@@ -2,6 +2,7 @@
 #include "Automation.h"
 #include "AutomationHandlers.h"
 #include "Gmic.h"
+#include "GridFilters.h"
 #include "ModelStore.h"
 #include "MoshDialog.h"
 #include "compositor/cameraraw.h"
@@ -86,7 +87,35 @@ void AutomationServer::registerPixelsHandlers() {
         EditorSession* s = session();
         if (!s->canAdjustPixels()) fail("the active layer has no pixels to filter; select a pixel layer");
         auto kind = filterKindNamed(str(p, "kind"));
-        if (!kind) fail("kind must be Gaussian Blur, Motion Blur, Add Noise or Lens Correction", invalidParams);
+        if (!kind) {
+            QStringList names;
+            for (int i = 0; i < filterKindCount; i++) names << QString::fromUtf8(filterKindName(FilterKind(i)));
+            fail("kind must be one of " + names.join(", "), invalidParams);
+        }
+        if (isGridFilter(*kind)) {
+            // The grid filters (filters.h): any depth and layout their feature supports, through one path.
+            const QString name = QString::fromUtf8(filterKindName(*kind));
+            const std::string feature = std::string("filter.") + filterKindName(*kind);
+            if (!s->supportsFeature(feature)) fail(name + ": " + s->unavailableTip(feature), invalidParams);
+            FilterSettings grid = FilterSettings::defaults(*kind);
+            QString error;
+            if (!readGridFilterSettings(*kind, p, grid, &error)) fail(name + ": " + error, invalidParams);
+            LayerTransform transform;
+            const AnyImage source = s->adjustmentSourceAny(gridFilterMargin(*kind, grid), transform);
+            if (!source) fail("the active layer has no pixels, or it is too large to grow for this filter");
+            const AnyGray coverage = s->selectionOnGridAny(transform, source.width(), source.height());
+            const GridFilterContext context = gridFilterContext(s, transform, coverage, uint32_t(integer(p, "seed", 1)));
+            AnyImage out = applyGridFilter(*kind, source, grid, context);
+            if (!out) fail(name + ": " + s->unavailableTip(feature), invalidParams);
+            if (coverage) out = blendThroughCoverageAny(out, source, coverage);
+            LayerTransform placed = transform;
+            if (gridFilterTrims(*kind)) {
+                bool empty = false;
+                if (AnyImage trimmed = trimToPixelsAny(out, transform, placed, &empty)) out = trimmed;
+            }
+            s->commitPixels(out, placed, name);
+            return QJsonObject{{"applied", name}};
+        }
         FilterSettings settings;
         settings.radius = num(p, "radius", settings.radius);
         settings.angle = num(p, "angle", settings.angle);

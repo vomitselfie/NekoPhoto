@@ -30,6 +30,14 @@ namespace {
     // filterKindName
     QT_TRANSLATE_NOOP("Names", "Gaussian Blur"), QT_TRANSLATE_NOOP("Names", "Motion Blur"), QT_TRANSLATE_NOOP("Names", "Add Noise"),
     QT_TRANSLATE_NOOP("Names", "Lens Correction"),
+    QT_TRANSLATE_NOOP("Names", "Box Blur"), QT_TRANSLATE_NOOP("Names", "Radial Blur"), QT_TRANSLATE_NOOP("Names", "Surface Blur"),
+    QT_TRANSLATE_NOOP("Names", "Dust & Scratches"), QT_TRANSLATE_NOOP("Names", "Median"), QT_TRANSLATE_NOOP("Names", "Unsharp Mask"),
+    QT_TRANSLATE_NOOP("Names", "High Pass"), QT_TRANSLATE_NOOP("Names", "Emboss"), QT_TRANSLATE_NOOP("Names", "Mosaic"),
+    QT_TRANSLATE_NOOP("Names", "Twirl"), QT_TRANSLATE_NOOP("Names", "Pinch"), QT_TRANSLATE_NOOP("Names", "Spherize"),
+    QT_TRANSLATE_NOOP("Names", "Wave"), QT_TRANSLATE_NOOP("Names", "Ripple"), QT_TRANSLATE_NOOP("Names", "Polar Coordinates"),
+    QT_TRANSLATE_NOOP("Names", "ZigZag"), QT_TRANSLATE_NOOP("Names", "Shear"), QT_TRANSLATE_NOOP("Names", "Maximum"),
+    QT_TRANSLATE_NOOP("Names", "Minimum"), QT_TRANSLATE_NOOP("Names", "Offset"), QT_TRANSLATE_NOOP("Names", "Clouds"),
+    QT_TRANSLATE_NOOP("Names", "Difference Clouds"), QT_TRANSLATE_NOOP("Names", "Find Edges"),
     // levelsChannelName, colorRangeName, samplingName
     QT_TRANSLATE_NOOP("Names", "RGB"), QT_TRANSLATE_NOOP("Names", "Red"), QT_TRANSLATE_NOOP("Names", "Green"), QT_TRANSLATE_NOOP("Names", "Blue"),
     QT_TRANSLATE_NOOP("Names", "CMYK"), QT_TRANSLATE_NOOP("Names", "Cyan"), QT_TRANSLATE_NOOP("Names", "Magenta"), QT_TRANSLATE_NOOP("Names", "Yellow"),

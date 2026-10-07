@@ -187,7 +187,11 @@ Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates 
 -100 greys out, lightness kept) beside the default `"scale"`.
 
 Pixels of the active layer, inside the selection: `pixels.adjust`,
-`pixels.filter` (`kind` and its settings; Lens Correction takes `bicubic: true` for a sharper resample; in a CMYK or
+`pixels.filter` (`kind` and its settings, those left out at the filter's defaults: Gaussian Blur, Box Blur, Motion Blur, Radial Blur,
+Surface Blur, Pinch, Polar Coordinates, Ripple, Shear, Spherize, Twirl, Wave, ZigZag, Add Noise, Dust & Scratches, Median, Mosaic,
+Clouds, Difference Clouds, Unsharp Mask, Emboss, Find Edges, High Pass, Maximum, Minimum, Offset and Lens Correction, with the keys
+`describe_method pixels.filter` lists; the distortions and Offset work inside the selection's bounds, Clouds paints between the
+foreground and background colours, and `seed` fixes Add Noise's, Wave's and the clouds' patterns; Lens Correction takes `bicubic: true` for a sharper resample; in a CMYK or
 Lab document both work on the inks or L, a and b, each kind where Photoshop offers it ([color-modes.md](color-modes.md#adjustments-and-filters)):
 Levels and Curves take a fifth slot for CMYK's black, `channel` names such as `"Cyan"`, `"Black"` or `"Lightness"`, and
 Channel Mixer `cyan` ... `black` ink rows),

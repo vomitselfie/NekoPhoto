@@ -162,6 +162,7 @@ qt_add_executable(nekophoto
     AutomationPixels.cpp
     AutomationSelection.cpp
     AutomationSupport.cpp
+    GridFilters.cpp
     Theme.h
     Theme.cpp
     ModelStore.h

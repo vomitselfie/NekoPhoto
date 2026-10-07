@@ -7,6 +7,7 @@
 #include <thread>
 
 class QCheckBox;
+class QTimer;
 
 namespace app {
 
@@ -25,7 +26,9 @@ private:
     AdjustmentEditor* editor_;
 };
 
-/// Filter > Gaussian Blur / Motion Blur / Add Noise / Lens Correction.
+/// Filter > Gaussian Blur / Motion Blur / Add Noise / Lens Correction, and the grid filters (compositor/filters.h,
+/// applyGridFilter: Box Blur to Mosaic through the Smart Filter kernels, the PhotoCraft ports), which preview at full
+/// size on the layer's own buffer, a moment after the last change.
 class FilterDialog : public PixelDialog {
     Q_OBJECT
 public:
@@ -48,6 +51,9 @@ private:
     uint32_t seed_;
     int margin_ = -1;
     std::vector<std::function<void()>> syncers_;
+    QTimer* gridTimer_ = nullptr;   // the grid filters' preview, coalesced
+    void refreshGridPreview();
+    compositor::AnyImage runGrid() const;
 };
 
 /// Filter > Remove Background: the subject mask from the model, refined live, applied as a layer mask.

@@ -24,6 +24,29 @@ const char* filterKindName(FilterKind kind) {
     case FilterKind::MotionBlur: return "Motion Blur";
     case FilterKind::AddNoise: return "Add Noise";
     case FilterKind::LensCorrection: return "Lens Correction";
+    case FilterKind::BoxBlur: return "Box Blur";
+    case FilterKind::RadialBlur: return "Radial Blur";
+    case FilterKind::SurfaceBlur: return "Surface Blur";
+    case FilterKind::DustAndScratches: return "Dust & Scratches";
+    case FilterKind::Median: return "Median";
+    case FilterKind::UnsharpMask: return "Unsharp Mask";
+    case FilterKind::HighPass: return "High Pass";
+    case FilterKind::Emboss: return "Emboss";
+    case FilterKind::Mosaic: return "Mosaic";
+    case FilterKind::Twirl: return "Twirl";
+    case FilterKind::Pinch: return "Pinch";
+    case FilterKind::Spherize: return "Spherize";
+    case FilterKind::Wave: return "Wave";
+    case FilterKind::Ripple: return "Ripple";
+    case FilterKind::PolarCoordinates: return "Polar Coordinates";
+    case FilterKind::ZigZag: return "ZigZag";
+    case FilterKind::Shear: return "Shear";
+    case FilterKind::Maximum: return "Maximum";
+    case FilterKind::Minimum: return "Minimum";
+    case FilterKind::Offset: return "Offset";
+    case FilterKind::Clouds: return "Clouds";
+    case FilterKind::DifferenceClouds: return "Difference Clouds";
+    case FilterKind::FindEdges: return "Find Edges";
     }
     return "";
 }
@@ -89,6 +112,7 @@ void applyFilter(FilterKind kind, Image& image, const FilterSettings& settings, 
         kernels::lensDistort(source, image, s.distortion / 100 * lensStrength, s.bicubic);
         break;
     }
+    default: break;   // the grid filters: applyGridFilter
     }
 }
 

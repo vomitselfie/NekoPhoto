@@ -1,6 +1,9 @@
 #include "Style.h"
 #include "Names.h"
 #include "FilterDialog.h"
+#include "GridFilters.h"
+#include "compositor/smartfilter.h"
+#include <QTimer>
 #include "compositor/depth.h"
 #include "compositor/modeedit.h"
 #include "ActionLibrary.h"
@@ -15,6 +18,7 @@
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QSlider>
 #include <QVBoxLayout>
 #include <cmath>
@@ -128,7 +132,7 @@ bool PixelAdjustmentDialog::apply() {
 // ---- Filters ----------------------------------------------------------------------------------
 
 FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* parent, bool smart)
-    : PixelDialog(session, parent), kind_(kind), smart_(smart), seed_(uint32_t(std::random_device{}() % 1000000000u)) {
+    : PixelDialog(session, parent), kind_(kind), smart_(smart), settings_(FilterSettings::defaults(kind)), seed_(uint32_t(std::random_device{}() % 1000000000u)) {
     setWindowTitle(smart ? tr("%1 (Smart Filter)").arg(names::filterKind(kind)) : names::filterKind(kind));
     setMinimumWidth(420);
     auto* layout = new QVBoxLayout(this);
@@ -159,6 +163,29 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
         connect(c, &QCheckBox::toggled, this, [this, apply](bool on) { apply(on); refreshPreview(); });
         layout->addWidget(c);
     };
+    auto choice = [&](const QString& label, const QStringList& items, int FilterSettings::*field) {
+        auto* row = new QHBoxLayout;
+        auto* name = new QLabel(label);
+        name->setMinimumWidth(80);
+        row->addWidget(name);
+        auto* box = new QComboBox;
+        box->addItems(items);
+        box->setCurrentIndex(settings_.*field);
+        connect(box, QOverload<int>::of(&QComboBox::activated), this, [this, field](int i) { settings_.*field = i; refreshPreview(); });
+        row->addWidget(box, 1);
+        layout->addLayout(row);
+    };
+    auto real = [this](double FilterSettings::*f) {
+        return std::make_pair(std::function<double()>([this, f] { return settings_.*f; }), std::function<void(double)>([this, f](double v) { settings_.*f = v; }));
+    };
+    auto whole = [this](int FilterSettings::*f) {
+        return std::make_pair(std::function<double()>([this, f] { return double(settings_.*f); }),
+                              std::function<void(double)>([this, f](double v) { settings_.*f = int(std::lround(v)); }));
+    };
+    auto sliderOf = [&](const QString& label, double min, double max, int decimals, double scale, std::pair<std::function<double()>, std::function<void(double)>> io) {
+        slider(label, min, max, decimals, scale, io.first, io.second);
+    };
+    const QStringList undefinedTwo{tr("Wrap Around"), tr("Repeat Edge Pixels")};
     switch (kind) {
     case FilterKind::GaussianBlur:
         slider(tr("Radius"), 0.1, 250, 1, 10, [this] { return settings_.radius; }, [this](double v) { settings_.radius = v; });
@@ -176,6 +203,88 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
         slider(tr("Remove Distortion"), -100, 100, 0, 1, [this] { return settings_.distortion; }, [this](double v) { settings_.distortion = v; });
         check(tr("Bicubic"), [this] { return settings_.bicubic; }, [this](bool on) { settings_.bicubic = on; });
         break;
+    case FilterKind::BoxBlur: sliderOf(tr("Radius"), 1, 2000, 0, 1, real(&FilterSettings::radius)); break;
+    case FilterKind::RadialBlur:
+        sliderOf(tr("Amount"), 1, 100, 0, 1, real(&FilterSettings::amount));
+        choice(tr("Quality"), {tr("Draft"), tr("Good"), tr("Best")}, &FilterSettings::quality);
+        break;
+    case FilterKind::SurfaceBlur:
+        sliderOf(tr("Radius"), 1, 100, 0, 1, real(&FilterSettings::radius));
+        sliderOf(tr("Threshold"), 2, 255, 0, 1, whole(&FilterSettings::threshold));
+        break;
+    case FilterKind::DustAndScratches:
+        sliderOf(tr("Radius"), 1, 500, 0, 1, real(&FilterSettings::radius));
+        sliderOf(tr("Threshold"), 0, 255, 0, 1, whole(&FilterSettings::threshold));
+        break;
+    case FilterKind::Median: sliderOf(tr("Radius"), 1, 500, 0, 1, real(&FilterSettings::radius)); break;
+    case FilterKind::UnsharpMask:
+        sliderOf(tr("Amount"), 1, 500, 0, 1, real(&FilterSettings::amount));
+        sliderOf(tr("Radius"), 0.1, 1000, 1, 10, real(&FilterSettings::radius));
+        sliderOf(tr("Threshold"), 0, 255, 0, 1, whole(&FilterSettings::threshold));
+        break;
+    case FilterKind::HighPass: sliderOf(tr("Radius"), 0.1, 1000, 1, 10, real(&FilterSettings::radius)); break;
+    case FilterKind::Emboss:
+        sliderOf(tr("Angle"), -180, 180, 0, 1, real(&FilterSettings::angle));
+        sliderOf(tr("Height"), 1, 100, 0, 1, whole(&FilterSettings::height));
+        sliderOf(tr("Amount"), 1, 500, 0, 1, real(&FilterSettings::amount));
+        break;
+    case FilterKind::Mosaic: sliderOf(tr("Cell Size"), 2, 200, 0, 1, whole(&FilterSettings::cellSize)); break;
+    case FilterKind::Twirl: sliderOf(tr("Angle"), -999, 999, 0, 1, real(&FilterSettings::angle)); break;
+    case FilterKind::Pinch: sliderOf(tr("Amount"), -100, 100, 0, 1, real(&FilterSettings::amount)); break;
+    case FilterKind::Spherize:
+        sliderOf(tr("Amount"), -100, 100, 0, 1, real(&FilterSettings::amount));
+        choice(tr("Mode"), {tr("Normal"), tr("Horizontal only"), tr("Vertical only")}, &FilterSettings::style);
+        break;
+    case FilterKind::Wave:
+        sliderOf(tr("Generators"), 1, 999, 0, 1, whole(&FilterSettings::generators));
+        sliderOf(tr("Wavelength Min."), 1, 998, 0, 1, real(&FilterSettings::wavelengthMin));
+        sliderOf(tr("Wavelength Max."), 2, 999, 0, 1, real(&FilterSettings::wavelengthMax));
+        sliderOf(tr("Amplitude Min."), 1, 998, 0, 1, real(&FilterSettings::amplitudeMin));
+        sliderOf(tr("Amplitude Max."), 1, 999, 0, 1, real(&FilterSettings::amplitudeMax));
+        choice(tr("Type"), {tr("Sine"), tr("Triangle"), tr("Square")}, &FilterSettings::style);
+        choice(tr("Undefined Areas"), undefinedTwo, &FilterSettings::undefinedAreas);
+        {
+            auto* randomize = new QPushButton(tr("Randomize"));
+            connect(randomize, &QPushButton::clicked, this, [this] { seed_ = uint32_t(std::random_device{}() % 1000000000u); refreshPreview(); });
+            layout->addWidget(randomize, 0, Qt::AlignLeft);
+        }
+        break;
+    case FilterKind::Ripple:
+        sliderOf(tr("Amount"), -999, 999, 0, 1, real(&FilterSettings::amount));
+        choice(tr("Size"), {tr("Small"), tr("Medium"), tr("Large")}, &FilterSettings::style);
+        break;
+    case FilterKind::PolarCoordinates:
+        choice(tr("Conversion"), {tr("Rectangular to Polar"), tr("Polar to Rectangular")}, &FilterSettings::style);
+        break;
+    case FilterKind::ZigZag:
+        sliderOf(tr("Amount"), -100, 100, 0, 1, real(&FilterSettings::amount));
+        sliderOf(tr("Ridges"), 0, 20, 0, 1, real(&FilterSettings::ridges));
+        choice(tr("Style"), {tr("Around Center"), tr("Out From Center"), tr("Pond Ripples")}, &FilterSettings::style);
+        break;
+    case FilterKind::Shear:
+        sliderOf(tr("Bend"), -100, 100, 0, 1, real(&FilterSettings::amount));
+        choice(tr("Undefined Areas"), undefinedTwo, &FilterSettings::undefinedAreas);
+        break;
+    case FilterKind::Maximum:
+    case FilterKind::Minimum:
+        sliderOf(tr("Radius"), 0.2, 500, 1, 10, real(&FilterSettings::radius));
+        choice(tr("Preserve"), {tr("Squareness"), tr("Roundness")}, &FilterSettings::style);
+        break;
+    case FilterKind::Offset:
+        sliderOf(tr("Horizontal"), -2000, 2000, 0, 1, whole(&FilterSettings::horizontal));
+        sliderOf(tr("Vertical"), -2000, 2000, 0, 1, whole(&FilterSettings::vertical));
+        choice(tr("Undefined Areas"), {tr("Wrap Around"), tr("Repeat Edge Pixels"), tr("Set to Transparent")}, &FilterSettings::undefinedAreas);
+        break;
+    case FilterKind::Clouds:
+    case FilterKind::DifferenceClouds:
+    case FilterKind::FindEdges:
+        break;   // no settings: the menu runs them directly
+    }
+    if (isGridFilter(kind)) {
+        gridTimer_ = new QTimer(this);
+        gridTimer_->setSingleShot(true);
+        gridTimer_->setInterval(120);
+        connect(gridTimer_, &QTimer::timeout, this, [this] { refreshGridPreview(); });
     }
     for (auto& s : syncers_) s();
     connect(addPreviewAndButtons(layout), &QCheckBox::toggled, this, [this] { refreshPreview(); });
@@ -183,6 +292,13 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
 }
 
 void FilterDialog::prepareSource() {
+    if (isGridFilter(kind_)) {
+        const int margin = gridFilterMargin(kind_, settings_);
+        if (hasSource() && margin <= margin_) return;
+        margin_ = std::max(margin_, margin);
+        captureAny(margin_);
+        return;
+    }
     // A blur grows the layer by its reach; only ever grows, so easing the amount off rebuilds nothing.
     int margin = int(std::ceil(blurMargin(kind_, settings_)));
     if (hasSource() && margin <= margin_) return;
@@ -190,7 +306,25 @@ void FilterDialog::prepareSource() {
     capture(margin_, kind_ == FilterKind::AddNoise ? 0 : previewLimit);
 }
 
-bool FilterDialog::identity() const { return kind_ == FilterKind::LensCorrection && settings_.normalized().distortion == 0; }
+bool FilterDialog::identity() const {
+    const FilterSettings s = settings_.normalizedFor(kind_);
+    if (kind_ == FilterKind::Shear || kind_ == FilterKind::Pinch || kind_ == FilterKind::Spherize || kind_ == FilterKind::Ripple || kind_ == FilterKind::ZigZag)
+        return s.amount == 0;
+    if (kind_ == FilterKind::Twirl) return s.angle == 0;
+    if (kind_ == FilterKind::Offset) return s.horizontal == 0 && s.vertical == 0;
+    return kind_ == FilterKind::LensCorrection && s.distortion == 0;
+}
+
+AnyImage FilterDialog::runGrid() const {
+    if (!sourceNative()) return {};
+    return applyGridFilter(kind_, sourceNative(), settings_, gridFilterContext(session(), placement(), coverageNative(), seed_));
+}
+
+void FilterDialog::refreshGridPreview() {
+    if (finished() || !hasPreviewSource()) return;
+    if (!previewing() || identity()) { clearPreview(); return; }
+    if (AnyImage out = runGrid()) showPreviewNative(out, placement());
+}
 
 std::shared_ptr<Image> FilterDialog::run(const Image& source, double scale) const {
     auto out = std::make_shared<Image>(source);
@@ -213,6 +347,7 @@ std::shared_ptr<ImageF> FilterDialog::run(const ImageF& source, double scale) co
 void FilterDialog::refreshPreview() {
     if (finished()) return;
     prepareSource();
+    if (gridTimer_) { gridTimer_->start(); return; }
     if (!hasPreviewSource()) return;
     if (!previewing() || identity()) { clearPreview(); return; }
     if (sourceNative()) { showPreviewNative(filteredInMode(kind_, sourceNative(), colorMode(), settings_, 1, seed_), placement()); return; }
@@ -229,6 +364,7 @@ bool FilterDialog::apply() {
         if (kind_ == FilterKind::GaussianBlur) entry.parameters = smartfilter::GaussianBlur{std::clamp(f.radius, 0.1, 1000.0)};
         else if (kind_ == FilterKind::MotionBlur) entry.parameters = smartfilter::MotionBlur{int32_t(std::lround(f.angle)), int32_t(std::clamp(std::lround(f.distance), 1L, 999L))};
         else if (kind_ == FilterKind::AddNoise) entry.parameters = smartfilter::AddNoise{std::clamp(f.amount, 0.1, 400.0), f.gaussian, f.monochromatic, int32_t(seed_ % 1000000000u)};
+        else if (auto p = smartFilterParametersFor(kind_, settings_)) entry.parameters = *p;
         else return false;
         QString error;
         if (!session()->addSmartFilter(entry, &error)) { QMessageBox::warning(this, windowTitle(), error); return false; }
@@ -236,6 +372,18 @@ bool FilterDialog::apply() {
         return true;
     }
     if (identity()) return true;
+    if (isGridFilter(kind_)) {
+        const QJsonObject step = gridFilterStep(kind_, settings_, seed_);
+        if (commitAsCommand(QStringLiteral("pixels.filter"), step)) return true;
+        AnyImage out = runGrid();
+        if (!out) return true;
+        out = throughSelectionNative(out);
+        LayerTransform placed = placement();
+        if (gridFilterTrims(kind_)) if (AnyImage trimmed = trimToPixelsAny(out, placement(), placed)) out = trimmed;
+        commit(out, placed, QString::fromUtf8(filterKindName(kind_)));
+        recordAction("pixels.filter", step);
+        return true;
+    }
     // On the command path: OK is pixels.filter, as automation and a recorded action run it.
     const FilterSettings f = settings_.normalized();
     QJsonObject step{{"kind", QString::fromUtf8(filterKindName(kind_))}};

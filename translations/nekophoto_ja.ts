@@ -1602,6 +1602,82 @@
         <translation>レンズ補正</translation>
     </message>
     <message>
+        <source>Box Blur</source>
+        <translation>ぼかし(ボックス)</translation>
+    </message>
+    <message>
+        <source>Radial Blur</source>
+        <translation>ぼかし(放射状)</translation>
+    </message>
+    <message>
+        <source>Surface Blur</source>
+        <translation>ぼかし(表面)</translation>
+    </message>
+    <message>
+        <source>Dust &amp; Scratches</source>
+        <translation>ダスト&amp;スクラッチ</translation>
+    </message>
+    <message>
+        <source>Median</source>
+        <translation>中間値</translation>
+    </message>
+    <message>
+        <source>Unsharp Mask</source>
+        <translation>アンシャープマスク</translation>
+    </message>
+    <message>
+        <source>High Pass</source>
+        <translation>ハイパス</translation>
+    </message>
+    <message>
+        <source>Mosaic</source>
+        <translation>モザイク</translation>
+    </message>
+    <message>
+        <source>Pinch</source>
+        <translation>つまむ</translation>
+    </message>
+    <message>
+        <source>Spherize</source>
+        <translation>球面</translation>
+    </message>
+    <message>
+        <source>Ripple</source>
+        <translation>波紋</translation>
+    </message>
+    <message>
+        <source>Polar Coordinates</source>
+        <translation>極座標</translation>
+    </message>
+    <message>
+        <source>ZigZag</source>
+        <translation>ジグザグ</translation>
+    </message>
+    <message>
+        <source>Shear</source>
+        <translation>シアー</translation>
+    </message>
+    <message>
+        <source>Maximum</source>
+        <translation>明るさの最大値</translation>
+    </message>
+    <message>
+        <source>Minimum</source>
+        <translation>明るさの最小値</translation>
+    </message>
+    <message>
+        <source>Clouds</source>
+        <translation>雲模様 1</translation>
+    </message>
+    <message>
+        <source>Difference Clouds</source>
+        <translation>雲模様 2</translation>
+    </message>
+    <message>
+        <source>Find Edges</source>
+        <translation>輪郭検出</translation>
+    </message>
+    <message>
         <source>RGB</source>
         <translation>RGB</translation>
     </message>
@@ -5193,6 +5269,14 @@ File &gt; New creates a blank canvas.</source>
         <translation>%1 (スマートフィルター)</translation>
     </message>
     <message>
+        <source>Wrap Around</source>
+        <translation>折り返す</translation>
+    </message>
+    <message>
+        <source>Repeat Edge Pixels</source>
+        <translation>端のピクセルを繰り返す</translation>
+    </message>
+    <message>
         <source>Radius</source>
         <translation>半径</translation>
     </message>
@@ -5223,6 +5307,170 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Bicubic</source>
         <translation>バイキュービック法</translation>
+    </message>
+    <message>
+        <source>Quality</source>
+        <translation>画質</translation>
+    </message>
+    <message>
+        <source>Draft</source>
+        <translation>ドラフト</translation>
+    </message>
+    <message>
+        <source>Good</source>
+        <translation>標準</translation>
+    </message>
+    <message>
+        <source>Best</source>
+        <translation>最高</translation>
+    </message>
+    <message>
+        <source>Threshold</source>
+        <translation>しきい値</translation>
+    </message>
+    <message>
+        <source>Height</source>
+        <translation>高さ</translation>
+    </message>
+    <message>
+        <source>Cell Size</source>
+        <translation>セルの大きさ</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>モード</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>標準</translation>
+    </message>
+    <message>
+        <source>Horizontal only</source>
+        <translation>水平方向のみ</translation>
+    </message>
+    <message>
+        <source>Vertical only</source>
+        <translation>垂直方向のみ</translation>
+    </message>
+    <message>
+        <source>Generators</source>
+        <translation>波数</translation>
+    </message>
+    <message>
+        <source>Wavelength Min.</source>
+        <translation>波長(最小)</translation>
+    </message>
+    <message>
+        <source>Wavelength Max.</source>
+        <translation>波長(最大)</translation>
+    </message>
+    <message>
+        <source>Amplitude Min.</source>
+        <translation>振幅(最小)</translation>
+    </message>
+    <message>
+        <source>Amplitude Max.</source>
+        <translation>振幅(最大)</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>種類</translation>
+    </message>
+    <message>
+        <source>Sine</source>
+        <translation>サイン波</translation>
+    </message>
+    <message>
+        <source>Triangle</source>
+        <translation>三角波</translation>
+    </message>
+    <message>
+        <source>Square</source>
+        <translation>矩形波</translation>
+    </message>
+    <message>
+        <source>Undefined Areas</source>
+        <translation>未定義領域</translation>
+    </message>
+    <message>
+        <source>Randomize</source>
+        <translation>ランダマイズ</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>大きさ</translation>
+    </message>
+    <message>
+        <source>Small</source>
+        <translation>小</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>中</translation>
+    </message>
+    <message>
+        <source>Large</source>
+        <translation>大</translation>
+    </message>
+    <message>
+        <source>Conversion</source>
+        <translation>変換</translation>
+    </message>
+    <message>
+        <source>Rectangular to Polar</source>
+        <translation>直交座標を極座標に</translation>
+    </message>
+    <message>
+        <source>Polar to Rectangular</source>
+        <translation>極座標を直交座標に</translation>
+    </message>
+    <message>
+        <source>Ridges</source>
+        <translation>折り返し数</translation>
+    </message>
+    <message>
+        <source>Style</source>
+        <translation>スタイル</translation>
+    </message>
+    <message>
+        <source>Around Center</source>
+        <translation>中心の周り</translation>
+    </message>
+    <message>
+        <source>Out From Center</source>
+        <translation>中心から外側へ</translation>
+    </message>
+    <message>
+        <source>Pond Ripples</source>
+        <translation>波紋</translation>
+    </message>
+    <message>
+        <source>Bend</source>
+        <translation>曲げ</translation>
+    </message>
+    <message>
+        <source>Preserve</source>
+        <translation>保持</translation>
+    </message>
+    <message>
+        <source>Squareness</source>
+        <translation>正方形</translation>
+    </message>
+    <message>
+        <source>Roundness</source>
+        <translation>真円率</translation>
+    </message>
+    <message>
+        <source>Horizontal</source>
+        <translation>水平方向</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation>垂直方向</translation>
+    </message>
+    <message>
+        <source>Set to Transparent</source>
+        <translation>透明にする</translation>
     </message>
 </context>
 <context>
@@ -8088,6 +8336,130 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Camera Raw Filter</source>
         <translation>Camera Raw フィルター</translation>
+    </message>
+    <message>
+        <source>&amp;Blur</source>
+        <translation>ぼかし(&amp;B)</translation>
+    </message>
+    <message>
+        <source>&amp;Box Blur…</source>
+        <translation>ぼかし(ボックス)(&amp;B)...</translation>
+    </message>
+    <message>
+        <source>&amp;Radial Blur…</source>
+        <translation>ぼかし(放射状)(&amp;R)...</translation>
+    </message>
+    <message>
+        <source>&amp;Surface Blur…</source>
+        <translation>ぼかし(表面)(&amp;S)...</translation>
+    </message>
+    <message>
+        <source>&amp;Distort</source>
+        <translation>変形(&amp;D)</translation>
+    </message>
+    <message>
+        <source>&amp;Pinch…</source>
+        <translation>つまむ(&amp;P)...</translation>
+    </message>
+    <message>
+        <source>P&amp;olar Coordinates…</source>
+        <translation>極座標(&amp;O)...</translation>
+    </message>
+    <message>
+        <source>&amp;Ripple…</source>
+        <translation>波紋(&amp;R)...</translation>
+    </message>
+    <message>
+        <source>S&amp;hear…</source>
+        <translation>シアー(&amp;H)...</translation>
+    </message>
+    <message>
+        <source>&amp;Spherize…</source>
+        <translation>球面(&amp;S)...</translation>
+    </message>
+    <message>
+        <source>&amp;Twirl…</source>
+        <translation>ツイスト(&amp;T)...</translation>
+    </message>
+    <message>
+        <source>&amp;Wave…</source>
+        <translation>波形(&amp;W)...</translation>
+    </message>
+    <message>
+        <source>&amp;ZigZag…</source>
+        <translation>ジグザグ(&amp;Z)...</translation>
+    </message>
+    <message>
+        <source>&amp;Noise</source>
+        <translation>ノイズ(&amp;N)</translation>
+    </message>
+    <message>
+        <source>&amp;Dust &amp;&amp; Scratches…</source>
+        <translation>ダスト&amp;&amp;スクラッチ(&amp;D)...</translation>
+    </message>
+    <message>
+        <source>&amp;Median…</source>
+        <translation>中間値(&amp;M)...</translation>
+    </message>
+    <message>
+        <source>&amp;Pixelate</source>
+        <translation>ピクセレート(&amp;P)</translation>
+    </message>
+    <message>
+        <source>&amp;Mosaic…</source>
+        <translation>モザイク(&amp;M)...</translation>
+    </message>
+    <message>
+        <source>R&amp;ender</source>
+        <translation>描画(&amp;E)</translation>
+    </message>
+    <message>
+        <source>&amp;Clouds</source>
+        <translation>雲模様 1(&amp;C)</translation>
+    </message>
+    <message>
+        <source>&amp;Difference Clouds</source>
+        <translation>雲模様 2(&amp;D)</translation>
+    </message>
+    <message>
+        <source>S&amp;harpen</source>
+        <translation>シャープ(&amp;H)</translation>
+    </message>
+    <message>
+        <source>&amp;Unsharp Mask…</source>
+        <translation>アンシャープマスク(&amp;U)...</translation>
+    </message>
+    <message>
+        <source>St&amp;ylize</source>
+        <translation>表現手法(&amp;Y)</translation>
+    </message>
+    <message>
+        <source>&amp;Emboss…</source>
+        <translation>エンボス(&amp;E)...</translation>
+    </message>
+    <message>
+        <source>&amp;Find Edges</source>
+        <translation>輪郭検出(&amp;F)</translation>
+    </message>
+    <message>
+        <source>O&amp;ther</source>
+        <translation>その他(&amp;T)</translation>
+    </message>
+    <message>
+        <source>&amp;High Pass…</source>
+        <translation>ハイパス(&amp;H)...</translation>
+    </message>
+    <message>
+        <source>Ma&amp;ximum…</source>
+        <translation>明るさの最大値(&amp;X)...</translation>
+    </message>
+    <message>
+        <source>M&amp;inimum…</source>
+        <translation>明るさの最小値(&amp;I)...</translation>
+    </message>
+    <message>
+        <source>&amp;Offset…</source>
+        <translation>オフセット(&amp;O)...</translation>
     </message>
     <message>
         <source>&amp;G&apos;MIC…</source>
