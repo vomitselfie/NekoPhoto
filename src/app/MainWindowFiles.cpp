@@ -25,6 +25,8 @@
 #include "VectorFiles.h"
 #include "compositor/svg.h"
 #include "ImageConvert.h"
+#include "ExportAs.h"
+#include "ExportAsDialog.h"
 #include "compositor/aseprite.h"
 #include "compositor/affinity.h"
 #include "compositor/clip.h"
@@ -493,30 +495,103 @@ bool MainWindow::save(bool asNew) {
     return true;
 }
 
-void MainWindow::exportPng() {
+namespace {
+/// The file dialog's filter and the suffixes for an Export As format.
+QString exportFilter(const QString& format) {
+    if (format == "jpg") return MainWindow::tr("JPEG image (*.jpg *.jpeg)");
+    if (format == "gif") return MainWindow::tr("GIF image (*.gif)");
+    if (format == "webp") return MainWindow::tr("WebP image (*.webp)");
+    if (format == "tif") return MainWindow::tr("TIFF image (*.tif *.tiff)");
+    if (format == "tga") return MainWindow::tr("TGA image (*.tga)");
+    return MainWindow::tr("PNG image (*.png)");
+}
+QStringList exportSuffixes(const QString& format) {
+    if (format == "jpg") return {QStringLiteral("jpg"), QStringLiteral("jpeg")};
+    if (format == "tif") return {QStringLiteral("tif"), QStringLiteral("tiff")};
+    return {format};
+}
+}
+
+QString MainWindow::exportBaseName(bool layer) const {
+    QString name;
+    if (layer) if (const Layer* l = session_->activeLayer()) name = QString::fromStdString(l->name);
+    if (name.isEmpty()) {
+        name = session_->projectPath().isEmpty() ? session_->title() : QFileInfo(session_->projectPath()).completeBaseName();
+        if (name.endsWith(QStringLiteral(" *"))) name.chop(2);
+    }
+    // Characters a file name cannot hold on Linux or Windows.
+    static const QRegularExpression unsafe(QStringLiteral("[/\\\\:*?\"<>|\\x00-\\x1f]"));
+    name.replace(unsafe, QStringLiteral("-"));
+    name = name.trimmed();
+    return name.isEmpty() || name == "." || name == ".." ? QStringLiteral("Untitled") : name;
+}
+
+void MainWindow::exportAs(bool layer, const QString& format) {
     session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
-    QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((session_->projectPath().isEmpty() ? QStringLiteral("Untitled") : QFileInfo(session_->projectPath()).completeBaseName()) + ".png");
-    QString path = QFileDialog::getSaveFileName(this, tr("Export PNG"), suggested, tr("PNG image (*.png)"));
+    const QString title = layer ? tr("Export Layer As") : tr("Export As");
+    ExportAsDialog dialog(session_, layer, format, this);
+    if (!dialog.ready()) { showError(title, dialog.why()); return; }
+    if (dialog.exec() != QDialog::Accepted) return;
+    dialog.rememberSettings();
+    const QString chosen = dialog.format();
+    const QString path = askExportPath(title, exportFilter(chosen), exportSuffixes(chosen), exportBaseName(layer));
     if (path.isEmpty()) return;
-    if (!path.endsWith(".png", Qt::CaseInsensitive)) path += ".png";
-    std::string error;
-    // The document's profile embedded (iCCP), or the pixels converted to sRGB for the web.
-    const Document& doc = *session_->document();
-    const auto convert = color::askConvertToSrgb(this, doc, false);
-    if (!convert) return;
-    const color::ExportPlan plan = color::exportPlan(doc, *convert);
-    const std::vector<uint8_t>* icc = plan.icc.empty() ? nullptr : &plan.icc;
-    // A 16-bit document as a 16-bit PNG; a 32-bit one too, tone-mapped at exposure 0.
-    if (session_->sampleType() != SampleType::U8) {
-        auto deep = color::flatten16(doc, plan);
-        if (!deep || !writePngImage16(path.toStdString(), *deep, doc.resolution, &error, icc)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
-        else if (session_->sampleType() == SampleType::F32)
-            statusBar()->showMessage(tr("Exported %1 at 16 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).").arg(QFileInfo(path).fileName()), 8000);
+    QJsonObject params = dialog.commandParams();
+    params["path"] = path;
+    params["overwrite"] = true;   // the file dialog has asked before replacing a file
+    writeExport(params);
+}
+
+void MainWindow::quickExport(bool layer) {
+    session_->endTemporaryLayers();
+    if (!session_->hasDocument()) return;
+    if (layer && !session_->activeLayer()) return;
+    const QString format = exportas::quickExportFormat();
+    // Beside the document; a document never saved asks for a folder.
+    QString directory = session_->projectPath().isEmpty() ? QString() : QFileInfo(session_->projectPath()).absolutePath();
+    if (directory.isEmpty()) {
+        directory = QFileDialog::getExistingDirectory(this, tr("Quick Export To"), QSettings().value("lastDir").toString());
+        if (directory.isEmpty()) return;
+        QSettings().setValue("lastDir", directory);
+    }
+    const QString path = QDir(directory).filePath(exportBaseName(layer) + "." + format);
+    if (QFileInfo::exists(path)) {
+        QMessageBox box(QMessageBox::Question, tr("Quick Export"), tr("%1 already exists in %2. Replace it?").arg(QFileInfo(path).fileName(), QDir::toNativeSeparators(directory)), QMessageBox::Cancel, this);
+        QPushButton* replace = box.addButton(tr("Replace"), QMessageBox::AcceptRole);
+        box.setDefaultButton(QMessageBox::Cancel);
+        box.exec();
+        if (box.clickedButton() != static_cast<QAbstractButton*>(replace)) return;
+    }
+    QJsonObject params = exportas::commandParams(format, exportas::remembered(format), 0, 0, layer ? QStringLiteral("active") : QString());
+    params["path"] = path;
+    params["overwrite"] = true;
+    writeExport(params);
+}
+
+void MainWindow::writeExport(const QJsonObject& params) {
+    const QString name = QFileInfo(params.value("path").toString()).fileName();
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    // Any error is shown once the busy cursor is gone (or goes to the sink a caller set).
+    const QString title = tr("Couldn’t export %1").arg(name);
+    QString* const sink = errorSink_;
+    QString error;
+    errorSink_ = &error;
+    const std::optional<QJsonValue> reply = runCommand("document.export", params, title);
+    errorSink_ = sink;
+    QApplication::restoreOverrideCursor();
+    if (!reply) {
+        if (sink) *sink += error;
+        else QMessageBox::warning(this, title, error.mid(title.size() + 2).trimmed());
         return;
     }
-    auto image = color::flatten8(doc, plan);
-    if (!image || !writePngImage(path.toStdString(), *image, doc.resolution, &error, icc)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
+    const QJsonObject r = reply->toObject();
+    QString message = tr("Exported %1 (%2 × %3 px)").arg(name).arg(r.value("width").toInt()).arg(r.value("height").toInt());
+    if (session_->sampleType() == SampleType::F32)
+        message = tr("Exported %1 at %2 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).").arg(name).arg(r.value("bits").toInt());
+    else if (session_->sampleType() != SampleType::U8 && r.value("bits").toInt() == 8)
+        message = tr("Exported %1, reduced from 16 to 8 bits per channel with dithering.").arg(name);
+    statusBar()->showMessage(message, 8000);
 }
 
 void MainWindow::noteDitheredExport(const QString& path) {
@@ -588,83 +663,15 @@ void MainWindow::exportSvg() {
                                             : tr("Exported %1").arg(QFileInfo(path).fileName()), 5000);
 }
 
-QString MainWindow::askExportPath(const QString& title, const QString& filter, const QStringList& suffixes) {
-    QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((session_->projectPath().isEmpty() ? QStringLiteral("Untitled") : QFileInfo(session_->projectPath()).completeBaseName()) + "." + suffixes.first());
+QString MainWindow::askExportPath(const QString& title, const QString& filter, const QStringList& suffixes, const QString& baseName) {
+    const QString base = baseName.isEmpty() ? exportBaseName(false) : baseName;
+    QString suggested = QDir(QSettings().value("lastDir").toString()).filePath(base + "." + suffixes.first());
     QString path = QFileDialog::getSaveFileName(this, title, suggested, filter);
     if (path.isEmpty()) return path;
     if (std::none_of(suffixes.begin(), suffixes.end(), [&](const QString& s) { return path.endsWith("." + s, Qt::CaseInsensitive); })) path += "." + suffixes.first();
+    // The next export (and open) starts where this one went.
+    QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
     return path;
-}
-
-void MainWindow::exportJpeg() {
-    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
-    if (!session_->hasDocument()) return;
-    const auto convert = color::askConvertToSrgb(this, *session_->document(), false);
-    if (!convert) return;
-    const color::ExportPlan plan = color::exportPlan(*session_->document(), *convert);
-    auto flattened = color::flatten8(*session_->document(), plan);
-    if (!flattened) return;
-    QImage image = toQImage(*flattened);
-    auto options = askJpegExport(this, image);
-    if (!options) return;
-    QString path = askExportPath(tr("Export JPEG"), tr("JPEG image (*.jpg *.jpeg)"), {"jpg", "jpeg"});
-    if (path.isEmpty()) return;
-    QImage flat(image.size(), QImage::Format_RGB32);
-    flat.fill(options->background);
-    QPainter p(&flat);
-    p.drawImage(0, 0, image);
-    p.end();
-    QString error;
-    if (!writeQtImage(path, "jpeg", flat, options->quality, session_->document()->resolution, &error, plan.iccBytes())) showError(tr("Couldn’t export JPEG"), error);
-    else noteDitheredExport(path);
-}
-
-void MainWindow::exportWebp() {
-    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
-    if (!session_->hasDocument()) return;
-    const auto convert = color::askConvertToSrgb(this, *session_->document(), false);
-    if (!convert) return;
-    const color::ExportPlan plan = color::exportPlan(*session_->document(), *convert);
-    auto flattened = color::flatten8(*session_->document(), plan);
-    if (!flattened) return;
-    QImage image = toQImage(*flattened);
-    auto options = askJpegExport(this, image, true);
-    if (!options) return;
-    QString path = askExportPath(tr("Export WebP"), tr("WebP image (*.webp)"), {"webp"});
-    if (path.isEmpty()) return;
-    QString error;
-    if (!writeQtImage(path, "webp", image, options->quality, session_->document()->resolution, &error, plan.iccBytes())) showError(tr("Couldn’t export WebP"), error);
-    else noteDitheredExport(path);
-}
-
-void MainWindow::exportTiff() {
-    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
-    if (!session_->hasDocument()) return;
-    auto flattened = session_->flattened();
-    if (!flattened) return;
-    QString path = askExportPath(tr("Export TIFF"), tr("TIFF image (*.tif *.tiff)"), {"tif", "tiff"});
-    if (path.isEmpty()) return;
-    QString error;
-    // A 16-bit document as a 16-bit TIFF, when Qt's TIFF plugin writes one.
-    const bool deep = session_->sampleType() != SampleType::U8 && canWriteDeepTiff();
-    // The document's profile embedded.
-    const QByteArray icc = color::exportPlan(*session_->document(), false).iccBytes();
-    if (!writeQtImage(path, "tiff", deep ? toQImage16(*session_->flattened16()) : toQImage(*flattened), 100, session_->document()->resolution, &error, icc)) showError(tr("Couldn’t export TIFF"), error);
-    else if (deep && session_->sampleType() == SampleType::F32)
-        statusBar()->showMessage(tr("Exported %1 at 16 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).").arg(QFileInfo(path).fileName()), 8000);
-    else if (!deep) noteDitheredExport(path);
-}
-
-void MainWindow::exportTga() {
-    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
-    if (!session_->hasDocument()) return;
-    auto flattened = session_->flattened();
-    if (!flattened) return;
-    QString path = askExportPath(tr("Export TGA"), tr("TGA image (*.tga)"), {"tga"});
-    if (path.isEmpty()) return;
-    std::string error;
-    if (!writeTgaImage(path.toStdString(), *flattened, &error)) showError(tr("Couldn’t export TGA"), QString::fromStdString(error));
-    else noteDitheredExport(path);
 }
 
 void MainWindow::exportIco() {

@@ -1,6 +1,6 @@
 # PSD export
 
-File > Export as Photoshop Document writes a layered `.psd`; so does `document.export` with a `.psd` path
+File > Export > Export as Photoshop Document writes a layered `.psd`; so does `document.export` with a `.psd` path
 over automation. The writer is `src/core/src/psd_writer.cpp`, the reader it is tested against
 `src/core/src/psd.cpp`.
 

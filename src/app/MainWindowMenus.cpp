@@ -1,4 +1,5 @@
 // The main window's menus, tool rail and colour swatches.
+#include "ExportAs.h"
 #include "ContentFillDialog.h"
 #include "ChannelDialogs.h"
 #include "Names.h"
@@ -217,17 +218,25 @@ void MainWindow::buildMenus() {
     needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }), "document.save");
     needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }), "document.save");
     file->addSeparator();
-    needsDocument(file->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd), "export.psd");
-    needsDocument(file->addAction(tr("Export &PNG…"), this, &MainWindow::exportPng), "export.png");
-    needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg), "export.jpeg");
-    needsDocument(file->addAction(tr("Export S&VG…"), this, &MainWindow::exportSvg), "export.svg");
-    if (canWriteImageFormat("webp")) needsDocument(file->addAction(tr("Export &WebP…"), this, &MainWindow::exportWebp), "export.webp");
-    if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff), "export.tiff");
-    needsDocument(file->addAction(tr("Export T&GA…"), this, &MainWindow::exportTga), "export.tga");
-    needsDocument(file->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco), "export.ico");
-    needsDocument(file->addAction(tr("Export Artboards to Files…"), this, [this] { exportBoxes(false); }), "export.artboards");
-    needsDocument(file->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }), "export.slices");
-    needsDocument(file->addAction(tr("E&xport Animated GIF…"), this, &MainWindow::exportGif), "export.gif");
+    // File > Export, as Photoshop's: Quick Export in the format Preferences choose, Export As for the flat formats
+    // (PNG, JPEG, GIF, WebP, TIFF, TGA) with a size and a preview, then the formats with dialogs of their own.
+    QMenu* exportMenu = file->addMenu(tr("E&xport"));
+    QAction* quickExportAction = needsDocument(exportMenu->addAction(tr("Quick Export"), this, [this] { quickExport(false); }), "export.png");
+    quickExportAction->setObjectName("export.quick");
+    QAction* exportAsAction = needsDocument(exportMenu->addAction(tr("Export &As…"), this, [this] { exportAs(false); }), "export.png");
+    exportAsAction->setObjectName("export.as");
+    // Ctrl+Alt+Shift+W is Photoshop's Export As; Ctrl+Alt+Shift+S (its Save for Web) opened Export JPEG here before.
+    exportAsAction->setShortcuts({QKeySequence("Ctrl+Alt+Shift+W"), QKeySequence("Ctrl+Alt+Shift+S")});
+    connect(exportMenu, &QMenu::aboutToShow, this, [this, quickExportAction] { quickExportAction->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat()))); });
+    quickExportAction->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat())));
+    exportMenu->addSeparator();
+    needsDocument(exportMenu->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd), "export.psd");
+    needsDocument(exportMenu->addAction(tr("Export S&VG…"), this, &MainWindow::exportSvg), "export.svg");
+    needsDocument(exportMenu->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco), "export.ico");
+    needsDocument(exportMenu->addAction(tr("E&xport Animated GIF…"), this, &MainWindow::exportGif), "export.gif");
+    exportMenu->addSeparator();
+    needsDocument(exportMenu->addAction(tr("Export Artboards to Files…"), this, [this] { exportBoxes(false); }), "export.artboards");
+    needsDocument(exportMenu->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }), "export.slices");
     file->addSeparator();
     QMenu* automate = file->addMenu(tr("A&utomate"));
     automate->addAction(tr("&Batch…"), this, [this] { showBatchDialog(); });
@@ -461,6 +470,14 @@ void MainWindow::buildMenus() {
         if (ok) runCommand("layers.set", {{"name", name}}, tr("Rename Layer"));
     }), "layers.structure"));
     needsDocument(layer->addAction(tr("Move &Out of Folder"), QKeySequence("Ctrl+Shift+["), this, [this] { session_->moveActiveLayerOutOfGroup(); }), "layers.structure");
+    // The active layer alone, cropped to its visible pixels, as Photoshop's Layer > Quick Export and Export As.
+    layer->addSeparator();
+    QAction* layerQuickExport = needsDocument(layer->addAction(tr("Quick Export"), QKeySequence("Ctrl+Shift+'"), this, [this] { quickExport(true); }), "export.png");
+    layerQuickExport->setObjectName("export.layerQuick");
+    layerQuickExport->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat())));
+    needsDocument(layer->addAction(tr("Export As…"), QKeySequence("Ctrl+Alt+Shift+'"), this, [this] { exportAs(true); }), "export.png")->setObjectName("export.layerAs");
+    connect(layer, &QMenu::aboutToShow, this, [this, layerQuickExport] { layerQuickExport->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat()))); });
+    layer->addSeparator();
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
     for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);

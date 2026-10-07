@@ -394,6 +394,11 @@ if(TARGET nekophoto)
     add_test(NAME guides_selftest COMMAND nekophoto --self-test guides)
     set_tests_properties(guides_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/data")
+    # File > Export > Export As, Quick Export and Layer > Export As: the estimate is the file's size, scaling, the
+    # settings remembered per format, a layer cropped to its pixels.
+    add_test(NAME export_as_selftest COMMAND nekophoto --self-test export-as)
+    set_tests_properties(export_as_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/export-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/export-home/data")
     # Edit > Search…: Ctrl+F, typed queries and their top result, Enter, Recently Used (English, for the labels).
     add_test(NAME search_selftest COMMAND nekophoto --lang en --self-test search)
     set_tests_properties(search_selftest PROPERTIES ENVIRONMENT

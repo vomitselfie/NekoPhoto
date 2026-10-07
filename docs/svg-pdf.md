@@ -50,7 +50,7 @@ A 2-point line imports as an open stroked path, not Photoshop's filled Line quad
 
 ## Exporting SVG
 
-File > Export SVG (or `document.export` to a `.svg`) writes `src/core/src/svg_write.cpp`'s output:
+File > Export > Export SVG (or `document.export` to a `.svg`) writes `src/core/src/svg_write.cpp`'s output:
 
 - Vector shape layers become `<path>` elements (`fill-rule="evenodd"`) with the fill colour and the stroke
   attributes; the layer's opacity and blend mode become CSS `opacity` and `mix-blend-mode`. A centre

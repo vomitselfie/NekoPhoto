@@ -2,20 +2,15 @@
 #include "Icons.h"
 #include "Style.h"
 #include <QApplication>
-#include <QBuffer>
 #include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
-#include <QColorDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGridLayout>
-#include <QImageWriter>
 #include <QLabel>
-#include <QPainter>
 #include <QPushButton>
-#include <QSlider>
 #include <QSpinBox>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -295,86 +290,6 @@ std::optional<ImageSizeOptions> askImageSize(QWidget* parent, int currentWidth, 
     width->selectAll();
     if (dialog.exec() != QDialog::Accepted) return std::nullopt;
     return ImageSizeOptions{width->value(), height->value(), resolution->value(), sampling->currentIndex()};
-}
-
-std::optional<JpegOptions> askJpegExport(QWidget* parent, const QImage& flattened, bool webp) {
-    // JPEG flattens onto a colour; WebP keeps transparency, and at quality 100 it is lossless.
-    const char* format = webp ? "webp" : "jpeg";
-    QDialog dialog(parent);
-    dialog.setWindowTitle(webp ? QObject::tr("Export WebP") : QObject::tr("Export JPEG"));
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* preview = new QLabel;
-    preview->setMinimumSize(560, 360);
-    preview->setAlignment(Qt::AlignCenter);
-    preview->setStyleSheet(QStringLiteral("background: %1;").arg(QColor(46, 46, 46).name()));
-    layout->addWidget(preview, 1);
-    auto* form = new QFormLayout;
-    auto* quality = new QSlider(Qt::Horizontal);
-    quality->setRange(1, 100);
-    quality->setValue(85);
-    auto* qualitySpin = new QSpinBox;
-    qualitySpin->setRange(1, 100);
-    qualitySpin->setValue(85);
-    qualitySpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    qualitySpin->setFixedWidth(48);
-    qualitySpin->setAlignment(Qt::AlignRight);
-    auto* qualityRow = new QHBoxLayout;
-    qualityRow->addWidget(quality, 1);
-    qualityRow->addWidget(qualitySpin);
-    form->addRow(QObject::tr("Quality"), qualityRow);
-    QColor background = Qt::white;
-    auto* colorButton = new QPushButton;
-    auto* colorSwatch = new QLabel;
-    colorSwatch->setFixedSize(22, 22);
-    colorSwatch->setAutoFillBackground(true);
-    auto swatch = [&] {
-        colorSwatch->setStyleSheet(QStringLiteral("background: %1; border: 1px solid rgba(0,0,0,120);").arg(background.name()));
-        colorButton->setText(background == Qt::white ? QObject::tr("White") : background == Qt::black ? QObject::tr("Black") : background.name());
-    };
-    swatch();
-    auto* colorRow = new QHBoxLayout;
-    colorRow->addWidget(colorSwatch);
-    colorRow->addWidget(colorButton);
-    colorRow->addStretch();
-    if (!webp) form->addRow(QObject::tr("Behind transparency"), colorRow);
-    else { colorSwatch->hide(); colorButton->hide(); }
-    auto* sizeLabel = new QLabel;
-    form->addRow(QObject::tr("File size"), sizeLabel);
-    layout->addLayout(form);
-    QImage small = flattened.width() > 1000 || flattened.height() > 1000 ? flattened.scaled(1000, 1000, Qt::KeepAspectRatio, Qt::SmoothTransformation) : flattened;
-    auto refresh = [&] {
-        QImage flat = small;
-        if (!webp) {
-            flat = QImage(small.size(), QImage::Format_RGB32);
-            flat.fill(background);
-            QPainter p(&flat);
-            p.drawImage(0, 0, small);
-        }
-        QByteArray bytes;
-        QBuffer buffer(&bytes);
-        buffer.open(QIODevice::WriteOnly);
-        QImageWriter writer(&buffer, format);
-        writer.setQuality(quality->value());
-        writer.write(flat);
-        QImage decoded = QImage::fromData(bytes, format);
-        preview->setPixmap(QPixmap::fromImage(decoded.scaled(preview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation)));
-        double factor = double(flattened.width()) * flattened.height() / std::max(1, small.width() * small.height());
-        double kb = bytes.size() * factor / 1024;
-        sizeLabel->setText(kb >= 1024 ? QObject::tr("about %1 MB").arg(kb / 1024, 0, 'f', 1) : QObject::tr("about %1 KB").arg(int(kb)));
-    };
-    QObject::connect(quality, &QSlider::valueChanged, &dialog, [&](int v) { { QSignalBlocker b(qualitySpin); qualitySpin->setValue(v); } refresh(); });
-    QObject::connect(qualitySpin, QOverload<int>::of(&QSpinBox::valueChanged), &dialog, [&](int v) { quality->setValue(v); });
-    QObject::connect(colorButton, &QPushButton::clicked, &dialog, [&] {
-        QColor c = QColorDialog::getColor(background, &dialog, QObject::tr("Colour behind transparent areas"));
-        if (c.isValid()) { background = c; swatch(); refresh(); }
-    });
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-    refresh();
-    if (dialog.exec() != QDialog::Accepted) return std::nullopt;
-    return JpegOptions{quality->value(), background};
 }
 
 } // namespace app

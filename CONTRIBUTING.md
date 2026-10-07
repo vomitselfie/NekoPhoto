@@ -152,6 +152,7 @@ documents, selections, paths, channels and history names, with each recorded onc
 
 | Where | Items | Method |
 |---|---|---|
+| File | Export > Export As… and Quick Export, Layer > Export As… and Quick Export (the dialog's choices as parameters; `export_as_selftest` checks them) | `document.export` |
 | Edit | Fill with Foreground / Background *(checked)*; Clear *(checked)*: pixels with a selection, else one layer that supplies no clipping mask | `pixels.fill`, `pixels.clear`, `layers.delete` |
 | Edit | Cut, Copy, Copy Merged, Paste *(checked)*: Copy with layers selected and no selection copies the layers, Paste pastes copied layers | `pixels.cut`, `pixels.copy`, `pixels.copyMerged`, `pixels.paste`, `layers.copy`, `layers.paste` |
 | Edit | Free Transform's commit *(checked)* | `layers.setTransform` |
@@ -181,7 +182,7 @@ ids (`layers.set` with `id`, `layers.move`), as an agent's requests do.
 
 | Items | Why |
 |---|---|
-| File: New, Open, Import, Save, Save As, Export…, Batch, tabs, Quit | File dialogs and the document's lifetime; `document.*` and `tabs.*` are there for scripts, and Photoshop's actions record none of them as edits |
+| File: New, Open, Import, Save, Save As, the PSD, SVG, ICO, animated GIF, artboard and slice exports, Batch, tabs, Quit | File dialogs and the document's lifetime; `document.*` and `tabs.*` are there for scripts, and Photoshop's actions record none of them as edits |
 | Edit: Undo, Redo | History is not a command |
 | Edit: Warp…, Warp Cage, Content-Aware Scale… | Interactive; `layers.warp`, `layers.setCage` and `pixels.contentAwareScale` exist, but the commits are not proven identical yet |
 | Edit: Color Settings…, Preferences… | Application settings, not document edits |

@@ -3,6 +3,7 @@
 #include "TextLayer.h"
 #include "Automation.h"
 #include "ColorManagement.h"
+#include "ExportAs.h"
 #include "compositor/gif.h"
 #include "AutomationGuard.h"
 #include "AutomationHandlers.h"
@@ -18,6 +19,7 @@
 #include "VectorFiles.h"
 #include "HistogramPanel.h"
 #include <QFileInfo>
+#include <QFile>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QPainter>
@@ -226,6 +228,12 @@ void AutomationServer::registerDocumentHandlers() {
         QString path = QFileInfo(str(p, "path")).absoluteFilePath();
         checkWrite(path, p);
         QString suffix = QFileInfo(path).suffix().toLower();
+        // Export As's choices: a size, one layer alone, a matte. They apply to the flat formats only.
+        const bool sized = has(p, "width") || has(p, "height") || has(p, "scale");
+        const bool oneLayer = has(p, "layer");
+        const bool flatOnly = sized || oneLayer || has(p, "transparency") || has(p, "resample") || has(p, "trim");
+        if (flatOnly && (suffix == "psd" || suffix == "psb" || suffix == "svg"))
+            fail("width, height, scale, resample, layer, trim and transparency apply to the flat formats (png, jpg, webp, tif, tga, gif, ico)", invalidParams);
         if (suffix == "psd" || suffix == "psb") {
             // Layered: what Photoshop cannot carry comes back in the reply, the way the export dialog lists it.
             PsdExportSummary summary;
@@ -243,10 +251,7 @@ void AutomationServer::registerDocumentHandlers() {
         // A 32-bit document goes to 16 bits (PNG, TIFF) or 8 tone-mapped at exposure 0: values above white clip.
         const bool floatDocument = doc.sampleType == SampleType::F32;
         const QString toneNote = QStringLiteral("tone-mapped from 32 bits per channel at exposure 0 (values above white are clipped)");
-        // The document's profile is embedded (PNG, JPEG, WebP, TIFF); convertToSrgb converts instead, as the web formats
-        // want (the default for GIF, which has no profile).
         const bool gif = suffix == "gif";
-        const color::ExportPlan plan = color::exportPlan(doc, flag(p, "convertToSrgb", gif), flag(p, "embedProfile", true));
         if (suffix == "svg" && floatDocument) fail("SVG export is not available for 32-bit documents yet");
         if (suffix == "svg") {
             // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
@@ -260,9 +265,11 @@ void AutomationServer::registerDocumentHandlers() {
             if (doc.colorMode != ColorMode::RGB) { out["convertedToSrgb"] = true; out["note"] = QStringLiteral("converted from %1 to sRGB").arg(QString::fromLatin1(colorModeName(doc.colorMode))); }
             return out;
         }
-        if (suffix == "gif") {
-            // The timeline's frames as an animated GIF, or the composite as a still one.
+        if (gif && flag(p, "animated", true) && !flatOnly) {
+            // The timeline's frames as an animated GIF (the composite when there are none). GIF has no profile, so
+            // the pixels are converted to sRGB unless convertToSrgb is false.
             session()->endFramePreview();
+            const color::ExportPlan plan = color::exportPlan(doc, flag(p, "convertToSrgb", true), flag(p, "embedProfile", true));
             std::string error;
             std::optional<Document> converted;
             if (plan.convert) { converted = document(); convertDocumentProfile(*converted, {}, {}); }
@@ -273,49 +280,65 @@ void AutomationServer::registerDocumentHandlers() {
             if (floatDocument) out["note"] = toneNote;
             return out;
         }
-        // A 16-bit document as a 16-bit PNG (and TIFF, when Qt writes one); the 8-bit formats get it dithered down.
-        if ((deep || floatDocument) && (suffix == "png" || ((suffix == "tif" || suffix == "tiff") && canWriteDeepTiff()))) {
-            auto image = color::flatten16(doc, plan);
-            if (!image) fail("nothing to export");
+        const QString format = exportas::formatKey(suffix);
+        if (format.isEmpty()) fail("path must end in .psd, .psb, .svg, .png, .jpg, .jpeg, .webp, .tif, .tiff, .gif, .tga or .ico", invalidParams);
+        if ((format == "webp" || format == "tif") && !canWriteImageFormat(format == "webp" ? "webp" : "tiff"))
+            fail(QStringLiteral("this build of Qt has no %1 writer (the qtimageformats plugins)").arg(format == "webp" ? "WebP" : "TIFF"));
+        // Layer > Export As: the layer alone, cropped to its visible pixels unless trim is false.
+        std::optional<Document> solo;
+        QString layerId;
+        if (oneLayer) {
+            const QString which = str(p, "layer");
+            const Layer* l = which == "active" ? session()->activeLayer() : doc.find(which.toStdString());
+            if (!l) fail(which == "active" ? QStringLiteral("no active layer") : QStringLiteral("no layer with id %1; document.overview or layers.list give the ids").arg(which), invalidParams);
             std::string error;
-            if (suffix == "png") { if (!writePngImage16(path.toStdString(), *image, doc.resolution, &error, plan.icc.empty() ? nullptr : &plan.icc)) fail("couldn't write " + path + ": " + qs(error)); }
-            else { QString qerror; if (!writeQtImage(path, "tiff", toQImage16(*image), 100, doc.resolution, &qerror, plan.iccBytes())) fail("couldn't write " + path + ": " + qerror); }
-            QJsonObject out{{"path", path}, {"width", image->width()}, {"height", image->height()}, {"bits", 16}};
-            if (floatDocument) out["note"] = toneNote;
-            if (doc.colorMode != ColorMode::RGB) { out["convertedToSrgb"] = true; out["note"] = QStringLiteral("converted from %1 to sRGB").arg(QString::fromLatin1(colorModeName(doc.colorMode))); }
-            return out;
+            solo = exportas::layerDocument(doc, l->id, &error);
+            if (!solo) fail(qs(error));
+            layerId = qs(l->id);
         }
-        auto flat = color::flatten8(doc, plan);
-        if (!flat) fail("nothing to export");
-        if (suffix == "png") {
-            std::string error;
-            if (!writePngImage(path.toStdString(), *flat, session()->document()->resolution, &error, plan.icc.empty() ? nullptr : &plan.icc)) fail("couldn't write " + path + ": " + qs(error));
-        } else if (suffix == "jpg" || suffix == "jpeg") {
-            QImage image(flat->width(), flat->height(), QImage::Format_RGB32);
-            image.fill(QColor(str(p, "background", QStringLiteral("#ffffff"))));
-            QPainter painter(&image);
-            painter.drawImage(0, 0, wrapImage(*flat));
-            painter.end();
-            QString error;
-            if (!writeQtImage(path, "jpeg", image, integer(p, "quality", 85), session()->document()->resolution, &error, plan.iccBytes())) fail("couldn't write " + path + ": " + error);
-        } else if ((suffix == "webp" || suffix == "tif" || suffix == "tiff") && canWriteImageFormat(suffix == "webp" ? "webp" : "tiff")) {
-            // WebP and TIFF keep transparency; WebP at quality 100 is lossless.
-            QString error;
-            if (!writeQtImage(path, suffix == "webp" ? "webp" : "tiff", toQImage(*flat), integer(p, "quality", 90), session()->document()->resolution, &error, plan.iccBytes()))
-                fail("couldn't write " + path + ": " + error);
-        } else if (suffix == "tga") {
-            std::string error;
-            if (!writeTgaImage(path.toStdString(), *flat, &error)) fail("couldn't write " + path + ": " + qs(error));
-        } else if (suffix == "ico") {
-            std::string error;
-            if (!writeIco(path.toStdString(), *flat, defaultIcoSizes, &error, &doc)) fail("couldn't write " + path + ": " + qs(error));
-        } else fail("path must end in .psd, .psb, .svg, .png, .jpg, .jpeg, .webp, .tif, .tiff, .gif, .tga or .ico", invalidParams);
-        QJsonObject out{{"path", path}, {"width", flat->width()}, {"height", flat->height()}, {"bits", 8}, {"profile", plan.icc.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(encodedProfileOf(doc).description))}, {"convertedToSrgb", plan.convert}};
-        if (deep) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
+        const Document& source = solo ? *solo : doc;
+        // The document's profile is embedded (PNG, JPEG, WebP, TIFF); convertToSrgb converts instead, as the web formats
+        // want (the default for GIF, which has no profile).
+        const color::ExportPlan plan = color::exportPlan(source, flag(p, "convertToSrgb", gif), flag(p, "embedProfile", true));
+        const exportas::Flat flat = exportas::flatten(source, format, plan, oneLayer && flag(p, "trim", true));
+        if (flat.empty()) fail(oneLayer ? "the layer has no visible pixels to export" : "nothing to export");
+        // The size: width and/or height (the other kept in proportion), or scale, of the image as flattened.
+        int width = integer(p, "width", 0), height = integer(p, "height", 0);
+        if (has(p, "scale")) {
+            const double k = num(p, "scale");
+            if (!(k > 0)) fail("scale must be above 0 (1 is full size)", invalidParams);
+            width = std::max(1, int(std::lround(flat.width() * k)));
+            height = std::max(1, int(std::lround(flat.height() * k)));
+        } else if (width > 0 && height <= 0) height = std::max(1, int(std::lround(double(width) * flat.height() / flat.width())));
+        else if (height > 0 && width <= 0) width = std::max(1, int(std::lround(double(height) * flat.width() / flat.height())));
+        if (width <= 0) { width = flat.width(); height = flat.height(); }
+        if (!Document::validDimension(width) || !Document::validDimension(height)) fail(QStringLiteral("the exported size must be 1..%1 pixels a side").arg(maxImageSide), invalidParams);
+        if (const BudgetCheck check = Document::canCreate(width, height, doc.sampleType); !check) fail(qs(check.message()), invalidParams);
+        const auto resample = exportas::resampleNamed(str(p, "resample", QStringLiteral("bicubic")));
+        if (!resample) fail("resample must be bicubic, bilinear, nearest or lanczos", invalidParams);
+        exportas::Options options;
+        options.format = format;
+        options.quality = has(p, "quality") ? integer(p, "quality") : -1;
+        options.transparency = flag(p, "transparency", true);
+        options.matte = QColor(str(p, "background", QStringLiteral("#ffffff")));
+        if (!options.matte.isValid()) fail("background must be a colour such as #ffffff", invalidParams);
+        options.width = width;
+        options.height = height;
+        options.resample = *resample;
+        options.resolution = doc.resolution;
+        const exportas::Encoded encoded = exportas::encode(flat, options, plan.icc, &source);
+        if (!encoded.ok()) fail("couldn't write " + path + ": " + encoded.error);
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(encoded.bytes) != encoded.bytes.size() || !file.flush()) fail("couldn't write " + path + ": " + file.errorString());
+        QJsonObject out{{"path", path}, {"width", encoded.width}, {"height", encoded.height}, {"bits", encoded.bits}, {"bytes", double(encoded.bytes.size())},
+                        {"profile", plan.icc.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(encodedProfileOf(source).description))}, {"convertedToSrgb", plan.convert}};
+        if (oneLayer) out["layer"] = layerId;
+        const bool dithered = deep && encoded.bits == 8;
+        if (dithered) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
         if (floatDocument) out["note"] = toneNote;
         if (doc.colorMode != ColorMode::RGB) {
             out["convertedToSrgb"] = true;
-            out["note"] = QStringLiteral("converted from %1 to sRGB%2").arg(QString::fromLatin1(colorModeName(doc.colorMode)), deep ? QStringLiteral(", reduced from 16 to 8 bits per channel with dithering") : QString());
+            out["note"] = QStringLiteral("converted from %1 to sRGB%2").arg(QString::fromLatin1(colorModeName(doc.colorMode)), dithered ? QStringLiteral(", reduced from 16 to 8 bits per channel with dithering") : QString());
         }
         return out;
     });

@@ -274,6 +274,29 @@ def remaining_methods(rpc):
     tga, ico = os.path.join(work, "flat.tga"), os.path.join(work, "flat.ico")
     assert rpc.call("document.export", path=tga)["width"] == 200
     rpc.call("document.export", path=ico)
+    # File > Export As: a new size (scale, or a width with the height in proportion) and its resampling, a matte,
+    # one layer alone cropped to its pixels; the reply's bytes are the file's.
+    half = rpc.call("document.export", path=os.path.join(work, "half.png"), scale=0.5)
+    assert (half["width"], half["height"]) == (100, 60) and half["bytes"] == os.path.getsize(half["path"]), half
+    narrow = rpc.call("document.export", path=os.path.join(work, "narrow.jpg"), width=50, quality=70)
+    assert (narrow["width"], narrow["height"]) == (50, 30), narrow
+    big = rpc.call("document.export", path=os.path.join(work, "big.png"), scale=2, resample="nearest")
+    assert (big["width"], big["height"]) == (400, 240), big
+    _, _, doubled = png_pixels(big["path"])
+    _, _, single = png_pixels(image)
+    assert doubled(81, 61) == single(40, 30) and doubled(200, 120) == single(100, 60), "nearest neighbour doubles each pixel"
+    alone = rpc.call("document.export", path=os.path.join(work, "shape.png"), layer="active")
+    assert 150 <= alone["width"] <= 170 and 70 <= alone["height"] <= 90 and alone["layer"], alone
+    _, _, shape_pixel = png_pixels(alone["path"])
+    assert shape_pixel(0, 0)[3] == 0 and shape_pixel(alone["width"] // 2, alone["height"] // 2)[3] == 255, "the layer alone keeps its transparency"
+    matted = rpc.call("document.export", path=os.path.join(work, "matted.png"), layer="active", trim=False, transparency=False, background="#00ff00")
+    assert (matted["width"], matted["height"]) == (200, 120), matted
+    _, _, matted_pixel = png_pixels(matted["path"])
+    assert matted_pixel(1, 1) == (0, 255, 0, 255), matted_pixel(1, 1)
+    still = rpc.call("document.export", path=os.path.join(work, "still.gif"), animated=False, scale=0.25)
+    assert (still["width"], still["height"]) == (50, 30), still
+    expect_refused(rpc, "flat formats", "document.export", path=os.path.join(work, "sized.psd"), scale=0.5)
+    expect_refused(rpc, "no layer with id", "document.export", path=os.path.join(work, "none.png"), layer="nope")
     rpc.call("document.import", path=tga)
     rpc.call("history.undo")
     here = rpc.call("tabs.list")

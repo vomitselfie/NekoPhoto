@@ -15,6 +15,7 @@
 #include "PreferencesDialog.h"
 #include "Automation.h"
 #include "Dialogs.h"
+#include "ExportAsDialog.h"
 #include "Theme.h"
 #include "CameraRawDialog.h"
 #include "RawDevelopDialog.h"
@@ -319,11 +320,11 @@ int run(int argc, char** argv) {
     parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, levels-clip and curves-clip (the clipping display), histogram and histogram-compact (the panel), text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), search or search:<query> (Edit > Search with the query typed), guides (two ruler guides, and a smart guide as a snap shows it).", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, export-as (or export-as:<format>: png, jpg, gif, webp, tif, tga), export-layer-as, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, levels-clip and curves-clip (the clipping display), histogram and histogram-compact (the panel), text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), search or search:<query> (Edit > Search with the query typed), guides (two ruler guides, and a smart guide as a snap shows it).", "name");
     parser.addOption(dialogOption);
     QCommandLineOption contextMenuOption("context-menu", "Open the canvas's context menu at document point <x,y> after opening (with --tool, for screenshots); x,y,transform or x,y,type first starts a free transform or typing there.", "x,y");
     parser.addOption(contextMenuOption);
-    QCommandLineOption selfTestOption("self-test", "Developer check: run in-app test <name> (command-path, guides, canvas-menus, search) on a demo document, print the result and quit with its status.", "name");
+    QCommandLineOption selfTestOption("self-test", "Developer check: run in-app test <name> (command-path, guides, canvas-menus, search, export-as) on a demo document, print the result and quit with its status.", "name");
     parser.addOption(selfTestOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
@@ -650,7 +651,14 @@ int run(int argc, char** argv) {
             else if (name == "new") app::askNewDocument(&window, {});
             else if (name == "canvas-size") app::askCanvasSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080);
             else if (name == "image-size") app::askImageSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080, 72);
-            else if (name == "jpeg") { auto flat = s->hasDocument() ? s->flattened() : nullptr; if (flat) app::askJpegExport(&window, app::toQImage(*flat)); }
+            else if (name == "export-as" || name.startsWith("export-as:") || name == "jpeg" || name == "export-layer-as") {
+                // File > Export > Export As (export-as:jpg starts on a format; jpeg is the old name for that), or
+                // Layer > Export As on the active layer.
+                const QString format = name == "jpeg" ? QStringLiteral("jpg") : given.section(':', 1).toLower();
+                auto* dialog = new app::ExportAsDialog(s, name == "export-layer-as", format, &window);
+                dialog->setAttribute(Qt::WA_DeleteOnClose);
+                dialog->show();
+            }
             else qWarning("unknown dialog: %s", qPrintable(name));
         });
     }

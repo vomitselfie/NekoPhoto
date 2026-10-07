@@ -445,7 +445,8 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl X, Ctrl C, Ctrl Shift C, Ctrl V | Cut, copy, copy merged, paste |
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
 | Ctrl Z, Ctrl Shift Z | Undo, redo |
-| Ctrl Alt Shift S | Export JPEG |
+| Ctrl Alt Shift W (also Ctrl Alt Shift S) | File ▸ Export ▸ Export As |
+| Ctrl Shift ', Ctrl Alt Shift ' | Layer ▸ Quick Export, Layer ▸ Export As (the active layer alone) |
 | Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |
 | Ctrl K (also Ctrl ,) | Preferences |
 | Ctrl F | Edit ▸ Search: find any command, tool or G'MIC filter by name and run it (arrows, Enter, Esc) |

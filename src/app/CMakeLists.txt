@@ -82,6 +82,10 @@ qt_add_executable(nekophoto
     EditorSessionColor.cpp
     ColorManagement.h
     ColorManagement.cpp
+    ExportAs.h
+    ExportAs.cpp
+    ExportAsDialog.h
+    ExportAsDialog.cpp
     ColorDialogs.h
     ColorDialogs.cpp
     CanvasWidget.h
