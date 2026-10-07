@@ -376,6 +376,9 @@ endif()
 # The legal boundaries' source checks (docs/legal-boundaries.md).
 if(Python3_Interpreter_FOUND)
     add_test(NAME legal_boundaries_check COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check_legal_boundaries.py)
+    # docs/compatibility.md's "At a glance" counts, generated from the repository: stale fails
+    # (COMPAT_TABLE_WRITE=1 rewrites them).
+    add_test(NAME compat_table_check COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/compat_table.py --check)
 endif()
 
 # Colour management: transforms against Little CMS (linked directly for the reference values), proofing, Convert.
