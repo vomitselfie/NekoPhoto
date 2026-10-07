@@ -273,7 +273,8 @@ packaging/                      .desktop, icon, MIME type
   files and their PSD exports (identical renders) and fuzzed under ASan.
 - Crash recovery (`src/app/Autosave.cpp`): in an ordinary launch, every tab
   with unsaved changes is saved as a project every few minutes (Preferences,
-  `autosave/minutes`, default 3, 0 off) into
+  `autosave/minutes`, default 3, 0 off; a change applies at once, while the
+  dialog is still open, and turning it on from Off starts it) into
   `~/.local/share/nekophoto/nekophoto/recovery/<instance>/`, on
   a worker thread from a copy of the document. A save or closing the tab
   removes its copy; a clean quit removes the folder. Each instance holds

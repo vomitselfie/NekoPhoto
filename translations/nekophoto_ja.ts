@@ -9209,8 +9209,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>起動時に自動操作ソケットでエージェントを待ち受ける</translation>
     </message>
     <message>
-        <source>Lets an MCP bridge or a script drive the editor over a local socket (%1). Only programs running as you can connect. Takes effect at the next launch; nekophoto --rpc turns it on for one run.</source>
-        <translation>MCP ブリッジやスクリプトが、ローカルソケット(%1)経由でエディターを操作できるようにします。接続できるのは同じユーザーで実行中のプログラムのみです。次回起動時に反映されます。nekophoto --rpc で 1 回の実行に限り有効にできます。</translation>
+        <source>Lets an MCP bridge or a script drive the editor over a local socket (%1). Only programs running as you can connect; nekophoto --rpc turns it on for one run.</source>
+        <translation>MCP ブリッジやスクリプトが、ローカルソケット(%1)経由でエディターを操作できるようにします。接続できるのは同じユーザーで実行中のプログラムのみです。nekophoto --rpc で 1 回の実行に限り有効にできます。</translation>
     </message>
     <message>
         <source>Downloading %1…</source>

@@ -12,6 +12,8 @@
 // type size keys, through synthesised key and mouse events.
 #include "SelfTest.h"
 #include "ActionLibrary.h"
+#include "Autosave.h"
+#include "PreferencesDialog.h"
 #include "AdjustmentEditor.h"
 #include "Automation.h"
 #include "CanvasWidget.h"
@@ -28,6 +30,7 @@
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QInputDialog>
+#include <QLabel>
 #include <QLineEdit>
 #include <QSlider>
 #include <QSpinBox>
@@ -1315,6 +1318,43 @@ int exportAs(MainWindow& w) {
 
 } // namespace
 
+/// Edit > Preferences: the autosave interval applies as it is changed (Off stops it, a number starts it again) rather
+/// than when the dialog closes, and the settings that apply only at the next launch say so beside their controls.
+int preferences(MainWindow& w) {
+    int failures = 0;
+    auto fail = [&](const char* what) { std::fprintf(stderr, "preferences: %s\n", what); failures++; };
+    // This run's own recovery folder only: nothing left by another run is offered back (which would wait on a dialog).
+    QDir(Autosave::root()).removeRecursively();
+    w.enableAutosave();
+    Autosave* autosave = w.autosave();
+    if (!autosave) { fail("no autosaver"); return failures; }
+    QAction* item = menuItem(w, {"Edit", "Preferences…"});
+    if (!item) return 1;
+    item->trigger();
+    QApplication::processEvents();
+    PreferencesDialog* dialog = w.findChild<PreferencesDialog*>();
+    if (!dialog) { fail("the dialog did not open"); return failures; }
+    auto* minutes = dialog->findChild<QSpinBox*>("autosaveMinutes");
+    if (!minutes) { fail("no autosave interval"); dialog->close(); return failures; }
+    minutes->setValue(0);
+    if (autosave->running()) fail("Off left autosave running while the dialog is open");
+    minutes->setValue(7);
+    if (!autosave->running()) fail("turning autosave on did not start it while the dialog is open");
+    else if (autosave->intervalMs() != 7 * 60 * 1000) fail("the new interval did not apply while the dialog is open");
+    minutes->setValue(2);
+    if (autosave->intervalMs() != 2 * 60 * 1000) fail("a changed interval did not apply while the dialog is open");
+    // Language, CPU power and Automation apply at the next launch, and each says so where it is set.
+    const QString nextLaunch = PreferencesDialog::tr("Takes effect the next time NekoPhoto starts.");
+    int saying = 0;
+    for (QLabel* label : dialog->findChildren<QLabel*>()) if (label->text().contains(nextLaunch)) saying++;
+    if (saying < 3) { std::fprintf(stderr, "preferences: %d hints say the setting applies at the next launch, expected 3\n", saying); failures++; }
+    dialog->close();
+    QApplication::processEvents();
+    autosave->finish();
+    std::printf("preferences: %s\n", failures ? "FAILED" : "ok");
+    return failures;
+}
+
 int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("command-path")) {
         const int first = commandPath(window);
@@ -1325,7 +1365,8 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("search")) return search(window);
     if (name == QLatin1String("held-keys")) return heldKeys(window);
     if (name == QLatin1String("export-as")) return exportAs(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as)\n", qPrintable(name));
+    if (name == QLatin1String("preferences")) return preferences(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences)\n", qPrintable(name));
     return 2;
 }
 

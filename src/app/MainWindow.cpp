@@ -649,7 +649,7 @@ void MainWindow::showPreferences() {
     auto* dialog = new PreferencesDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &PreferencesDialog::backgroundRemovalChanged, this, &MainWindow::refreshBackgroundAction);
-    connect(dialog, &QObject::destroyed, this, [this] { if (autosave_) autosave_->restart(); });
+    connect(dialog, &PreferencesDialog::autosaveIntervalChanged, this, [this](int minutes) { if (autosave_) autosave_->setInterval(minutes); });
     dialog->show();
 }
 

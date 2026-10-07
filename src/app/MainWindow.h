@@ -65,6 +65,8 @@ public:
     /// Crash recovery for an interactive launch: autosaves each tab's unsaved changes and offers back what
     /// an instance that crashed left behind. Off for headless, batch and screenshot runs.
     void enableAutosave();
+    /// Crash recovery's autosaver; none until enableAutosave.
+    Autosave* autosave() const { return autosave_; }
     /// A file handed over from another launch: a project or PSD as `openPath` does, an image as a document of
     /// its own rather than a layer of the current one (a double-click in the file manager means "open this").
     void openAsDocument(const QString& path);

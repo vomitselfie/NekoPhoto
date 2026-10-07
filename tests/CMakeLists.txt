@@ -418,6 +418,10 @@ if(TARGET nekophoto)
     add_test(NAME search_selftest COMMAND nekophoto --lang en --self-test search)
     set_tests_properties(search_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/search-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/search-home/data")
+    # Edit > Preferences: the autosave interval applies while the dialog is open; next-launch settings say so (English).
+    add_test(NAME preferences_selftest COMMAND nekophoto --lang en --self-test preferences)
+    set_tests_properties(preferences_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/preferences-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/preferences-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)
