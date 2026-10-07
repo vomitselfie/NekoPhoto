@@ -111,8 +111,14 @@ void ContentAwareScaleDialog::updatePreview() {
 void ContentAwareScaleDialog::apply() {
     const int w = std::max(1, int(std::lround(pixelWidth_ * width_->value() / 100)));
     const int h = std::max(1, int(std::lround(pixelHeight_ * height_->value() / 100)));
+    const bool protect = protect_->isChecked() && protect_->isEnabled();
+    // The command path: pixels.contentAwareScale with the size in pixels (an error is shown by the window).
+    if (session_->commandsRouted()) {
+        if (session_->runCommand(QStringLiteral("pixels.contentAwareScale"), {{"width", w}, {"height", h}, {"protectSelection", protect}})) accept();
+        return;
+    }
     QString error;
-    if (!session_->contentAwareScale(w, h, protect_->isChecked() && protect_->isEnabled(), &error)) {
+    if (!session_->contentAwareScale(w, h, protect, &error)) {
         QMessageBox::warning(this, windowTitle(), error);
         return;
     }

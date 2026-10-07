@@ -644,11 +644,21 @@ void AutomationServer::registerPaintHandlers() {
         if (!hasLayerVectorMask(l)) fail("the layer has no vector mask (a shape layer's path is shape.get's)", invalidParams);
         return vectorMaskJson(l);
     });
-    add("vectorMask.set", [session, layer, vectorMaskJson](const QJsonObject& p) {
+    const LayerOrActive layerOrActive{w};
+    add("vectorMask.set", [session, layerOrActive, vectorMaskJson](const QJsonObject& p) {
         // Layer > Vector Mask: Reveal All, Hide All, Current Path (the path paths.select chose), or a path given.
         EditorSession* s = session();
-        const Uuid id = layer(p).id;
+        const Uuid id = layerOrActive(p).id;
         const QString mode = str(p, "mode", has(p, "path") ? QStringLiteral("path") : QStringLiteral("revealAll"));
+        if (!has(p, "inverted") && !hasLayerVectorMask(*s->document()->find(id)) && (mode == "revealAll" || mode == "hideAll" || mode == "currentPath")) {
+            // The menu's items on a layer without one: their own step names, and the new mask becomes the target path.
+            using Kind = EditorSession::VectorMaskKind;
+            s->selectLayer(id);
+            QString error;
+            if (!s->addVectorMask(mode == "hideAll" ? Kind::HideAll : mode == "currentPath" ? Kind::CurrentPath : Kind::RevealAll, &error))
+                fail(error.isEmpty() ? QStringLiteral("couldn't add the vector mask") : error, invalidParams);
+            return vectorMaskJson(*s->document()->find(id));
+        }
         VectorPath path;
         if (mode == "path") { if (!has(p, "path")) fail("mode path needs path", invalidParams); path = pathFromJson(p.value("path")); }
         else if (mode == "hideAll") path.inverted = true;
@@ -662,17 +672,17 @@ void AutomationServer::registerPaintHandlers() {
         if (!s->setVectorMaskPath(id, path, &error)) fail(error.isEmpty() ? QStringLiteral("couldn't set the vector mask") : error, invalidParams);
         return vectorMaskJson(*s->document()->find(id));
     });
-    add("vectorMask.delete", [session, layer](const QJsonObject& p) {
+    add("vectorMask.delete", [session, layerOrActive](const QJsonObject& p) {
         EditorSession* s = session();
-        const Uuid id = layer(p).id;
+        const Uuid id = layerOrActive(p).id;
         s->selectLayer(id);
         if (!s->deleteVectorMask()) fail("the layer has no vector mask", invalidParams);
         return QJsonObject{{"deleted", true}};
     });
-    add("vectorMask.target", [session, layer, vectorMaskJson](const QJsonObject& p) {
+    add("vectorMask.target", [session, layerOrActive, vectorMaskJson](const QJsonObject& p) {
         // Makes it the target path: the Pen, Direct Selection and paths.addAnchor / setOperation / mergeComponents
         // then work on it (paths.select with an id lets it go).
-        const Uuid id = layer(p).id;
+        const Uuid id = layerOrActive(p).id;
         if (!session()->targetVectorMask(id)) fail("the layer has no vector mask", invalidParams);
         return vectorMaskJson(*session()->document()->find(id));
     });

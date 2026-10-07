@@ -1,5 +1,6 @@
 #include "WarpDialog.h"
 #include <QComboBox>
+#include <QJsonObject>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QMessageBox>
@@ -64,6 +65,14 @@ void WarpDialog::accept() {
     warp.horizontal = horizontal_->value();
     warp.vertical = vertical_->value();
     warp.verticalOrientation = orientation_->currentIndex() == 1;
+    // The command path: layers.warp with the dialog's values (None, on text, is the style none). An error is shown by
+    // the window and the dialog stays open, as before.
+    if (session_->commandsRouted()) {
+        const QJsonObject params{{"style", warp.style.empty() ? QStringLiteral("none") : QString::fromStdString(warp.style)}, {"bend", warp.bend},
+                                 {"horizontal", warp.horizontal}, {"vertical", warp.vertical}, {"orientation", warp.verticalOrientation ? "vertical" : "horizontal"}};
+        if (session_->runCommand(QStringLiteral("layers.warp"), params)) QDialog::accept();
+        return;
+    }
     QString error;
     if (!session_->warpActiveLayer(warp, &error)) { QMessageBox::warning(this, tr("Warp"), error); return; }
     QDialog::accept();

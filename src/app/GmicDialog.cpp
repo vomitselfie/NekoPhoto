@@ -2,6 +2,7 @@
 #include "Style.h"
 #include "compositor/filters.h"
 #include "compositor/render.h"
+#include <QApplication>
 #include <QCheckBox>
 #include <algorithm>
 #include <QColorDialog>
@@ -504,6 +505,20 @@ bool GmicDialog::apply() {
     if (applying_) return false;
     QString command = customCommand_ ? command_->text().trimmed() : current_.commandLine(false);
     if (command.isEmpty()) return true;
+    // The command path: pixels.gmic runs the command line (a catalogue filter, or a built-in followed by numbers, as
+    // the method allows), the step named after the filter. A typed command the method does not allow runs here.
+    const QString stepName = customCommand_ ? command.section(' ', 0, 0) : current_.name;
+    if (GmicRunner::allowedForAutomation(command, nullptr) && session() && session()->commandsRouted()) {
+        preview_runner_.cancel();
+        setEnabled(false);
+        status_->setText(tr("Applying %1…").arg(current_.name));
+        status_->repaint();
+        QApplication::setOverrideCursor(Qt::BusyCursor);
+        const bool ran = commitAsCommand(QStringLiteral("pixels.gmic"), {{"command", command}, {"name", stepName}});
+        QApplication::restoreOverrideCursor();
+        setEnabled(true);
+        if (ran) return true;
+    }
     applying_ = true;
     preview_runner_.cancel();
     setEnabled(false);

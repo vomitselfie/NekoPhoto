@@ -185,7 +185,9 @@ void AutomationServer::registerDocumentHandlers() {
         if (psd) w->nextPsdMergedOnly = flag(p, "mergedOnly", false);
         const EditorSession* before = session();
         const std::string beforeDocument = before->hasDocument() ? before->document()->id : std::string();
-        w->openPath(path);
+        // asDocument is File > Open: an image is a document of its own, in a new tab, whatever is open.
+        if (flag(p, "asDocument", false)) w->openAsDocument(path);
+        else w->openPath(path);
         EditorSession* s = session();
         QJsonObject out{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->hasDocument() ? s->document()->width : 0}, {"height", s->hasDocument() ? s->document()->height : 0}};
         if (pdf || svg) {

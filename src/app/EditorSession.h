@@ -696,8 +696,9 @@ public:
     bool beginLayerStyleEdit(const compositor::Uuid& id);
     void previewLayerStyle(const compositor::LayerStyle& style);
     void endLayerStyleEdit(bool keep);
-    /// Gives a layer `style` as one undo step (automation's layers.setStyle).
-    bool applyLayerStyle(const compositor::Uuid& id, const compositor::LayerStyle& style);
+    /// Gives a layer `style` as one undo step named `step` (automation's layers.setStyle: Layer Style, Paste Layer Style
+    /// or Clear Layer Style).
+    bool applyLayerStyle(const compositor::Uuid& id, const compositor::LayerStyle& style, const char* step = "Layer Style");
     /// A style preset on a layer as one undo step ("Apply Style"): the document first gets the patterns it uses.
     bool applyStylePreset(const compositor::Uuid& id, const compositor::LayerStyle& style, const std::vector<compositor::PatternPreset>& patterns);
     /// Gives the document patterns it does not have (one undo step); how many were added.
@@ -705,6 +706,9 @@ public:
     /// Copy, Paste and Clear Layer Style on the active layer.
     void copyLayerStyle();
     bool canPasteLayerStyle() const { return styleClipboard_.has_value(); }
+    /// The style Copy Layer Style holds (Layer > Layer Style > Copy Layer Style puts layers.style's answer here).
+    const std::optional<compositor::LayerStyle>& styleClipboard() const { return styleClipboard_; }
+    void setStyleClipboard(const compositor::LayerStyle& style) { styleClipboard_ = style; }
     void pasteLayerStyle();
     void clearLayerStyle();
     bool activeLayerHasStyle() const;

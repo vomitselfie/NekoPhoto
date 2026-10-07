@@ -74,10 +74,10 @@ void EditorSession::endLayerStyleEdit(bool keep) {
     notifyDocument();
 }
 
-bool EditorSession::applyLayerStyle(const Uuid& id, const LayerStyle& style) {
+bool EditorSession::applyLayerStyle(const Uuid& id, const LayerStyle& style, const char* step) {
     if (refusedAtDepth("edit.style", tr("Layer styles"))) return false;
     if (styleEditLayer_ || !canStyleLayer(id)) return false;
-    beginEdit(QT_TRANSLATE_NOOP("History", "Layer Style"));
+    beginEdit(QString::fromLatin1(step));
     addDocumentPatterns(*document_, PresetLibrary::instance().patternsFor(style));   // library patterns it names
     giveLayerStyle(*document_->find(id), style);
     endEdit();

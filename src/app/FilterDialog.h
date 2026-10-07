@@ -80,6 +80,7 @@ private:
     std::shared_ptr<compositor::GrayImage> raw_;        // the mask the sliders refine: coarse or detailed
     std::shared_ptr<compositor::GrayImage> coarse_, detailed_;
     bool detail_ = false;
+    bool mirror_ = false;   // Preferences' mirrored pass, as it was when the dialog opened
     QString error_;
     bool computing_ = false;
     std::thread worker_;   // runs the model; joined before the dialog goes, so a quit mid-run waits for it

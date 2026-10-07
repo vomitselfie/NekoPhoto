@@ -80,6 +80,14 @@ BlendIf blendIfFrom(const QJsonValue& v, BlendIf b, ColorMode mode) {
 
 } // namespace
 
+QJsonObject layerStyleRequest(const LayerStyle& style, ColorMode mode) {
+    QJsonObject o = QJsonDocument::fromJson(QByteArray::fromStdString(layerStyleToJson(style))).object();
+    if (style.blendIf) o["blendIf"] = blendIfJson(*style.blendIf, mode);
+    o["referenceX"] = style.referenceX;
+    o["referenceY"] = style.referenceY;
+    return o;
+}
+
 void AutomationServer::registerLayersHandlers() {
     MainWindow* w = window_;
     const SessionOf session{w};
@@ -318,22 +326,38 @@ void AutomationServer::registerLayersHandlers() {
         if (auto b = layerBlendIf(l, mode)) o["blendIf"] = blendIfJson(*b, mode);
         return o;
     });
-    add("layers.style", [session, layer](const QJsonObject& p) {
-        const std::string json = layerStyleToJson(session()->layerStyle(layer(p).id));
-        return QJsonDocument::fromJson(QByteArray::fromStdString(json)).object();
+    // A layer's style as layers.style shows it: the effects (compositor's layer style JSON), the Blending Options' Blend If
+    // ranges and the effects' reference point, so Copy Layer Style and layers.setStyle carry everything the menu did.
+    auto styleJson = [session](const LayerStyle& style) { return layerStyleRequest(style, session()->document()->colorMode); };
+    add("layers.style", [session, layerOrActive, styleJson](const QJsonObject& p) {
+        return styleJson(session()->layerStyle(layerOrActive(p).id));
     });
-    add("layers.setStyle", [session, layer](const QJsonObject& p) {
-        const Uuid id = layer(p).id;
+    add("layers.setStyle", [session, layerOrActive, styleJson](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        if (!p.value("style").isObject()) fail("style must be an object, shaped as layers.style shows", invalidParams);
+        QJsonObject given = p.value("style").toObject();
+        const QJsonValue blendIf = given.take("blendIf");
+        const QJsonValue referenceX = given.take("referenceX"), referenceY = given.take("referenceY");
         LayerStyle style;
         std::string error;
-        const QByteArray json = QJsonDocument(p.value("style").toObject()).toJson(QJsonDocument::Compact);
-        if (!p.value("style").isObject() || !layerStyleFromJson(json.toStdString(), style, &error))
+        const QByteArray json = QJsonDocument(given).toJson(QJsonDocument::Compact);
+        if (!layerStyleFromJson(json.toStdString(), style, &error))
             fail(QString::fromStdString(error.empty() ? "style must be an object, shaped as layers.style shows" : error), invalidParams);
-        if (!session()->applyLayerStyle(id, style)) fail("this layer cannot have effects (an adjustment layer, or a locked document)");
-        return QJsonDocument::fromJson(QByteArray::fromStdString(layerStyleToJson(session()->layerStyle(id)))).object();
+        const ColorMode mode = session()->document()->colorMode;
+        if (!blendIf.isUndefined()) style.blendIf = blendIfFrom(blendIf, BlendIf{}, mode);
+        // The effects' reference point stays the layer's unless the style names one (a copied style carries its own).
+        const LayerStyle current = session()->layerStyle(id);
+        style.referenceX = referenceX.isDouble() ? referenceX.toDouble() : current.referenceX;
+        style.referenceY = referenceY.isDouble() ? referenceY.toDouble() : current.referenceY;
+        // Photoshop's step names: Paste Layer Style, Clear Layer Style (a style without effects), else Layer Style.
+        const char* step = flag(p, "paste", false) ? QT_TRANSLATE_NOOP("History", "Paste Layer Style")
+                           : !hasAnyEffect(style) && !style.blendIf ? QT_TRANSLATE_NOOP("History", "Clear Layer Style")
+                                                                     : QT_TRANSLATE_NOOP("History", "Layer Style");
+        if (!session()->applyLayerStyle(id, style, step)) fail("this layer cannot have effects (an adjustment layer, or a locked document)");
+        return styleJson(session()->layerStyle(id));
     });
-    add("layers.applyStyle", [session, layer](const QJsonObject& p) {
-        const Uuid id = layer(p).id;
+    add("layers.applyStyle", [session, layerOrActive](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
         const StylePreset* preset = PresetLibrary::instance().findStyle(str(p, "style"));
         if (!preset) fail("no style preset named " + str(p, "style") + " (presets.list shows them)", invalidParams);
         const StylePreset copy = *preset;
@@ -350,9 +374,9 @@ void AutomationServer::registerLayersHandlers() {
         for (size_t i = 0; i < cage->xs.size(); i++) points.append(QJsonArray{cage->xs[i], cage->ys[i]});
         return QJsonObject{{"points", points}};
     });
-    add("layers.setCage", [session, layer](const QJsonObject& p) {
+    add("layers.setCage", [session, layerOrActive](const QJsonObject& p) {
         EditorSession* s = session();
-        s->selectLayer(layer(p).id);
+        s->selectLayer(layerOrActive(p).id);
         const QJsonArray points = p.value("points").toArray();
         if (points.size() != 16) fail("points must be the cage's 16 [x, y] points, row by row (layers.cage gives them)", invalidParams);
         QString error;
@@ -461,17 +485,17 @@ void AutomationServer::registerLayersHandlers() {
         const Layer* updated = s->document()->find(l.id);
         return updated ? layerJson(*updated, 0) : QJsonObject{};
     });
-    add("text.toPath", [session, layer](const QJsonObject& p) {
+    add("text.toPath", [session, layerOrActive](const QJsonObject& p) {
         // Type > Create Work Path: the text's glyph outlines as the Work Path (id 1025), the text layer kept.
-        const Uuid id = layer(p).id;
+        const Uuid id = layerOrActive(p).id;
         QString error;
         if (!session()->textToWorkPath(id, &error)) fail(error.isEmpty() ? QStringLiteral("couldn't make a path from the text") : error, invalidParams);
         const auto work = compositor::documentPath(*session()->document(), compositor::kWorkPathId);
         return QJsonObject{{"id", int(compositor::kWorkPathId)}, {"subpaths", work ? int(work->path.subpaths.size()) : 0}};
     });
-    add("text.toShape", [session, layer](const QJsonObject& p) {
+    add("text.toShape", [session, layerOrActive](const QJsonObject& p) {
         // Type > Convert to Shape: the text layer becomes a shape layer of its glyph outlines, in its colour.
-        const Uuid id = layer(p).id;
+        const Uuid id = layerOrActive(p).id;
         QString error;
         if (!session()->textToShape(id, &error)) fail(error.isEmpty() ? QStringLiteral("couldn't convert the text") : error, invalidParams);
         const Layer* l = session()->document()->find(id);

@@ -8,6 +8,8 @@
 #include <QPointer>
 #include <QSettings>
 #include <QStandardPaths>
+#include <cstring>
+#include <mutex>
 
 namespace app {
 
@@ -111,6 +113,76 @@ ModelStore::Download ModelStore::download(const ModelInfo& model, QObject* conte
     });
     QPointer<QNetworkReply> handle(reply);
     return {[handle] { if (handle) handle->abort(); }};
+}
+
+namespace {
+
+/// The pixels a mask was made from, by content: the dialog and the method hold different copies of the same layer.
+struct MaskKey {
+    int width = 0, height = 0;
+    uint64_t hash = 0;
+    QString model;
+    bool mirror = false;
+    int windows = 0;
+    bool operator==(const MaskKey&) const = default;
+};
+
+uint64_t pixelHash(const compositor::Image& image) {
+    uint64_t h = 1469598103934665603ull;
+    const uint8_t* bytes = image.data();
+    const size_t n = image.byteCount();
+    size_t i = 0;
+    for (; i + 8 <= n; i += 8) {
+        uint64_t word;
+        std::memcpy(&word, bytes + i, 8);
+        h = (h ^ word) * 1099511628211ull;
+        h ^= h >> 29;
+    }
+    for (; i < n; i++) h = (h ^ bytes[i]) * 1099511628211ull;
+    return h;
+}
+
+struct MaskCache {
+    std::mutex mutex;
+    MaskKey coarseKey, detailKey;
+    std::shared_ptr<compositor::GrayImage> coarse, detail;
+};
+
+MaskCache& maskCache() {
+    static MaskCache cache;
+    return cache;
+}
+
+} // namespace
+
+std::shared_ptr<compositor::GrayImage> ModelStore::subjectMask(const compositor::Image& image, const QString& modelPath, bool mirror, int detailWindows, std::string* error) {
+    MaskKey key{image.width(), image.height(), pixelHash(image), modelPath, mirror, 0};
+    MaskCache& cache = maskCache();
+    std::shared_ptr<compositor::GrayImage> coarse;
+    {
+        std::lock_guard<std::mutex> lock(cache.mutex);
+        if (cache.coarse && cache.coarseKey == key) coarse = cache.coarse;
+    }
+    if (!coarse) {
+        coarse = compositor::subjectMask(image, modelPath.toStdString(), error, mirror);
+        if (!coarse) return nullptr;
+        std::lock_guard<std::mutex> lock(cache.mutex);
+        cache.coarseKey = key;
+        cache.coarse = coarse;
+    }
+    if (detailWindows <= 0) return coarse;
+    key.windows = detailWindows;
+    {
+        std::lock_guard<std::mutex> lock(cache.mutex);
+        if (cache.detail && cache.detailKey == key) return cache.detail;
+    }
+    // The detail pass over the coarse mask, its windows unmirrored (the dialog's pass, as Remove Background has run it).
+    auto detail = compositor::subjectMaskDetailed(image, modelPath.toStdString(), coarse.get(), detailWindows, error);
+    if (!detail) return nullptr;
+    std::lock_guard<std::mutex> lock(cache.mutex);
+    cache.detailKey = key;
+    cache.detail = detail;
+    return detail;
 }
 
 } // namespace app

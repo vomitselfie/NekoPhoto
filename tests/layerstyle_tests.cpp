@@ -189,6 +189,20 @@ TEST_CASE(a_style_set_here_draws_and_reads_back) {
     std::string error;
     REQUIRE(layerStyleFromJson(layerStyleToJson(back), fromJson, &error));
     CHECK(authorLayerStyleBlock(fromJson) == authorLayerStyleBlock(style));
+    // A CMYK colour's inks and a bevel texture's phase come back too (the Layer Style dialog commits through JSON).
+    LayerStyle inked = style;
+    inked.colorOverlays[0].color.ink = std::array<float, 4>{0.f, 0.99f, 1.f, 0.f};
+    inked.strokes[0].gradient.colors[0].ink = std::array<float, 4>{1.f, 0.5f, 0.f, 0.25f};
+    Bevel textured; textured.useTexture = true; textured.texturePhaseX = 12; textured.texturePhaseY = -7;
+    inked.bevels.push_back(textured);
+    REQUIRE(layerStyleFromJson(layerStyleToJson(inked), fromJson, &error));
+    REQUIRE(fromJson.colorOverlays.size() == 1);
+    CHECK(fromJson.colorOverlays[0].color.ink == inked.colorOverlays[0].color.ink);
+    CHECK(fromJson.strokes[0].gradient.colors[0].ink == inked.strokes[0].gradient.colors[0].ink);
+    REQUIRE(fromJson.bevels.size() == 1);
+    CHECK_EQ(fromJson.bevels[0].texturePhaseX, 12.0f);
+    CHECK_EQ(fromJson.bevels[0].texturePhaseY, -7.0f);
+    CHECK(authorLayerStyleBlock(fromJson) == authorLayerStyleBlock(inked));
     CHECK(!layerStyleFromJson(R"({"strokes": [{"sise": 3}]})", fromJson, &error));
     CHECK(error.find("sise") != std::string::npos);
     CHECK(!layerStyleFromJson(R"({"colorOverlays": [{"mode": "sparkle"}]})", fromJson, &error));
