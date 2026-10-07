@@ -42,12 +42,14 @@ std::optional<int> fuzzyScore(const QString& query, const QString& text) {
     const QString q = query.toLower();
     int score = 0;
     qsizetype ti = 0, last = -2;
+    std::vector<qsizetype> at;
     for (const QChar qc : q) {
         bool found = false;
         while (ti < t.size()) {
             if (t[ti] == qc) {
                 score += last == ti - 1 ? 8 : 1;   // a contiguous run
                 if (wordStart(t, ti)) score += 5;
+                at.push_back(ti);
                 last = ti++;
                 found = true;
                 break;
@@ -55,6 +57,13 @@ std::optional<int> fuzzyScore(const QString& query, const QString& text) {
             ti++;
         }
         if (!found) return std::nullopt;
+    }
+    // Every letter starts a word or sits in a run of two or more: a lone letter picked out of the middle of a word
+    // ("gauss" spelled across "Iain Fergusson") is not a match at all.
+    for (size_t k = 0; k < at.size(); k++) {
+        if (q[qsizetype(k)].isSpace() || wordStart(t, at[k])) continue;
+        const bool runBefore = k > 0 && at[k - 1] == at[k] - 1, runAfter = k + 1 < at.size() && at[k + 1] == at[k] + 1;
+        if (!runBefore && !runAfter) return std::nullopt;
     }
     return score - int(t.size() / 8);
 }
