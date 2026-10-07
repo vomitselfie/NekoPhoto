@@ -281,8 +281,9 @@ def revert(rpc):
         info = rpc.call("document.info")
         assert info["source"] == {"path": path, "format": form}, info
         layers = [l["name"] for l in rpc.call("layers.list")]
-        if not info["modified"]:
-            assert rpc.call("document.revert")["reverted"] is False   # nothing to revert yet
+        # Opened as the file is: unmodified, nothing in the history, and nothing to revert yet (Photoshop's Open).
+        assert not info["modified"] and rpc.call("history.list")["undo"] == [], (path, info, rpc.call("history.list"))
+        assert rpc.call("document.revert")["reverted"] is False
         rpc.call("layers.add", name="Unsaved")
         rpc.call("pixels.fill", color="#00ff00")
         before = rpc.call("history.list")["undo"]
@@ -2762,6 +2763,7 @@ def main():
             expect_refused(rpc, "", "document.open", path=dng, settings=bad)
         eight = rpc.call("document.open", path=dng, bitsPerChannel=8, settings={"exposure": 1, "whiteBalance": "Auto"})
         assert rpc.call("document.info")["bits"] == 8 and eight["settings"]["exposure"] == 1, eight
+        assert not rpc.call("document.info")["modified"], "a RAW file opens unmodified"
         assert rpc.call("render", maxSize=32) != plain, "the settings change the develop"
         # File > Revert develops the file again with the settings and the depth it opened with.
         developed = rpc.call("render", maxSize=32)

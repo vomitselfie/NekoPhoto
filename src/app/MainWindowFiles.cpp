@@ -353,7 +353,14 @@ bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at,
         if (!image) { if (error) *error = tr("The image could not be converted to the document's colour mode."); return false; }
     } else image = color::convertForDocument(image, embedded, session_->document()->profile);
     if (!session_->insertImage(image, QFileInfo(path).completeBaseName(), at, error)) return false;   // at the document's depth
-    if (first) { session_->adoptProfile(decision.profile); session_->setSource(source); }   // the file is the document's
+    if (first) {
+        // The file is the document's: named after it, and opened as it is (unmodified, no history).
+        session_->adoptProfile(decision.profile);
+        session_->setSource(source);
+        session_->markOpened(QFileInfo(path).completeBaseName());
+        currentTab().defaultName = QFileInfo(path).completeBaseName();
+        refreshTabTitles();
+    }
     addRecent(path);
     return true;
 }
@@ -371,6 +378,7 @@ bool MainWindow::openImageAsDocument(const QString& path, QString* error) {
     tab.session->insertImage(image, QFileInfo(path).completeBaseName(), std::nullopt);   // a first image makes the canvas
     tab.session->adoptProfile(decision.profile);
     tab.session->setSource(source);
+    tab.session->markOpened(QFileInfo(path).completeBaseName());
     tab.defaultName = QFileInfo(path).completeBaseName();
     refreshTabTitles();
     addRecent(path);
@@ -459,6 +467,7 @@ bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenR
         tab.session->insertImage(image, stem, std::nullopt);   // a first image makes the canvas, at its depth
         tab.session->adoptProfile(decision.profile);
         tab.session->setSource(source);
+        tab.session->markOpened(stem);
         tab.defaultName = stem;
     }
     refreshTabTitles();

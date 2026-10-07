@@ -144,6 +144,9 @@ public:
     bool isModified() const { return history_.isModified(); }
     /// A document that exists nowhere else (one recovered after a crash): unsaved until saved.
     void markUnsaved() { history_.markUnsaved(); emit titleChanged(); emit historyChanged(); }
+    /// The document is the file it was just opened from: no history behind it and nothing unsaved (Photoshop opens a
+    /// PNG or a RAW file unmodified), so closing it asks nothing and Revert has nothing to go back to yet.
+    void markOpened(const QString& name = {}) { if (!name.isEmpty()) importedName_ = name; history_.reset(); history_.markSaved(); emit titleChanged(); emit historyChanged(); }
     void createDocument(int width, int height, double resolution = 72, bool emptyLayer = true);
     /// A project read from disk with its saved active layer, before any session takes it.
     struct LoadedProject { compositor::Document document; std::optional<compositor::Uuid> activeLayer; QString path; };
