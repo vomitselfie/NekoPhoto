@@ -34,13 +34,19 @@ QString Autosave::root() { return QStandardPaths::writableLocation(QStandardPath
 int Autosave::intervalMinutes() { return std::clamp(QSettings().value("autosave/minutes", 3).toInt(), 0, 120); }
 void Autosave::setIntervalMinutes(int minutes) { QSettings().setValue("autosave/minutes", std::clamp(minutes, 0, 120)); }
 
-void Autosave::restart() {
+void Autosave::restart() { setInterval(intervalMinutes()); }
+
+void Autosave::setInterval(int minutes) {
+    minutes = std::clamp(minutes, 0, 120);
     // COMPOSITOR_AUTOSAVE_MS overrides the interval, for tests.
-    const int override = qEnvironmentVariableIntValue("COMPOSITOR_AUTOSAVE_MS"), minutes = intervalMinutes();
+    const int override = qEnvironmentVariableIntValue("COMPOSITOR_AUTOSAVE_MS");
     if (override > 0) timer_->start(override);
     else if (minutes > 0) timer_->start(minutes * 60 * 1000);
     else timer_->stop();
 }
+
+bool Autosave::running() const { return timer_->isActive(); }
+int Autosave::intervalMs() const { return timer_->interval(); }
 
 void Autosave::watch(EditorSession* session, std::function<QString()> title) {
     Entry entry;

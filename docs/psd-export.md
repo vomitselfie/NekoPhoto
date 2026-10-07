@@ -4,6 +4,12 @@ File > Export > Export as Photoshop Document writes a layered `.psd`; so does `d
 over automation. The writer is `src/core/src/psd_writer.cpp`, the reader it is tested against
 `src/core/src/psd.cpp`.
 
+A save never damages the file it replaces: the document is written to `<name>.psd.part` beside it, flushed to the
+disk, and only then renamed over the old file (on Unix the folder is synced after the rename, so the new name
+survives a power cut). When any step fails (the folder is read-only, the disk is full, the rename is refused) the
+temporary file is removed and the old file is left byte for byte; `psd_save_that_fails_leaves_the_old_file_and_no_temporary`
+in `tests/psd_writer_tests.cpp` checks each step.
+
 ## What is carried
 
 - Pixel layers with their names (Unicode, in `luni`, beside an ASCII legacy name), positions (also past the

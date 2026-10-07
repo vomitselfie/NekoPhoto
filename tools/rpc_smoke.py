@@ -852,7 +852,7 @@ def sixteen_bit(rpc):
 
 # The Filter menu's grid filters (filters.h, applyGridFilter) with settings off their defaults.
 GRID_FILTERS = (
-    ("Box Blur", {"radius": 3}), ("Radial Blur", {"amount": 12, "quality": "draft"}), ("Surface Blur", {"radius": 4, "threshold": 20}),
+    ("Box Blur", {"radius": 3}), ("Radial Blur", {"amount": 12, "quality": "draft"}), ("Radial Blur", {"amount": 20, "quality": "good", "mode": "zoom"}), ("Surface Blur", {"radius": 4, "threshold": 20}),
     ("Dust & Scratches", {"radius": 2, "threshold": 8}), ("Median", {"radius": 2}), ("Unsharp Mask", {"amount": 120, "radius": 1.5, "threshold": 2}),
     ("High Pass", {"radius": 6}), ("Emboss", {"angle": 120, "height": 2, "amount": 150}), ("Mosaic", {"cellSize": 6}),
     ("Twirl", {"angle": 120}), ("Pinch", {"amount": -40}), ("Spherize", {"amount": 60, "mode": "horizontalOnly"}),

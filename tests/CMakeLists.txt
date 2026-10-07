@@ -304,6 +304,8 @@ add_test(NAME smartobject_tests COMMAND smartobject_tests)
 
 add_executable(smartfilter_tests smartfilter_tests.cpp)
 target_link_libraries(smartfilter_tests PRIVATE compositor::core compositor_warnings)
+# Patchy beside this checkout for Photoshop's Radial Blur Zoom preview; PATCHY_FIXTURES in the environment overrides it.
+target_compile_definitions(smartfilter_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
 add_test(NAME smartfilter_tests COMMAND smartfilter_tests)
 
 add_executable(vectormask_tests vectormask_tests.cpp)
@@ -418,6 +420,10 @@ if(TARGET nekophoto)
     add_test(NAME search_selftest COMMAND nekophoto --lang en --self-test search)
     set_tests_properties(search_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/search-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/search-home/data")
+    # Edit > Preferences: the autosave interval applies while the dialog is open; next-launch settings say so (English).
+    add_test(NAME preferences_selftest COMMAND nekophoto --lang en --self-test preferences)
+    set_tests_properties(preferences_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/preferences-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/preferences-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)

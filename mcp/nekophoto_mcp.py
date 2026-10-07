@@ -721,12 +721,13 @@ def smart_object_via_copy(id: Optional[str] = None) -> str:
 @edit("Add a Smart Filter")
 def smart_object_add_filter(kind: str, id: Optional[str] = None, radius: Optional[float] = None, threshold: Optional[float] = None,
                             amount: Optional[float] = None, angle: Optional[float] = None, distance: Optional[float] = None,
-                            cell_size: Optional[float] = None, height: Optional[float] = None, opacity: float = 100) -> str:
+                            cell_size: Optional[float] = None, height: Optional[float] = None, zoom: Optional[bool] = None, opacity: float = 100) -> str:
     """Add a Smart Filter on top of a smart object's stack, as Photoshop keeps it (non-destructive): gaussian blur,
     high pass, median, dust and scratches, surface blur, unsharp mask, motion blur, plastic wrap, mosaic, emboss,
-    box blur, radial blur or add noise (plastic wrap is RGB only, as in Photoshop). Only the settings the filter uses matter."""
+    box blur, radial blur (zoom=True for its Zoom method) or add noise (plastic wrap is RGB only, as in Photoshop).
+    Only the settings the filter uses matter."""
     return text(call("smartObject.addFilter", id=id, kind=kind, radius=radius, threshold=threshold, amount=amount, angle=angle,
-                     distance=distance, cellSize=cell_size, height=height, opacity=opacity))
+                     distance=distance, cellSize=cell_size, height=height, zoom=zoom, opacity=opacity))
 
 
 @look("List Smart Filters")
@@ -741,11 +742,13 @@ def smart_object_filters(id: Optional[str] = None) -> str:
 def smart_object_set_filter(id: Optional[str] = None, index: Optional[int] = None, enabled: Optional[bool] = None,
                             radius: Optional[float] = None, threshold: Optional[float] = None, amount: Optional[float] = None,
                             angle: Optional[float] = None, distance: Optional[float] = None, cell_size: Optional[float] = None,
-                            height: Optional[float] = None, opacity: Optional[float] = None, blend: Optional[str] = None) -> str:
-    """Change one Smart Filter (index from smart_object_filters): its settings (only those the filter uses), enabled,
-    opacity (percent) and blend mode. Without index, enabled switches the whole stack. One undo step."""
+                            height: Optional[float] = None, zoom: Optional[bool] = None, opacity: Optional[float] = None,
+                            blend: Optional[str] = None) -> str:
+    """Change one Smart Filter (index from smart_object_filters): its settings (only those the filter uses; zoom
+    switches Radial Blur between Zoom and Spin), enabled, opacity (percent) and blend mode. Without index, enabled
+    switches the whole stack. One undo step."""
     return text(call("smartObject.setFilter", id=id, index=index, enabled=enabled, radius=radius, threshold=threshold, amount=amount,
-                     angle=angle, distance=distance, cellSize=cell_size, height=height, opacity=opacity, blend=blend))
+                     angle=angle, distance=distance, cellSize=cell_size, height=height, zoom=zoom, opacity=opacity, blend=blend))
 
 
 @edit("Remove Smart Filters")
@@ -827,7 +830,7 @@ def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[flo
                   preserve: Optional[str] = None, horizontal: Optional[int] = None, vertical: Optional[int] = None, seed: Optional[int] = None) -> str:
     """Run a filter on the active layer's pixels, inside the selection; settings left out take the filter's defaults.
     Blur: Gaussian Blur (radius), Box Blur (radius), Motion Blur (angle, distance), Radial Blur (amount 1..100, quality
-    draft/good/best; Spin about the layer's centre), Surface Blur (radius, threshold). Distort: Pinch (amount -100..100),
+    draft/good/best, mode spin/zoom; about the layer's centre), Surface Blur (radius, threshold). Distort: Pinch (amount -100..100),
     Polar Coordinates (mode rectangularToPolar/polarToRectangular), Ripple (amount -999..999, size small/medium/large),
     Shear (amount -100..100, undefinedAreas wrap/repeat), Spherize (amount, mode normal/horizontalOnly/verticalOnly),
     Twirl (angle -999..999), Wave (generators, wavelengthMin/Max, amplitudeMin/Max, type sine/triangle/square,

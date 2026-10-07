@@ -26,7 +26,7 @@ std::optional<SmartFilterParameters> smartFilterParametersFor(FilterKind kind, c
     SmartFilterParameters p;
     switch (kind) {
     case FilterKind::BoxBlur: p = BoxBlur{s.radius}; break;
-    case FilterKind::RadialBlur: p = RadialBlur{int32_t(std::lround(s.amount)), s.quality <= 0 ? 8 : s.quality == 1 ? 16 : 32}; break;
+    case FilterKind::RadialBlur: p = RadialBlur{int32_t(std::lround(s.amount)), s.quality <= 0 ? 8 : s.quality == 1 ? 16 : 32, s.style == 1}; break;
     case FilterKind::SurfaceBlur: p = SurfaceBlur{s.radius, s.threshold}; break;
     case FilterKind::DustAndScratches: p = DustAndScratches{int32_t(std::lround(s.radius)), s.threshold}; break;
     case FilterKind::Median: p = Median{s.radius}; break;
@@ -210,7 +210,7 @@ FilterSettings FilterSettings::defaults(FilterKind kind) {
     FilterSettings s;
     switch (kind) {
     case FilterKind::BoxBlur: s.radius = 10; break;
-    case FilterKind::RadialBlur: s.amount = 10; s.quality = 1; break;
+    case FilterKind::RadialBlur: s.amount = 10; s.quality = 1; s.style = 0; break;
     case FilterKind::SurfaceBlur: s.radius = 5; s.threshold = 15; break;
     case FilterKind::DustAndScratches: s.radius = 1; s.threshold = 0; break;
     case FilterKind::Median: s.radius = 1; break;
@@ -237,7 +237,7 @@ FilterSettings FilterSettings::normalizedFor(FilterKind kind) const {
     auto clampI = [](int v, int lo, int hi) { return std::clamp(v, lo, hi); };
     switch (kind) {
     case FilterKind::BoxBlur: s.radius = clampD(radius, 1, 2000, d.radius); break;
-    case FilterKind::RadialBlur: s.amount = clampD(amount, 1, 100, d.amount); s.quality = clampI(quality, 0, 2); break;
+    case FilterKind::RadialBlur: s.amount = clampD(amount, 1, 100, d.amount); s.quality = clampI(quality, 0, 2); s.style = clampI(style, 0, 1); break;
     case FilterKind::SurfaceBlur: s.radius = clampD(radius, 1, 100, d.radius); s.threshold = clampI(threshold, 2, 255); break;
     case FilterKind::DustAndScratches: s.radius = clampD(radius, 1, 500, d.radius); s.threshold = clampI(threshold, 0, 255); break;
     case FilterKind::Median: s.radius = clampD(radius, 1, 500, d.radius); break;

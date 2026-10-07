@@ -22,6 +22,8 @@ public:
 signals:
     /// The feature's readiness may have changed (enabled, downloaded, removed).
     void backgroundRemovalChanged();
+    /// Crash recovery's interval changed to `minutes` (0: off).
+    void autosaveIntervalChanged(int minutes);
 
 private:
     void syncStatus();

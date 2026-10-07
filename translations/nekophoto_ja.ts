@@ -5486,6 +5486,18 @@ File &gt; New creates a blank canvas.</source>
         <translation>バイキュービック法</translation>
     </message>
     <message>
+        <source>Blur Method</source>
+        <translation>方法</translation>
+    </message>
+    <message>
+        <source>Spin</source>
+        <translation>回転</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>ズーム</translation>
+    </message>
+    <message>
         <source>Quality</source>
         <translation>画質</translation>
     </message>
@@ -6919,8 +6931,20 @@ File &gt; New creates a blank canvas.</source>
         <translation>塗りつぶし</translation>
     </message>
     <message>
+        <source>Subject</source>
+        <translation>被写体を選択</translation>
+    </message>
+    <message>
         <source>Unavailable: this build has no OpenCV</source>
         <translation>使用不可: このビルドには OpenCV が含まれていません</translation>
+    </message>
+    <message>
+        <source>The click-to-select model isn’t downloaded: choose the Click engine in the Quick Selection tool’s options and download it</source>
+        <translation>クリックで選択するモデルがダウンロードされていません。クイック選択ツールのオプションでクリックエンジンを選んでダウンロードしてください</translation>
+    </message>
+    <message>
+        <source>Select the main subject of the image</source>
+        <translation>画像の主な被写体を選択します</translation>
     </message>
     <message>
         <source>Off: enable it in Edit &gt; Preferences</source>
@@ -9209,8 +9233,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>起動時に自動操作ソケットでエージェントを待ち受ける</translation>
     </message>
     <message>
-        <source>Lets an MCP bridge or a script drive the editor over a local socket (%1). Only programs running as you can connect. Takes effect at the next launch; nekophoto --rpc turns it on for one run.</source>
-        <translation>MCP ブリッジやスクリプトが、ローカルソケット(%1)経由でエディターを操作できるようにします。接続できるのは同じユーザーで実行中のプログラムのみです。次回起動時に反映されます。nekophoto --rpc で 1 回の実行に限り有効にできます。</translation>
+        <source>Lets an MCP bridge or a script drive the editor over a local socket (%1). Only programs running as you can connect; nekophoto --rpc turns it on for one run.</source>
+        <translation>MCP ブリッジやスクリプトが、ローカルソケット(%1)経由でエディターを操作できるようにします。接続できるのは同じユーザーで実行中のプログラムのみです。nekophoto --rpc で 1 回の実行に限り有効にできます。</translation>
     </message>
     <message>
         <source>Downloading %1…</source>
@@ -9435,6 +9459,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Height</source>
         <translation>高さ</translation>
+    </message>
+    <message>
+        <source>Spin</source>
+        <translation>回転</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>ズーム</translation>
+    </message>
+    <message>
+        <source>Blur Method</source>
+        <translation>方法</translation>
     </message>
     <message>
         <source>Draft</source>

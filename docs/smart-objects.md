@@ -155,7 +155,7 @@ Warp tool and the tests.
 A stack (`SoLd` `filterFX`: `filterFXList` in the order the filters run, each with its blend options and settings)
 is drawn when every entry is one of the thirteen filters Patchy calibrated against Photoshop 2026 (Gaussian Blur,
 High Pass, Median, Dust & Scratches, Surface Blur, Unsharp Mask, Motion Blur, Plastic Wrap, Mosaic, Emboss, Box Blur,
-Radial Blur's Spin, Add Noise), each within Photoshop's own dialog ranges, in a blend mode NekoPhoto has, the filter
+Radial Blur, Spin or Zoom, Add Noise), each within Photoshop's own dialog ranges, in a blend mode NekoPhoto has, the filter
 mask not linked, and the instance has exactly one readable record in the document's `FEid` / `FXid` cache. The
 record gives the filter canvas (the rect the blurs may grow into) and the shared filter mask (document space).
 `src/core/src/smartfilter.cpp` reads and writes these; `smartfilter_render.cpp` is the port of Patchy's kernels.
@@ -181,7 +181,11 @@ Where Photoshop's own previews in Patchy's fixtures disagreed with Patchy's docu
 
 Every other drawn filter matches Photoshop's preview exactly or within half a level, except two Gaussian layers with
 a five-tone filter mask, whose previews ignore the mask entirely (probably stale; a hard mask on the same stack
-matches exactly), Radial Blur (2.3) and the two above.
+matches exactly), Radial Blur (2.3) and the two above. Radial Blur's Zoom, which Patchy keeps preview-locked, is
+NekoPhoto's own: samples along the line through the centre over amount / 200 of the pixel's distance, centred on the
+pixel, fitted to Photoshop's preview in `photoshop-smart-filter-radial-blur-zoom.psd` (Zoom 25, Best: mean 0.22
+levels, at most 4 off; `radial_blur_zoom_against_photoshop`). That file opens with Photoshop's own pixels, now
+editable.
 
 ## Warping and adding Smart Filters
 

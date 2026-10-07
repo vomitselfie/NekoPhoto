@@ -27,10 +27,12 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QLineEdit>
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QSlider>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
@@ -649,8 +651,30 @@ void MainWindow::showPreferences() {
     auto* dialog = new PreferencesDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &PreferencesDialog::backgroundRemovalChanged, this, &MainWindow::refreshBackgroundAction);
-    connect(dialog, &QObject::destroyed, this, [this] { if (autosave_) autosave_->restart(); });
+    connect(dialog, &PreferencesDialog::autosaveIntervalChanged, this, [this](int minutes) { if (autosave_) autosave_->setInterval(minutes); });
     dialog->show();
+}
+
+void MainWindow::selectSubject() {
+    if (!session_->hasDocument() || !ModelStore::promptReady()) return;
+    // Photoshop finds the subject with no prompt; the click model is given a box just inside the canvas (one
+    // around the whole canvas reads as "everything" and comes back empty).
+    const compositor::Document& d = *session_->document();
+    const int dx = d.width / 20, dy = d.height / 20;
+    runCommand("selection.subject", {{"box", QJsonArray{dx, dy, d.width - dx, d.height - dy}}}, tr("Subject"));
+}
+
+void MainWindow::refreshSelectSubject() {
+    if (!selectSubjectAction_) return;
+    const bool has = session_ && session_->hasDocument();
+    QString why;
+    if (!ModelStore::supported()) why = tr("Unavailable: this build has no OpenCV");
+    else if (!ModelStore::promptReady())
+        why = tr("The click-to-select model isn’t downloaded: choose the Click engine in the Quick Selection tool’s options and download it");
+    else if (has && !session_->supportsFeature("tool.quickSelect")) why = session_->unavailableTip("tool.quickSelect");
+    selectSubjectAction_->setEnabled(has && why.isEmpty());
+    selectSubjectAction_->setToolTip(why.isEmpty() ? tr("Select the main subject of the image") : why);
+    if (auto* menu = qobject_cast<QMenu*>(selectSubjectAction_->parent()); menu && !why.isEmpty()) menu->setToolTipsVisible(true);
 }
 
 void MainWindow::refreshBackgroundAction() {
@@ -674,6 +698,7 @@ void MainWindow::refreshActions() {
     undoAction_->setEnabled(session_->canUndo());
     redoAction_->setEnabled(session_->canRedo());
     if (toggleStateAction_) toggleStateAction_->setEnabled(session_->canUndo() || session_->canRedo());
+    refreshSelectSubject();
     if (revertAction_) revertAction_->setEnabled(has && session_->canRevert());
     undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(names::history(session_->undoName())) : tr("&Undo"));
     redoAction_->setText(session_->canRedo() ? tr("&Redo %1").arg(names::history(session_->redoName())) : tr("&Redo"));

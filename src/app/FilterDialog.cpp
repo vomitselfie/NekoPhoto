@@ -206,6 +206,7 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
     case FilterKind::BoxBlur: sliderOf(tr("Radius"), 1, 2000, 0, 1, real(&FilterSettings::radius)); break;
     case FilterKind::RadialBlur:
         sliderOf(tr("Amount"), 1, 100, 0, 1, real(&FilterSettings::amount));
+        choice(tr("Blur Method"), {tr("Spin"), tr("Zoom")}, &FilterSettings::style);
         choice(tr("Quality"), {tr("Draft"), tr("Good"), tr("Best")}, &FilterSettings::quality);
         break;
     case FilterKind::SurfaceBlur:

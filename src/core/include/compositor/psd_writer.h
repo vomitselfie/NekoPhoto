@@ -61,7 +61,15 @@ std::optional<std::vector<uint8_t>> photoshopTypeBlock(const LayerText& text, co
 /// The file's bytes; empty with `error` set when the document cannot be written as PSD.
 std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions& options, PsdExportSummary* summary, std::string* error);
 
-/// Writes `path` (through a temporary file, so a failure leaves any old file alone).
+/// Writes `path` through a temporary file beside it (`path` + ".part"), flushed to disk before it replaces the old
+/// file and the folder synced after (on Unix), so a failure or a crash leaves any old file whole and no temporary
+/// file behind.
 bool exportPsd(const Document& document, const std::string& path, const PsdExportOptions& options, PsdExportSummary* summary, std::string* error);
+
+namespace detail {
+/// For tests: when set, exportPsd asks it before each step of writing the file ("open", "write", "rename") and fails
+/// that step, as a full disk or a refused rename would, when it returns true.
+extern bool (*psdSaveFault)(const char* step);
+} // namespace detail
 
 } // namespace compositor

@@ -881,7 +881,7 @@ Result16 renderEmboss(const Result16& input, int32_t angleDegrees, int32_t heigh
     return result;
 }
 
-// ---- Radial Blur (Spin) ------------------------------------------------------------------------------------
+// ---- Radial Blur (Spin and Zoom) ---------------------------------------------------------------------------
 
 struct RadialBlurAccum {
     std::array<double, 3> premultipliedColor{0.0, 0.0, 0.0};
@@ -912,24 +912,20 @@ void radialBlurAccumulateSample(RadialBlurAccum& accum, const Image16& original,
     radialBlurAccumulatePixel(accum, original.pixel(x1, y1), tx * ty);
 }
 
-Result16 renderRadialBlur(const Result16& input, int32_t amount, int32_t samples, double centerX, double centerY) {
+Result16 renderRadialBlur(const Result16& input, int32_t amount, int32_t samples, double centerX, double centerY, bool zoom) {
     if (pixelsEmpty(input)) return input;
-    constexpr double kPi = 3.14159265358979323846;
     Result16 result{Image16(input.bounds.width, input.bounds.height), input.bounds};
     const auto clampedAmount = std::clamp(amount, 0, 100);
     const auto clampedSamples = std::clamp(samples, 4, 32);
-    const auto sweep = double(clampedAmount) * 3.6 * kPi / 180.0;
     for (int32_t y = 0; y < input.bounds.height; ++y)
         for (int32_t x = 0; x < input.bounds.width; ++x) {
             const auto dx = double(x) - centerX;
             const auto dy = double(y) - centerY;
             RadialBlurAccum accum;
             for (int sample = 0; sample < clampedSamples; ++sample) {
-                const auto t = clampedSamples <= 1 ? 0.0 : double(sample) / double(clampedSamples - 1) - 0.5;
-                const auto angle = sweep * t;
-                const auto sourceX = centerX + dx * std::cos(angle) - dy * std::sin(angle);
-                const auto sourceY = centerY + dx * std::sin(angle) + dy * std::cos(angle);
-                radialBlurAccumulateSample(accum, input.pixels, sourceX, sourceY);
+                double sx = 0, sy = 0;
+                radialBlurSource(dx, dy, clampedAmount, clampedSamples, zoom, sample, sx, sy);
+                radialBlurAccumulateSample(accum, input.pixels, centerX + sx, centerY + sy);
             }
             auto* dst = result.pixels.pixel(x, y);
             const auto normalizedAlpha = accum.weight > 0.0 ? accum.alpha / accum.weight : 1.0;
@@ -1161,7 +1157,7 @@ struct RunEntry {
         auto input = embedInFilterCanvas(current, canvasOr(canvas, current));
         const auto centerX = double(content.x - input.bounds.x) + double(std::max<int32_t>(0, content.width - 1)) * 0.5;
         const auto centerY = double(content.y - input.bounds.y) + double(std::max<int32_t>(0, content.height - 1)) * 0.5;
-        return trimTransparentResult(renderRadialBlur(input, p.amount, p.samples, centerX, centerY));
+        return trimTransparentResult(renderRadialBlur(input, p.amount, p.samples, centerX, centerY, p.zoom));
     }
     Result16 operator()(const smartfilter::AddNoise& p) const { return renderAddNoise(current, p.amount, p.gaussian, p.monochromatic, p.seed); }
 };

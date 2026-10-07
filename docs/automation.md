@@ -178,7 +178,7 @@ own), `smartObject.editContents` (opens a tab; a smart object made from a camera
 and Lab every one but Plastic Wrap, as in Photoshop) on top of a smart object's stack. `smartObject.filters` lists the stack (entries by `index` in running order, 0 applied
 first; each with its `kind`, `settings`, `enabled`, `opacity`, `blend`, and `drawn` false for one NekoPhoto does not draw,
 which makes the stack read-only), `smartObject.setFilter` changes an entry's settings, switch, opacity or blend (no
-`index`: `enabled` switches the whole stack), `smartObject.moveFilter` (`index`, `to`), `smartObject.removeFilter`
+`index`: `enabled` switches the whole stack; Radial Blur's `zoom` picks its Zoom method), `smartObject.moveFilter` (`index`, `to`), `smartObject.removeFilter`
 (`index`, or `all` to clear them), and `smartObject.filterMask` (`action`: enable, disable, invert, delete, or select
 to paint it with `brush.stroke` `mask` and the other mask tools, `show` to see it; deselect, or selecting a layer, ends that). `layers.cage` and `layers.setCage` read and apply a free warp cage (16 control points; a smart object keeps it as its
 own Custom warp). `layers.warp` bends a layer with one of Photoshop's fifteen presets (`style`, `bend`, `horizontal`, `vertical`,
@@ -218,7 +218,7 @@ Pixels of the active layer, inside the selection: `pixels.adjust`,
 Surface Blur, Pinch, Polar Coordinates, Ripple, Shear, Spherize, Twirl, Wave, ZigZag, Add Noise, Dust & Scratches, Median, Mosaic,
 Clouds, Difference Clouds, Unsharp Mask, Emboss, Find Edges, High Pass, Maximum, Minimum, Offset and Lens Correction, with the keys
 `describe_method pixels.filter` lists; the distortions and Offset work inside the selection's bounds, Clouds paints between the
-foreground and background colours, and `seed` fixes Add Noise's, Wave's and the clouds' patterns; Lens Correction takes `bicubic: true` for a sharper resample; in a CMYK or
+foreground and background colours, Radial Blur takes `mode` `spin` or `zoom`, and `seed` fixes Add Noise's, Wave's and the clouds' patterns; Lens Correction takes `bicubic: true` for a sharper resample; in a CMYK or
 Lab document both work on the inks or L, a and b, each kind where Photoshop offers it ([color-modes.md](color-modes.md#adjustments-and-filters)):
 Levels and Curves take a fifth slot for CMYK's black, `channel` names such as `"Cyan"`, `"Black"` or `"Lightness"`, and
 Channel Mixer `cyan` ... `black` ink rows),
@@ -254,7 +254,8 @@ Selection: `selection.all`, `selection.none`, `selection.invert`, `selection.res
 `selection.scribble` (`foreground` and `background`: lists of strokes, each a list of `[x, y]`
 points; `size`, `refine` 0..40, `clear`), `selection.subject` (click to select with the EfficientSAM
 model once downloaded: `foreground` and `background` points as `[x, y]` lists, an optional `box`
-`[x0, y0, x1, y1]`, `refine`, `clear`; `app.info` reports `clickSelect` when it can run) (all take
+`[x0, y0, x1, y1]`, `refine`, `clear`; `app.info` reports `clickSelect` when it can run; Select > Subject sends it a
+`box` 5% inside the canvas) (all take
 `mode` replace, add, subtract or intersect),
 `selection.fromLayer`, `selection.grow`, `selection.feather` (`radius`), `selection.smooth`
 (`radius`), `selection.border` (`width`).

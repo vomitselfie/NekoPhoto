@@ -14,11 +14,11 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 <!-- BEGIN GENERATED at-a-glance: tools/compat_table.py --write; do not edit by hand -->
 | Check | Result | How to rerun |
 |---|---|---|
-| Photoshop's merged image as the oracle | **39 of 46** Patchy files with a merged image render within 2 levels of it on 99% of pixels, mean under 1 level (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
+| Photoshop as the oracle | **52 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
 | Render hashes | **697 scenes**: 156 at 8-bit RGB, 155 at 16-bit RGB, 120 at 32-bit RGB, 71 at 8-bit CMYK, 71 at 16-bit CMYK, 62 at 8-bit Lab, 62 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
-| Test suites | **85 CTest tests** registered (709 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
+| Test suites | **86 CTest tests** registered (715 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
 | Automation | **183 methods**, 182 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
@@ -61,11 +61,14 @@ Blend If, the mask section, blend key, flags, folder state, opacity and clipping
 global blocks) and reopens the export. On this run every file passed and nothing was lost.
 
 `psd_composite_oracle` (in CTest; skipped without the checkout) renders each file from its layers and compares the
-result with the merged image Photoshop stored beside them, premultiplied: the largest channel difference, the share
-of pixels more than 2 levels off and the mean. 47 of the files store a real merged image; the other 70 were saved
-without Maximize Compatibility. `tests/psd_oracle.txt` holds the floor of files within tolerance (it may only rise)
-and `tests/patchy-manifest.txt` pins the Patchy commit and each fixture's SHA-256; a checkout that differs is
-reported, not failed.
+result with what Photoshop shows for it: the largest channel difference, the share of pixels more than 2 levels off
+and the mean. Where Patchy keeps Photoshop's own flatten of the file beside it (a `.bmp` of the same name, 48 files)
+that is the reference, compared in RGB with NekoPhoto's render matted on white as Photoshop flattens; the merged image
+stored inside a file can be stale (Patchy's notes: Photoshop saving headless). Otherwise the reference is the merged
+image Photoshop stored in the file ("Maximize Compatibility", 24 more files), compared premultiplied. Each line of
+the run says which reference it used; the other 45 files have neither. `tests/psd_oracle.txt` holds the floor of files
+within tolerance (it may only rise) and `tests/patchy-manifest.txt` pins the Patchy commit and the SHA-256 of each
+fixture and flatten; a checkout that differs is reported, not failed.
 
 Beyond Patchy's corpus, `tests/psd_writer_tests.cpp` covers the edit cases (painted, moved, opacity changed, a
 project save, a canvas change), and every layered PSD from Photoshop and Clip Studio the project has (up to 54
@@ -186,8 +189,8 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
 <!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
-- **Photoshop の統合画像との比較**: 統合画像を持つ Patchy のファイル 46 個のうち **39 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
-- **描画のハッシュ**: 697 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 85 個(709 `TEST_CASE`)。
+- **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **52 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
+- **描画のハッシュ**: 697 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 86 個(715 `TEST_CASE`)。
 - **自動操作**: メソッド 183 個、うち 182 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
