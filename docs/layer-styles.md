@@ -35,6 +35,23 @@ blends its own pixels and the interior effects land on that, with it on they fol
 Stroke with Overprint off knocks the layer's content out of its band, even at 0% opacity; a clipped layer is
 masked by the base's pixels, never its effects; with Fill below 100% the overlays are their own passes.
 
+Bevel & Emboss goes past Patchy in three places, each fitted to Photoshop's merged image of a Patchy fixture
+(`build/tests/psd_composite_oracle`):
+
+- **Soften blurs the shading, not the surface** (Photoshop's own description: it "blurs the results of shading"):
+  the signed light (highlight above zero, shadow below), after the Gloss Contour, goes through a tent of the soften's
+  width and then a [1 2 1], and is split into highlight and shadow afterwards. A flat face's Gloss Contour wash goes
+  into the blur too. `photoshop-bevel-gloss` (an Outer Bevel with Soften 7 and a cornered, non-monotone gloss)
+  went from 2.8 levels off on average to 0.03, no pixel more than 2 off; blurring the height field instead (as
+  before) left a shadow on the lit side and a saturated one on the other.
+- **An anti-aliased Contour or Gloss Contour is supersampled**: the surface is shaded at nine points of each pixel,
+  a third of a pixel apart starting at its corner (bilinear between pixels), and the nine signed lights averaged. A
+  curve without Anti-aliased, and every linear curve, is shaded once per pixel as before. The anti-aliased Contour of
+  `photoshop-bevel-subs` went from 5.2 levels off to 0.8 (centred sampling does not match: Photoshop's rings sit a
+  third of a pixel up and left of them).
+- **An Outer Bevel's texture comes out the other way up**: there, Invert with a negative depth raises the light
+  texels (`photoshop-bevel-subs`); on an Inner Bevel the two cancel as before.
+
 ## Blend If
 
 Blending Options' Blend If is drawn and editable (`src/core/include/compositor/blendif.h`). A layer, an adjustment
@@ -97,7 +114,8 @@ Perceptual or Linear is here to compare with (they share the overlay's measured 
 ## How close
 
 Against Photoshop's own renders of Patchy's fixtures (`../Patchy/test-fixtures/psd/*.bmp`), mean difference per
-pixel on a 0-255 scale:
+pixel on a 0-255 scale (the merged image where the file has one: an Outer Bevel with Soften and an anti-aliased
+gloss, `photoshop-bevel-gloss`, is 0.03):
 
 | Effect | Mean |
 |---|---:|
@@ -105,9 +123,10 @@ pixel on a 0-255 scale:
 | Shadow knockout, inner glow range, outer glow range, gradient overlay geometry, smooth bevel, stroke overprint | 0.02-0.08 |
 | Pillow emboss, emboss styles | 0.08-0.13 |
 | Inner glow, bevel texture, Shape Burst stroke, gloss contour, stroke on antialiased edges | 0.3-0.9 |
+| Bevel with an anti-aliased non-monotone contour | 0.8 |
 | Outer glow, overlay z-order, pattern scale | 1.1-1.7 |
 | Styled folders | 0.00-2.6 |
-| Bevel with a non-monotone contour | 6.1 |
+| Outer bevel with a texture | 5.2 |
 
 A designer's client PSD (three smart objects, eight styled layers, a gold Multiply colour overlay carrying the
 whole design) renders within 1.7 levels of Photoshop's own composite, no pixel off by more than 8.
