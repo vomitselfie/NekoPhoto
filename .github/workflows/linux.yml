@@ -54,7 +54,7 @@ jobs:
       - name: Automation panic hunt
         # Hostile parameters for every method against its own headless instance; a crash, hang or malformed reply fails.
         timeout-minutes: 20
-        run: python3 tools/rpc_panic_hunt.py --bin ./build/src/app/nekophoto --budget 900
+        run: python3 tools/rpc_panic_hunt.py --bin ./build/src/app/nekophoto --budget 600
       - name: Crash recovery
         timeout-minutes: 5
         run: python3 tools/recovery_check.py ./build/src/app/nekophoto

@@ -403,7 +403,7 @@ def main():
 
     work = tempfile.mkdtemp(prefix="nphunt")
     ed = Editor(args.bin, work, args.timeout)
-    problems, slow, sent, began = [], [], 0, time.time()
+    problems, slow, sent, began, reached = [], [], 0, time.time(), 0
     ctx = {"root": os.path.join(work, "root"), "layer": ""}
 
     def run(method, what, params, raw):
@@ -443,6 +443,7 @@ def main():
         todo.sort(key=lambda m: LAST.index(m) + 1 if m in LAST else 0)
         out_of_time = False
         for n, method in enumerate(todo):
+            reached = n + 1
             if args.budget and time.time() - began > args.budget:
                 # A slow runner covers fewer methods; that is a warning, not a failure.
                 print(f"warning: time budget of {args.budget:.0f} s reached; {len(todo) - n} of {len(todo)} methods not reached")
@@ -491,7 +492,7 @@ def main():
         else:
             shutil.rmtree(work, ignore_errors=True)
 
-    print(f"\n{sent} requests to {len(methods) - len(skipped)} methods in {time.time() - began:.0f} s"
+    print(f"\n{sent} requests to {reached} of {len(methods) - len(skipped)} methods in {time.time() - began:.0f} s"
           + (f"; skipped {len(skipped)} ({', '.join(f'{m}: {SKIP[m]}' for m in skipped)})" if skipped else ""))
     if slow:
         print(f"{len(slow)} requests took over 2 s (not failures; the slowest):")
