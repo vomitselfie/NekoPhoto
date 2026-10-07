@@ -222,9 +222,26 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : PixelDialog(se
     // Start on the first essential so the right side is never blank (COMPOSITOR_GMIC_FILTER names another, for screenshots).
     if (QTreeWidgetItem* first = tree_->topLevelItem(0); first && first->childCount() > 0) tree_->setCurrentItem(first->child(0));
     QString wanted = qEnvironmentVariable("COMPOSITOR_GMIC_FILTER");
-    if (!wanted.isEmpty())
-        for (QTreeWidgetItemIterator it(tree_); *it; ++it)
-            if ((*it)->text(0).compare(wanted, Qt::CaseInsensitive) == 0) { tree_->setCurrentItem(*it); tree_->scrollToItem(*it); break; }
+    if (!wanted.isEmpty()) showFilter(wanted);
+}
+
+void GmicDialog::showFilter(const QString& name) {
+    for (QTreeWidgetItemIterator it(tree_); *it; ++it)
+        if ((*it)->childCount() == 0 && (*it)->text(0).compare(name, Qt::CaseInsensitive) == 0) { tree_->setCurrentItem(*it); tree_->scrollToItem(*it); break; }
+}
+
+const std::vector<std::pair<QString, QString>>& GmicDialog::listedFilters() {
+    static const std::vector<std::pair<QString, QString>> list = [] {
+        std::vector<std::pair<QString, QString>> out;
+        for (const GmicFilter& f : builtinPresets()) out.emplace_back(f.name, f.folder);
+        GmicCatalogue catalogue;
+        const QString path = GmicCatalogue::preferredFile();
+        if (!path.isEmpty() && catalogue.load(path))
+            for (const GmicFilter& f : catalogue.filters())
+                if (!GmicCatalogue::unsupported().contains(f.command)) out.emplace_back(f.name, f.folder);
+        return out;
+    }();
+    return list;
 }
 
 GmicDialog::~GmicDialog() { preview_runner_.cancel(); }

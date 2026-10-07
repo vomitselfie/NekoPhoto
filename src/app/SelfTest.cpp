@@ -13,6 +13,7 @@
 #include "Automation.h"
 #include "CanvasWidget.h"
 #include "ChannelsPanel.h"
+#include "CommandPalette.h"
 #include "FilterDialog.h"
 #include "LayersPanel.h"
 #include "Names.h"
@@ -596,6 +597,9 @@ int menuCommands(MainWindow& w) {
              emit tree->dropRequested(layerId(s, "Paint"), std::nullopt, layerId(s, "Background"), false);
              return true;
          }), [](EditorSession& s, auto&) { s.placeLayer(layerId(s, "Paint"), std::nullopt, layerId(s, "Background"), false); }, {"layers.move"}},
+        // Last: it merges most of the document. Red hidden first, so a hidden layer stays out of the merge.
+        {"Merge Visible", "Paint", [](EditorSession& s) { const Layer* red = s.document()->find(layerId(s, "Red")); if (red && red->visible) s.toggleLayerVisibility(red->id); },
+         trigger({"Layer", "Merge Visible"}), [](EditorSession& s, auto&) { s.mergeVisible(); }, {"layers.merge"}},
     };
 
     int failures = 0;
@@ -796,6 +800,60 @@ int canvasMenus(MainWindow& w) {
     return failures ? 1 : 0;
 }
 
+/// Edit > Search…: Ctrl+F opens the palette, typed queries put the expected command first, Enter runs it and it
+/// joins Recently Used.
+int search(MainWindow& w) {
+    int failures = 0;
+    w.show();
+    QApplication::processEvents();
+    QAction* searchAction = action(w, "edit.search");
+    if (!searchAction || searchAction->shortcut() != QKeySequence("Ctrl+F")) { std::fprintf(stderr, "Edit > Search has no Ctrl+F\n"); return 1; }
+    auto open = [&]() -> CommandPalette* {
+        searchAction->trigger();
+        QApplication::processEvents();
+        for (CommandPalette* p : w.findChildren<CommandPalette*>()) if (p->isVisible()) return p;   // a closed one waits for deletion
+        return static_cast<CommandPalette*>(nullptr);
+    };
+    auto type = [](CommandPalette* p, const QString& text) {
+        auto* field = p->findChild<QLineEdit*>(QStringLiteral("commandPaletteField"));
+        field->clear();
+        for (QChar c : text) {
+            QKeyEvent press(QEvent::KeyPress, 0, Qt::NoModifier, QString(c));
+            QApplication::sendEvent(field, &press);
+        }
+        QApplication::processEvents();
+    };
+    const std::vector<std::pair<QString, QString>> cases = {
+        {"gauss", "Gaussian Blur…"}, {"merge vis", "Merge Visible"}, {"sel inv", "Inverse"}, {"prefer", "Preferences…"},
+        {"lasso", "Lasso"}};
+    for (const auto& [query, expected] : cases) {
+        CommandPalette* p = open();
+        if (!p) { std::fprintf(stderr, "Ctrl+F opened no palette\n"); return 1; }
+        type(p, query);
+        const QStringList rows = p->resultLabels();
+        if (rows.isEmpty() || rows.first() != expected) {
+            std::fprintf(stderr, "search \"%s\": expected \"%s\" first, got \"%s\"\n", qPrintable(query), qPrintable(expected), qPrintable(rows.value(0)));
+            failures++;
+        }
+        p->close();
+        QApplication::processEvents();
+    }
+    // Enter runs the top row: "lasso" picks the Lasso tool, which then leads Recently Used.
+    CommandPalette* p = open();
+    type(p, QStringLiteral("lasso"));
+    QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(p->findChild<QLineEdit*>(QStringLiteral("commandPaletteField")), &enter);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    if (w.session()->tool() != Tool::Lasso) { std::fprintf(stderr, "Enter on \"lasso\" did not pick the Lasso tool\n"); failures++; }
+    if (CommandPalette::recent().value(0) != QLatin1String("tool:Lasso")) { std::fprintf(stderr, "recent: %s\n", qPrintable(CommandPalette::recent().join(", "))); failures++; }
+    p = open();
+    if (!p || p->resultLabels().value(0) != QLatin1String("Lasso")) { std::fprintf(stderr, "Recently Used does not lead the empty query\n"); failures++; }
+    if (p) p->close();
+    std::printf("search: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
 } // namespace
 
 int runSelfTest(MainWindow& window, const QString& name) {
@@ -805,7 +863,8 @@ int runSelfTest(MainWindow& window, const QString& name) {
     }
     if (name == QLatin1String("guides")) return guides(window);
     if (name == QLatin1String("canvas-menus")) return canvasMenus(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus)\n", qPrintable(name));
+    if (name == QLatin1String("search")) return search(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search)\n", qPrintable(name));
     return 2;
 }
 

@@ -215,7 +215,7 @@ void MainWindow::buildMenus() {
     needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }), "document.save");
     file->addSeparator();
     needsDocument(file->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd), "export.psd");
-    needsDocument(file->addAction(tr("Export &PNG…"), QKeySequence("Ctrl+Shift+E"), this, &MainWindow::exportPng), "export.png");
+    needsDocument(file->addAction(tr("Export &PNG…"), this, &MainWindow::exportPng), "export.png");
     needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg), "export.jpeg");
     needsDocument(file->addAction(tr("Export S&VG…"), this, &MainWindow::exportSvg), "export.svg");
     if (canWriteImageFormat("webp")) needsDocument(file->addAction(tr("Export &WebP…"), this, &MainWindow::exportWebp), "export.webp");
@@ -317,7 +317,14 @@ void MainWindow::buildMenus() {
     }), "document.profile");
 
     edit->addSeparator();
-    edit->addAction(tr("Prefere&nces…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
+    // Photoshop's Edit > Search (Ctrl+F): every command, tool and G'MIC filter by name.
+    searchAction_ = edit->addAction(tr("&Search…"), QKeySequence("Ctrl+F"), this, [this] { showCommandPalette(); });
+    searchAction_->setObjectName("edit.search");
+    // Photoshop's Ctrl+K, and the platform's own Preferences key where it has one.
+    QAction* preferences = edit->addAction(tr("Prefere&nces…"), this, &MainWindow::showPreferences);
+    QList<QKeySequence> preferenceKeys{QKeySequence("Ctrl+K")};
+    for (const QKeySequence& key : QKeySequence::keyBindings(QKeySequence::Preferences)) if (!preferenceKeys.contains(key)) preferenceKeys << key;
+    preferences->setShortcuts(preferenceKeys);
 
     QMenu* image = menuBar()->addMenu(tr("&Image"));
     // Photoshop's Image > Mode: the document's bits per channel (docs/bit-depth.md).
@@ -440,6 +447,8 @@ void MainWindow::buildMenus() {
     mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { runCommand("layers.merge", {}, mergeAction_->text().remove('&')); }), "layers.merge");
     mergeAction_->setObjectName("command.layers.merge");
     named_["layer.merge"] = mergeAction_;
+    mergeVisibleAction_ = needsDocument(layer->addAction(tr("Merge &Visible"), QKeySequence("Ctrl+Shift+E"), this, [this] { runCommand("layers.merge", {{"visible", true}}, tr("Merge Visible")); }), "layers.merge");
+    mergeVisibleAction_->setObjectName("command.layers.mergeVisible");
     editTextAction_ = nameAction("layer.editText", needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }), "edit.text"));
     nameAction("layer.rename", needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
         const Layer* active = session_->activeLayer();
@@ -648,11 +657,7 @@ void MainWindow::buildMenus() {
         (new CameraRawDialog(session_, this))->show();
     }), "filter.Camera Raw");
     filter->addSeparator();
-    needsDocument(filter->addAction(tr("&G'MIC…"), QKeySequence("Ctrl+Shift+G"), this, [this] {
-        if (session_->smartObjectBlocksPixels(true)) return;
-            if (!session_->canAdjustPixels()) { showError(tr("G'MIC"), tr("Select a layer with pixels first.")); return; }
-        (new GmicDialog(session_, this))->show();
-    }), "filter.G'MIC");
+    gmicAction_ = needsDocument(filter->addAction(tr("&G'MIC…"), QKeySequence("Ctrl+Shift+G"), this, [this] { openGmic(); }), "filter.G'MIC");
     removeBackgroundAction_ = needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {
         if (!ModelStore::ready()) {
             // Off, or no model yet: the preferences page is where it gets turned on and fetched.

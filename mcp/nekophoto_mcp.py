@@ -565,9 +565,10 @@ def layers_mask(id: str, action: str, revealing: bool = True) -> str:
 
 
 @edit("Merge layers")
-def layers_merge(down: bool = False) -> str:
-    """Merge the selected layers, a selected folder, or (down=true) the active layer into the one beneath."""
-    return text(call("layers.merge", down=down))
+def layers_merge(down: bool = False, visible: bool = False) -> str:
+    """Merge the selected layers, a selected folder, (down=true) the active layer into the one beneath, or
+    (visible=true) every visible layer into one, as Layer > Merge Visible; hidden layers stay."""
+    return text(call("layers.merge", down=down, visible=visible))
 
 
 @edit("Group layers")

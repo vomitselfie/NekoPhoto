@@ -629,6 +629,11 @@ void AutomationServer::registerLayersHandlers() {
         document();
         EditorSession* s = session();
         if (flag(p, "down", false)) { s->mergeDown(); return QJsonObject{{"merged", true}}; }
+        if (flag(p, "visible", false)) {
+            if (!s->canMergeVisible()) fail("nothing to merge: Merge Visible needs two or more visible layers");
+            s->mergeVisible();
+            return QJsonObject{{"merged", true}, {"action", QStringLiteral("Merge Visible")}};
+        }
         if (!s->canMergeLayers()) fail("nothing to merge: select two or more layers, a folder, or a layer with one beneath it");
         QString title = s->mergeTitle();
         s->mergeLayers();

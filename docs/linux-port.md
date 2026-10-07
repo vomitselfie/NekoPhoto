@@ -437,7 +437,7 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Arrows with a selection tool | Nudge the selection outline |
 | Ctrl Shift [ | Move the layer out of its folder |
 | Ctrl N, Ctrl W, Ctrl Tab | New tab, close tab, next tab |
-| Ctrl Shift N, Ctrl G, Ctrl J, Ctrl E | New layer, group, duplicate, merge down |
+| Ctrl Shift N, Ctrl G, Ctrl J, Ctrl E, Ctrl Shift E | New layer, group, duplicate, merge down, merge visible |
 | Ctrl Alt G | Clipping mask |
 | Ctrl ] / Ctrl [ | Bring forward / send backward |
 | Ctrl A, Ctrl D, Ctrl Shift D, Ctrl Shift I | Select all, deselect, reselect, inverse |
@@ -445,7 +445,8 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl X, Ctrl C, Ctrl Shift C, Ctrl V | Cut, copy, copy merged, paste |
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
 | Ctrl Z, Ctrl Shift Z | Undo, redo |
-| Ctrl Shift E, Ctrl Alt Shift S | Export PNG, export JPEG |
+| Ctrl Alt Shift S | Export JPEG |
 | Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |
-| Ctrl , | Preferences |
+| Ctrl K (also Ctrl ,) | Preferences |
+| Ctrl F | Edit ▸ Search: find any command, tool or G'MIC filter by name and run it (arrows, Enter, Esc) |
 | Type tool: Ctrl Enter or keypad Enter, Esc | Commit or cancel the text being typed on the canvas (Enter alone starts a new line) |

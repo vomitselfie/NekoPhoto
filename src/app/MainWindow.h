@@ -35,6 +35,8 @@ class LayersPanel;
 class AdjustmentsPanel;
 class AutomationServer;
 class ToolOptionsBar;
+class CommandPalette;
+struct PaletteEntry;
 
 /// The tab strip: accepts a layer dragged from another project's Layers panel.
 class ProjectTabBar : public QTabBar {
@@ -117,6 +119,12 @@ public:
     std::optional<QJsonValue> runCommand(const QString& method, const QJsonObject& params = {}, const QString& title = {});
     /// What plays actions: the socket's server, or one of the window's own when automation is off.
     AutomationServer* automationEngine();
+    /// Edit > Search… (Ctrl+F): the command palette over the window, its field holding `query`.
+    CommandPalette* showCommandPalette(const QString& query = {});
+    /// What the palette searches: every menu command, the tools and the G'MIC filters.
+    std::vector<PaletteEntry> paletteEntries();
+    /// Filter > G'MIC…, on the filter named `filter` when given.
+    void openGmic(const QString& filter = {});
     /// Plays an action on the current tab; returns why it stopped, empty when it completed.
     QString playAction(const QString& name);
     /// File > Automate > Batch…, with `action` chosen.
@@ -224,6 +232,9 @@ private:
     QHash<QString, QAction*> named_;   // menu actions the canvas menu reuses, by key ("select.deselect", ...)
     QAction* named(const QString& key) const { return named_.value(key); }
     QAction* mergeAction_ = nullptr;
+    QAction* mergeVisibleAction_ = nullptr;
+    QAction* gmicAction_ = nullptr;
+    QAction* searchAction_ = nullptr;
     QAction* editTextAction_ = nullptr;
     QStringList lastImportNotes_;   // what the last PSD import could not carry, for automation callers
 

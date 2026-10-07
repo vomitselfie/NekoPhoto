@@ -146,7 +146,7 @@ reuses the menu bar's `QAction`s (by the keys `nameAction` gives them), so it fo
 
 ### Converted
 
-`command_path_selftest` checks every item below that is marked *checked* (89 of them): the menu path (or dialog,
+`command_path_selftest` checks every item below that is marked *checked* (90 of them): the menu path (or dialog,
 or panel control), the requests the recording holds, and the session calls the item made before, compared as
 documents, selections, paths, channels and history names, with each recorded once.
 
@@ -160,7 +160,7 @@ documents, selections, paths, channels and history names, with each recorded onc
 | Image | Mode: RGB, CMYK, Lab, 8, 16, 32 Bits *(checked: 16, 8, Lab, RGB)*; Canvas Size, Image Size, Trim, Crop to Selection, Flip Canvas Horizontal / Vertical, Adjustments > Invert *(checked)* | `image.mode`, `canvas.resize`, `image.resize`, `image.trim`, `canvas.crop` + `selection.none`, `canvas.flip`, `pixels.invert` |
 | Image | Adjustments: every dialog's OK *(checked: Levels, Curves, Brightness/Contrast, Posterize)* | `pixels.adjust` |
 | Filter | Gaussian Blur, Motion Blur, Add Noise, Lens Correction OK *(checked)* | `pixels.filter` |
-| Layer | New Layer, New Layer Below, New Folder, New Adjustment Layer, Layer via Copy, Duplicate, Delete, Merge Down, Rename, Group, Bring Forward, Send Backward, Flip Layer Horizontal / Vertical, Resampling, Create / Release Clipping Mask *(checked)* | `layers.add`, `layers.viaCopy`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.set`, `layers.group`, `layers.reorder`, `layers.flip` |
+| Layer | New Layer, New Layer Below, New Folder, New Adjustment Layer, Layer via Copy, Duplicate, Delete, Merge Down, Merge Visible, Rename, Group, Bring Forward, Send Backward, Flip Layer Horizontal / Vertical, Resampling, Create / Release Clipping Mask *(checked)* | `layers.add`, `layers.viaCopy`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.set`, `layers.group`, `layers.reorder`, `layers.flip` |
 | Layer | Layer Mask: Reveal All, Hide All, From Selection (Reveal / Hide), Enable / Disable, Invert, Apply, Delete *(checked but From Selection)* | `layers.mask` |
 | Layer | Smart Objects: Convert *(checked)*, Rasterize *(checked)*, Replace Contents…; File > Place Embedded… | `smartObject.convert`, `smartObject.rasterize`, `smartObject.replace`, `smartObject.place` |
 | Select | All, Deselect, Inverse, Reselect, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) *(checked)* | `selection.*` |

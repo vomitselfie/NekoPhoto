@@ -5,6 +5,8 @@
 #include "PixelDialog.h"
 #include <QTimer>
 #include <memory>
+#include <utility>
+#include <vector>
 
 class QCheckBox;
 class QLabel;
@@ -23,6 +25,11 @@ class GmicDialog : public PixelDialog {
 public:
     GmicDialog(EditorSession* session, QWidget* parent = nullptr);
     ~GmicDialog() override;
+    /// Shows the filter named `name` (an essential or a catalogue filter), as Edit > Search picks it.
+    void showFilter(const QString& name);
+    /// The filters the dialog lists at its defaults, as {name, folder}: the essentials, then the catalogue's
+    /// filters that work here. Read once (the catalogue file is parsed on first use).
+    static const std::vector<std::pair<QString, QString>>& listedFilters();
 
 protected:
     bool apply() override;

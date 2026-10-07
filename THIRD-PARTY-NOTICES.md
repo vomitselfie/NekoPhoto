@@ -94,6 +94,11 @@ not distributed). Reading a Gradient Map's method from 'grdm' version 3 (`src/co
 `src/additionalInfo.ts` at commit 387049670cb89b88fb8fe1b7c01aeacf98dd2e3b (MIT, (c) Agamnentzar): the method's
 four-character code after Dither, present when its first byte is not zero.
 
+Edit ▸ Search's fuzzy match (`fuzzyScore` in `src/app/CommandPalette.cpp`: a subsequence match scored by contiguous
+runs and word starts, less for long texts) is adapted from [PhotoCraft](https://github.com/storytold/photocraft)'s
+`crates/ui-egui/src/palette.rs` at commit b07a2e5b43939497032a0c27489df55a1a1a7295 (dual MIT / Apache-2.0, used under
+Apache-2.0, [Apache-2.0.txt](LICENSES/Apache-2.0.txt); Copyright (c) 2026 ArtCraft Team and the PhotoCraft contributors).
+
 Blend If (`src/core/src/blendif.cpp`): the inclusive split-handle ramp, the Gray weights and the transparency rule
 follow Patchy's calibration notes (`docs/layer-effects-render.md`, MIT, above), checked against its Photoshop fixture.
 

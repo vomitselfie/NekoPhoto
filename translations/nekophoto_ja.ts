@@ -211,6 +211,10 @@
         <translation>下のレイヤーと結合</translation>
     </message>
     <message>
+        <source>Merge Visible</source>
+        <translation>表示レイヤーを結合</translation>
+    </message>
+    <message>
         <source>Rename Layer</source>
         <translation>レイヤー名の変更</translation>
     </message>
@@ -4614,6 +4618,17 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::CommandPalette</name>
+    <message>
+        <source>Search commands, tools and filters</source>
+        <translation>コマンド、ツール、フィルターを検索</translation>
+    </message>
+    <message>
+        <source>Not available now</source>
+        <translation>現在は使用できません</translation>
+    </message>
+</context>
+<context>
     <name>app::ContentAwareScaleDialog</name>
     <message>
         <source>Content-Aware Scale</source>
@@ -7378,6 +7393,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>プロファイル変換</translation>
     </message>
     <message>
+        <source>&amp;Search…</source>
+        <translation>検索(&amp;S)...</translation>
+    </message>
+    <message>
         <source>Prefere&amp;nces…</source>
         <translation>環境設定(&amp;N)...</translation>
     </message>
@@ -7432,6 +7451,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Trim…</source>
         <translation>トリミング(&amp;T)...</translation>
+    </message>
+    <message>
+        <source>Merge &amp;Visible</source>
+        <translation>表示レイヤーを結合(&amp;V)</translation>
+    </message>
+    <message>
+        <source>Merge Visible</source>
+        <translation>表示レイヤーを結合</translation>
     </message>
     <message>
         <source>New Smart Object via &amp;Copy</source>

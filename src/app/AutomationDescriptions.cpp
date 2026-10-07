@@ -175,7 +175,7 @@ const MethodDoc methodDocs[] = {
     {"layers.flip", "Flip a layer's pixels.", "id:layer The layer (default the active one); vertical:bool=false Top to bottom instead of left to right"},
     {"layers.mask", "Add, remove or change a layer mask.",
      "id:layer The layer (default the active one); action:(add|addFromSelection|delete|toggle|invert|apply|link)! What to do; revealing:bool=true For add: white (reveal all) rather than black"},
-    {"layers.merge", "Merge the selected layers, or the active layer into the one beneath.", "down:bool=false Merge the active layer down"},
+    {"layers.merge", "Merge the selected layers, or the active layer into the one beneath; visible: true merges every visible layer (Layer > Merge Visible).", "down:bool=false Merge the active layer down; visible:bool=false Merge all visible layers into one; hidden layers stay"},
     {"layers.group", "Put the selected layers in a new folder.", ""},
     {"artboards.list", "The document's artboards: folders with a rectangle and a background, their children clipped to it.", ""},
     {"artboards.add", "A new, empty artboard at the top of the layer stack (Photoshop's Artboard tool).",

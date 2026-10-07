@@ -79,7 +79,7 @@ Coming next:
 - **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
 - **G'MIC:** over 850 more filters with a live preview, when `gmic` is installed
 - **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; Photoshop's layer styles, vector shapes and masks drawn as it draws them ([docs/layer-styles.md](docs/layer-styles.md), [docs/vector-masks.md](docs/vector-masks.md)); smart objects you can place, convert, edit and replace without losing resolution ([docs/smart-objects.md](docs/smart-objects.md)); text that stays editable both ways; layered PSD export; projects of up to a gigapixel of layers; camera RAW (opens in Camera Raw first, white balance in Kelvin and Tint, and Open Object keeps the RAW file inside a smart object you can re-develop), Affinity, SVG, PDF, GIF, TGA and ICO; a Photoshop file too big to open can open as its flattened image instead; PNG, JPEG, WebP, TIFF, SVG, GIF, TGA and ICO export; several projects in tabs; crash recovery
-- **Works the way Photoshop does:** its tools and shortcuts (Shift+letter steps through a tool group), right-click menus on the canvas that fit the tool and what's under the pointer, rulers and guides with smart guides while you move things, labels you drag to change a number, the Crop tool's ratio presets, and whole layers copied and pasted between documents
+- **Works the way Photoshop does:** its tools and shortcuts (Shift+letter steps through a tool group), Edit ▸ Search (Ctrl+F) to find and run any command, tool or filter by name, right-click menus on the canvas that fit the tool and what's under the pointer, rulers and guides with smart guides while you move things, labels you drag to change a number, the Crop tool's ratio presets, and whole layers copied and pasted between documents
 - **AI agents:** Claude Code or any MCP client can drive the editor
 
 The full list is in [docs/features.md](docs/features.md).
@@ -252,7 +252,7 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 - **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
 - **G'MIC:** `gmic` をインストールすると、850 種類以上のフィルターをライブプレビュー付きで使えます
 - **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開け、レイヤー付き PSD に書き出せます。1 ギガピクセルまでのプロジェクト、カメラ RAW(まず Camera Raw で開き、ホワイトバランスは色温度と色かぶり補正。「オブジェクトとして開く」なら RAW を含むスマートオブジェクトとして後から現像し直せます)・Affinity・SVG・PDF・GIF・TGA・ICO の読み込み、大きすぎて開けない Photoshop ファイルは統合画像として開くこともできます、PNG・JPEG・WebP・TIFF・SVG・GIF・TGA・ICO 書き出し、タブで複数のプロジェクト、クラッシュからの復元
-- **Photoshop と同じ操作感:** おなじみのツールとショートカット(Shift+キーでツールグループを切り替え)、ツールとポインター下の対象に合わせたカンバスの右クリックメニュー、定規・ガイドと移動中のスマートガイド、ラベルをドラッグして数値を変更、切り抜きツールの比率プリセット、ドキュメント間でのレイヤーのコピー&ペースト
+- **Photoshop と同じ操作感:** おなじみのツールとショートカット(Shift+キーでツールグループを切り替え)、コマンド・ツール・フィルターを名前で探して実行できる 編集 ▸ 検索(Ctrl+F)、ツールとポインター下の対象に合わせたカンバスの右クリックメニュー、定規・ガイドと移動中のスマートガイド、ラベルをドラッグして数値を変更、切り抜きツールの比率プリセット、ドキュメント間でのレイヤーのコピー&ペースト
 - **AI エージェント:** Claude Code などの MCP クライアントから操作できます
 
 機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。

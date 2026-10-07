@@ -174,7 +174,7 @@ above it, the whole layer without a selection), `layers.copy` and `layers.paste`
 selected and no selection, then Paste: `ids` to copy, default the selected ones; the paste answers the new ids),
 `layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
-apply, link), `layers.merge`, `layers.group`, `adjustments.set`.
+apply, link), `layers.merge` (`down` for Merge Down, `visible` for Merge Visible), `layers.group`, `adjustments.set`.
 `layers.style` gives a layer's effects (Photoshop's layer style) as JSON, every kind a list with switched-off
 effects kept (`enabled` false); `layers.setStyle` replaces them with an object of that shape (settings left out take
 Photoshop's defaults, `{}` clears the style). The style is written into the PSD as Photoshop's own `lfx2`.

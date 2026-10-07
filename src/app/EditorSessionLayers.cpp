@@ -4,6 +4,7 @@
 #include "compositor/colormgmt.h"
 #include "compositor/filters.h"
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -384,11 +385,61 @@ std::optional<EditorSession::MergePlan> EditorSession::mergePlan() const {
 bool EditorSession::canMergeLayers() const { return mergePlan().has_value(); }
 QString EditorSession::mergeTitle() const { auto plan = mergePlan(); return plan ? plan->action : QStringLiteral(QT_TRANSLATE_NOOP("History", "Merge Down")); }
 
+std::optional<EditorSession::MergePlan> EditorSession::mergeVisiblePlan() const {
+    if (!canEditLayers()) return std::nullopt;
+    const auto& layers = document_->layers;
+    // Shown on the canvas: the layer's eye, every enclosing folder's eye, and the base it clips to.
+    std::map<Uuid, const Layer*> byId;
+    for (auto& l : layers) byId[l.id] = &l;
+    std::map<Uuid, bool> memo;
+    std::function<bool(const Layer&, int)> shown = [&](const Layer& l, int depth) -> bool {
+        if (auto it = memo.find(l.id); it != memo.end()) return it->second;
+        bool v = l.visible && depth < 256;
+        if (v && l.parentId) { auto it = byId.find(*l.parentId); v = it != byId.end() && shown(*it->second, depth + 1); }
+        if (v && l.maskSourceId) { auto it = byId.find(*l.maskSourceId); v = it != byId.end() && shown(*it->second, depth + 1); }
+        memo[l.id] = v;
+        return v;
+    };
+    MergePlan plan;
+    int items = 0;
+    const Layer* top = nullptr;
+    bool anyPixels = false;
+    for (auto& l : layers) {
+        if (!shown(l, 0)) continue;
+        plan.ids.push_back(l.id);
+        plan.removed.insert(l.id);
+        if (!l.isGroup) { anyPixels = true; items++; }
+        if (!l.parentId || !shown(*byId[*l.parentId], 0)) top = &l;   // the topmost visible item at its own level
+    }
+    if (!anyPixels || items < 2 || !top) return std::nullopt;
+    // Photoshop names the result after the active layer when it is one of the merged ones.
+    const Layer* active = activeLayer();
+    const Layer* named = active && !active->isGroup && plan.removed.count(active->id) ? active : nullptr;
+    if (!named) for (auto& l : layers) if (plan.removed.count(l.id) && !l.isGroup) named = &l;
+    plan.name = named ? named->name : top->name;
+    plan.parent = std::nullopt;
+    for (std::optional<Uuid> p = top->parentId; p; p = byId[*p]->parentId) if (!plan.removed.count(*p)) { plan.parent = p; break; }
+    plan.anchor = top->id;
+    plan.action = QT_TRANSLATE_NOOP("History", "Merge Visible");
+    return plan;
+}
+
+bool EditorSession::canMergeVisible() const { return mergeVisiblePlan().has_value(); }
+
+void EditorSession::mergeVisible() {
+    if (refusedAtDepth("layers.merge", tr("Editing pixels"))) return;
+    commitTransform();
+    if (auto plan = mergeVisiblePlan()) mergeWithPlan(*plan);
+}
+
 void EditorSession::mergeLayers() {
     if (refusedAtDepth("layers.merge", tr("Editing pixels"))) return;
     commitTransform();
-    auto plan = mergePlan();
-    if (!plan) return;
+    if (auto plan = mergePlan()) mergeWithPlan(*plan);
+}
+
+void EditorSession::mergeWithPlan(const MergePlan& planned) {
+    const MergePlan* plan = &planned;
     const auto& layers = document_->layers;
     std::set<Uuid> kept(plan->ids.begin(), plan->ids.end());
     // Only the merged layers, cut loose from anything outside the merge, composited as the canvas shows them.
@@ -433,6 +484,13 @@ void EditorSession::mergeLayers() {
     merged.parentId = plan->parent;
     std::vector<Layer> next;
     for (auto& l : layers) if (!plan->removed.count(l.id)) next.push_back(l);
+    // A hidden layer inside a merged folder moves to the nearest folder that stays.
+    for (auto& l : next) {
+        while (l.parentId && plan->removed.count(*l.parentId)) {
+            const Layer* parent = document_->find(*l.parentId);
+            l.parentId = parent ? parent->parentId : std::nullopt;
+        }
+    }
     // Layers clipped to anything that was merged now clip to the result.
     for (auto& l : next) if (l.maskSourceId && plan->removed.count(*l.maskSourceId)) l.maskSourceId = merged.id;
     int slot = document_->indexOf(plan->anchor);

@@ -183,6 +183,8 @@ qt_add_executable(nekophoto
     MainWindow.cpp
     MainWindowFiles.cpp
     MainWindowMenus.cpp
+    MainWindowSearch.cpp
+    CommandPalette.cpp
     Autosave.h
     Autosave.cpp
     Bench.h
@@ -211,6 +213,9 @@ find_package(Qt6 QUIET COMPONENTS LinguistTools)
 if(TARGET Qt6::lrelease AND TARGET Qt6::lupdate)
     qt_add_translations(nekophoto TS_FILES ${CMAKE_SOURCE_DIR}/translations/nekophoto_ja.ts RESOURCE_PREFIX "/i18n"
         LUPDATE_OPTIONS -no-obsolete -locations none)
+    # The source file too, under :/i18n-src: Edit > Search matches a command's English name in any language.
+    qt_add_resources(nekophoto "i18n_sources" PREFIX "/i18n-src" BASE ${CMAKE_SOURCE_DIR}/translations
+        FILES ${CMAKE_SOURCE_DIR}/translations/nekophoto_ja.ts)
     message(STATUS "Translations: Japanese (Qt LinguistTools ${Qt6LinguistTools_VERSION})")
 else()
     message(STATUS "Translations: Qt LinguistTools not found (qt6-l10n-tools on Debian/Ubuntu, qt6-tools elsewhere); the app will be English only")

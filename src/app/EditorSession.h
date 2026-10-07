@@ -244,6 +244,10 @@ public:
     bool canMergeLayers() const;
     QString mergeTitle() const;
     void mergeLayers();
+    /// Layer > Merge Visible (Ctrl+Shift+E): every layer shown on the canvas merges into one; hidden layers stay.
+    std::optional<MergePlan> mergeVisiblePlan() const;
+    bool canMergeVisible() const;
+    void mergeVisible();
     void moveActiveLayerOutOfGroup();
     /// Alt-drag in the Layers panel: a copy of the layer placed where it was dropped.
     bool duplicateLayerTo(const compositor::Uuid& id, const std::optional<compositor::Uuid>& parent, const std::optional<compositor::Uuid>& above, bool atBottom);
@@ -439,6 +443,7 @@ public:
     bool setSelectedSubpathOp(compositor::VectorPath::Op op);
     /// Merge Shape Components on the target path (add-only geometry), as one undo step.
     bool mergeTargetComponents();
+    void mergeWithPlan(const MergePlan& plan);
     /// Photoshop's Auto Add/Delete: with no path being drawn, the Pen adds an anchor on the target path's outline and
     /// deletes one it clicks.
     bool penAutoAddDelete = true;

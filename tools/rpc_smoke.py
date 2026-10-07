@@ -379,6 +379,19 @@ def remaining_methods(rpc):
     rpc.call("history.undo")
     rpc.call("layers.select", id=placed["id"])
     rpc.call("layers.merge", down=True)
+    # Merge Visible (Ctrl+Shift+E): the visible layers become one, a hidden one stays; one undo step.
+    def layer_ids():
+        listed = rpc.call("layers.list")
+        return [l["id"] for l in (listed["layers"] if isinstance(listed, dict) else listed)]
+    before = layer_ids()
+    rpc.call("layers.set", id=before[-1], visible=False)
+    assert rpc.call("layers.merge", visible=True)["merged"]
+    assert rpc.call("history.info")["undo"] == "Merge Visible"
+    after = layer_ids()
+    assert before[-1] in after and len(after) < len(before), (before, after)
+    rpc.call("history.undo")
+    assert layer_ids() == before
+    rpc.call("history.undo")
     # Blend If (Blending Options): set by channel, one undo step, reported by layers.get, cleared by reset.
     top = rpc.call("layers.list")
     top = (top["layers"] if isinstance(top, dict) else top)[0]

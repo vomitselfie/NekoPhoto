@@ -5,12 +5,16 @@
 Everything NekoPhoto does, on Linux and Windows. Keyboard shortcuts follow Photoshop's and are
 listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
+Edit ▸ Search… (Ctrl+F, as Photoshop) finds any menu command, tool, adjustment, filter or G'MIC filter by a few
+letters of its name or menu path ("gauss" finds Gaussian Blur, "merge vis" Merge Visible), in English or in the
+interface language, and runs it; the last eight used come first.
+
 ## Layers
 - Layers and folders with opacity and all 27 of Photoshop's blend modes plus Pass Through, drawn with its calibrated byte arithmetic (Vivid Light, Linear Light, Hard Mix, Darker/Lighter Color and the rest match Photoshop captures; Dissolve dithers by document position)
 - Layer masks: paint, fill, invert, blur and feather; link or unlink them from the layer
 - Clipping masks and folder masks
 - Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map, Grain
-- Merge Down, Merge Layers and Merge Group (Ctrl+E)
+- Merge Down, Merge Layers and Merge Group (Ctrl+E); Merge Visible (Ctrl+Shift+E) merges every visible layer into one and leaves the hidden ones
 - Duplicate, rename, reorder and nest by drag and drop; drag layers between open projects
 - Copy and paste whole layers between documents, as Photoshop: Edit ▸ Copy with layers selected and no selection copies them and the folders' contents with their masks, vector masks, styles, text, shapes, smart objects (and their sources), adjustments, blending and clipping; Paste in any open document puts them above the active layer as one undo step, converted to its colour profile and depth (other apps get the layers flattened)
 
@@ -124,12 +128,16 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショートカットは Photoshop に合わせてあり、
 [linux-port.md](linux-port.md#keyboard-shortcuts)(英語)に一覧があります。
 
+編集 ▸ 検索...(Ctrl+F、Photoshop と同じ)で、メニューのコマンド・ツール・色調補正・フィルター・G'MIC フィルターを
+名前やメニューの位置の一部(「gauss」でぼかし(ガウス)、「表示」で表示レイヤーを結合)から探して実行できます。英語名でも探せ、
+最近使った 8 件が先頭に並びます。
+
 ### レイヤー
 - 描画モードと不透明度を持つレイヤーとグループ
 - レイヤーマスク:描画、塗りつぶし、反転、ぼかし、境界のぼかし。レイヤーとのリンクの切り替え
 - クリッピングマスクとグループのマスク
 - 調整レイヤー:色相・彩度、レベル補正、トーンカーブ、露光量、グラデーションマップ、粒子
-- 下のレイヤーと結合、レイヤーを結合、グループを結合(Ctrl+E)
+- 下のレイヤーと結合、レイヤーを結合、グループを結合(Ctrl+E)。表示レイヤーを結合(Ctrl+Shift+E)は表示中のレイヤーをすべて 1 枚にまとめ、非表示のレイヤーは残します
 - ブレンド条件(レイヤースタイル ▸ 描画オプション):グレーと各カラーチャンネルの「このレイヤー」「下になっているレイヤー」のスライダー。Alt キーを押しながらドラッグして分割すると、その間でなめらかにフェードします。レイヤー・グループ・調整レイヤーに使え、すべてのビット数で描画し、PSD とプロジェクトに保存されます。グラデーションは Photoshop の方法(知覚的・リニア・クラシック)で描画します([layer-styles.md](layer-styles.md)、英語)
 - ドラッグ&ドロップで複製・名前変更・並べ替え・入れ子。開いているプロジェクト間でもレイヤーを移動可能
 - ドキュメント間でレイヤーごとコピー&ペースト(Photoshop と同じ):選択範囲がなくレイヤーを選択しているときの 編集 ▸ コピー で、レイヤーとグループの中身をマスク・ベクトルマスク・スタイル・テキスト・シェイプ・スマートオブジェクト(ソースごと)・調整レイヤー・描画モード・クリッピングを保ったままコピーし、開いているどのドキュメントでもペーストで作業中のレイヤーの上に 1 回の取り消し単位で追加します。カラープロファイルとビット数はペースト先に合わせて変換します(他のアプリには統合した画像を渡します)
