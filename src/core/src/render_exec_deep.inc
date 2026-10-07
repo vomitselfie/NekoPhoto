@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -179,6 +180,13 @@ struct RenderExecDeep {
         frames.pop_back();
         // The contents at the folder's opacity and, when it has a style, its Fill (the effects are drawn after).
         const float opacity = float(clamp(g.opacity, 0.0, 1.0)) * folderContentFill(g);
+        // Blend Interior Effects as Group: the overlays and satins join the folder's result before its mode blends it.
+        bool foldsInteriors = false;
+        if constexpr (O::styles) {
+            auto style = f.buffer ? layerStyleOf(g, document) : nullptr;
+            foldsInteriors = style && style->blendInteriorAsGroup;
+        }
+        if (foldsInteriors) drawGroupStyle(g, *f.buffer, StyledDraw::Phase::InteriorOverlays);
         if (f.buffer) {
             cur = f.parent;
             // A folder's Blend If gates its result against what is under the folder.
@@ -197,7 +205,7 @@ struct RenderExecDeep {
                 }
             });
         }
-        if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Interior);
+        if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, foldsInteriors ? StyledDraw::Phase::InteriorRest : StyledDraw::Phase::Interior);
     }
 
     void drawGroupStyle(const Layer& group, Img& out, StyledDraw::Phase phase) {
@@ -452,6 +460,15 @@ struct RenderExecDeep {
             drawStroke();
             return;
         }
+        if constexpr (std::is_same_v<Img, Image16>)
+            if (!plainOnly && N == 4 && params.mode == BlendMode::Normal && document.colorMode == ColorMode::RGB && photoshopType(layer)) {
+                // Type in Normal mode blends its colours with Photoshop's text gamma (render_plan.h).
+                Img own = blank(outWidth, outHeight);
+                O::drawLayer(params, region, scale, coverage, own);
+                blendTextGamma(own, target);
+                drawStroke();
+                return;
+            }
         O::drawLayer(params, region, scale, coverage, target);
         drawStroke();
     }

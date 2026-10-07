@@ -31,7 +31,9 @@ height field and Lambert split. So are its compositing rules: effects fold their
 burn and dodge modes; a layer and its shadow or glow add up against the backdrop (the shape knocks the effect
 out, "Layer Knocks Out Drop Shadow" included); overlays stack pattern, gradient, colour, then satin, inner
 glow, inner shadow, stroke, bevel; with Blend Interior Effects as Group off (the default) the layer's mode
-blends its own pixels and the interior effects land on that, with it on they fold into the layer's colour; a
+blends its own pixels and the interior effects land on that, with it on they fold into the layer's colour (on a
+folder that isolates, the overlays and satins join the folder's result, which its mode then blends: Patchy's
+photoshop-group-fx-interior); a
 Stroke with Overprint off knocks the layer's content out of its band, even at 0% opacity; a clipped layer is
 masked by the base's pixels, never its effects; with Fill below 100% the overlays are their own passes.
 
@@ -72,7 +74,8 @@ Gradients follow Photoshop's Method (gradient overlays, layer-style strokes, gra
 the Gradient tool and Gradient Map; the Layer Style dialog, the Gradient tool's options bar and the Gradient Map
 editor have the menu): Classic interpolates the stored sRGB values, Linear interpolates
 in linear light, and Perceptual in Oklab, each with the gradient's smoothness applied in its own space (between two
-stops too; Classic smooths only past two stops, as before). Colour stops, midpoints and opacity stops work as in
+stops too, Classic included: Photoshop's merged image of a two-stop Classic overlay, Patchy's
+photoshop-overlay-zorder, follows the eased ramp). Colour stops, midpoints and opacity stops work as in
 Classic; opacity interpolates linearly in every method. The model follows PhotoCraft's (THIRD-PARTY-NOTICES.md),
 fitted to Photoshop's composites, and is checked against two Photoshop-saved files of ag-psd's tests (MIT), whose
 merged images it now matches (mean / max level difference): a Perceptual gradient overlay 0.57 / 4 (8.1 / 20 drawn
@@ -101,11 +104,11 @@ pixel on a 0-255 scale:
 
 | Effect | Mean |
 |---|---:|
-| Inner shadow, interior/exterior blending, pattern overlay (anchor, transparency) | 0.00-0.02 |
+| Inner shadow, interior/exterior blending, pattern overlay (anchor, transparency, a 16-bit pattern), overlay z-order | 0.00-0.02 |
 | Shadow knockout, inner glow range, outer glow range, gradient overlay geometry, smooth bevel, stroke overprint | 0.02-0.08 |
 | Pillow emboss, emboss styles | 0.08-0.13 |
 | Inner glow, bevel texture, Shape Burst stroke, gloss contour, stroke on antialiased edges | 0.3-0.9 |
-| Outer glow, overlay z-order, pattern scale | 1.1-1.7 |
+| Outer glow, pattern scale (minified: Photoshop's filter is not identified) | 1.1-1.7 |
 | Styled folders | 0.00-2.6 |
 | Bevel with a non-monotone contour | 6.1 |
 

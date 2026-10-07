@@ -229,3 +229,99 @@ TEST_CASE(radial_fill_layer_gradients_snap_as_photoshop_draws_them) {
     g.type = StyleGradient::Type::Linear;
     CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 49.5, 49.5), 0.5, 1e-6);
 }
+
+TEST_CASE(two_stop_overlays_ease_as_photoshop_draws_them) {
+    // Photoshop's merged image of a two-stop Classic overlay (Patchy's photoshop-overlay-zorder.psd, 28 px wide) eases
+    // its ends: 5, not the linear 9, one pixel in from blue toward cyan; the middle stays half way.
+    StyleGradient g;
+    g.colors = {{0, {0, 0, 255}, 0.5f, std::nullopt}, {1, {0, 255, 255}, 0.5f, std::nullopt}};
+    CHECK_EQ(int(gradientColor(g, 1.0f / 28).g), 5);
+    CHECK(std::abs(int(gradientColor(g, 0.5f).g) - 128) <= 1);
+    g.smoothness = 0;   // Smoothness 0: the plain ramp
+    CHECK_EQ(int(gradientColor(g, 1.0f / 28).g), 9);
+}
+
+TEST_CASE(sixteen_bit_patterns_keep_their_samples) {
+    // A 'Patt' record as Photoshop writes a 16-bit grayscale pattern (photoshop-pattern-deep.psd): one column, two
+    // rows, raw 16-bit samples. Read to 8 bits rounded, and kept at 15 bits for 16- and 32-bit documents.
+    psd::BigEndianWriter body;
+    body.write_u32(1); body.write_u32(1);            // version, grayscale
+    body.write_u16(2); body.write_u16(1);            // height, width
+    psd::write_descriptor_unicode_string(body, "Deep");
+    const std::string id = "deep-pattern";
+    body.write_u8(uint8_t(id.size()));
+    body.write_bytes(std::span(reinterpret_cast<const uint8_t*>(id.data()), id.size()));
+    body.write_u32(3); body.write_u32(16 + 4 + (8 + 23 + 4) + 25 * 4);   // the VMA's version and length
+    body.write_u32(0); body.write_u32(0); body.write_u32(2); body.write_u32(1);
+    body.write_u32(24);
+    body.write_u32(1); body.write_u32(23 + 4); body.write_u32(16);
+    body.write_u32(0); body.write_u32(0); body.write_u32(2); body.write_u32(1);
+    body.write_u16(16); body.write_u8(0);
+    body.write_u16(0x0a7f); body.write_u16(0x763f);
+    for (int slot = 1; slot < 26; slot++) body.write_u32(0);
+    psd::BigEndianWriter block;
+    block.write_u32(uint32_t(body.bytes().size()));
+    block.write_bytes(body.bytes());
+    while (block.bytes().size() % 4) block.write_u8(0);
+    const auto tiles = parsePatternBlock(block.bytes());
+    REQUIRE(tiles.count(id) == 1);
+    const PatternTile& tile = tiles.at(id);
+    REQUIRE(tile.width == 1 && tile.height == 2);
+    CHECK_EQ(int(tile.rgba[0]), 0x15);   // Photoshop's merged image of it: 0x15 and 0xec
+    CHECK_EQ(int(tile.rgba[4]), 0xec);
+    CHECK(tile.rgba[1] == tile.rgba[0] && tile.rgba[2] == tile.rgba[0] && tile.rgba[3] == 255);
+    REQUIRE(tile.rgba16.size() == 8);
+    CHECK_EQ(int(tile.rgba16[0]), 0x0a7f);
+    CHECK_EQ(int(tile.rgba16[7]), 32768);
+}
+
+TEST_CASE(type_blends_with_photoshops_text_gamma) {
+    // Black type at 60% coverage over white: Photoshop's merged image has 141 (Blend Text Colors Using Gamma 1.45, the
+    // default); the plain blend gives 102, which a pixel layer with the same pixels keeps.
+    Document doc(4, 1);
+    auto white = std::make_shared<Image>(4, 1);
+    white->fill(255, 255, 255, 255);
+    doc.layers.push_back(Layer(Asset::make(white, "Background"), Point(0, 0)));
+    auto edge = std::make_shared<Image>(4, 1);
+    edge->fill(0, 0, 0, 153);
+    Layer type(Asset::make(edge, "Type"), Point(0, 0));
+    type.text = LayerText{};
+    doc.layers.push_back(type);
+    CHECK_EQ(int(at(*renderFlattened(doc), 1, 0)[0]), 141);
+    doc.layers[1].text.reset();
+    CHECK_EQ(int(at(*renderFlattened(doc), 1, 0)[0]), 102);
+}
+
+TEST_CASE(an_isolated_folder_carries_its_folded_overlay_in_its_mode) {
+    // Blend Interior Effects as Group on a Multiply folder: its Color Overlay joins the folder's result, which then
+    // multiplies the backdrop (Patchy's photoshop-group-fx-interior.psd: green over (200, 150, 100) gives (0, 150, 0)).
+    // Off, the overlay lands over the composite in its own Normal mode.
+    for (bool asGroup : {true, false}) {
+        Document doc(20, 20);
+        auto back = std::make_shared<Image>(20, 20);
+        back->fill(200, 150, 100, 255);
+        doc.layers.push_back(Layer(Asset::make(back, "Background"), Point(0, 0)));
+        Layer folder("Folder", doc.size());
+        folder.isGroup = true;
+        folder.passThrough = false;
+        folder.blendMode = BlendMode::Multiply;
+        LayerStyle style;
+        ColorOverlay green;
+        green.color = {0, 255, 0};
+        style.colorOverlays.push_back(green);
+        style.blendInteriorAsGroup = asGroup;
+        setLayerStyle(folder, style);
+        auto grey = std::make_shared<Image>(10, 10);
+        grey->fill(128, 128, 128, 255);
+        Layer child(Asset::make(grey, "Child"), Point(5, 5));
+        child.parentId = folder.id;
+        doc.layers.push_back(folder);
+        doc.layers.push_back(child);
+        auto out = renderFlattened(doc);
+        const uint8_t* p = at(*out, 10, 10);
+        CHECK_EQ(int(p[0]), 0);
+        CHECK_EQ(int(p[1]), asGroup ? 150 : 255);
+        CHECK_EQ(int(p[2]), 0);
+        CHECK_EQ(int(at(*out, 2, 2)[0]), 200);   // outside the folder's pixels: the backdrop
+    }
+}

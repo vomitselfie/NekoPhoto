@@ -123,6 +123,8 @@ struct RenderExec<SampleType::U8> {
         dumpStage(g, "3-children", *cur);
         // The contents at the folder's opacity and, when it has a style, its Fill (the effects are drawn after).
         const float opacity = float(clamp(g.opacity, 0.0, 1.0)) * folderContentFill(g);
+        const bool foldsInteriors = f.buffer && interiorsAsGroup(g);
+        if (foldsInteriors) drawGroupStyle(g, *f.buffer, StyledDraw::Phase::InteriorOverlays);
         if (f.buffer) {
             // The folder's result, in its own mode and opacity, over what is below it.
             cur = f.parent;
@@ -151,8 +153,15 @@ struct RenderExec<SampleType::U8> {
             });
         }
         dumpStage(g, "4-opacity", *cur);
-        if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Interior);
+        if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, foldsInteriors ? StyledDraw::Phase::InteriorRest : StyledDraw::Phase::Interior);
         dumpStage(g, "5-interior", *cur);
+    }
+
+    /// Blend Interior Effects as Group on a folder with a style: its overlays and satins join its result before its
+    /// mode blends it (Patchy's photoshop-group-fx-interior probe: a Multiply folder's Color Overlay multiplies).
+    bool interiorsAsGroup(const Layer& g) const {
+        auto style = layerStyleOf(g, document);
+        return style && style->blendInteriorAsGroup;
     }
 
     void drawGroupStyle(const Layer& group, Image& out, StyledDraw::Phase phase) {
@@ -414,6 +423,14 @@ struct RenderExec<SampleType::U8> {
             // The folders' coverage alone: the vector mask is already in the source.
             if (vector) draw.coverage = coverageWithoutVector;
             drawStyledLayer(draw, target);
+            drawStroke();
+            return;
+        }
+        if (!plainOnly && params.mode == BlendMode::Normal && document.colorMode == ColorMode::RGB && photoshopType(layer)) {
+            // Type in Normal mode blends its colours with Photoshop's text gamma.
+            Image own(outWidth, outHeight);
+            drawLayer(params, region, scale, coverage, own);
+            blendTextGamma(own, target);
             drawStroke();
             return;
         }

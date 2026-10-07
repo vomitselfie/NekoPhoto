@@ -53,8 +53,8 @@ struct StyleGradient {
     Type type = Type::Linear;
     float angle = 90, scale = 1, offsetX = 0, offsetY = 0;   // offsets in percent
     bool reverse = false, dither = false, alignWithLayer = true;
-    /// A fill layer's gradient ('GdFl'): Photoshop spans it over the bounds' centre chord, unsnapped, and eases even
-    /// a two-stop ramp (Patchy's calibration); layer styles keep the overlay geometry.
+    /// A fill layer's gradient ('GdFl'): Photoshop spans it over the bounds' centre chord, unsnapped, and eases the
+    /// opacity ramp as it eases the colours (Patchy's calibration); layer styles keep the overlay geometry.
     bool fillLayer = false;
 };
 
@@ -164,8 +164,10 @@ bool hasAnyEffect(const LayerStyle& style);
 std::string layerStyleToJson(const LayerStyle& style);
 bool layerStyleFromJson(const std::string& json, LayerStyle& out, std::string* error);
 
-/// The document's patterns (Photoshop 'Patt' blocks), by id, straight RGBA; parsed once per document carry.
-struct PatternTile { int width = 0, height = 0; std::vector<uint8_t> rgba; };
+/// The document's patterns (Photoshop 'Patt' blocks), by id, straight RGBA; parsed once per document carry. A pattern
+/// stored at 16 bits keeps its samples at 15 bits (0..32768, straight) in `rgba16` too, for 16- and 32-bit documents;
+/// `rgba` is then those samples rounded to 8 bits.
+struct PatternTile { int width = 0, height = 0; std::vector<uint8_t> rgba; std::vector<uint16_t> rgba16; };
 std::shared_ptr<const std::map<std::string, PatternTile>> documentPatterns(const Document& document);
 /// The patterns of one 'Patt'-shaped payload (length-prefixed pattern records), by id.
 std::map<std::string, PatternTile> parsePatternBlock(const std::vector<uint8_t>& payload);

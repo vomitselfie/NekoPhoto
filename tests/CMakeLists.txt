@@ -186,6 +186,13 @@ target_link_libraries(psd_modes_tests PRIVATE compositor::core compositor_warnin
 # Patchy beside this checkout (CONTRIBUTING.md); PATCHY_FIXTURES in the environment overrides it.
 target_compile_definitions(psd_modes_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
 add_test(NAME psd_modes_tests COMMAND psd_modes_tests)
+# Photoshop's merged image as the oracle over Patchy's fixtures (skipped without them); the floor and the fixture pin are
+# tests/psd_oracle.txt and tests/patchy-manifest.txt.
+add_executable(psd_composite_oracle psd_composite_oracle.cpp)
+target_link_libraries(psd_composite_oracle PRIVATE compositor::core compositor_warnings)
+target_compile_definitions(psd_composite_oracle PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd"
+                           ORACLE_FILE="${CMAKE_SOURCE_DIR}/tests/psd_oracle.txt" MANIFEST_FILE="${CMAKE_SOURCE_DIR}/tests/patchy-manifest.txt")
+add_test(NAME psd_composite_oracle COMMAND psd_composite_oracle)
 
 # Offline background-removal harness: runs the pipeline on a PNG and dumps every stage, or scores a
 # directory of image/alpha pairs (SAD, MSE, MAD, Grad, Conn). Not a test.

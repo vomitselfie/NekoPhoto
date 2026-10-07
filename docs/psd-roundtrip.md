@@ -75,6 +75,13 @@ leading, fixed or automatic, becomes our line spacing. Everything else (box text
 shows as Photoshop's pixels, and its own 'TySh' comes back on export while those pixels are unchanged; so does the
 original block of a layer opened as text and not edited, since it says more than ours.
 
+**Drawing.** Type in Normal mode in an 8- or 16-bit RGB document meets what is under it as Photoshop blends it with
+Color Settings' "Blend Text Colors Using Gamma" at its default, 1.45: each colour is taken to linear light, raised to
+1 / 1.45, mixed by the type's coverage, and taken back (`blendTextGamma`, `src/core/src/render.cpp`). That holds for
+NekoPhoto text and for Photoshop type shown as its pixels while they are unchanged. Every anti-aliased edge pixel of
+the Photoshop-saved text fixtures with a merged image then matches it (the plain blend was up to 40 levels off); 32-bit,
+CMYK and Lab documents, and type in other modes, keep the plain blend (no Photoshop file to check them against).
+
 **Several styles.** Text whose runs differ (runs are compared over the normal style sheet, as Photoshop leaves out what
 equals it) keeps them: `LayerText::runs`, each with its face, size, weight, bold and italic, colour, tracking,
 baseline shift, leading, caps (small or all) and underline or strikethrough, in UTF-16 units of the text. The face's

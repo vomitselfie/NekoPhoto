@@ -1,0 +1,42 @@
+# Merged-composite oracle: how many of Patchy's fixtures NekoPhoto renders like Photoshop's merged image
+# (tests/psd_composite_oracle.cpp). The floor may only rise; the test fails below it.
+# Raise it after an improvement: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle
+compared 46
+floor 37
+pass patchy-open-path-strokes.psd
+pass photoshop-bevel-default.psd
+pass photoshop-bevel-texture-ramp.psd
+pass photoshop-brightness-contrast-legacy.psd
+pass photoshop-brightness-contrast-modern.psd
+pass photoshop-color-balance.psd
+pass photoshop-gradient-overlay-geometry.psd
+pass photoshop-group-fx-blend-fill.psd
+pass photoshop-group-fx-interior.psd
+pass photoshop-group-fx-mask-stroke.psd
+pass photoshop-group-fx-passthrough.psd
+pass photoshop-group-opacity.psd
+pass photoshop-inner-glow-range.psd
+pass photoshop-inner-glow.psd
+pass photoshop-inner-shadow.psd
+pass photoshop-interior-exterior-blending.psd
+pass photoshop-invert.psd
+pass photoshop-overlay-zorder.psd
+pass photoshop-pattern-anchor.psd
+pass photoshop-pattern-deep.psd
+pass photoshop-pattern-overlay.psd
+pass photoshop-pattern-transparent.psd
+pass photoshop-posterize.psd
+pass photoshop-saved-channels.psd
+pass photoshop-saved-paths.psd
+pass photoshop-smart-filter-add-noise-gaussian.psd
+pass photoshop-smart-filter-add-noise.psd
+pass photoshop-smart-filter-radial-blur-zoom.psd
+pass photoshop-smart-filter-radial-blur.psd
+pass photoshop-text-anchor-center-third.psd
+pass photoshop-text-anchor-center-whole.psd
+pass photoshop-text-anchor-center90-third.psd
+pass photoshop-text-anchor-center90-whole.psd
+pass photoshop-text-rtl-hebrew.psd
+pass photoshop-text-vertical-box.psd
+pass photoshop-text-vertical-point.psd
+pass photoshop-threshold.psd

@@ -40,8 +40,10 @@ struct StyledDraw {
     /// Where the layer's pixels can be (document pixels); the effects are worked out only around it. None: anywhere.
     std::optional<Rect> bounds;
     /// A folder's style comes in two parts around its children: the exterior effects before them, the rest after
-    /// (over what the children made). A layer's is drawn whole.
-    enum class Phase { Whole, Exterior, Interior } phase = Phase::Whole;
+    /// (over what the children made). A layer's is drawn whole. An isolated folder with Blend Interior Effects as Group
+    /// splits its interior: the overlays and satins into its own result, which its mode then carries
+    /// (InteriorOverlays), and the other interior effects over the composite (InteriorRest).
+    enum class Phase { Whole, Exterior, Interior, InteriorOverlays, InteriorRest } phase = Phase::Whole;
     /// Blend If: called once the layer's own pixels are drawn and before its interior effects, so the caller's gate
     /// takes the pixels and not the effects (Photoshop gates only the layer's pixels). Overlays and satins are then
     /// drawn as passes over the gated pixels instead of folded into their colour. Not called when nothing is drawn.

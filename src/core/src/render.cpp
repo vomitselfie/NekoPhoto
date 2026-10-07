@@ -6,7 +6,12 @@
 #include "compositor/parallel.h"
 #include "compositor/resample.h"
 #include "compositor/warp.h"
+#include "compositor/depth.h"
+#include "compositor/imaget.h"
 #include <algorithm>
+#include <array>
+#include <type_traits>
+#include <vector>
 #include <cmath>
 #include <cstring>
 #include <optional>
@@ -120,6 +125,70 @@ void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, 
 }
 void sampleMaskCoverage(const GrayPtr& mask, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply) {
     if (mask) sampleMaskCoverageImpl(*mask, mask, transform, region, scale, outside, out, multiply);
+}
+
+// ---- Type's gamma (render_plan.h) --------------------------------------------
+
+bool photoshopType(const Layer& layer) {
+    if (layer.text) return true;
+    if (!layer.psdCarry || !layer.asset) return false;
+    const auto& blocks = layer.psdCarry->blocks;
+    if (std::none_of(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "TySh"; })) return false;
+    return layer.psdCarry->contentHash == psdContentHash(layer.asset->image);
+}
+
+namespace {
+
+constexpr double kTextGamma = 1.45;
+
+/// An sRGB-encoded level (0..1) in the space type blends in, and back.
+double intoTextSpace(double c) { return std::pow(c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4), 1 / kTextGamma); }
+double outOfTextSpace(double g) {
+    const double l = std::pow(std::clamp(g, 0.0, 1.0), kTextGamma);
+    return l <= 0.0031308 ? l * 12.92 : 1.055 * std::pow(l, 1 / 2.4) - 0.055;
+}
+
+/// The blend on premultiplied RGBA whose full value is `one`; `into` maps a straight level to the text space.
+template <class Img, class Into>
+void blendTextGammaImpl(const Img& source, Img& target, int one, const Into& into) {
+    const int w = std::min(source.width(), target.width()), h = std::min(source.height(), target.height());
+    parallelRows(0, h, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const auto* s = source.row(y);
+            auto* d = target.row(y);
+            for (int x = 0; x < w; x++, s += 4, d += 4) {
+                if (!s[3]) continue;
+                const double sa = double(s[3]) / one, behind = double(d[3]) / one * (1 - sa), oa = sa + behind;
+                for (int k = 0; k < 3; k++) {
+                    const int f = std::min(one, int((int64_t(s[k]) * one + s[3] / 2) / s[3]));
+                    const int b = d[3] ? std::min(one, int((int64_t(d[k]) * one + d[3] / 2) / d[3])) : 0;
+                    const double g = (sa * into(f) + behind * into(b)) / oa;
+                    d[k] = static_cast<std::remove_reference_t<decltype(d[k])>>(std::lround(outOfTextSpace(g) * oa * one));
+                }
+                d[3] = static_cast<std::remove_reference_t<decltype(d[3])>>(std::lround(oa * one));
+            }
+        }
+    });
+}
+
+} // namespace
+
+void blendTextGamma(const Image& source, Image& target) {
+    static const auto table = [] {
+        std::array<double, 256> t{};
+        for (int i = 0; i < 256; i++) t[size_t(i)] = intoTextSpace(i / 255.0);
+        return t;
+    }();
+    blendTextGammaImpl(source, target, 255, [&](int v) { return table[size_t(v)]; });
+}
+
+void blendTextGamma(const Image16& source, Image16& target) {
+    static const auto table = [] {
+        std::vector<double> t(size_t(one16) + 1);
+        for (size_t i = 0; i < t.size(); i++) t[i] = intoTextSpace(double(i) / one16);
+        return t;
+    }();
+    blendTextGammaImpl(source, target, int(one16), [&](int v) { return table[size_t(v)]; });
 }
 
 // ---- Drawing a layer -------------------------------------------------------
