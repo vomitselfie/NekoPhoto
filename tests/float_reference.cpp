@@ -302,26 +302,24 @@ void blackWhite(double& r, double& g, double& b, const BlackWhiteSettings& s) {
 }
 
 void colorBalance(double& r, double& g, double& b, const ColorBalanceSettings& s) {
-    double c[3] = {r, g, b};
-    auto lum = [](const double* v) { return 0.3 * v[0] + 0.59 * v[1] + 0.11 * v[2]; };
-    const double before = lum(c);
-    for (int i = 0; i < 3; i++) {
-        const double sh = std::clamp(s.ranges[0][size_t(i)], -100.0, 100.0), mid = std::clamp(s.ranges[1][size_t(i)], -100.0, 100.0);
-        const double hi = std::clamp(s.ranges[2][size_t(i)], -100.0, 100.0);
-        const double gamma = std::pow(2.0, -mid / 100);
-        const double inBlack = sh < 0 ? -sh * 0.0035 : 0, outBlack = sh > 0 ? sh * 0.0035 : 0;
-        const double inWhite = hi > 0 ? 1 - hi * 0.003 : 1, outWhite = hi < 0 ? 1 + hi * 0.003 : 1;
-        const double x = std::pow(std::clamp((c[i] - inBlack) / std::max(1e-6, inWhite - inBlack), 0.0, 1.0), gamma);
-        c[i] = outBlack + (outWhite - outBlack) * x;
+    // A Levels per channel: black and white points in levels, a gamma as a power of two (adjustments_more.cpp).
+    std::array<std::array<double, 3>, 3> v;
+    for (size_t t = 0; t < 3; t++) for (size_t c = 0; c < 3; c++) v[t][c] = std::clamp(s.ranges[t][c], -100.0, 100.0);
+    double* channel[3] = {&r, &g, &b};
+    for (size_t c = 0; c < 3; c++) {
+        double black, white, log2Gamma;
+        if (s.preserveLuminosity) {
+            black = std::max({v[0][0], v[0][1], v[0][2]}) - v[0][c];
+            white = 255 - (v[2][c] - std::min({v[2][0], v[2][1], v[2][2]}));
+            log2Gamma = -(v[1][c] - (std::max({v[1][0], v[1][1], v[1][2]}) + std::min({v[1][0], v[1][1], v[1][2]})) / 2) / 100;
+        } else {
+            black = std::max(0.0, -v[0][c]);
+            white = 255 - std::max(0.0, v[2][c]);
+            log2Gamma = -v[1][c] / 100 - (v[0][c] + v[2][c]) / 200;
+        }
+        const double x = std::clamp((*channel[c] - black / 255) / ((white - black) / 255), 0.0, 1.0);
+        *channel[c] = std::pow(x, std::exp2(log2Gamma));
     }
-    if (s.preserveLuminosity) {
-        const double d = before - lum(c);
-        for (double& v : c) v += d;
-        const double l = lum(c), lo = std::min({c[0], c[1], c[2]}), hi = std::max({c[0], c[1], c[2]});
-        if (lo < 0 && l > lo) for (double& v : c) v = l + (v - l) * l / (l - lo);
-        if (hi > 1 && hi > l) for (double& v : c) v = l + (v - l) * (1 - l) / (hi - l);
-    }
-    r = c[0]; g = c[1]; b = c[2];
 }
 
 void vibrance(double& r, double& g, double& b, const VibranceSettings& s) {
@@ -362,47 +360,9 @@ void channelMixer(double& r, double& g, double& b, const ChannelMixerSettings& s
 
 void hueSaturation(Canvas& canvas, const HueSaturationSettings& settings, const Encoding& encoding) {
     if (settings.isIdentity()) return;
-    if (settings.colorize) {
-        perColour(canvas, encoding, [&](double& r, double& g, double& b) {
-            const double v = (std::max({r, g, b}) + std::min({r, g, b})) / 2;
-            r = g = b = v;
-            settings.adjust(r, g, b);
-        });
-        return;
-    }
-    constexpr int dim = 33;
-    std::vector<double> cube(size_t(dim) * dim * dim * 3);
-    for (int bi = 0; bi < dim; bi++)
-        for (int gi = 0; gi < dim; gi++)
-            for (int ri = 0; ri < dim; ri++) {
-                double r = ri / double(dim - 1), g = gi / double(dim - 1), b = bi / double(dim - 1);
-                settings.adjust(r, g, b);
-                const size_t i = (size_t(bi) * dim * dim + size_t(gi) * dim + size_t(ri)) * 3;
-                cube[i] = r; cube[i + 1] = g; cube[i + 2] = b;
-            }
-    auto at = [&](const int* index) { return &cube[(size_t(index[2]) * dim * dim + size_t(index[1]) * dim + size_t(index[0])) * 3]; };
-    perColour(canvas, encoding, [&](double& r, double& g, double& b) {
-        // Tetrahedral: from the cell's corner along the axes in decreasing order of their fractions.
-        const double in[3] = {r, g, b};
-        int index[3];
-        double f[3];
-        for (int c = 0; c < 3; c++) {
-            const double s = std::clamp(in[c], 0.0, 1.0) * (dim - 1);
-            index[c] = std::min(dim - 2, int(s));
-            f[c] = s - index[c];
-        }
-        int order[3] = {0, 1, 2};
-        std::stable_sort(order, order + 3, [&](int a, int b2) { return f[a] > f[b2]; });
-        const double* previous = at(index);
-        double out[3] = {previous[0], previous[1], previous[2]};
-        for (int k = 0; k < 3; k++) {
-            index[order[k]]++;
-            const double* next = at(index);
-            for (int c = 0; c < 3; c++) out[c] += (next[c] - previous[c]) * f[order[k]];
-            previous = next;
-        }
-        r = out[0]; g = out[1]; b = out[2];
-    });
+    // The model itself, colour by colour (it is what the 16- and 32-bit kernels evaluate).
+    const auto adjust = settings.adjuster();
+    perColour(canvas, encoding, [&](double& r, double& g, double& b) { adjust(r, g, b); });
 }
 
 inline uint32_t hash32(uint32_t x) {

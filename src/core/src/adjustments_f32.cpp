@@ -179,58 +179,11 @@ void forEachEncodedColour(ImageF& image, const TransferCurve& curve, const std::
 
 namespace {
 
-// ---- Hue/Saturation: a float cube, sampled tetrahedrally as the 16-bit kernel does ---------------------------------
-
-constexpr int cubeDim = 33;
+// ---- Hue/Saturation: Photoshop's model on each encoded colour ----------------------------------------------------
 
 void applyHueSaturationF(ImageF& image, const HueSaturationSettings& settings, const TransferCurve& curve) {
     if (settings.isIdentity()) return;
-    const auto adjust = settings.adjuster();
-    if (settings.colorize) {
-        // Colorize keeps only the lightness (max + min) / 2, evaluated directly.
-        forEachEncodedColour(image, curve, [&](double& r, double& g, double& b) {
-            double v = (std::max({r, g, b}) + std::min({r, g, b})) / 2;
-            double out[3] = {v, v, v};
-            adjust(out[0], out[1], out[2]);
-            r = out[0]; g = out[1]; b = out[2];
-        });
-        return;
-    }
-    std::vector<float> cube(size_t(cubeDim) * cubeDim * cubeDim * 3);
-    parallelRows(0, cubeDim, [&](int b0, int b1) {
-        for (int bi = b0; bi < b1; bi++)
-            for (int gi = 0; gi < cubeDim; gi++)
-                for (int ri = 0; ri < cubeDim; ri++) {
-                    double r = ri / double(cubeDim - 1), g = gi / double(cubeDim - 1), b = bi / double(cubeDim - 1);
-                    adjust(r, g, b);
-                    const size_t index = (size_t(bi) * cubeDim * cubeDim + size_t(gi) * cubeDim + size_t(ri)) * 3;
-                    cube[index] = float(r); cube[index + 1] = float(g); cube[index + 2] = float(b);
-                }
-    }, 1);
-    constexpr size_t stepR = 3, stepG = size_t(cubeDim) * 3, stepB = size_t(cubeDim) * cubeDim * 3;
-    forEachEncodedColour(image, curve, [&](double& r, double& g, double& b) {
-        const double in[3] = {r, g, b};
-        int index[3];
-        double frac[3];
-        for (int c = 0; c < 3; c++) {
-            const double s = std::clamp(in[c], 0.0, 1.0) * (cubeDim - 1);
-            index[c] = std::min(cubeDim - 2, int(s));
-            frac[c] = s - index[c];
-        }
-        const size_t step[3] = {stepR, stepG, stepB};
-        int order[3] = {0, 1, 2};
-        if (frac[order[0]] < frac[order[1]]) std::swap(order[0], order[1]);
-        if (frac[order[1]] < frac[order[2]]) std::swap(order[1], order[2]);
-        if (frac[order[0]] < frac[order[1]]) std::swap(order[0], order[1]);
-        const float* c0 = &cube[size_t(index[2]) * stepB + size_t(index[1]) * stepG + size_t(index[0]) * stepR];
-        const float* cA = c0 + step[order[0]];
-        const float* cB = cA + step[order[1]];
-        const float* c1 = cB + step[order[2]];
-        const double tA = frac[order[0]], tB = frac[order[1]], tC = frac[order[2]];
-        double out[3];
-        for (int c = 0; c < 3; c++) out[c] = c0[c] + (cA[c] - c0[c]) * tA + (cB[c] - cA[c]) * tB + (c1[c] - cB[c]) * tC;
-        r = out[0]; g = out[1]; b = out[2];
-    });
+    forEachEncodedColour(image, curve, settings.adjuster());
 }
 
 void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const TransferCurve& curve) {

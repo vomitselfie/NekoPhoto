@@ -16,7 +16,7 @@ into one pass.
 | Brightness/Contrast | `brit`, `CgEd` | Patchy's closed forms for the modern and legacy modes (recovered from ~750 Photoshop captures) | modern exact, legacy within 1 level |
 | Posterize | `post` | buckets floor(v * n / 256), each at step 255 / (n - 1) | exact; refitted here (rounding to the nearest step, as Patchy has it, misses a third of the samples) |
 | Threshold | `thrs` | Photoshop's integer luminance (30 R + 59 G + 11 B) / 100, white at or above the level | exact |
-| Color Balance | `blnc` | midtones: a gamma per channel, v^(2^(-amount / 100)); shadows and highlights move the channel's black and white points; Preserve Luminosity is Photoshop's Luminosity blend | midtones exact (0.2 levels); a file using all three ranges is ~10 levels off, the shadow and highlight curves not pinned down by its eight samples |
+| Color Balance | `blnc` | a Levels per channel, ((v - black) / (white - black))^gamma. Preserve Luminosity on: the shadows raise each channel's black point by how far its slider sits below the highest of the three (in levels), the highlights lower the white point by how far it sits above the lowest, the midtones give the gamma 2^-((v - (max + min) / 2) / 100). Off: each slider moves its own channel only (a negative shadow raises the black point, a positive highlight lowers the white point; the midtones bend the gamma by 2^(-v / 100), shadows and highlights by 2^(-v / 200)) | within a level on both files (mean 0.2 and 0.3) |
 | Black & White | `blwh` | upstream Compositor's decomposition (grey + secondary + primary, each weighted by its slider); the tint is the tint colour at the grey's lightness | not yet (no Photoshop file) |
 | Vibrance | `vibA` | Saturation scales every colour's distance from its luminance; Vibrance does so weighted towards muted colours | not yet |
 | Photo Filter | `phfl` | each channel multiplied by the filter's, mixed in by the density; Preserve Luminosity keeps the luminance. Version 3 files store the colour as XYZ in an undocumented scale (read as 16.16, else hundredths); NekoPhoto writes version 2 (RGB) | not yet |
@@ -38,4 +38,22 @@ Photoshop's documented keys and is unconfirmed.
 
 The "Checked" column is against the merged composites Photoshop stored in Patchy's fixtures
 (`test-fixtures/psd/photoshop-{invert,brightness-contrast-*,posterize,threshold,color-balance*}.psd`); the rest wait
-for a Photoshop capture.
+for a Photoshop capture. `tests/photoshop_adjustment_tests.cpp` holds Hue/Saturation and Color Balance to them.
+
+**Hue/Saturation** (`hue2`, `src/core/src/adjustments.cpp`) is Photoshop's model as Patchy calibrated it (MIT,
+`docs/adjustments-calibration.md` there): the Lightness slider blends each channel towards white or black first (its
+percent quantised to a byte step); the colour is then read as a lightness (max + min) / 2, a half-chroma and a position
+on a 1530-step hue wheel; Saturation multiplies the half-chroma by a measured table (+100 is 128 times, so any colour
+saturates fully, neutrals never tint), the Hue slider turns the wheel by whole steps (4.25 a degree), and the colour is
+rebuilt rounding towards its brightest channel and truncating towards its darkest, so sliders at zero give every colour
+back exactly. A range (Reds ... Magentas) is chosen by the colour's own hue through its four stops; its lightness
+collapses the chroma towards the brightest (positive) or darkest (negative) channel before the master, its saturation
+adds `weight * (table - 1)` to the master's factor and its hue adds `weight * degrees` in steps. Colorize keeps the
+lightness and rebuilds from measured per-percent saturation and per-degree hue tables. On bytes this is Photoshop's
+integer arithmetic; at 16 and 32 bits and in CMYK the same model runs unrounded on each colour. Without the Photoshop
+saturation curve (`"saturationCurve": "scale"`, the default for a layer made here) Saturation scales the half-chroma by
+1 + percent / 100 instead. Against Photoshop's flatten of Patchy's probes (`photoshop-hue-saturation-{master,bands}.bmp`;
+the merged image stored in those two PSDs is the probe before the settings were written into them, so
+`psd_composite_oracle` cannot judge them): master within a level (mean 0.07); ranges within two levels but on their
+feathered edges, where Photoshop weighs a colour as if its hue were up to three-quarters of a degree lower (7 levels at
+worst, mean 0.13, 2% of pixels beyond two levels; Patchy found no rule either).

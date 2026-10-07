@@ -423,94 +423,250 @@ double HueSaturationSettings::weight(int colorRange, double hue) const {
 
 namespace {
 
-void toHSL(double r, double g, double b, double& h, double& s, double& l) {
-    double high = std::max({r, g, b}), low = std::min({r, g, b});
-    l = (high + low) / 2;
-    double delta = high - low;
-    if (delta <= 0) { h = 0; s = 0; return; }
-    s = std::min(1.0, delta / (1 - std::fabs(2 * l - 1)));
-    if (high == r) h = (g - b) / delta; else if (high == g) h = (b - r) / delta + 2; else h = (r - g) / delta + 4;
-    h *= 60;
-    if (h < 0) h += 360;
+// Photoshop's Hue/Saturation, ported from Patchy's calibration (src/core/adjustment_layer.cpp and
+// docs/adjustments-calibration.md at the commit in src/third_party/patchy_psd/README.md; MIT, (c) 2026 Seth A. Robinson):
+// the lightness slider blends each channel towards white or black first; the colour is then read as a lightness
+// (max + min) / 2, a half-chroma and a position on a 1530-step hue wheel; saturation scales the half-chroma, the hue
+// slider turns the wheel, and the triple is rebuilt. A range's lightness collapses the chroma towards the brightest
+// (positive) or darkest (negative) channel before that, and the ranges are chosen by the colour's own hue. On bytes
+// the arithmetic is Photoshop's integer one (within 2 levels of its output); on 16 and 32 bits the same model runs
+// without the rounding.
+
+// Per-degree hue interpolant (x / 255) within the 60-degree sector, measured for Colorize.
+constexpr std::array<uint8_t, 360> colorizeHueInterp = {
+      0,   0,   7,  14,  14,  21,  28,  28,  34,  40,  47,  47,  53,  59,  59,
+     65,  71,  76,  76,  82,  88,  88,  93,  99, 104, 104, 110, 115, 115, 121,
+    126, 132, 132, 137, 142, 142, 148, 153, 159, 159, 165, 170, 170, 176, 182,
+    187, 187, 193, 199, 199, 205, 211, 211, 218, 224, 231, 231, 237, 244, 244,
+    255, 255, 244, 244, 237, 231, 231, 224, 218, 211, 211, 205, 199, 199, 193,
+    187, 182, 182, 176, 170, 170, 165, 159, 153, 153, 148, 142, 142, 137, 132,
+    126, 126, 121, 115, 115, 110, 104, 104,  99,  93,  88,  88,  82,  76,  76,
+     71,  65,  59,  59,  53,  47,  47,  40,  34,  28,  28,  21,  14,  14,   7,
+      0,   0,   0,   7,  14,  14,  21,  28,  34,  34,  40,  47,  47,  53,  59,
+     65,  65,  71,  76,  76,  82,  88,  88,  93,  99, 104, 104, 110, 115, 115,
+    121, 126, 132, 132, 137, 142, 142, 148, 153, 159, 159, 165, 170, 170, 176,
+    182, 187, 187, 193, 199, 199, 205, 211, 218, 218, 224, 231, 231, 237, 244,
+    255, 255, 244, 237, 237, 231, 224, 224, 218, 211, 205, 205, 199, 193, 193,
+    187, 182, 176, 176, 170, 165, 165, 159, 153, 148, 148, 142, 137, 137, 132,
+    126, 121, 121, 115, 110, 110, 104,  99,  93,  93,  88,  82,  82,  76,  71,
+     65,  65,  59,  53,  53,  47,  40,  40,  34,  28,  21,  21,  14,   7,   7,
+      0,   0,   7,   7,  14,  21,  21,  28,  34,  40,  40,  47,  53,  53,  59,
+     65,  71,  71,  76,  82,  82,  88,  93,  99,  99, 104, 110, 110, 115, 121,
+    126, 126, 132, 137, 137, 142, 148, 148, 153, 159, 165, 165, 170, 176, 176,
+    182, 187, 193, 193, 199, 205, 205, 211, 218, 224, 224, 231, 237, 237, 244,
+    255, 255, 255, 244, 237, 237, 231, 224, 218, 218, 211, 205, 205, 199, 193,
+    187, 187, 182, 176, 176, 170, 165, 165, 159, 153, 148, 148, 142, 137, 137,
+    132, 126, 121, 121, 115, 110, 110, 104,  99,  93,  93,  88,  82,  82,  76,
+     71,  65,  65,  59,  53,  53,  47,  40,  34,  34,  28,  21,  21,  14,   7,
+};
+
+// Colorize's saturation as a share of the half-chroma available, per percent.
+constexpr std::array<double, 101> colorizeSaturationScale = {
+    0.000000000, 0.007905262, 0.019710941, 0.027668416, 0.039421881, 0.047270696, 0.059073014, 0.066946710, 0.078843763,
+    0.086640420, 0.098455023, 0.110265169, 0.118146027, 0.129960630, 0.137863155, 0.149803150, 0.157507281, 0.169323089,
+    0.177190272, 0.189000384, 0.200803537, 0.208678535, 0.220530338, 0.228370759, 0.240176779, 0.249015748, 0.259921260,
+    0.267786839, 0.279548726, 0.287450787, 0.299606299, 0.311067367, 0.318931578, 0.330738946, 0.338646177, 0.350410526,
+    0.358300525, 0.370104305, 0.378000768, 0.389797144, 0.401607074, 0.409465789, 0.421278069, 0.429150262, 0.441060676,
+    0.448841267, 0.460652039, 0.468626969, 0.480353559, 0.488212135, 0.501968504, 0.511857893, 0.519710941, 0.531513797,
+    0.539421881, 0.551231577, 0.559073014, 0.571147357, 0.578843763, 0.590730136, 0.602385922, 0.610265169, 0.622070134,
+    0.629960630, 0.641761664, 0.649803150, 0.661437828, 0.669323089, 0.681130891, 0.689000384, 0.700803537, 0.712621052,
+    0.720530338, 0.732303348, 0.740176779, 0.751984252, 0.759921260, 0.771696337, 0.779548726, 0.791502625, 0.803170548,
+    0.811067367, 0.822875656, 0.830738946, 0.842556139, 0.850410526, 0.862224811, 0.870104305, 0.881917104, 0.889797144,
+    0.901607074, 0.913423683, 0.921278069, 0.933202100, 0.941060676, 0.952793047, 0.960652039, 0.972459005, 0.980353559,
+    0.992156742, 1.003952500,
+};
+
+// The Saturation slider's multiplier of the half-chroma, indexed percent + 100 (no closed form reproduces it).
+constexpr std::array<double, 201> masterSaturationScale = {
+    0.000000000, 0.015503876, 0.027027027, 0.034482759, 0.047619048, 0.054545455, 0.066666667, 0.074074074, 0.085714286,
+    0.097560976, 0.105263158, 0.117647059, 0.125000000, 0.136363636, 0.142857143, 0.155963303, 0.163934426, 0.176470588,
+    0.187500000, 0.195121951, 0.206896552, 0.214285714, 0.226415094, 0.235294118, 0.247311828, 0.253333333, 0.266666667,
+    0.277777778, 0.285714286, 0.296296296, 0.304347826, 0.315789474, 0.324324324, 0.333333333, 0.347826087, 0.355555556,
+    0.368421053, 0.375000000, 0.387096774, 0.393939394, 0.406250000, 0.413793103, 0.425531915, 0.437500000, 0.444444444,
+    0.457142857, 0.465116279, 0.476190476, 0.483870968, 0.496062992, 0.500000000, 0.515151515, 0.527272727, 0.534883721,
+    0.545454545, 0.555555556, 0.566037736, 0.574468085, 0.586206897, 0.600000000, 0.606060606, 0.617021277, 0.625000000,
+    0.636363636, 0.645161290, 0.656000000, 0.666666667, 0.675675676, 0.687500000, 0.695652174, 0.707317073, 0.714285714,
+    0.727272727, 0.733333333, 0.747368421, 0.753246753, 0.764705882, 0.777777778, 0.785714286, 0.800000000, 0.804878049,
+    0.816326531, 0.823529412, 0.836363636, 0.847457627, 0.857142857, 0.866666667, 0.875000000, 0.886792453, 0.894736842,
+    0.905982906, 0.914285714, 0.925925926, 0.937500000, 0.945454545, 0.956521739, 0.965517241, 0.976744186, 0.984126984,
+    1.000000000, 1.000000000, 1.011764706, 1.023255814, 1.031250000, 1.043478261, 1.050847458, 1.066666667, 1.074074074,
+    1.086956522, 1.097560976, 1.111111111, 1.121212121, 1.137254902, 1.153846154, 1.160000000, 1.176470588, 1.187500000,
+    1.205128205, 1.216216216, 1.235294118, 1.247311828, 1.266666667, 1.277777778, 1.297872340, 1.310344828, 1.333333333,
+    1.352941176, 1.368421053, 1.388888889, 1.403508772, 1.428571429, 1.444444444, 1.470588235, 1.485714286, 1.514285714,
+    1.529411765, 1.560000000, 1.575757576, 1.608695652, 1.640000000, 1.658536585, 1.692307692, 1.716981132, 1.750000000,
+    1.777777778, 1.811594203, 1.838709677, 1.882352941, 1.909090909, 1.952380952, 2.000000000, 2.030769231, 2.076923077,
+    2.111111111, 2.166666667, 2.200000000, 2.263157895, 2.307692308, 2.368421053, 2.411764706, 2.481481481, 2.533333333,
+    2.609756098, 2.692307692, 2.750000000, 2.842105263, 2.904761905, 3.000000000, 3.081081081, 3.200000000, 3.275862069,
+    3.411764706, 3.500000000, 3.666666667, 3.761904762, 3.933333333, 4.125000000, 4.263157895, 4.500000000, 4.666666667,
+    4.923076923, 5.117647059, 5.444444444, 5.692307692, 6.090909091, 6.400000000, 6.909090909, 7.333333333, 8.000000000,
+    8.818181818, 9.500000000, 10.666666667, 11.666666667, 13.500000000, 15.000000000, 18.250000000, 21.333333333,
+    28.400000000, 36.500000000, 64.000000000, 128.000000000,
+};
+
+/// A table read at a fractional index, linearly between its entries (sliders are whole numbers in Photoshop).
+template <size_t N>
+double tableAt(const std::array<double, N>& table, double index) {
+    index = std::clamp(index, 0.0, double(N - 1));
+    const size_t i = std::min(N - 2, size_t(index));
+    return table[i] + (table[i + 1] - table[i]) * (index - double(i));
 }
 
-void toRGB(double h, double s, double l, double& r, double& g, double& b) {
-    if (s <= 0) { r = g = b = l; return; }
-    double chroma = (1 - std::fabs(2 * l - 1)) * s;
-    double sector = h / 60;
-    double second = chroma * (1 - std::fabs(std::fmod(sector, 2.0) - 1));
-    double base = l - chroma / 2;
-    switch (int(sector)) {
-    case 0: r = chroma; g = second; b = 0; break;
-    case 1: r = second; g = chroma; b = 0; break;
-    case 2: r = 0; g = chroma; b = second; break;
-    case 3: r = 0; g = second; b = chroma; break;
-    case 4: r = second; g = 0; b = chroma; break;
-    default: r = chroma; g = 0; b = second; break;
-    }
-    r = std::min(1.0, std::max(0.0, r + base)); g = std::min(1.0, std::max(0.0, g + base)); b = std::min(1.0, std::max(0.0, b + base));
+/// The 1530-step wheel position (six sectors of 255) of a colour on the 0..255 scale.
+double wheelPosition(const double c[3]) {
+    const double r = c[0], g = c[1], b = c[2];
+    const double high = std::max({r, g, b}), low = std::min({r, g, b}), span = high - low;
+    if (span <= 0) return 0;
+    auto ramp = [span](double middle, double bottom) { return 255 * (middle - bottom) / span; };
+    if (r == high && b == low) return ramp(g, b);               // red -> yellow
+    if (g == high && b == low) return 510 - ramp(r, b);         // yellow -> green
+    if (g == high && r == low) return 510 + ramp(b, r);         // green -> cyan
+    if (b == high && r == low) return 1020 - ramp(g, r);        // cyan -> blue
+    if (b == high && g == low) return 1020 + ramp(r, g);        // blue -> magenta
+    return 1530 - ramp(b, g);                                   // magenta -> red
 }
 
-struct HueResponse { double shift = 0, saturation = 0, lightness = 0; };
-
-std::vector<HueResponse> hueResponse(const HueSaturationSettings& settings) {
-    std::vector<HueResponse> result(361);
-    for (int degree = 0; degree <= 360; degree++) {
-        for (auto& [range, a] : settings.adjustments) {
-            if (a == RangeAdjustment{}) continue;
-            double w = settings.weight(range, degree);
-            if (w <= 0) continue;
-            result[size_t(degree)].shift += a.hue * w;
-            result[size_t(degree)].saturation += a.saturation * w;
-            result[size_t(degree)].lightness += a.lightness * w;
-        }
-    }
-    return result;
+void wheelSplit(double position, int& sector, double& interpolant) {
+    position = std::fmod(position, 1530.0);
+    if (position < 0) position += 1530;
+    sector = std::min(5, int(position / 255));
+    const double offset = position - sector * 255.0;
+    interpolant = sector % 2 == 0 ? offset : 255 - offset;
 }
 
-/// Photoshop's Saturation slider (as reverse-engineered by maozefa, 2012): the channels move away from or
-/// towards the HSL lightness, +100 reaching full saturation and -100 grey; the lightness is kept.
-void photoshopSaturate(double& r, double& g, double& b, double amount) {
-    double high = std::max({r, g, b}), low = std::min({r, g, b}), l = (high + low) / 2, delta = high - low;
-    if (delta <= 0) return;
-    double factor;
-    if (amount >= 0) {
-        double s = delta / (1 - std::fabs(2 * l - 1));
-        factor = 1 / (amount + s >= 1 ? s : 1 - amount);
-    } else factor = 1 + amount;
-    auto move = [&](double& c) { c = std::min(1.0, std::max(0.0, l + (c - l) * factor)); };
-    move(r); move(g); move(b);
-}
-
-void adjustColor(const HueSaturationSettings& settings, const std::vector<HueResponse>& response, double& r, double& g, double& b) {
-    double h, s, l;
-    toHSL(r, g, b, h, s, l);
-    double lightnessAmount, saturationAmount = 0;
-    if (settings.colorize) {
-        RangeAdjustment a = settings.currentValue();
-        h = wrap360(a.hue);
-        s = std::min(1.0, std::max(0.0, a.saturation / 100));
-        lightnessAmount = a.lightness / 100;
+/// The colour at a lightness and half-chroma in a sector. On bytes (`exact`) the brightest channel rounds and the
+/// darkest truncates, which makes all-zero sliders an exact identity.
+void hslRebuild(double light, double halfChroma, int sector, double interpolant, bool exact, double out[3]) {
+    double q, p, m;
+    if (exact) {
+        q = std::min(255.0, light + std::floor(halfChroma + 0.5));
+        p = std::max(0.0, light - std::floor(halfChroma));
+        m = p + std::floor((q - p) * interpolant / 255 + 0.5);
     } else {
-        const HueResponse& sampled = response[size_t(std::min(360, std::max(0, int(std::round(h)))))];
-        lightnessAmount = sampled.lightness / 100;
-        saturationAmount = std::min(1.0, std::max(-1.0, sampled.saturation / 100));
-        h = wrap360(h + sampled.shift);
-        if (!settings.photoshopSaturation) s = std::min(1.0, std::max(0.0, s * (1 + saturationAmount)));
+        q = std::min(255.0, light + halfChroma);
+        p = std::max(0.0, light - halfChroma);
+        m = p + (q - p) * interpolant / 255;
     }
-    double amount = std::min(1.0, std::max(-1.0, lightnessAmount));
-    l = amount >= 0 ? l + (1 - l) * amount : l * (1 + amount);
-    toRGB(h, s, std::min(1.0, std::max(0.0, l)), r, g, b);
-    if (settings.photoshopSaturation && !settings.colorize && saturationAmount != 0) photoshopSaturate(r, g, b, saturationAmount);
+    switch (sector) {
+    case 0: out[0] = q; out[1] = m; out[2] = p; break;
+    case 1: out[0] = m; out[1] = q; out[2] = p; break;
+    case 2: out[0] = p; out[1] = q; out[2] = m; break;
+    case 3: out[0] = p; out[1] = m; out[2] = q; break;
+    case 4: out[0] = m; out[1] = p; out[2] = q; break;
+    default: out[0] = q; out[1] = p; out[2] = m; break;
+    }
 }
+
+/// The Lightness slider on one channel: Photoshop quantises the percent to a byte step first.
+double lightnessValue(double value, double lightness, bool exact) {
+    const double step = std::floor(std::fabs(lightness) * 255 / 100);
+    double v = value;
+    if (lightness > 0) v = value + (255 - value) * step / 255;
+    else if (lightness < 0) v = value * (255 - step) / 255;
+    return exact ? std::floor(v + 0.5) : v;
+}
+
+struct HueSatModel {
+    HueSaturationSettings settings;
+    bool colorize = false;
+    // Colorize
+    int colorizeHue = 0;
+    double colorizeScale = 0, colorizeLightness = 0;
+    // Master
+    double lightness = 0, ratio = 1, rotation = 0;
+    struct Range { int range; double hue, lightness, saturationOffset; };
+    std::vector<Range> ranges;
+    std::array<uint8_t, 256> ramp{};
+
+    explicit HueSatModel(const HueSaturationSettings& s) : settings(s), colorize(s.colorize) {
+        auto saturationRatio = [&](double percent) {
+            percent = std::clamp(percent, -100.0, 100.0);
+            return s.photoshopSaturation ? tableAt(masterSaturationScale, percent + 100) : std::max(0.0, 1 + percent / 100);
+        };
+        if (colorize) {
+            const RangeAdjustment a = s.currentValue();
+            colorizeHue = int(std::lround(wrap360(a.hue))) % 360;
+            colorizeScale = tableAt(colorizeSaturationScale, std::clamp(a.saturation, 0.0, 100.0));
+            colorizeLightness = std::clamp(a.lightness, -100.0, 100.0);
+            return;
+        }
+        RangeAdjustment master;
+        if (auto it = s.adjustments.find(0); it != s.adjustments.end()) master = it->second;
+        lightness = std::clamp(master.lightness, -100.0, 100.0);
+        ratio = saturationRatio(master.saturation);
+        rotation = std::floor(std::clamp(master.hue, -180.0, 180.0) * 4.25 + 0.5);
+        for (auto& [range, a] : s.adjustments) {
+            if (range < 1 || range > 6 || a == RangeAdjustment{}) continue;
+            ranges.push_back({range, std::clamp(a.hue, -180.0, 180.0), std::clamp(a.lightness, -100.0, 100.0),
+                              a.saturation != 0 ? saturationRatio(a.saturation) - 1 : 0.0});
+        }
+        for (int v = 0; v < 256; v++) ramp[size_t(v)] = uint8_t(lightnessValue(v, lightness, true));
+    }
+
+    /// One colour on the 0..255 scale; whole numbers in and out when `exact`.
+    void apply(double c[3], bool exact) const {
+        if (colorize) {
+            const double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
+            const double light = lightnessValue(exact ? std::floor((high + low) / 2) : (high + low) / 2, colorizeLightness, exact);
+            const double halfChroma = std::min(light, 255 - light) * colorizeScale;
+            hslRebuild(light, halfChroma, colorizeHue / 60, colorizeHueInterp[size_t(colorizeHue)], exact, c);
+            return;
+        }
+        // The ranges, chosen by the colour's own hue (a master rotation does not move them); their lightness first.
+        double weights[7] = {0, 0, 0, 0, 0, 0, 0};
+        if (!ranges.empty()) {
+            const double wheel = wheelPosition(c);
+            int sector;
+            double interpolant;
+            wheelSplit(wheel, sector, interpolant);
+            double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
+            double bandLightness = 0;
+            if (high > low)
+                for (const Range& r : ranges) {
+                    weights[r.range] = settings.weight(r.range, wheel / 4.25);
+                    bandLightness += weights[r.range] * r.lightness;
+                }
+            if (bandLightness > 0) low += (high - low) * std::min(bandLightness, 100.0) / 100;
+            else if (bandLightness < 0) high += (low - high) * std::min(-bandLightness, 100.0) / 100;
+            if (bandLightness != 0) {
+                if (exact) { high = std::clamp(std::floor(high + 0.5), 0.0, 255.0); low = std::clamp(std::floor(low + 0.5), 0.0, 255.0); }
+                const double light = exact ? std::floor((high + low) / 2) : (high + low) / 2;
+                hslRebuild(light, (high - low) / 2, sector, interpolant, exact, c);
+            }
+        }
+        double lit[3];
+        for (int i = 0; i < 3; i++) lit[i] = exact ? ramp[size_t(std::clamp(int(c[i]), 0, 255))] : lightnessValue(c[i], lightness, false);
+        const double high = std::max({lit[0], lit[1], lit[2]}), low = std::min({lit[0], lit[1], lit[2]});
+        if (high == low) { c[0] = lit[0]; c[1] = lit[1]; c[2] = lit[2]; return; }   // neutrals are never tinted
+        const double light = exact ? std::floor((high + low) / 2) : (high + low) / 2;
+        const double half = (high - low) / 2;
+        // The ranges' saturation offsets from 1 add up and multiply the master's; their rotations add, in whole steps.
+        double offset = 0, turn = rotation;
+        for (const Range& r : ranges) {
+            const double w = weights[r.range];
+            if (w <= 0) continue;
+            offset += w * r.saturationOffset;
+            if (r.hue != 0) turn += exact ? std::floor(w * r.hue * 4.25 + 0.5) : w * r.hue * 4.25;
+        }
+        const double limit = std::max(std::min(light, 255 - light), half);
+        const double halfChroma = std::min(half * ratio * std::max(0.0, 1 + offset), limit);
+        int sector;
+        double interpolant;
+        wheelSplit(wheelPosition(lit) + turn, sector, interpolant);
+        hslRebuild(light, halfChroma, sector, interpolant, exact, c);
+    }
+};
 
 } // namespace
 
-void HueSaturationSettings::adjust(double& r, double& g, double& b) const { adjustColor(*this, hueResponse(*this), r, g, b); }
+void HueSaturationSettings::adjust(double& r, double& g, double& b) const { adjuster()(r, g, b); }
 
 std::function<void(double&, double&, double&)> HueSaturationSettings::adjuster() const {
-    auto response = std::make_shared<const std::vector<HueResponse>>(hueResponse(*this));
-    return [settings = *this, response](double& r, double& g, double& b) { adjustColor(settings, *response, r, g, b); };
+    auto model = std::make_shared<const HueSatModel>(*this);
+    return [model](double& r, double& g, double& b) {
+        double c[3] = {std::clamp(r, 0.0, 1.0) * 255, std::clamp(g, 0.0, 1.0) * 255, std::clamp(b, 0.0, 1.0) * 255};
+        model->apply(c, false);
+        r = c[0] / 255; g = c[1] / 255; b = c[2] / 255;
+    };
 }
 
 double HueSaturationSettings::shiftedHue(double hue) const {
@@ -521,34 +677,24 @@ double HueSaturationSettings::shiftedHue(double hue) const {
 
 void applyHueSaturation(Image& image, const HueSaturationSettings& settings) {
     if (settings.isIdentity()) return;
-    auto fixed = [](double v) { return uint16_t(std::lround(std::min(1.0, std::max(0.0, v)) * 65280)); };
-    if (settings.colorize) {
-        // Colorize keeps only the pixel's lightness (max + min) / 2, so a table over max + min is exact.
-        std::vector<uint16_t> table(511 * 3);
-        std::vector<HueResponse> none;
-        for (int key = 0; key <= 510; key++) {
-            double r = key / 510.0, g = r, b = r;
-            adjustColor(settings, none, r, g, b);
-            table[size_t(key) * 3] = fixed(r); table[size_t(key) * 3 + 1] = fixed(g); table[size_t(key) * 3 + 2] = fixed(b);
-        }
-        kernels::applyLightnessTable(image, table.data());
-        return;
-    }
-    // A 33-point colour cube, as the Mac's CIColorCube, sampled tetrahedrally; fast enough for slider drags.
-    constexpr int dim = kernels::cubeDim;
-    std::vector<uint16_t> cube(size_t(dim) * dim * dim * 3);
-    std::vector<HueResponse> response = hueResponse(settings);
-    parallelRows(0, dim, [&](int b0, int b1) {
-        for (int bi = b0; bi < b1; bi++)
-            for (int gi = 0; gi < dim; gi++)
-                for (int ri = 0; ri < dim; ri++) {
-                    double r = ri / double(dim - 1), g = gi / double(dim - 1), b = bi / double(dim - 1);
-                    adjustColor(settings, response, r, g, b);
-                    size_t index = (size_t(bi) * dim * dim + size_t(gi) * dim + size_t(ri)) * 3;
-                    cube[index] = fixed(r); cube[index + 1] = fixed(g); cube[index + 2] = fixed(b);
+    // Photoshop's byte arithmetic on each straight colour.
+    const HueSatModel model(settings);
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            uint8_t* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const int a = p[3];
+                if (!a) continue;
+                double c[3];
+                for (int i = 0; i < 3; i++) c[i] = a == 255 ? p[i] : std::min(255, (p[i] * 255 + a / 2) / a);
+                model.apply(c, true);
+                for (int i = 0; i < 3; i++) {
+                    const int v = std::clamp(int(c[i]), 0, 255);
+                    p[i] = uint8_t(a == 255 ? v : (v * a + 127) / 255);
                 }
-    }, 1);
-    kernels::applyColorCube(image, cube.data());
+            }
+        }
+    });
 }
 
 // ---- Invert ---------------------------------------------------------------------------
