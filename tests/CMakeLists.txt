@@ -10,6 +10,11 @@ add_executable(history_tests history_tests.cpp)
 target_link_libraries(history_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME history_tests COMMAND history_tests)
 
+# Work done, not time taken: fixed workloads with upper bounds on the work counters (docs/work-counters.md).
+add_executable(work_counter_tests work_counter_tests.cpp)
+target_link_libraries(work_counter_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME work_counter_tests COMMAND work_counter_tests)
+
 add_executable(imaget_tests imaget_tests.cpp)
 target_link_libraries(imaget_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME imaget_tests COMMAND imaget_tests)
@@ -415,6 +420,11 @@ if(TARGET nekophoto)
     set_tests_properties(export_as_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/export-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/export-home/data")
     # Edit > Search…: Ctrl+F, typed queries and their top result, Enter, Recently Used (English, for the labels).
+    # The window's work for a brush stroke, an adjustment slider drag, pans and zooms, bounded by the work counters
+    # (SelfTestWork.cpp, docs/work-counters.md); at a 1x display scale, which the dab-sized bounds assume.
+    add_test(NAME work_counters_selftest COMMAND nekophoto --self-test work-counters)
+    set_tests_properties(work_counters_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;COMPOSITOR_WINDOW_SIZE=1200x800;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/work-counters-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/work-counters-home/data")
     add_test(NAME search_selftest COMMAND nekophoto --lang en --self-test search)
     set_tests_properties(search_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/search-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/search-home/data")
