@@ -102,9 +102,10 @@ SmartFilterParameters parametersOf(const psd::DescriptorObject& f, uint32_t id) 
     if (c == "RdlB" && id == 0x52646c42u && intIn(either(f, "Amnt", "amount"), 1, 100, i)) {
         const V* method = either(f, "BlrM", "blurMethod");
         const V* quality = either(f, "BlrQ", "blurQuality");
-        if (method && method->type == V::Type::Enum && method->enum_value == "Spn " && quality && quality->type == V::Type::Enum) {
+        if (method && method->type == V::Type::Enum && (method->enum_value == "Spn " || method->enum_value == "Zm  ") && quality
+            && quality->type == V::Type::Enum) {
             const std::string& q = quality->enum_value;
-            if (q == "Drft" || q == "Gd  " || q == "Bst ") return RadialBlur{i, q == "Drft" ? 8 : q == "Gd  " ? 16 : 32};
+            if (q == "Drft" || q == "Gd  " || q == "Bst ") return RadialBlur{i, q == "Drft" ? 8 : q == "Gd  " ? 16 : 32, method->enum_value == "Zm  "};
         }
     }
     if (c == "AdNs" && id == 0x41644e73u && unitIn(either(f, "Nose", "noise"), "#Prc", 0.1, 400, d) && intIn(either(f, "FlRs", "FlRs"), 0, 999999999, i)) {
@@ -652,7 +653,7 @@ std::optional<V> entryDescriptor(const SmartFilterEntry& entry) {
         else if constexpr (std::is_same_v<T, BoxBlur>) { spec = Spec{"Box Blur", "boxblur", true, 843u}; keys = {{"Rds ", dvUnit("#Pxl", p.radius)}}; }
         else if constexpr (std::is_same_v<T, RadialBlur>) {
             spec = Spec{"Radial Blur", "RdlB", false, 0x52646c42u};
-            keys = {{"Amnt", dvInt(p.amount)}, {"BlrM", dvEnum("BlrM", false, "Spn ", false)},
+            keys = {{"Amnt", dvInt(p.amount)}, {"BlrM", dvEnum("BlrM", false, p.zoom ? "Zm  " : "Spn ", false)},
                     {"BlrQ", dvEnum("BlrQ", false, p.samples <= 8 ? "Drft" : p.samples <= 16 ? "Gd  " : "Bst ", false)}};
         } else if constexpr (std::is_same_v<T, AddNoise>) {
             spec = Spec{"Add Noise", "AdNs", false, 0x41644e73u};

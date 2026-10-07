@@ -90,6 +90,12 @@ SmartFilterDialog::SmartFilterDialog(EditorSession* session, Uuid layerId, int i
             } else if constexpr (std::is_same_v<T, BoxBlur>) number(tr("Radius"), 1, 2000, 0, p.radius, [&p](double v) { p.radius = v; }, tr(" px"));
             else if constexpr (std::is_same_v<T, RadialBlur>) {
                 number(tr("Amount"), 1, 100, 0, p.amount, [&p, integer](double v) { p.amount = integer(v); });
+                auto* method = new QComboBox;
+                method->addItem(tr("Spin"));
+                method->addItem(tr("Zoom"));
+                method->setCurrentIndex(p.zoom ? 1 : 0);
+                connect(method, QOverload<int>::of(&QComboBox::activated), this, [this, &p](int i) { p.zoom = i == 1; schedulePreview(); });
+                form->addRow(tr("Blur Method"), method);
                 auto* quality = new QComboBox;
                 quality->addItem(tr("Draft"), 8);
                 quality->addItem(tr("Good"), 16);

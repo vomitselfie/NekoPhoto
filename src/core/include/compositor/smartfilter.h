@@ -37,8 +37,8 @@ struct PlasticWrap { int32_t highlight = 9, detail = 7, smoothness = 5; bool ope
 struct Mosaic { int32_t cellSize = 8; bool operator==(const Mosaic&) const = default; };
 struct Emboss { int32_t angle = 135, height = 2, amount = 100; bool operator==(const Emboss&) const = default; };
 struct BoxBlur { double radius = 1; bool operator==(const BoxBlur&) const = default; };
-/// Spin only (Zoom is not drawn); samples 8 / 16 / 32 for Draft / Good / Best, about the contents' centre.
-struct RadialBlur { int32_t amount = 10, samples = 16; bool operator==(const RadialBlur&) const = default; };
+/// Spin (around the contents' centre) or Zoom (towards it); samples 8 / 16 / 32 for Draft / Good / Best.
+struct RadialBlur { int32_t amount = 10, samples = 16; bool zoom = false; bool operator==(const RadialBlur&) const = default; };
 struct AddNoise { double amount = 12.5; bool gaussian = false, monochromatic = false; int32_t seed = 1; bool operator==(const AddNoise&) const = default; };
 } // namespace smartfilter
 
@@ -108,7 +108,7 @@ PlacedRaster smartPlasticWrap(const PlacedRaster& in, int32_t highlight, int32_t
 PlacedRaster smartMosaic(const PlacedRaster& in, int32_t cellSize);
 PlacedRaster smartEmboss(const PlacedRaster& in, int32_t angle, int32_t height, int32_t amount);
 PlacedRaster smartBoxBlur(const PlacedRaster& in, const PixelRect& canvas, double radius);
-PlacedRaster smartRadialBlur(const PlacedRaster& in, const PixelRect& canvas, int32_t amount, int32_t samples);
+PlacedRaster smartRadialBlur(const PlacedRaster& in, const PixelRect& canvas, int32_t amount, int32_t samples, bool zoom = false);
 PlacedRaster smartAddNoise(const PlacedRaster& in, double amount, bool gaussian, bool monochromatic, int32_t seed);
 
 /// The whole stack over the unfiltered instance `placed`: each enabled entry composited over the result so far with

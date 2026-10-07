@@ -14,7 +14,7 @@ struct Choice { const char* key; QStringList names; int FilterSettings::*field; 
 
 std::vector<Choice> choicesOf(FilterKind kind) {
     switch (kind) {
-    case FilterKind::RadialBlur: return {{"quality", {"draft", "good", "best"}, &FilterSettings::quality}};
+    case FilterKind::RadialBlur: return {{"quality", {"draft", "good", "best"}, &FilterSettings::quality}, {"mode", {"spin", "zoom"}, &FilterSettings::style}};
     case FilterKind::Spherize: return {{"mode", {"normal", "horizontalOnly", "verticalOnly"}, &FilterSettings::style}};
     case FilterKind::PolarCoordinates: return {{"mode", {"rectangularToPolar", "polarToRectangular"}, &FilterSettings::style}};
     case FilterKind::Ripple: return {{"size", {"small", "medium", "large"}, &FilterSettings::style}};

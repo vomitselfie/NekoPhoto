@@ -304,6 +304,8 @@ add_test(NAME smartobject_tests COMMAND smartobject_tests)
 
 add_executable(smartfilter_tests smartfilter_tests.cpp)
 target_link_libraries(smartfilter_tests PRIVATE compositor::core compositor_warnings)
+# Patchy beside this checkout for Photoshop's Radial Blur Zoom preview; PATCHY_FIXTURES in the environment overrides it.
+target_compile_definitions(smartfilter_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
 add_test(NAME smartfilter_tests COMMAND smartfilter_tests)
 
 add_executable(vectormask_tests vectormask_tests.cpp)

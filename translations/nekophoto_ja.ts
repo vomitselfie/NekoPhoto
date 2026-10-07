@@ -5486,6 +5486,18 @@ File &gt; New creates a blank canvas.</source>
         <translation>バイキュービック法</translation>
     </message>
     <message>
+        <source>Blur Method</source>
+        <translation>方法</translation>
+    </message>
+    <message>
+        <source>Spin</source>
+        <translation>回転</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>ズーム</translation>
+    </message>
+    <message>
         <source>Quality</source>
         <translation>画質</translation>
     </message>
@@ -9435,6 +9447,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Height</source>
         <translation>高さ</translation>
+    </message>
+    <message>
+        <source>Spin</source>
+        <translation>回転</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>ズーム</translation>
+    </message>
+    <message>
+        <source>Blur Method</source>
+        <translation>方法</translation>
     </message>
     <message>
         <source>Draft</source>

@@ -215,7 +215,7 @@ const MethodDoc methodDocs[] = {
      "radius:number Pixels (blurs, high pass, median, dust and scratches, surface blur, unsharp mask); threshold:number Levels (dust and scratches, surface blur, unsharp mask); "
      "amount:number Percent (unsharp mask, emboss, add noise) or Radial Blur's amount; angle:number Degrees (motion blur, emboss); distance:number Motion Blur pixels; "
      "highlight:number Plastic Wrap; detail:number Plastic Wrap; smoothness:number Plastic Wrap; cellSize:number Mosaic pixels; height:number Emboss pixels; "
-     "samples:number Radial Blur 8, 16 or 32; gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
+     "samples:number Radial Blur 8, 16 or 32; zoom:bool Radial Blur's Zoom method (else Spin); gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
      "opacity:number=100 Percent; blend:<blend> How it blends over what is below it in the stack"},
     {"smartObject.filters", "A smart object's Smart Filters: the stack's switch, its shared mask, and each entry in running order (index 0 is applied first) with its settings, switch, opacity and blend; drawn false marks one NekoPhoto does not draw (the stack is then read-only).",
      "id:layer The smart object layer (default: active)"},
@@ -223,7 +223,7 @@ const MethodDoc methodDocs[] = {
      "id:layer The smart object layer (default: active); index:integer Entry in running order (smartObject.filters); enabled:bool On or off (the entry, or the stack without index); radius:number Pixels (blurs, high pass, median, dust and scratches, surface blur, unsharp mask); threshold:number Levels (dust and scratches, surface blur, unsharp mask); "
      "amount:number Percent (unsharp mask, emboss, add noise) or Radial Blur's amount; angle:number Degrees (motion blur, emboss); distance:number Motion Blur pixels; "
      "highlight:number Plastic Wrap; detail:number Plastic Wrap; smoothness:number Plastic Wrap; cellSize:number Mosaic pixels; height:number Emboss pixels; "
-     "samples:number Radial Blur 8, 16 or 32; gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
+     "samples:number Radial Blur 8, 16 or 32; zoom:bool Radial Blur's Zoom method (else Spin); gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
      "opacity:number Percent; blend:<blend> How it blends over what is below it in the stack"},
     {"smartObject.removeFilter", "Delete one Smart Filter, or all of them (Clear Smart Filters); the last one takes the stack and its mask with it.",
      "id:layer The smart object layer (default: active); index:integer Entry in running order; all:bool=false Every Smart Filter"},
@@ -256,7 +256,7 @@ const MethodDoc methodDocs[] = {
      "distortion:number Lens Correction distortion -100..100; bicubic:bool Lens Correction: sharper resample; "
      "threshold:integer Dust & Scratches, Surface Blur, Unsharp Mask threshold in levels; height:integer Emboss height in pixels; "
      "cellSize:integer Mosaic cell size in pixels; quality:(draft|good|best) Radial Blur quality; "
-     "mode:string Spherize: normal, horizontalOnly or verticalOnly, Polar Coordinates: rectangularToPolar or polarToRectangular; "
+     "mode:string Radial Blur: spin or zoom, Spherize: normal, horizontalOnly or verticalOnly, Polar Coordinates: rectangularToPolar or polarToRectangular; "
      "size:(small|medium|large) Ripple size; style:(aroundCenter|outFromCenter|pondRipples) ZigZag style; ridges:number ZigZag ridges 0..20; "
      "type:(sine|triangle|square) Wave type; generators:integer Wave generators; wavelengthMin:number Wave; wavelengthMax:number Wave; "
      "amplitudeMin:number Wave; amplitudeMax:number Wave; undefinedAreas:(wrap|repeat|transparent) Wave, Shear and Offset (transparent: Offset only); "

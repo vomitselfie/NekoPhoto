@@ -294,4 +294,57 @@ TEST_CASE(distortion_values) {
 #endif
 }
 
+TEST_CASE(radial_blur_zoom_at_every_depth_and_mode) {
+    // Zoom is the Smart Filter kernel's Zoom (Photoshop's Blur Method), at 8 and 16 bits and on CMYK's inks and Lab.
+    const auto img = card();
+    FilterSettings s = defaults(FilterKind::RadialBlur);
+    s.amount = 30;
+    s.style = 1;   // Zoom
+    const AnyImage zoom = run(FilterKind::RadialBlur, ImagePtr(img), s);
+    REQUIRE(zoom.u8());
+    SmartFilterStack stack;
+    stack.supported = true;
+    stack.entries.push_back({smartfilter::RadialBlur{30, 16, true}, "Radial Blur"});
+    auto ref = renderSmartFilterStack(PlacedRaster{std::make_shared<Image>(*img), 0, 0}, PixelRect{0, 0, img->width(), img->height()}, stack);
+    REQUIRE(ref && ref->image);
+    int differing = 0;
+    for (int y = 0; y < ref->image->height(); y++)
+        for (int x = 0; x < ref->image->width(); x++)
+            if (std::memcmp(ref->image->pixel(x, y), zoom.u8()->pixel(x + ref->x, y + ref->y), 4) != 0) differing++;
+    CHECK_EQ(differing, 0);
+    // Spin and Zoom differ.
+    FilterSettings spin = s;
+    spin.style = 0;
+    const AnyImage spun = run(FilterKind::RadialBlur, ImagePtr(img), spin);
+    CHECK(hashOf(spun) != hashOf(zoom));
+    // 16 bits: the 8-bit result within two levels.
+    const AnyImage deep = run(FilterKind::RadialBlur, Image16Ptr(widenImage(*img)), s);
+    REQUIRE(deep.u16());
+    int worst = 0;
+    for (int y = 0; y < img->height(); y++)
+        for (int x = 0; x < img->width(); x++)
+            for (int k = 0; k < 4; k++) worst = std::max(worst, std::abs(int(narrow16(deep.u16()->pixel(x, y)[k])) - int(zoom.u8()->pixel(x, y)[k])));
+    CHECK(worst <= 2);
+    // CMYK (the first three inks carry the card's channels) and Lab.
+    auto cmyk = std::make_shared<ImageC8>(img->width(), img->height(), 5);
+    for (int y = 0; y < img->height(); y++)
+        for (int x = 0; x < img->width(); x++) {
+            const uint8_t* p = img->pixel(x, y);
+            uint8_t* q = cmyk->pixel(x, y);
+            q[0] = p[0]; q[1] = p[1]; q[2] = p[2]; q[3] = p[3]; q[4] = p[3];
+        }
+    GridFilterContext c;
+    c.mode = ColorMode::CMYK;
+    const AnyImage inks = run(FilterKind::RadialBlur, ImageC8Ptr(cmyk), s, c);
+    REQUIRE(inks.c8());
+    CHECK(hashOf(inks) != hashOf(ImageC8Ptr(cmyk)));
+    c.mode = ColorMode::Lab;
+    const AnyImage lab = run(FilterKind::RadialBlur, ImagePtr(img), s, c);
+    REQUIRE(lab.u8());
+    CHECK(hashOf(lab) != hashOf(ImagePtr(img)));
+#ifndef _WIN32
+    checkHash("radial/zoom", zoom, 0x62b2c3b6d47f8e00ull);
+#endif
+}
+
 TEST_MAIN()
