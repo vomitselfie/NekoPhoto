@@ -33,13 +33,31 @@ StyleColor parseHex(const json& j, const std::string& key) {
     return {uint8_t(r), uint8_t(g), uint8_t(b)};
 }
 
+/// A CMYK colour's own inks (C, M, Y, K, 0..1), kept beside its "#rrggbb" so a style read and written again is the same.
+json inkJson(const std::array<float, 4>& ink) { return json::array({ink[0], ink[1], ink[2], ink[3]}); }
+
+std::array<float, 4> parseInk(const json& j, const std::string& key) {
+    if (!j.is_array() || j.size() != 4) throw Bad(key + " must be [c, m, y, k], each 0..1");
+    std::array<float, 4> ink{};
+    for (size_t i = 0; i < 4; i++) {
+        if (!j[i].is_number()) throw Bad(key + " must be [c, m, y, k], each 0..1");
+        const float v = j[i].get<float>();
+        if (!std::isfinite(v)) throw Bad(key + " must be [c, m, y, k], each 0..1");
+        ink[i] = std::clamp(v, 0.0f, 1.0f);
+    }
+    return ink;
+}
+
 /// Writes the fields into a JSON object.
 struct Out {
     json j = json::object();
     void operator()(const char* k, float& v) { j[k] = v; }
     void operator()(const char* k, bool& v) { j[k] = v; }
     void operator()(const char* k, std::string& v) { j[k] = v; }
-    void operator()(const char* k, StyleColor& v) { j[k] = hex(v); }
+    void operator()(const char* k, StyleColor& v) {
+        j[k] = hex(v);
+        if (v.ink) j[std::string(k) + "Ink"] = inkJson(*v.ink);
+    }
     void operator()(const char* k, EffectBlend& v) { j[k] = kBlendNames[int(v)]; }
     template <typename E> void choice(const char* k, E& v, std::initializer_list<const char*> names) { j[k] = *(names.begin() + int(v)); }
     void operator()(const char* k, StyleGradient& g);
@@ -65,7 +83,11 @@ struct In {
     void operator()(const char* k, float& v) { if (auto x = at(k)) { if (!x->is_number()) throw Bad(name(k) + " must be a number"); v = x->get<float>(); } }
     void operator()(const char* k, bool& v) { if (auto x = at(k)) { if (!x->is_boolean()) throw Bad(name(k) + " must be true or false"); v = x->get<bool>(); } }
     void operator()(const char* k, std::string& v) { if (auto x = at(k)) { if (!x->is_string()) throw Bad(name(k) + " must be a string"); v = x->get<std::string>(); } }
-    void operator()(const char* k, StyleColor& v) { if (auto x = at(k)) v = parseHex(*x, name(k)); }
+    void operator()(const char* k, StyleColor& v) {
+        if (auto x = at(k)) v = parseHex(*x, name(k));
+        const std::string inkKey = std::string(k) + "Ink";
+        if (auto x = at(inkKey.c_str())) v.ink = parseInk(*x, name(inkKey.c_str()));
+    }
     void operator()(const char* k, EffectBlend& v) {
         if (auto x = at(k)) {
             for (int i = 0; i < int(std::size(kBlendNames)); i++) if (x->is_string() && x->get<std::string>() == kBlendNames[i]) { v = EffectBlend(i); return; }
@@ -105,7 +127,12 @@ void Out::operator()(const char* k, StyleGradient& g) {
     Out o;
     fields(o, g);
     json colors = json::array(), alphas = json::array();
-    for (auto& s : g.colors) colors.push_back({{"location", s.location}, {"color", hex(s.color)}, {"midpoint", s.midpoint}});
+    for (auto& s : g.colors) {
+        json stop = {{"location", s.location}, {"color", hex(s.color)}, {"midpoint", s.midpoint}};
+        if (s.color.ink) stop["colorInk"] = inkJson(*s.color.ink);
+        if (s.ink) stop["ink"] = inkJson(*s.ink);
+        colors.push_back(stop);
+    }
     for (auto& s : g.alphas) alphas.push_back({{"location", s.location}, {"opacity", s.opacity}, {"midpoint", s.midpoint}});
     o.j["colors"] = colors;
     o.j["alphas"] = alphas;
@@ -120,7 +147,11 @@ void In::operator()(const char* k, StyleGradient& g) {
     fields(in, g);
     if (auto c = in.at("colors")) {
         g.colors.clear();
-        for (auto& s : *c) g.colors.push_back({s.value("location", 0.0f), parseHex(s.value("color", json("#000000")), name(k) + ".colors"), s.value("midpoint", 0.5f)});
+        for (auto& s : *c) {
+            g.colors.push_back({s.value("location", 0.0f), parseHex(s.value("color", json("#000000")), name(k) + ".colors"), s.value("midpoint", 0.5f)});
+            if (s.is_object() && s.contains("colorInk")) g.colors.back().color.ink = parseInk(s["colorInk"], name(k) + ".colors.colorInk");
+            if (s.is_object() && s.contains("ink")) g.colors.back().ink = parseInk(s["ink"], name(k) + ".colors.ink");
+        }
     }
     if (auto a = in.at("alphas")) {
         g.alphas.clear();
@@ -173,6 +204,7 @@ template <typename V> void fields(V& v, Bevel& e) {
     v("useContour", e.useContour); v("contour", e.contour); v("contourAntialiased", e.contourAntialiased); v("contourRange", e.contourRange);
     v("useTexture", e.useTexture); v("texturePattern", e.texturePattern); v("textureScale", e.textureScale); v("textureDepth", e.textureDepth);
     v("textureInvert", e.textureInvert); v("textureLinkWithLayer", e.textureLinkWithLayer);
+    v("texturePhaseX", e.texturePhaseX); v("texturePhaseY", e.texturePhaseY);
 }
 
 /// Holds every number to the range the Layer Style dialog offers (and PSD round-trips); a non-finite one is an error.
@@ -184,7 +216,8 @@ struct Clamp {
             {"opacity", {0, 1}}, {"highlightOpacity", {0, 1}}, {"shadowOpacity", {0, 1}}, {"size", {0, 250}}, {"distance", {0, 30000}},
             {"spread", {0, 100}}, {"choke", {0, 100}}, {"range", {1, 100}}, {"angle", {-360, 360}}, {"altitude", {0, 90}}, {"depth", {0.01f, 10}},
             {"soften", {0, 16}}, {"scale", {0.01f, 10}}, {"textureScale", {0.01f, 10}}, {"textureDepth", {-10, 10}}, {"contourRange", {0, 1}},
-            {"offsetX", {-100, 100}}, {"offsetY", {-100, 100}}, {"smoothness", {0, 1}}, {"phaseX", {-30000, 30000}}, {"phaseY", {-30000, 30000}}};
+            {"offsetX", {-100, 100}}, {"offsetY", {-100, 100}}, {"smoothness", {0, 1}}, {"phaseX", {-30000, 30000}}, {"phaseY", {-30000, 30000}},
+            {"texturePhaseX", {-30000, 30000}}, {"texturePhaseY", {-30000, 30000}}};
         auto it = ranges.find(k);
         if (it != ranges.end()) v = std::clamp(v, it->second.first, it->second.second);
     }

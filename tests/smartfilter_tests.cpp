@@ -12,9 +12,16 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
+#include <utility>
 #include <vector>
+
+#ifndef PATCHY_FIXTURES
+#define PATCHY_FIXTURES "../Patchy/test-fixtures/psd"
+#endif
 
 using namespace compositor;
 
@@ -449,6 +456,22 @@ TEST_CASE(edit_reorder_and_mask_a_stack_then_round_trip) {
     CHECK(!setSmartFilters(doc, doc.layers[0], *stack, &error));
 }
 
+TEST_CASE(radial_blur_zoom_round_trips_as_photoshops_zoom) {
+    // Written as BlrM 'Zm  ' and read back as Zoom, still drawn here.
+    Document doc = filteredDocument();
+    std::string error;
+    SmartFilterEntry zoom;
+    zoom.parameters = smartfilter::RadialBlur{25, 32, true};
+    REQUIRE(addSmartFilter(doc, doc.layers[0], zoom, &error));
+    auto bytes = encodePsd(doc, {}, nullptr, &error);
+    auto back = importPsdBytes(bytes, &error);
+    REQUIRE(back.has_value());
+    REQUIRE(back->document.layers[0].isLiveSmartObject() && !back->document.layers[0].smartObject->locked());
+    auto again = smartFilterStackOf(back->document, back->document.layers[0]);
+    REQUIRE(again && again->supported && again->entries.size() == 1);
+    CHECK(again->entries[0].parameters == SmartFilterParameters(smartfilter::RadialBlur{25, 32, true}));
+}
+
 TEST_CASE(clearing_a_stack_removes_its_filterfx_and_cache_record) {
     Document doc = filteredDocument();
     std::string error;
@@ -566,6 +589,7 @@ TEST_CASE(sixteen_bit_kernels_agree_with_eight_bit_on_eight_bit_input) {
         {"Box Blur 3", smartfilter::BoxBlur{3}},
         {"Box Blur 20", smartfilter::BoxBlur{20}},
         {"Radial Blur 10/16", smartfilter::RadialBlur{10, 16}},
+        {"Radial Blur Zoom 25/32", smartfilter::RadialBlur{25, 32, true}},
         {"Unsharp Mask 50/1/0", smartfilter::UnsharpMask{50, 1, 0}},
         {"Unsharp Mask 150/2/8", smartfilter::UnsharpMask{150, 2, 8}},
         {"Unsharp Mask 175/2.5/7", smartfilter::UnsharpMask{175, 2.5, 7}},
@@ -689,6 +713,85 @@ TEST_CASE(sixteen_bit_documents_take_smart_filters) {
     CHECK(addSmartFilter(doc, doc.layers[0], sharpen, &error));
     CHECK(doc.layers[0].isLiveSmartObject());
     CHECK(doc.layers[0].asset->image.u16() != nullptr);
+}
+
+TEST_CASE(radial_blur_zoom_streaks_from_the_centre) {
+    // Zoom keeps a uniform field and the centre pixel, and smears a ring along the radius, not around it.
+    auto image = solid(9, 7, 90, 60, 30, 255);
+    for (int samples : {8, 16, 32}) {
+        auto out = smartRadialBlur(placed(image, 0, 0), PixelRect{0, 0, 9, 7}, 42, samples, true);
+        CHECK(out.bounds() == (PixelRect{0, 0, 9, 7}));
+        CHECK(*out.image == *image);
+    }
+    // A white ring of radius 10 about the centre of a black 41 x 41 square. Zoom 100 reads each pixel along its radius
+    // from 3/4 to 5/4 of its distance, so the ring smears inwards and outwards along the radius (radii 8 and 13 light
+    // up, 6 and 15 stay dark) the same way in every direction; Spin moves along the circle and leaves those radii dark.
+    auto ring = solid(41, 41, 0, 0, 0, 255);
+    for (int y = 0; y < 41; y++)
+        for (int x = 0; x < 41; x++) {
+            const double r = std::hypot(x - 20.0, y - 20.0);
+            if (r >= 9.5 && r < 10.5) put(*ring, x, y, 255, 255, 255);
+        }
+    auto zoom = smartRadialBlur(placed(ring, 0, 0), PixelRect{0, 0, 41, 41}, 100, 32, true);
+    auto zoomAgain = smartRadialBlur(placed(ring, 0, 0), PixelRect{0, 0, 41, 41}, 100, 32, true);
+    CHECK(*zoom.image == *zoomAgain.image);   // deterministic
+    auto spin = smartRadialBlur(placed(ring, 0, 0), PixelRect{0, 0, 41, 41}, 100, 32, false);
+    for (int r : {8, 13}) {
+        const int lit[4] = {zoom.image->pixel(20 + r, 20)[0], zoom.image->pixel(20 - r, 20)[0], zoom.image->pixel(20, 20 + r)[0], zoom.image->pixel(20, 20 - r)[0]};
+        for (int v : lit) CHECK(v > 20);
+        for (int v : lit) CHECK(std::abs(v - lit[0]) <= 1);   // no preferred direction
+        CHECK(spin.image->pixel(20 + r, 20)[0] < 5);
+    }
+    for (int r : {6, 15}) CHECK(zoom.image->pixel(20 + r, 20)[0] < 5);
+}
+
+TEST_CASE(radial_blur_zoom_against_photoshop) {
+    // Patchy's photoshop-smart-filter-radial-blur-zoom.psd: a Photoshop 2026 smart object with Radial Blur, Zoom 25,
+    // Best, and the preview Photoshop drew of it. NekoPhoto's Zoom over the same placed contents must match it.
+    const char* env = std::getenv("PATCHY_FIXTURES");
+    const std::string dir = env && *env ? env : PATCHY_FIXTURES;
+    std::string error;
+    auto imported = importPsd(dir + "/photoshop-smart-filter-radial-blur-zoom.psd", &error);
+    if (!imported) { std::printf("  skipped: no Patchy fixtures at %s\n", dir.c_str()); return; }
+    const Document& doc = imported->document;
+    const Layer* layer = nullptr;
+    for (const Layer& l : doc.layers) if (l.smartObject) layer = &l;
+    REQUIRE(layer != nullptr);
+    REQUIRE(doc.psdCarry != nullptr);
+    auto source = doc.smartObjects.find(layer->smartObject->sourceId);
+    REQUIRE(source != doc.smartObjects.end());
+    REQUIRE(source->second->image.u8() != nullptr);
+    auto cache = findSmartFilterCache(doc.psdCarry->globals, layer->smartObject->placedId);
+    REQUIRE(cache.has_value());
+    const Rect canvas(cache->canvas.x, cache->canvas.y, cache->canvas.width, cache->canvas.height);
+    auto placedRaster = placedSmartObjectRaster(*layer->smartObject, *source->second->image.u8(), layer->smartObject->quad, &canvas);
+    REQUIRE(placedRaster.has_value());
+    SmartFilterStack stack = stackOf(smartfilter::RadialBlur{25, 32, true});
+    auto ours = renderSmartFilterStack(*placedRaster, cache->canvas, stack);
+    REQUIRE(ours.has_value());
+    // Photoshop's preview: the layer's pixels, placed by its transform.
+    const Image& ps = *layer->asset->image.u8();
+    const int px = int(std::lround(layer->transform.origin.x)), py = int(std::lround(layer->transform.origin.y));
+    int64_t sum = 0, count = 0, over = 0;
+    int worst = 0;
+    for (int y = 0; y < ps.height(); y++)
+        for (int x = 0; x < ps.width(); x++) {
+            const int ox = x + px - ours->x, oy = y + py - ours->y;
+            const uint8_t* a = ps.pixel(x, y);
+            uint8_t none[4] = {0, 0, 0, 0};
+            const uint8_t* b = ox >= 0 && oy >= 0 && ox < ours->image->width() && oy < ours->image->height() ? ours->image->pixel(ox, oy) : none;
+            int pixelWorst = 0;
+            for (int c = 0; c < 4; c++) { const int d = std::abs(int(a[c]) - int(b[c])); sum += d; pixelWorst = std::max(pixelWorst, d); }
+            worst = std::max(worst, pixelWorst);
+            over += pixelWorst > 2;
+            count++;
+        }
+    const double mean = count ? double(sum) / double(count * 4) : 0, share = count ? 100.0 * double(over) / double(count) : 0;
+    std::printf("  zoom vs Photoshop: %dx%d, max %d, >2: %.2f%%, mean %.3f\n", ps.width(), ps.height(), worst, share, mean);
+    // Fitted at mean 0.22, 4.9% of pixels more than 2 levels off, at most 4 (Photoshop's samples look jittered).
+    CHECK(mean < 0.3);
+    CHECK(share < 6);
+    CHECK(worst <= 5);
 }
 
 TEST_MAIN()

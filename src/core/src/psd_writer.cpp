@@ -15,10 +15,15 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <set>
 #include <zlib.h>
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace compositor {
 
@@ -1568,21 +1573,66 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
     return std::move(f.b);
 }
 
+namespace detail {
+bool (*psdSaveFault)(const char* step) = nullptr;
+} // namespace detail
+
+namespace {
+
+bool injectedFault(const char* step) { return detail::psdSaveFault && detail::psdSaveFault(step); }
+
+/// Writes `bytes` to `path` and flushes them to the disk.
+bool writeDurably(const std::filesystem::path& path, const std::vector<uint8_t>& bytes) {
+    if (injectedFault("open")) return false;
+#ifdef _WIN32
+    FILE* file = _wfopen(path.c_str(), L"wb");
+#else
+    FILE* file = std::fopen(path.c_str(), "wb");
+#endif
+    if (!file) return false;
+    bool ok = std::fwrite(bytes.data(), 1, bytes.size(), file) == bytes.size() && !injectedFault("write") && std::fflush(file) == 0;
+#ifdef _WIN32
+    ok = ok && _commit(_fileno(file)) == 0;
+#else
+    ok = ok && ::fsync(fileno(file)) == 0;
+#endif
+    ok = std::fclose(file) == 0 && ok;
+    return ok;
+}
+
+/// Makes a rename in `directory` durable (Unix; Windows has no directory handle to flush). Best effort: the file is
+/// already in place when this runs.
+void syncDirectory([[maybe_unused]] const std::filesystem::path& directory) {
+#ifndef _WIN32
+    const int fd = ::open(directory.empty() ? "." : directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0) return;
+    ::fsync(fd);
+    ::close(fd);
+#endif
+}
+
+} // namespace
+
 bool exportPsd(const Document& document, const std::string& path, const PsdExportOptions& options, PsdExportSummary* summary, std::string* error) {
     std::vector<uint8_t> bytes = encodePsd(document, options, summary, error);
     if (bytes.empty()) return false;
     const std::filesystem::path target(path);
     std::filesystem::path temp = target;
     temp += ".part";
-    {
-        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-        if (!out) { if (error) *error = "Couldn't write " + temp.string(); return false; }
-        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-        if (!out) { if (error) *error = "Couldn't write " + temp.string(); std::error_code ec; std::filesystem::remove(temp, ec); return false; }
-    }
     std::error_code ec;
-    std::filesystem::rename(temp, target, ec);
-    if (ec) { if (error) *error = "Couldn't write " + path + ": " + ec.message(); std::filesystem::remove(temp, ec); return false; }
+    if (!writeDurably(temp, bytes)) {
+        if (error) *error = "Couldn't write " + temp.string();
+        std::filesystem::remove(temp, ec);
+        return false;
+    }
+    if (injectedFault("rename")) ec = std::make_error_code(std::errc::permission_denied);
+    else std::filesystem::rename(temp, target, ec);
+    if (ec) {
+        if (error) *error = "Couldn't write " + path + ": " + ec.message();
+        std::filesystem::remove(temp, ec);
+        return false;
+    }
+    syncDirectory(target.parent_path());
     return true;
 }
 

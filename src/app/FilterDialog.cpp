@@ -31,6 +31,8 @@ namespace app {
 namespace {
 
 constexpr int previewLimit = 2048;
+/// Remove Background's detail pass: windows of the model's input size along the uncertain edge, at most this many.
+constexpr int detailWindows = 12;
 
 } // namespace
 
@@ -206,6 +208,7 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
     case FilterKind::BoxBlur: sliderOf(tr("Radius"), 1, 2000, 0, 1, real(&FilterSettings::radius)); break;
     case FilterKind::RadialBlur:
         sliderOf(tr("Amount"), 1, 100, 0, 1, real(&FilterSettings::amount));
+        choice(tr("Blur Method"), {tr("Spin"), tr("Zoom")}, &FilterSettings::style);
         choice(tr("Quality"), {tr("Draft"), tr("Good"), tr("Best")}, &FilterSettings::quality);
         break;
     case FilterKind::SurfaceBlur:
@@ -426,7 +429,7 @@ bool FilterDialog::apply() {
 // ---- Remove Background -----------------------------------------------------------------------
 
 BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QString quickModelPath, QWidget* parent)
-    : PixelDialog(session, parent), modelPath_(std::move(modelPath)) {
+    : PixelDialog(session, parent), modelPath_(std::move(modelPath)), mirror_(ModelStore::mirrorAverage()) {
     setWindowTitle(tr("Remove Background"));
     capture(0, 0);
     guide_ = source() ? source() : source16() ? std::shared_ptr<const Image>(narrowImage(*source16())) : nullptr;
@@ -516,8 +519,9 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     computing_ = true;
     setCursor(Qt::BusyCursor);
     std::shared_ptr<const Image> image = guide_;
-    std::string path = modelPath_.toStdString(), quick = quickModelPath == modelPath_ ? std::string() : quickModelPath.toStdString();
-    const bool mirror = ModelStore::mirrorAverage();
+    std::string quick = quickModelPath == modelPath_ ? std::string() : quickModelPath.toStdString();
+    const QString path = modelPath_;
+    const bool mirror = mirror_;
     worker_ = std::thread([this, image, path, quick, mirror] {
         if (!quick.empty()) {
             std::string ignored;
@@ -525,7 +529,8 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
                 QMetaObject::invokeMethod(this, [this, coarse] { if (computing_) { raw_ = coarse; refreshPreview(); } }, Qt::QueuedConnection);
         }
         std::string error;
-        auto mask = subjectMask(*image, path, &error, mirror);
+        // Kept by ModelStore for these pixels: OK's pixels.removeBackground takes the same mask.
+        auto mask = ModelStore::subjectMask(*image, path, mirror, 0, &error);
         QMetaObject::invokeMethod(this, [this, mask, error] {
             computing_ = false;
             unsetCursor();
@@ -543,11 +548,11 @@ void BackgroundDialog::startDetail() {
     setCursor(Qt::BusyCursor);
     if (worker_.joinable()) worker_.join();
     std::shared_ptr<const Image> image = guide_;
-    std::shared_ptr<const GrayImage> coarse = coarse_;
-    std::string path = modelPath_.toStdString();
-    worker_ = std::thread([this, image, coarse, path] {
+    const QString path = modelPath_;
+    const bool mirror = mirror_;
+    worker_ = std::thread([this, image, path, mirror] {
         std::string error;
-        auto detailed = subjectMaskDetailed(*image, path, coarse.get(), 12, &error);
+        auto detailed = ModelStore::subjectMask(*image, path, mirror, detailWindows, &error);
         QMetaObject::invokeMethod(this, [this, detailed] {
             computing_ = false;
             unsetCursor();
@@ -606,6 +611,22 @@ void BackgroundDialog::refreshPreview() {
 bool BackgroundDialog::apply() {
     if (computing_) return false;   // OK waits for the mask
     if (!raw_) return true;
+    // The command path: pixels.removeBackground with the dialog's choices, which takes the mask shown here from
+    // ModelStore rather than running the model again. The model's own mask (not the quick preview's) only.
+    if (raw_ == coarse_ || raw_ == detailed_) {
+        const bool detail = raw_ == detailed_ && detailed_ != coarse_;
+        QJsonObject params{{"refine", advancedMode_}, {"detail", detail}, {"flip", mirror_}};
+        if (detail) params["detailWindows"] = detailWindows;
+        if (advancedMode_) {
+            params["refineEdges"] = settings_.refineEdges;
+            params["contrast"] = settings_.contrast;
+            params["matting"] = settings_.matting;
+            params["shiftEdge"] = settings_.shiftEdge;
+            params["cleanup"] = settings_.cleanup;
+            params["decontaminate"] = settings_.decontaminate;
+        }
+        if (commitAsCommand(QStringLiteral("pixels.removeBackground"), params)) return true;
+    }
     if (source16()) {
         const AlphaPlane plane = refinedPlane(0);
         std::shared_ptr<const Image16> pixels;

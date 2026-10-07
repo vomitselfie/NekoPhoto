@@ -4714,6 +4714,10 @@ File &gt; New creates a blank canvas.</source>
         <source>Not available now</source>
         <translation>現在は使用できません</translation>
     </message>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
 </context>
 <context>
     <name>app::ContentAwareScaleDialog</name>
@@ -5484,6 +5488,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Bicubic</source>
         <translation>バイキュービック法</translation>
+    </message>
+    <message>
+        <source>Blur Method</source>
+        <translation>方法</translation>
+    </message>
+    <message>
+        <source>Spin</source>
+        <translation>回転</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>ズーム</translation>
     </message>
     <message>
         <source>Quality</source>
@@ -6685,6 +6701,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>露光量</translation>
     </message>
     <message>
+        <source>No document is open</source>
+        <translation>ドキュメントが開かれていません</translation>
+    </message>
+    <message>
         <source>Untitled</source>
         <translation>名称未設定</translation>
     </message>
@@ -6919,8 +6939,16 @@ File &gt; New creates a blank canvas.</source>
         <translation>塗りつぶし</translation>
     </message>
     <message>
+        <source>Subject</source>
+        <translation>被写体を選択</translation>
+    </message>
+    <message>
         <source>Unavailable: this build has no OpenCV</source>
         <translation>使用不可: このビルドには OpenCV が含まれていません</translation>
+    </message>
+    <message>
+        <source>The click-to-select model isn’t downloaded: choose the Click engine in the Quick Selection tool’s options and download it</source>
+        <translation>クリックで選択するモデルがダウンロードされていません。クイック選択ツールのオプションでクリックエンジンを選んでダウンロードしてください</translation>
     </message>
     <message>
         <source>Off: enable it in Edit &gt; Preferences</source>
@@ -7305,6 +7333,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>GIF 画像 (*.gif)</translation>
     </message>
     <message>
+        <source>New</source>
+        <translation>新規</translation>
+    </message>
+    <message>
         <source>Export Layer As</source>
         <translation>レイヤーを書き出し形式で書き出し</translation>
     </message>
@@ -7679,6 +7711,18 @@ File &gt; New creates a blank canvas.</source>
         <translation>アニメーション GIF を書き出し(&amp;X)...</translation>
     </message>
     <message>
+        <source>Colours</source>
+        <translation>カラー</translation>
+    </message>
+    <message>
+        <source>No active layer</source>
+        <translation>アクティブなレイヤーがありません</translation>
+    </message>
+    <message>
+        <source>Nothing to revert to: the document has not changed since it was opened or saved</source>
+        <translation>復帰するものがありません: ドキュメントは開いてから(または保存してから)変更されていません</translation>
+    </message>
+    <message>
         <source>E&amp;xport</source>
         <translation>書き出し(&amp;X)</translation>
     </message>
@@ -7723,8 +7767,28 @@ File &gt; New creates a blank canvas.</source>
         <translation>編集(&amp;E)</translation>
     </message>
     <message>
+        <source>Undo</source>
+        <translation>取り消し</translation>
+    </message>
+    <message>
+        <source>Nothing to undo</source>
+        <translation>取り消す操作がありません</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>やり直し</translation>
+    </message>
+    <message>
+        <source>Nothing to redo</source>
+        <translation>やり直す操作がありません</translation>
+    </message>
+    <message>
         <source>Toggle &amp;Last State</source>
         <translation>最後の状態を切り替え(&amp;L)</translation>
+    </message>
+    <message>
+        <source>Nothing to undo or redo</source>
+        <translation>取り消しまたはやり直す操作がありません</translation>
     </message>
     <message>
         <source>Cu&amp;t</source>
@@ -7887,12 +7951,40 @@ File &gt; New creates a blank canvas.</source>
         <translation>トリミング(&amp;T)...</translation>
     </message>
     <message>
+        <source>Nothing to merge: select the layers to merge, or a layer with a layer below it</source>
+        <translation>結合するものがありません: 結合するレイヤーを選択するか、下にレイヤーがあるレイヤーを選択してください</translation>
+    </message>
+    <message>
         <source>Merge &amp;Visible</source>
         <translation>表示レイヤーを結合(&amp;V)</translation>
     </message>
     <message>
         <source>Merge Visible</source>
         <translation>表示レイヤーを結合</translation>
+    </message>
+    <message>
+        <source>Nothing to merge: fewer than two layers are visible</source>
+        <translation>結合するものがありません: 表示されているレイヤーが 2 つ未満です</translation>
+    </message>
+    <message>
+        <source>The active layer is not a text layer</source>
+        <translation>アクティブなレイヤーはテキストレイヤーではありません</translation>
+    </message>
+    <message>
+        <source>Move Out of Folder</source>
+        <translation>グループから出す</translation>
+    </message>
+    <message>
+        <source>Copy Layer Style</source>
+        <translation>レイヤースタイルをコピー</translation>
+    </message>
+    <message>
+        <source>Paste Layer Style</source>
+        <translation>レイヤースタイルをペースト</translation>
+    </message>
+    <message>
+        <source>Clear Layer Style</source>
+        <translation>レイヤースタイルを消去</translation>
     </message>
     <message>
         <source>New Smart Object via &amp;Copy</source>
@@ -7905,6 +7997,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Reselect</source>
         <translation>再選択</translation>
+    </message>
+    <message>
+        <source>Quick Mask</source>
+        <translation>クイックマスク</translation>
     </message>
     <message>
         <source>Load as Selection</source>
@@ -8209,10 +8305,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Couldn’t apply the style</source>
         <translation>スタイルを適用できませんでした</translation>
-    </message>
-    <message>
-        <source>This layer cannot have effects.</source>
-        <translation>このレイヤーには効果を適用できません。</translation>
     </message>
     <message>
         <source>&amp;Import Styles…</source>
@@ -8805,6 +8897,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>32 bit プレビューオプション(&amp;V)…</translation>
     </message>
     <message>
+        <source>For 32-bit documents</source>
+        <translation>32 bit ドキュメント用</translation>
+    </message>
+    <message>
         <source>Proof Set&amp;up</source>
         <translation>校正設定(&amp;U)</translation>
     </message>
@@ -9209,8 +9305,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>起動時に自動操作ソケットでエージェントを待ち受ける</translation>
     </message>
     <message>
-        <source>Lets an MCP bridge or a script drive the editor over a local socket (%1). Only programs running as you can connect. Takes effect at the next launch; nekophoto --rpc turns it on for one run.</source>
-        <translation>MCP ブリッジやスクリプトが、ローカルソケット(%1)経由でエディターを操作できるようにします。接続できるのは同じユーザーで実行中のプログラムのみです。次回起動時に反映されます。nekophoto --rpc で 1 回の実行に限り有効にできます。</translation>
+        <source>Lets an MCP bridge or a script drive the editor over a local socket (%1). Only programs running as you can connect; nekophoto --rpc turns it on for one run.</source>
+        <translation>MCP ブリッジやスクリプトが、ローカルソケット(%1)経由でエディターを操作できるようにします。接続できるのは同じユーザーで実行中のプログラムのみです。nekophoto --rpc で 1 回の実行に限り有効にできます。</translation>
     </message>
     <message>
         <source>Downloading %1…</source>
@@ -9435,6 +9531,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Height</source>
         <translation>高さ</translation>
+    </message>
+    <message>
+        <source>Spin</source>
+        <translation>回転</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>ズーム</translation>
+    </message>
+    <message>
+        <source>Blur Method</source>
+        <translation>方法</translation>
     </message>
     <message>
         <source>Draft</source>

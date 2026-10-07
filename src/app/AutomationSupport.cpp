@@ -264,7 +264,7 @@ void smartFilterSettingsFrom(const QJsonObject& p, SmartFilterParameters& parame
         else if constexpr (std::is_same_v<T, PlasticWrap>) { i("highlight", f.highlight); i("detail", f.detail); i("smoothness", f.smoothness); }
         else if constexpr (std::is_same_v<T, Mosaic>) i("cellSize", f.cellSize);
         else if constexpr (std::is_same_v<T, Emboss>) { i("angle", f.angle); i("height", f.height); i("amount", f.amount); }
-        else if constexpr (std::is_same_v<T, RadialBlur>) { i("amount", f.amount); i("samples", f.samples); }
+        else if constexpr (std::is_same_v<T, RadialBlur>) { i("amount", f.amount); i("samples", f.samples); b("zoom", f.zoom); }
         else if constexpr (std::is_same_v<T, AddNoise>) { d("amount", f.amount); b("gaussian", f.gaussian); b("monochromatic", f.monochromatic); i("seed", f.seed); }
     }, parameters);
 }
@@ -283,7 +283,7 @@ QJsonObject settingsJson(const SmartFilterParameters& parameters) {
         else if constexpr (std::is_same_v<T, PlasticWrap>) { o["highlight"] = f.highlight; o["detail"] = f.detail; o["smoothness"] = f.smoothness; }
         else if constexpr (std::is_same_v<T, Mosaic>) o["cellSize"] = f.cellSize;
         else if constexpr (std::is_same_v<T, Emboss>) { o["angle"] = f.angle; o["height"] = f.height; o["amount"] = f.amount; }
-        else if constexpr (std::is_same_v<T, RadialBlur>) { o["amount"] = f.amount; o["samples"] = f.samples; }
+        else if constexpr (std::is_same_v<T, RadialBlur>) { o["amount"] = f.amount; o["samples"] = f.samples; o["zoom"] = f.zoom; }
         else if constexpr (std::is_same_v<T, AddNoise>) { o["amount"] = f.amount; o["gaussian"] = f.gaussian; o["monochromatic"] = f.monochromatic; o["seed"] = f.seed; }
     }, parameters);
     return o;

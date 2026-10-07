@@ -13,6 +13,7 @@
 #include "compositor/smartfilter.h"
 #include "compositor/blend.h"
 #include "smartfilter_kernels.h"
+#include "compositor/workcounters.h"
 
 #include <algorithm>
 #include <array>
@@ -1082,7 +1083,7 @@ Result renderEmboss(const Result& input, int32_t angleDegrees, int32_t heightPix
     return result;
 }
 
-// ---- Radial Blur (Spin) ------------------------------------------------------------------------------------
+// ---- Radial Blur (Spin and Zoom) ---------------------------------------------------------------------------
 
 struct RadialBlurAccum {
     std::array<double, 3> premultipliedColor{0.0, 0.0, 0.0};
@@ -1123,24 +1124,20 @@ void radialBlurWritePixel(Image& pixels, int32_t x, int32_t y, const RadialBlurA
     dst[3] = clampLong(std::lround(normalizedAlpha * 255.0));
 }
 
-Result renderRadialBlur(const Result& input, int32_t amount, int32_t samples, double centerX, double centerY) {
+Result renderRadialBlur(const Result& input, int32_t amount, int32_t samples, double centerX, double centerY, bool zoom) {
     if (pixelsEmpty(input)) return input;
-    constexpr double kPi = 3.14159265358979323846;
     Result result{Image(input.bounds.width, input.bounds.height), input.bounds};
     const auto clampedAmount = std::clamp(amount, 0, 100);
     const auto clampedSamples = std::clamp(samples, 4, 32);
-    const auto sweep = double(clampedAmount) * 3.6 * kPi / 180.0;
     for (int32_t y = 0; y < input.bounds.height; ++y)
         for (int32_t x = 0; x < input.bounds.width; ++x) {
             const auto dx = double(x) - centerX;
             const auto dy = double(y) - centerY;
             RadialBlurAccum accum;
             for (int sample = 0; sample < clampedSamples; ++sample) {
-                const auto t = clampedSamples <= 1 ? 0.0 : double(sample) / double(clampedSamples - 1) - 0.5;
-                const auto angle = sweep * t;
-                const auto sourceX = centerX + dx * std::cos(angle) - dy * std::sin(angle);
-                const auto sourceY = centerY + dx * std::sin(angle) + dy * std::cos(angle);
-                radialBlurAccumulateSample(accum, input.pixels, sourceX, sourceY);
+                double sx = 0, sy = 0;
+                radialBlurSource(dx, dy, clampedAmount, clampedSamples, zoom, sample, sx, sy);
+                radialBlurAccumulateSample(accum, input.pixels, centerX + sx, centerY + sy);
             }
             radialBlurWritePixel(result.pixels, x, y, accum);
         }
@@ -1360,13 +1357,13 @@ Result motionStep(const Result& r, const PixelRect& canvas, int32_t angle, int32
 Result boxStep(const Result& r, const PixelRect& canvas, double radius) {
     return trimTransparentResult(renderBoxBlur(embedInFilterCanvas(r, canvasOr(canvas, r)), int32_t(std::floor(radius))));
 }
-Result radialStep(const Result& r, const PixelRect& canvas, int32_t amount, int32_t samples) {
+Result radialStep(const Result& r, const PixelRect& canvas, int32_t amount, int32_t samples, bool zoom) {
     const auto content = r.bounds;
     auto input = embedInFilterCanvas(r, canvasOr(canvas, r));
     // The sweep pivots on the CONTENT centre in canvas buffer coordinates, never the canvas centre.
     const auto centerX = double(content.x - input.bounds.x) + double(std::max<int32_t>(0, content.width - 1)) * 0.5;
     const auto centerY = double(content.y - input.bounds.y) + double(std::max<int32_t>(0, content.height - 1)) * 0.5;
-    return trimTransparentResult(renderRadialBlur(input, amount, samples, centerX, centerY));
+    return trimTransparentResult(renderRadialBlur(input, amount, samples, centerX, centerY, zoom));
 }
 
 bool inRange(double v, double lo, double hi) { return std::isfinite(v) && v >= lo && v <= hi; }
@@ -1473,7 +1470,7 @@ struct RunEntry {
     Result operator()(const smartfilter::Mosaic& p) const { return renderMosaic(current, p.cellSize); }
     Result operator()(const smartfilter::Emboss& p) const { return renderEmboss(current, p.angle, p.height, p.amount); }
     Result operator()(const smartfilter::BoxBlur& p) const { return boxStep(current, canvas, p.radius); }
-    Result operator()(const smartfilter::RadialBlur& p) const { return radialStep(current, canvas, p.amount, p.samples); }
+    Result operator()(const smartfilter::RadialBlur& p) const { return radialStep(current, canvas, p.amount, p.samples, p.zoom); }
     Result operator()(const smartfilter::AddNoise& p) const {
         return renderAddNoise(current, p.amount, p.gaussian, p.monochromatic, p.seed);
     }
@@ -1550,10 +1547,10 @@ PlacedRaster smartBoxBlur(const PlacedRaster& in, const PixelRect& canvas, doubl
     return toPlaced(boxStep(toStraight(in), canvas, std::clamp(radius, kMinimumBoxBlurRadius, kMaximumBoxBlurRadius)));
 }
 
-PlacedRaster smartRadialBlur(const PlacedRaster& in, const PixelRect& canvas, int32_t amount, int32_t samples) {
+PlacedRaster smartRadialBlur(const PlacedRaster& in, const PixelRect& canvas, int32_t amount, int32_t samples, bool zoom) {
     if (!in.image) return in;
     return toPlaced(radialStep(toStraight(in), canvas, std::clamp(amount, kMinimumRadialBlurAmount, kMaximumRadialBlurAmount),
-                               std::clamp(samples, 4, 32)));
+                               std::clamp(samples, 4, 32), zoom));
 }
 
 PlacedRaster smartAddNoise(const PlacedRaster& in, double amount, bool gaussian, bool monochromatic, int32_t seed) {
@@ -1571,6 +1568,7 @@ std::optional<PlacedRaster> renderSmartFilterStack(const PlacedRaster& placed, c
             return std::nullopt;
     }
     if (!stack.enabled || !placed.image || placed.image->isEmpty()) return placed;
+    work::add(work::Counter::SmartFilterStacks);
 
     const auto active = std::count_if(stack.entries.begin(), stack.entries.end(),
                                       [](const SmartFilterEntry& e) { return e.enabled && e.opacity > 0.0; });
@@ -1581,6 +1579,7 @@ std::optional<PlacedRaster> renderSmartFilterStack(const PlacedRaster& placed, c
     const Result base = embedInFilterCanvas(current, filterCanvas);
     for (const auto& entry : stack.entries) {
         if (!entry.enabled || entry.opacity <= 0.0) continue;
+        work::add(work::Counter::SmartFilterPasses);
         Result filtered = std::visit(RunEntry{current, filterCanvas}, entry.parameters);
         current = blendEntryResult(current, std::move(filtered), entry.opacity, entry.blend);
     }

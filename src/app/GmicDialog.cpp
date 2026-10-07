@@ -1,7 +1,9 @@
 #include "GmicDialog.h"
+#include "ActionLibrary.h"
 #include "Style.h"
 #include "compositor/filters.h"
 #include "compositor/render.h"
+#include <QApplication>
 #include <QCheckBox>
 #include <algorithm>
 #include <QColorDialog>
@@ -504,6 +506,10 @@ bool GmicDialog::apply() {
     if (applying_) return false;
     QString command = customCommand_ ? command_->text().trimmed() : current_.commandLine(false);
     if (command.isEmpty()) return true;
+    // G'MIC runs in the background, as the preview does (a filter can take minutes, and the window stays live); the
+    // result is the step pixels.gmic would make, and a command the method allows is recorded as that request for Actions.
+    const QString stepName = customCommand_ ? command.section(' ', 0, 0) : current_.name;
+    const bool recordable = GmicRunner::allowedForAutomation(command, nullptr);
     applying_ = true;
     preview_runner_.cancel();
     setEnabled(false);
@@ -511,7 +517,7 @@ bool GmicDialog::apply() {
     auto* runner = new GmicRunner(this);
     const QString name = QStringLiteral("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name);
     // Either depth: the result comes back at the layer's.
-    auto done = [this, runner, name](auto result, const QString& error) {
+    auto done = [this, runner, name, recordable, command, stepName](auto result, const QString& error) {
         runner->deleteLater();
         setEnabled(true);
         applying_ = false;
@@ -519,6 +525,7 @@ bool GmicDialog::apply() {
         if (!result) { status_->setText(error); QMessageBox::warning(this, tr("G'MIC"), error); return; }
         throughSelection(*result);
         commit(std::shared_ptr<const typename decltype(result)::element_type>(result), placement(), name);
+        if (recordable) recordAction(QStringLiteral("pixels.gmic"), {{"command", command}, {"name", stepName}});
         finish(QDialog::Accepted);
     };
     connect(runner, &GmicRunner::finished, this, [done](std::shared_ptr<Image> result, QString error) { done(result, error); });

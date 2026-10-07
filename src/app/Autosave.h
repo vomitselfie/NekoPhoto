@@ -38,6 +38,11 @@ public:
     void finish();
     /// Rereads the interval.
     void restart();
+    /// Schedules autosaves every `minutes` from now (0 stops them), as Preferences sets them.
+    void setInterval(int minutes);
+    /// Whether autosaves are scheduled, and how often (milliseconds).
+    bool running() const;
+    int intervalMs() const;
 
     /// A project left by an instance that is no longer running.
     /// `source`: where the document came from (DocumentSource::toJson), the file File > Revert reads.

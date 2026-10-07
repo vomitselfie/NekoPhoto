@@ -6,20 +6,47 @@
 // interface path holds the requests automation would send. Then the same for the menu items, dialogs and panel
 // buttons converted after them (menuCommands): each through the menu bar (answering its dialog), through the
 // requests the recording holds, and through the session calls the interface made before, compared as documents and
-// history names, with each recorded once as the method it names.
+// history names, with each recorded once as the method it names. The file commands (New, Open, Import File, Save As,
+// Edit Contents) through their dialogs (fileCommands), and the command registry: every menu item a command with an id
+// of its own, every key one action's (registry).
 //
 // held-keys: Photoshop's held tools (Alt, Ctrl, Ctrl+Space), spring-loaded tool letters, F7, F12, Ctrl+Alt+Z and the
 // type size keys, through synthesised key and mouse events.
 #include "SelfTest.h"
 #include "ActionLibrary.h"
+#include "Autosave.h"
+#include "PreferencesDialog.h"
 #include "AdjustmentEditor.h"
 #include "Automation.h"
+#include "CameraRawDialog.h"
+#include "CameraRawPanels.h"
 #include "CanvasWidget.h"
+#include "ChannelDialogs.h"
+#include "ColorManagement.h"
 #include "ChannelsPanel.h"
 #include "CommandPalette.h"
+#include "CommandRegistry.h"
+#include "ContentAwareScaleDialog.h"
+#include "Gmic.h"
+#include "GmicDialog.h"
+#include "LayerStyleDialog.h"
+#include "MoshDialog.h"
+#include "PresetLibrary.h"
+#include "WarpDialog.h"
+#include "compositor/presets.h"
+#include "compositor/vectorlayer.h"
+#include "compositor/warpmesh.h"
+#include <QDialogButtonBox>
+#include <QFileDialog>
+#include <QListWidget>
+#include <QPushButton>
+#include <QRegularExpression>
+#include <QToolBar>
+#include <set>
 #include "ExportAsDialog.h"
 #include "FilterDialog.h"
 #include "LayersPanel.h"
+#include "ModelStore.h"
 #include "Names.h"
 #include "PathsPanel.h"
 #include "MainWindow.h"
@@ -28,10 +55,12 @@
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QInputDialog>
+#include <QLabel>
 #include <QLineEdit>
 #include <QSlider>
 #include <QSpinBox>
 #include <QTreeWidgetItemIterator>
+#include <QThread>
 #include <QTimer>
 #include <QTemporaryDir>
 #include <QImageReader>
@@ -101,6 +130,11 @@ QString describe(EditorSession& s) {
     out << "paths " + paths.join(", ");
     out << "channels " + channels.join(", ");
     out << QString("guides %1").arg(d.guides.size());
+    // The colours, the vector masks and the effects, which the pixels alone do not show either.
+    out << QString("colors %1 %2").arg(s.foregroundColor.name(QColor::HexArgb), s.backgroundColor.name(QColor::HexArgb));
+    for (const Layer& l : d.layers)
+        if (hasLayerVectorMask(l) || hasAnyEffect(s.layerStyle(l.id)))
+            out << QString("  %1: vector mask %2 style %3").arg(QString::fromStdString(l.name)).arg(hasLayerVectorMask(l)).arg(QString::fromStdString(layerStyleToJson(s.layerStyle(l.id))));
     if (auto flat = s.flattened()) out << QString("composite %1").arg(hashBytes(flat->data(), flat->byteCount()));
     QStringList history;
     for (const std::string& n : s.undoNames()) history << QString::fromStdString(n);
@@ -129,6 +163,8 @@ AdjustmentSettings levelsSettings() {
 }
 
 constexpr double blurRadius = 3.5;
+/// The style preset Layer > Layer Style > Apply Style applies (imported for the test, removed after it).
+constexpr const char* kStylePreset = "Self-test Shadow";
 const LayerTransform moved(const LayerTransform& t) {
     LayerTransform out = t;
     out.origin.x += 13;
@@ -136,6 +172,8 @@ const LayerTransform moved(const LayerTransform& t) {
     out.rotation = 15;
     return out;
 }
+
+
 
 int commandPath(MainWindow& w) {
     AutomationServer* engine = w.automationEngine();
@@ -305,7 +343,34 @@ struct Converted {
     std::function<void(EditorSession&, const QList<ActionStep>&)> direct;   // the edit as the interface made it before
     QStringList methods;                                          // the steps Actions records for it
     bool edits = true;                                            // false: it leaves no history step (a copy)
+    /// Requests the automation run sends for what Actions does not record (history, the view).
+    QList<std::pair<QString, QJsonObject>> unrecorded = {};
 };
+
+/// A command by its registry id (CommandRegistry.h), as its menu item or key runs it.
+std::function<bool(MainWindow&, EditorSession&)> command(QString id) {
+    return [id](MainWindow& w, EditorSession&) {
+        const Command* c = w.commandRegistry().find(id);
+        if (!c || !c->action) { std::fprintf(stderr, "no command %s\n", qPrintable(id)); return false; }
+        if (!c->action->isEnabled()) { std::fprintf(stderr, "%s is disabled: %s\n", qPrintable(id), qPrintable(w.commandRegistry().disabledReason(*c))); return false; }
+        c->action->trigger();
+        QApplication::processEvents();
+        return true;
+    };
+}
+
+/// Presses Return on the canvas of the tab on screen (Free Transform's and the warp cage's Enter).
+void pressEnter(MainWindow& w) {
+    QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(w.canvasAt(w.currentTabIndex()), &enter);
+    QApplication::processEvents();
+}
+
+/// Clicks a dialog's OK.
+void clickOk(QDialog* d) {
+    if (auto* box = d->findChild<QDialogButtonBox*>()) if (QPushButton* ok = box->button(QDialogButtonBox::Ok)) { ok->click(); return; }
+    std::fprintf(stderr, "no OK button\n");
+}
 
 std::function<bool(MainWindow&, EditorSession&)> trigger(QStringList path, std::function<void(QDialog*)> modal = {}, bool hasModal = false) {
     return [path, modal, hasModal](MainWindow& w, EditorSession&) {
@@ -432,8 +497,27 @@ int menuCommands(MainWindow& w) {
     auto backgroundUnderRed = [](EditorSession& s) { select(s, "Red"); s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Replace); select(s, "Background"); };
     MainWindow* window = &w;
     auto revertFiles = std::make_shared<QStringList>();   // the projects the Revert step saves, removed at the end
+    // A style preset for Apply Style: an .asl of one drop shadow, imported into the library and removed at the end.
+    QTemporaryDir presetDir;
+    {
+        StyleLibrary library;
+        StylePreset preset;
+        preset.id = "self-test-style";
+        preset.name = kStylePreset;
+        DropShadow shadow;
+        shadow.distance = 6;
+        shadow.color = {200, 30, 30};
+        preset.style.dropShadows.push_back(shadow);
+        library.styles.push_back(preset);
+        const std::vector<uint8_t> bytes = writeAsl(library);
+        QFile file(presetDir.filePath(QStringLiteral("self-test.asl")));
+        if (!file.open(QIODevice::WriteOnly) || file.write(reinterpret_cast<const char*>(bytes.data()), qint64(bytes.size())) != qint64(bytes.size())) std::fprintf(stderr, "could not write the style preset\n");
+        file.close();
+        PresetLibrary::instance().importFiles({file.fileName()});
+        if (!PresetLibrary::instance().findStyle(QString::fromLatin1(kStylePreset))) std::fprintf(stderr, "the style preset was not imported\n");
+    }
 
-    const std::vector<Converted> steps = {
+    std::vector<Converted> steps = {
         {"New Layer Below", "Paint", {}, trigger({"Layer", "New Layer Below"}), [](EditorSession& s, auto&) { s.addBlankLayer(true); }, {"layers.add"}},
         {"New Folder", "Paint", {}, trigger({"Layer", "New Folder"}), [](EditorSession& s, auto&) { s.addGroup(); }, {"layers.add"}},
         {"New Adjustment Layer", "Paint", {}, trigger({"Layer", "New Adjustment Layer", names::adjustmentKind(AdjustmentKind::Curves)}),
@@ -442,6 +526,7 @@ int menuCommands(MainWindow& w) {
          [](EditorSession& s, auto&) { s.renameLayer(*s.activeLayerId(), "Renamed"); }, {"layers.set"}},
         {"Delete Layer", "Renamed", {}, trigger({"Layer", "Delete Layer"}), [](EditorSession& s, auto&) { s.deleteLayersResolvingClipping({*s.activeLayerId()}, false); }, {"layers.delete"}},
         {"Group Layers", "Paint", {}, trigger({"Layer", "Group Layers"}), [](EditorSession& s, auto&) { s.groupSelectedLayers(); }, {"layers.group"}},
+        {"Move Out of Folder", "Paint", {}, trigger({"Layer", "Move Out of Folder"}), [](EditorSession& s, auto&) { s.moveActiveLayerOutOfGroup(); }, {"layers.move"}},
         {"Bring Forward", "Background", {}, trigger({"Layer", "Bring Forward"}), [](EditorSession& s, auto&) { s.moveActiveLayer(1); }, {"layers.reorder"}},
         {"Send Backward", "Background", {}, trigger({"Layer", "Send Backward"}), [](EditorSession& s, auto&) { s.moveActiveLayer(-1); }, {"layers.reorder"}},
         {"Flip Layer Horizontal", "Background", {}, trigger({"Layer", "Flip Layer Horizontal"}), [](EditorSession& s, auto&) { s.flipLayer(true); }, {"layers.flip"}},
@@ -539,6 +624,9 @@ int menuCommands(MainWindow& w) {
         {"New Channel", "Background", {}, panelButton(false, ChannelsPanel::tr("Create new channel")), [](EditorSession& s, auto&) { s.newChannel(); }, {"channels.new"}},
         {"Path to Shape", "Background", {}, panelButton(true, PathsPanel::tr("Make a shape layer from the path")),
          [](EditorSession& s, auto&) { s.pathToShapeLayer(*s.activePathId()); }, {"paths.toShape"}},
+        {"Vector Mask Current Path", "Background", [](EditorSession& s) { s.selectPath(kWorkPathId); }, trigger({"Layer", "Vector Mask", "Current Path"}),
+         [](EditorSession& s, auto&) { s.addVectorMask(EditorSession::VectorMaskKind::CurrentPath); }, {"vectorMask.set"}},
+        {"Vector Mask Delete", "Background", {}, trigger({"Layer", "Vector Mask", "Delete"}), [](EditorSession& s, auto&) { s.deleteVectorMask(); }, {"vectorMask.delete"}},
         {"Delete Path", "Background", [](EditorSession& s) { s.selectPath(kWorkPathId); }, panelButton(true, PathsPanel::tr("Delete the path")),
          [](EditorSession& s, auto&) { s.deletePath(*s.activePathId()); }, {"paths.delete"}},
         // The pixel clipboard and Reselect
@@ -614,6 +702,169 @@ int menuCommands(MainWindow& w) {
              emit tree->dropRequested(layerId(s, "Paint"), std::nullopt, layerId(s, "Background"), false);
              return true;
          }), [](EditorSession& s, auto&) { s.placeLayer(layerId(s, "Paint"), std::nullopt, layerId(s, "Background"), false); }, {"layers.move"}},
+        // ---- Converted with the command registry (1.8.10) ----
+        // History and the view: not recorded, so the automation run sends the requests itself.
+        {"Undo", nullptr, {}, command("edit.undo"), [](EditorSession& s, auto&) { s.undo(); }, {}, true, {{"history.undo", {}}}},
+        {"Redo", nullptr, {}, command("edit.redo"), [](EditorSession& s, auto&) { s.redo(); }, {}, true, {{"history.redo", {}}}},
+        {"Zoom In", nullptr, {}, trigger({"View", "Zoom In"}), [](EditorSession& s, auto&) { s.zoomTo(s.viewport.zoom * 1.25); }, {}, false},
+        {"Fit on Screen", nullptr, {}, trigger({"View", "Fit on Screen"}), [](EditorSession& s, auto&) { s.fitView(); }, {}, false},
+        {"Actual Pixels", nullptr, {}, trigger({"View", "Actual Pixels"}), [](EditorSession& s, auto&) { s.zoomTo(1); }, {}, false},
+        // Colours: X, D, and a 16-bit foreground filled (#rrrrggggbbbb).
+        {"Fill 16-bit Colour", "Background", [](EditorSession& s) { s.foregroundColor = QColor::fromRgba64(40000, 1234, 65535); }, trigger({"Edit", "Fill with Foreground"}),
+         [](EditorSession& s, auto&) { s.fillSelection(s.foregroundColor); }, {"pixels.fill"}},
+        {"Swap Colours", nullptr, {}, command("colors.swap"), [](EditorSession& s, auto&) { std::swap(s.foregroundColor, s.backgroundColor); }, {"colors.set"}, false},
+        {"Default Colours", nullptr, {}, command("colors.default"), [](EditorSession& s, auto&) { s.foregroundColor = Qt::black; s.backgroundColor = Qt::white; }, {"colors.set"}, false},
+        // Layer styles: Copy (nothing recorded, nothing to undo), Paste and Clear, the dialog's OK, a preset.
+        {"Copy Layer Style", "Paint", [](EditorSession& s) {
+             LayerStyle style;
+             DropShadow shadow;
+             shadow.distance = 9;
+             shadow.color = {20, 40, 200};
+             style.dropShadows.push_back(shadow);
+             s.applyLayerStyle(*s.activeLayerId(), style);
+         }, trigger({"Layer", "Layer Style", "Copy Layer Style"}), [](EditorSession& s, auto&) { s.copyLayerStyle(); }, {}, false},
+        {"Paste Layer Style", "Red", {}, trigger({"Layer", "Layer Style", "Paste Layer Style"}), [](EditorSession& s, auto&) { s.pasteLayerStyle(); }, {"layers.setStyle"}},
+        {"Clear Layer Style", "Paint", {}, trigger({"Layer", "Layer Style", "Clear Layer Style"}), [](EditorSession& s, auto&) { s.clearLayerStyle(); }, {"layers.setStyle"}},
+        {"Layer Style Dialog", "Red", {}, [](MainWindow& w, EditorSession& s) {
+             LayerStyleDialog dialog(&s, *s.activeLayerId(), &w, 0);
+             auto* list = dialog.findChild<QListWidget*>();
+             if (!list || list->count() < 3) return false;
+             list->item(2)->setCheckState(Qt::Checked);   // Stroke
+             static_cast<QDialog&>(dialog).accept();
+             QApplication::processEvents();
+             return true;
+         }, [window](EditorSession& s, auto&) {
+             LayerStyleDialog dialog(&s, *s.activeLayerId(), window, 0);
+             dialog.findChild<QListWidget*>()->item(2)->setCheckState(Qt::Checked);
+             static_cast<QDialog&>(dialog).accept();
+         }, {"layers.setStyle"}},
+        {"Apply Style", "Background", {}, trigger({"Layer", "Layer Style", "Apply Style", QString::fromLatin1(kStylePreset)}), [](EditorSession& s, auto&) {
+             const StylePreset* p = PresetLibrary::instance().findStyle(QString::fromLatin1(kStylePreset));
+             if (p) s.applyStylePreset(*s.activeLayerId(), p->style, PresetLibrary::instance().patternsFor(p->style));
+         }, {"layers.applyStyle"}},
+        // Vector masks and type.
+        {"Vector Mask Reveal All", "Background", {}, trigger({"Layer", "Vector Mask", "Reveal All"}), [](EditorSession& s, auto&) { s.addVectorMask(EditorSession::VectorMaskKind::RevealAll); }, {"vectorMask.set"}},
+        {"Vector Mask Edit Background", "Background", {}, trigger({"Layer", "Vector Mask", "Edit"}), [](EditorSession& s, auto&) { s.targetVectorMask(*s.activeLayerId()); }, {"vectorMask.target"}, false},
+        {"Vector Mask Delete Background", "Background", {}, trigger({"Layer", "Vector Mask", "Delete"}), [](EditorSession& s, auto&) { s.deleteVectorMask(); }, {"vectorMask.delete"}},
+        {"Vector Mask Hide All", "Red", {}, trigger({"Layer", "Vector Mask", "Hide All"}), [](EditorSession& s, auto&) { s.addVectorMask(EditorSession::VectorMaskKind::HideAll); }, {"vectorMask.set"}},
+        {"Create Work Path", nullptr, [](EditorSession& s) {
+             LayerText text;
+             text.text = "Neko";
+             text.fontSize = 40;
+             s.addTextLayer(QPointF(20, 60), text, false);
+         }, trigger({"Type", "Create Work Path"}), [](EditorSession& s, auto&) { s.textToWorkPath(*s.activeLayerId()); }, {"text.toPath"}},
+        {"Convert to Shape", nullptr, {}, trigger({"Type", "Convert to Shape"}), [](EditorSession& s, auto&) { s.textToShape(*s.activeLayerId()); }, {"text.toShape"}},
+        // Quick Mask, the channel keys (Ctrl+3 red, Ctrl+2 the composite, Ctrl+Alt+3 red as the selection).
+        {"Quick Mask On", "Background", {}, trigger({"Select", "Edit in Quick Mask Mode"}), [](EditorSession& s, auto&) { s.toggleQuickMask(); }, {"selection.quickMask"}},
+        {"Quick Mask Off", nullptr, {}, trigger({"Select", "Edit in Quick Mask Mode"}), [](EditorSession& s, auto&) { s.toggleQuickMask(); }, {"selection.quickMask"}},
+        {"Select Red", "Background", {}, command("select.channel.target2"), [](EditorSession& s, auto&) { s.selectColorChannels(1u); }, {"channels.select"}, false},
+        {"Select Composite", "Background", {}, command("select.channel.target1"), [](EditorSession& s, auto&) { s.selectColorChannels(s.allColors()); }, {"channels.select"}, false},
+        {"Load Red", "Background", {}, command("select.channel.load2"), [](EditorSession& s, auto&) {
+             SelectionSource source;
+             source.kind = SelectionSource::Red;
+             s.loadSelectionFromSource(source, false, SelectionMode::Replace);
+         }, {"channels.loadSelection"}},
+        // Several layers deleted at once (by id), from the menu and from the Layers panel's bin.
+        {"Delete Two Layers", nullptr, [](EditorSession& s) {
+             s.addBlankLayer(); s.renameLayer(*s.activeLayerId(), "Gone A");
+             s.addBlankLayer(); s.renameLayer(*s.activeLayerId(), "Gone B");
+             s.selectLayers({layerId(s, "Gone A"), layerId(s, "Gone B")}, layerId(s, "Gone B"));
+         }, trigger({"Layer", "Delete Layer"}), [](EditorSession& s, auto&) { s.deleteLayersResolvingClipping({layerId(s, "Gone A"), layerId(s, "Gone B")}, false); }, {"layers.delete"}},
+        {"Panel Delete Two", nullptr, [](EditorSession& s) {
+             s.addBlankLayer(); s.renameLayer(*s.activeLayerId(), "Gone C");
+             s.addBlankLayer(); s.renameLayer(*s.activeLayerId(), "Gone D");
+             s.selectLayers({layerId(s, "Gone C"), layerId(s, "Gone D")}, layerId(s, "Gone D"));
+         }, layersButton(LayersPanel::tr("Delete the selected layers")), [](EditorSession& s, auto&) { s.deleteSelectedLayers(); }, {"layers.delete"}},
+        // The dialogs' OK.
+        {"Warp", "Background", {}, trigger({"Edit", "Warp…"}, [](QDialog* d) { auto* style = d->findChild<QComboBox*>(); style->setCurrentIndex(style->findData(QStringLiteral("warpFlag"))); }),
+         [window](EditorSession& s, auto&) {
+             WarpDialog dialog(&s, window);
+             auto* style = dialog.findChild<QComboBox*>();
+             style->setCurrentIndex(style->findData(QStringLiteral("warpFlag")));
+             static_cast<QDialog&>(dialog).accept();
+         }, {"layers.warp"}},
+        {"Content-Aware Scale", "Background", {}, [](MainWindow& w, EditorSession& s) {
+             auto* dialog = new ContentAwareScaleDialog(&s, &w);
+             nth<QDoubleSpinBox>(dialog, 0)->setValue(80);
+             clickOk(dialog);
+             QApplication::processEvents();
+             delete dialog;
+             return true;
+         }, [window](EditorSession& s, auto&) {
+             auto* dialog = new ContentAwareScaleDialog(&s, window);
+             nth<QDoubleSpinBox>(dialog, 0)->setValue(80);
+             clickOk(dialog);
+             delete dialog;
+         }, {"pixels.contentAwareScale"}},
+        {"Camera Raw", "Background", {}, [](MainWindow& w, EditorSession& s) {
+             auto* dialog = new CameraRawDialog(&s, &w);
+             auto* panels = dialog->findChild<CameraRawPanels*>();
+             if (!panels) return false;
+             CameraRawSettings grade = panels->settings();
+             grade.exposure = 0.4;
+             grade.contrast = 20;
+             panels->setSettings(grade);
+             dialog->accept();
+             QApplication::processEvents();
+             return true;
+         }, [window](EditorSession& s, auto&) {
+             auto* dialog = new CameraRawDialog(&s, window);
+             auto* panels = dialog->findChild<CameraRawPanels*>();
+             CameraRawSettings grade = panels->settings();
+             grade.exposure = 0.4;
+             grade.contrast = 20;
+             panels->setSettings(grade);
+             dialog->accept();
+         }, {"pixels.cameraRaw"}},
+        {"Mosh", "Background", {}, [](MainWindow& w, EditorSession& s) {
+             auto* dialog = new MoshDialog(&s, *compositor::mosh::findEffect("wave"), &w);
+             dialog->accept();
+             QApplication::processEvents();
+             return true;
+         }, [window](EditorSession& s, auto&) { (new MoshDialog(&s, *compositor::mosh::findEffect("wave"), window))->accept(); }, {"pixels.mosh"}},
+        {"Load Selection", "Background", [](EditorSession& s) { s.deselect(); }, [](MainWindow& w, EditorSession& s) {
+             auto* dialog = new LoadSelectionDialog(&s, &w);
+             auto* source = dialog->findChild<QComboBox*>();
+             source->setCurrentIndex(source->findData(QStringList{QStringLiteral("transparency"), QString::fromStdString(layerId(s, "Red"))}));
+             clickOk(dialog);
+             QApplication::processEvents();
+             return true;
+         }, [](EditorSession& s, auto&) {
+             SelectionSource source;
+             source.kind = SelectionSource::Transparency;
+             source.id = layerId(s, "Red");
+             s.loadSelectionFromSource(source, false, SelectionMode::Replace);
+         }, {"channels.loadSelection"}},
+        {"Save Selection", "Background", {}, [](MainWindow& w, EditorSession& s) {
+             auto* dialog = new SaveSelectionDialog(&s, &w);
+             clickOk(dialog);
+             QApplication::processEvents();
+             return true;
+         }, [window](EditorSession& s, auto&) { clickOk(new SaveSelectionDialog(&s, window)); }, {"channels.saveSelection"}},
+        {"Warp Cage", "Background", [](EditorSession& s) { s.deselect(); }, [](MainWindow& w, EditorSession& s) {
+             if (!s.beginWarpCage()) return false;
+             WarpMesh cage = *s.warpCage();
+             cage.xs[5] += 12;
+             cage.ys[5] -= 8;
+             s.setWarpCage(cage);
+             pressEnter(w);
+             return !s.warpCage();
+         }, [](EditorSession& s, auto&) {
+             s.beginWarpCage();
+             WarpMesh cage = *s.warpCage();
+             cage.xs[5] += 12;
+             cage.ys[5] -= 8;
+             s.setWarpCage(cage);
+             s.commitWarpCage();
+         }, {"layers.setCage"}},
+        // A saved project saved again: document.save, no history step.
+        {"Save", "Paint", [revertFiles](EditorSession& s) {
+             const QString path = QDir(QDir::tempPath()).filePath(QStringLiteral("nekophoto-command-path-%1-%2.nekophoto").arg(QCoreApplication::applicationPid()).arg(revertFiles->size()));
+             revertFiles->push_back(path);
+             QString error;
+             if (!s.saveProject(path, &error)) std::fprintf(stderr, "Save: could not save %s: %s\n", qPrintable(path), qPrintable(error));
+             s.addBlankLayer();
+         }, trigger({"File", "Save"}), [](EditorSession& s, auto&) { s.saveProject(s.projectPath(), nullptr); }, {"document.save"}, false},
         // Last: it merges most of the document. Red hidden first, so a hidden layer stays out of the merge.
         // File > Revert: the project as saved before a change, as one undo step (each tab saves a project of its own).
         {"Revert", "Paint", [revertFiles](EditorSession& s) {
@@ -626,6 +877,32 @@ int menuCommands(MainWindow& w) {
         {"Merge Visible", "Paint", [](EditorSession& s) { const Layer* red = s.document()->find(layerId(s, "Red")); if (red && red->visible) s.toggleLayerVisibility(red->id); },
          trigger({"Layer", "Merge Visible"}), [](EditorSession& s, auto&) { s.mergeVisible(); }, {"layers.merge"}},
     };
+    // G'MIC's OK, where G'MIC is installed: a built-in filter through pixels.gmic (before, the dialog's own run).
+    if (GmicRunner::available()) {
+        auto gmicDialog = [](MainWindow& w, EditorSession& s) {
+            auto* dialog = new GmicDialog(&s, &w);
+            dialog->showFilter(QStringLiteral("Sepia"));
+            auto done = std::make_shared<bool>(false);
+            QObject::connect(dialog, &QDialog::finished, [done] { *done = true; });
+            static_cast<QDialog*>(dialog)->accept();
+            // The direct path runs G'MIC in the background and closes when it is done.
+            for (int i = 0; i < 12000 && !*done; i++) { QApplication::processEvents(QEventLoop::AllEvents, 10); QThread::msleep(5); }
+            if (!*done) std::fprintf(stderr, "G'MIC did not finish\n");
+            return *done;
+        };
+        steps.insert(steps.end() - 2, Converted{"G'MIC", "Background", {}, gmicDialog, [window, gmicDialog](EditorSession& s, auto&) { gmicDialog(*window, s); }, {"pixels.gmic"}});
+    }
+
+    // Select > Subject: selection.subject with a box 5% inside the canvas, when the click-to-select model is there
+    // (a developer's machine); without it (CI) the item is greyed and says why, checked below.
+    if (ModelStore::promptReady())
+        steps.insert(steps.end() - 2, Converted{"Subject", "Background", {}, trigger({"Select", "Subject"}), [](EditorSession& s, auto&) {
+            const Document& d = *s.document();
+            s.clearClickPrompts();
+            s.setQuickSelectClicks(true);
+            s.setClickBox(QPointF(d.width / 20, d.height / 20), QPointF(d.width - d.width / 20, d.height - d.height / 20), false);
+            s.runClickSelection(SelectionMode::Replace, nullptr);
+        }, {"selection.subject"}});
 
     int failures = 0;
     auto prepare = [](EditorSession& s) {
@@ -638,10 +915,33 @@ int menuCommands(MainWindow& w) {
         if (step.setup) step.setup(s);
     };
 
+    // Type converted once before the runs, through the menus as the first run does: the first layout of a font in the
+    // process can place glyph outlines 1/64 px apart from the ones after it, which would set the first run apart.
+    {
+        w.newTab();
+        EditorSession& warm = *w.session();
+        prepare(warm);
+        LayerText text;
+        text.text = "Neko";
+        text.fontSize = 40;
+        if (warm.addTextLayer(QPointF(20, 60), text, false)) {
+            trigger({"Type", "Create Work Path"})(w, warm);
+            trigger({"Type", "Convert to Shape"})(w, warm);
+        }
+    }
+
     // The interface, recorded.
     w.newTab();
     EditorSession& a = *w.session();
     prepare(a);
+    if (!ModelStore::promptReady()) {
+        QAction* subject = menuItem(w, {"Select", "Subject"});
+        if (!subject) failures++;
+        else if (subject->isEnabled() || subject->toolTip().isEmpty() || !subject->toolTip().contains(QLatin1String("model"))) {
+            std::fprintf(stderr, "Select > Subject without the click-to-select model: enabled %d, tooltip \"%s\"\n", subject->isEnabled(), qPrintable(subject->toolTip()));
+            failures++;
+        }
+    }
     ActionLibrary::instance().startRecording(QStringLiteral("menu-commands self-test"));
     std::vector<int> recordedBefore;
     auto recorded = [] {
@@ -662,6 +962,8 @@ int menuCommands(MainWindow& w) {
     // The layers' names when each step was made: steps that name layers by id (an eye, a drag) are replayed on the
     // other tabs' layers of the same name.
     std::vector<std::map<std::string, std::string>> namesAt;
+    // The document after each step on each path, to name the first step where two paths part.
+    std::vector<QString> afterInterface, afterAutomation, afterDirect;
     for (const Converted& step : steps) {
         current = step.label;
         before(a, step);
@@ -671,6 +973,7 @@ int menuCommands(MainWindow& w) {
         const auto history = a.undoNames();   // (the list is capped: compare it, not its length)
         if (!step.ui(w, a)) { std::fprintf(stderr, "%s: could not be done through the interface\n", qPrintable(step.label)); failures++; }
         if ((a.undoNames() == history) == step.edits) { std::fprintf(stderr, step.edits ? "%s left no history step\n" : "%s left a history step\n", qPrintable(step.label)); failures++; }
+        afterInterface.push_back(describe(a));
     }
     watchdog.stop();
     ActionLibrary::instance().stopRecording();
@@ -695,15 +998,27 @@ int menuCommands(MainWindow& w) {
         before(b, steps[i]);
         for (int k = recordedBefore[i]; k < recordedBefore[i + 1]; k++) {
             QJsonObject sent = steps_[k].params;
-            for (const char* key : {"id", "parent", "above"}) {
-                if (!sent.value(key).isString()) continue;
-                auto name = namesAt[i].find(sent.value(key).toString().toStdString());
-                if (name == namesAt[i].end()) continue;
-                for (const Layer& l : b.document()->layers) if (l.name == name->second) sent[key] = QString::fromStdString(l.id);
+            auto mapped = [&](const QString& id) -> QString {
+                auto name = namesAt[i].find(id.toStdString());
+                if (name == namesAt[i].end()) return id;
+                for (const Layer& l : b.document()->layers) if (l.name == name->second) return QString::fromStdString(l.id);
+                return id;
+            };
+            for (const char* key : {"id", "parent", "above", "layer"})
+                if (sent.value(key).isString()) sent[key] = mapped(sent.value(key).toString());
+            if (sent.value("ids").isArray()) {
+                QJsonArray ids;
+                for (const QJsonValue& v : sent.value("ids").toArray()) ids.append(mapped(v.toString()));
+                sent["ids"] = ids;
             }
             const QJsonObject reply = engine->handle(QJsonObject{{"jsonrpc", "2.0"}, {"id", 1}, {"method", steps_[k].method}, {"params", sent}});
             if (reply.contains("error")) { std::fprintf(stderr, "%s: %s\n", qPrintable(steps_[k].method), qPrintable(reply.value("error").toObject().value("message").toString())); failures++; }
         }
+        for (const auto& [method, params] : steps[i].unrecorded) {
+            const QJsonObject reply = engine->handle(QJsonObject{{"jsonrpc", "2.0"}, {"id", 1}, {"method", method}, {"params", params}});
+            if (reply.contains("error")) { std::fprintf(stderr, "%s: %s\n", qPrintable(method), qPrintable(reply.value("error").toObject().value("message").toString())); failures++; }
+        }
+        afterAutomation.push_back(describe(b));
     }
     const QString viaAutomation = describe(b);
 
@@ -716,8 +1031,23 @@ int menuCommands(MainWindow& w) {
         before(c, steps[i]);
         steps[i].direct(c, steps_.mid(recordedBefore[i], recordedBefore[i + 1] - recordedBefore[i]));
         QApplication::processEvents();
+        afterDirect.push_back(describe(c));
     }
     const QString direct = describe(c);
+    // Where two paths first part, and the lines that differ there.
+    auto firstDifference = [&](const std::vector<QString>& one, const std::vector<QString>& other, const char* what) {
+        for (size_t i = 0; i < steps.size() && i < one.size() && i < other.size(); i++) {
+            if (one[i] == other[i]) continue;
+            const QStringList x = one[i].split('\n'), y = other[i].split('\n');
+            QStringList lines;
+            for (int k = 0; k < std::max(x.size(), y.size()); k++)
+                if (x.value(k) != y.value(k) && !x.value(k).startsWith(QLatin1String("history"))) lines << QStringLiteral("  %1\n  %2").arg(x.value(k), y.value(k));
+            std::fprintf(stderr, "%s first differ after \"%s\":\n%s\n", what, qPrintable(steps[i].label), qPrintable(lines.join('\n')));
+            return;
+        }
+    };
+    firstDifference(afterInterface, afterAutomation, "the interface and automation");
+    firstDifference(afterInterface, afterDirect, "the interface and the direct calls");
 
     if (viaInterface != viaAutomation) {
         std::fprintf(stderr, "menu commands: the interface and automation differ:\n--- interface\n%s\n--- automation\n%s\n", qPrintable(viaInterface), qPrintable(viaAutomation));
@@ -728,6 +1058,7 @@ int menuCommands(MainWindow& w) {
         failures++;
     }
     for (const QString& path : *revertFiles) QFile::remove(path);
+    PresetLibrary::instance().removeStyle(QString::fromLatin1(kStylePreset));
     std::printf("menu commands: %d checked, %s\n", int(steps.size()), failures ? "FAILED" : "ok");
     return failures;
 }
@@ -849,6 +1180,28 @@ int search(MainWindow& w) {
         }
         QApplication::processEvents();
     };
+    {
+        // Undo is greyed with nothing to undo, and says so; its entry carries the registry's id.
+        CommandPalette* p = open();
+        if (!p) { std::fprintf(stderr, "Ctrl+F opened no palette\n"); return 1; }
+        type(p, QStringLiteral("undo"));
+        const PaletteEntry* first = p->resultEntry(0);
+        if (!first || first->commandId != QLatin1String("edit.undo")) { std::fprintf(stderr, "search \"undo\": the first row is not edit.undo\n"); failures++; }
+        else if (!w.session()->canUndo() && !p->rowText(0, 1).contains(QLatin1String("Nothing to undo"))) {
+            std::fprintf(stderr, "search \"undo\": the greyed row says \"%s\", not why\n", qPrintable(p->rowText(0, 1)));
+            failures++;
+        }
+        p->close();
+        QApplication::processEvents();
+        // A command that needs a document, with none open, says so.
+        if (!w.session()->hasDocument()) {
+            p = open();
+            type(p, QStringLiteral("gauss"));
+            if (!p->rowText(0, 1).contains(QLatin1String("No document is open"))) { std::fprintf(stderr, "search \"gauss\": \"%s\"\n", qPrintable(p->rowText(0, 1))); failures++; }
+            p->close();
+            QApplication::processEvents();
+        }
+    }
     const std::vector<std::pair<QString, QString>> cases = {
         {"gauss", "Gaussian Blur…"}, {"merge vis", "Merge Visible"}, {"sel inv", "Inverse"}, {"prefer", "Preferences…"},
         {"lasso", "Lasso"}};
@@ -1313,19 +1666,219 @@ int exportAs(MainWindow& w) {
     return failures ? 1 : 0;
 }
 
+
+/// The command registry (CommandRegistry.h): every menu item is a command with a well-formed id of its own, and every
+/// key the window answers to belongs to one action (an ambiguous key runs neither).
+int registry(MainWindow& w) {
+    int failures = 0;
+    const CommandRegistry& reg = w.commandRegistry();
+    static const QRegularExpression form(QStringLiteral("^[a-z][A-Za-z0-9]*(\\.[a-z0-9][A-Za-z0-9]*)+$"));
+    std::set<QString> ids;
+    for (const Command* c : reg.all()) {
+        if (!form.match(c->id).hasMatch()) { std::fprintf(stderr, "registry: badly formed id \"%s\"\n", qPrintable(c->id)); failures++; }
+        if (!ids.insert(c->id).second) { std::fprintf(stderr, "registry: id %s twice\n", qPrintable(c->id)); failures++; }
+        if (!c->action || c->action->property("commandId").toString() != c->id) { std::fprintf(stderr, "registry: %s has no action\n", qPrintable(c->id)); failures++; }
+        if (c->params && c->method.isEmpty()) { std::fprintf(stderr, "registry: %s sends a request without a method\n", qPrintable(c->id)); failures++; }
+    }
+    // Every item of every menu, the submenus' own items too (a submenu listed as it fills, Open Recent and Apply
+    // Style, holds files and presets rather than commands).
+    QList<QAction*> answering;
+    int items = 0;
+    std::function<void(QMenu*, const QString&)> walk = [&](QMenu* menu, const QString& path) {
+        if (menu->property("commandsDynamic").toBool()) return;
+        emit menu->aboutToShow();
+        for (QAction* a : menu->actions()) {
+            if (a->isSeparator()) continue;
+            const QString here = path + QStringLiteral(" > ") + plainText(a->text());
+            if (QMenu* sub = a->menu()) { walk(sub, here); continue; }
+            items++;
+            answering << a;
+            if (!reg.forAction(a)) { std::fprintf(stderr, "registry: the menu item %s has no command\n", qPrintable(here)); failures++; }
+        }
+    };
+    for (QAction* top : w.menuBar()->actions())
+        if (QMenu* menu = top->menu()) walk(menu, plainText(top->text()));
+    // The keys: the menus', the window's own (the channel keys, X and D, the tool kinds) and the tool rail's.
+    answering << w.actions();
+    for (QToolBar* bar : w.findChildren<QToolBar*>()) answering << bar->actions();
+    std::map<QString, QAction*> keys;
+    for (QAction* a : answering)
+        for (const QKeySequence& key : a->shortcuts()) {
+            if (key.isEmpty()) continue;
+            const QString text = key.toString(QKeySequence::PortableText);
+            auto [at, added] = keys.emplace(text, a);
+            if (!added && at->second != a) {
+                std::fprintf(stderr, "registry: %s is the key of both \"%s\" and \"%s\"\n", qPrintable(text), qPrintable(plainText(at->second->text())), qPrintable(plainText(a->text())));
+                failures++;
+            }
+        }
+    // The registry's default keys, likewise.
+    std::map<QString, QString> defaults;
+    for (const Command* c : reg.all())
+        for (const QKeySequence& key : c->shortcuts) {
+            auto [at, added] = defaults.emplace(key.toString(QKeySequence::PortableText), c->id);
+            if (!added && at->second != c->id) { std::fprintf(stderr, "registry: %s is the default key of %s and %s\n", qPrintable(at->first), qPrintable(at->second), qPrintable(c->id)); failures++; }
+        }
+    std::printf("command registry: %d commands, %d menu items, %d keys, %s\n", int(ids.size()), items, int(keys.size()), failures ? "FAILED" : "ok");
+    return failures;
+}
+
+/// File > New, Open, Import File, Save As and Layer > Smart Objects > Edit Contents through their dialogs: each runs its
+/// method (document.new, document.open, document.import, document.save, smartObject.editContents), recorded once, and
+/// gives what the window's own calls gave before.
+int fileCommands(MainWindow& w) {
+    int failures = 0;
+    auto expect = [&](bool ok, const QString& what) { if (!ok) { std::fprintf(stderr, "file commands: %s\n", qPrintable(what)); failures++; } };
+    QTemporaryDir dir;
+    const QString png = dir.filePath(QStringLiteral("opened.png"));
+    {
+        QImage image(40, 30, QImage::Format_ARGB32);
+        for (int y = 0; y < 30; y++) for (int x = 0; x < 40; x++) image.setPixel(x, y, qRgba(x * 6, y * 8, 120, 255));
+        image.save(png);
+    }
+    auto pick = [](const QString& path) {
+        return [path](QDialog* d) { if (auto* f = qobject_cast<QFileDialog*>(d)) f->selectFile(path); else std::fprintf(stderr, "not a file dialog: %s\n", d->metaObject()->className()); };
+    };
+    // Qt's own file dialog, whatever the desktop's platform theme offers, so the test can answer it.
+    const bool nativeDialogs = !QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs);
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, true);
+    // Untagged images open in the working space without the question, as a person who turned it off sees.
+    const color::Settings colours = color::settings();
+    {
+        color::Settings quiet = colours;
+        quiet.askMissing = quiet.askMismatch = false;
+        color::setSettings(quiet);
+    }
+    // A dialog nobody answers (a question the test does not expect) fails the test instead of waiting for ever.
+    QTimer watchdog;
+    QPointer<QWidget> waiting;
+    int waited = 0;
+    QObject::connect(&watchdog, &QTimer::timeout, [&] {
+        QWidget* modal = QApplication::activeModalWidget();
+        if (!modal || modal != waiting) { waiting = modal; waited = 0; return; }
+        if (++waited < 50) return;
+        std::fprintf(stderr, "file commands: an unexpected %s (\"%s\") was left open\n", modal->metaObject()->className(), qPrintable(modal->windowTitle()));
+        failures++;
+        if (auto* d = qobject_cast<QDialog*>(modal)) d->reject(); else modal->close();
+    });
+    watchdog.start(100);
+    auto run = [&](const QStringList& path, std::function<void(QDialog*)> answer) {
+        QAction* a = menuItem(w, path);
+        if (!a || !a->isEnabled()) { expect(false, path.join(" > ") + " is not there or is greyed"); return; }
+        if (answer) answerModal(answer);
+        a->trigger();
+        QApplication::processEvents();
+    };
+    ActionLibrary::instance().startRecording(QStringLiteral("file-commands self-test"));
+    // New: the dialog's size, in a tab of its own (this one holds a document).
+    const int tabs = w.tabCount();
+    run({"File", "New…"}, [](QDialog* d) { nth<QSpinBox>(d, 0)->setValue(120); nth<QSpinBox>(d, 1)->setValue(80); });
+    expect(w.tabCount() == tabs + 1 && w.session()->hasDocument() && w.session()->document()->width == 120 && w.session()->document()->height == 80, "New did not make a 120 x 80 document in a new tab");
+    const QString made = describe(*w.session());
+    // Open: the image as a document of its own, in another tab.
+    run({"File", "Open…"}, pick(png));
+    expect(w.tabCount() == tabs + 2 && w.session()->document()->width == 40, "Open did not open the image in a tab of its own");
+    const QString opened = describe(*w.session());
+    // Import File: into the document on screen, as a layer.
+    const size_t layersBefore = w.session()->document()->layers.size();
+    run({"File", "Import File…"}, pick(png));
+    expect(w.session()->document()->layers.size() == layersBefore + 1, "Import File did not add a layer");
+    const QString imported = describe(*w.session());
+    // Save As: a project file the dialog names.
+    const QString project = dir.filePath(QStringLiteral("saved.nekophoto"));
+    run({"File", "Save As…"}, pick(project));
+    expect(QFileInfo::exists(project) && w.session()->projectPath() == project, "Save As did not save " + project);
+    // Edit Contents: a smart object's contents, in a tab of their own.
+    w.session()->convertToSmartObject(nullptr);
+    const int beforeContents = w.tabCount();
+    run({"Layer", "Smart Objects", "Edit Contents"}, {});
+    expect(w.tabCount() == beforeContents + 1 && w.session()->smartObjectParent(), "Edit Contents did not open the contents");
+    const QString contents = describe(*w.session());
+    ActionLibrary::instance().stopRecording();
+    QStringList recorded;
+    if (const RecordedAction* r = ActionLibrary::instance().find(QStringLiteral("file-commands self-test")))
+        for (const ActionStep& step : r->steps) recorded << step.method;
+    ActionLibrary::instance().remove(QStringLiteral("file-commands self-test"));
+    // (The smart object was made by a session call, which records nothing.)
+    const QStringList wanted{"document.new", "document.open", "document.import", "document.save", "smartObject.editContents"};
+    expect(recorded == wanted, "recorded [" + recorded.join(", ") + "], expected [" + wanted.join(", ") + "]");
+
+    // The same through the window's own calls, as before the command path.
+    w.newTab();
+    w.session()->createDocument(120, 80, 72, true);
+    w.session()->adoptProfile(color::newDocumentProfile());
+    expect(describe(*w.session()) == made, "New gives another document than before");
+    QString error;
+    expect(w.openImageAsDocument(png, &error), "could not open the image: " + error);
+    expect(describe(*w.session()) == opened, "Open gives another document than before");
+    expect(w.importImageFile(png, std::nullopt, &error), "could not import the image: " + error);
+    expect(describe(*w.session()) == imported, "Import File gives another document than before");
+    w.session()->convertToSmartObject(nullptr);
+    expect(w.editSmartObjectContents(&error), "could not open the contents: " + error);
+    expect(describe(*w.session()) == contents, "Edit Contents gives other contents than before");
+    watchdog.stop();
+    color::setSettings(colours);
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, !nativeDialogs);
+    std::printf("file commands: %s\n", failures ? "FAILED" : "ok");
+    return failures;
+}
+
 } // namespace
+
+/// Edit > Preferences: the autosave interval applies as it is changed (Off stops it, a number starts it again) rather
+/// than when the dialog closes, and the settings that apply only at the next launch say so beside their controls.
+int preferences(MainWindow& w) {
+    int failures = 0;
+    auto fail = [&](const char* what) { std::fprintf(stderr, "preferences: %s\n", what); failures++; };
+    // This run's own recovery folder only: nothing left by another run is offered back (which would wait on a dialog).
+    QDir(Autosave::root()).removeRecursively();
+    w.enableAutosave();
+    Autosave* autosave = w.autosave();
+    if (!autosave) { fail("no autosaver"); return failures; }
+    QAction* item = menuItem(w, {"Edit", "Preferences…"});
+    if (!item) return 1;
+    item->trigger();
+    QApplication::processEvents();
+    PreferencesDialog* dialog = w.findChild<PreferencesDialog*>();
+    if (!dialog) { fail("the dialog did not open"); return failures; }
+    auto* minutes = dialog->findChild<QSpinBox*>("autosaveMinutes");
+    if (!minutes) { fail("no autosave interval"); dialog->close(); return failures; }
+    minutes->setValue(0);
+    if (autosave->running()) fail("Off left autosave running while the dialog is open");
+    minutes->setValue(7);
+    if (!autosave->running()) fail("turning autosave on did not start it while the dialog is open");
+    else if (autosave->intervalMs() != 7 * 60 * 1000) fail("the new interval did not apply while the dialog is open");
+    minutes->setValue(2);
+    if (autosave->intervalMs() != 2 * 60 * 1000) fail("a changed interval did not apply while the dialog is open");
+    // Language, CPU power and Automation apply at the next launch, and each says so where it is set.
+    const QString nextLaunch = PreferencesDialog::tr("Takes effect the next time NekoPhoto starts.");
+    int saying = 0;
+    for (QLabel* label : dialog->findChildren<QLabel*>()) if (label->text().contains(nextLaunch)) saying++;
+    if (saying < 3) { std::fprintf(stderr, "preferences: %d hints say the setting applies at the next launch, expected 3\n", saying); failures++; }
+    dialog->close();
+    QApplication::processEvents();
+    autosave->finish();
+    std::printf("preferences: %s\n", failures ? "FAILED" : "ok");
+    return failures;
+}
+
+int workCounters(MainWindow& window);   // SelfTestWork.cpp
 
 int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("command-path")) {
         const int first = commandPath(window);
-        return menuCommands(window) || first ? 1 : 0;
+        const int menus = menuCommands(window);
+        const int files = fileCommands(window);
+        return registry(window) || menus || files || first ? 1 : 0;
     }
     if (name == QLatin1String("guides")) return guides(window);
     if (name == QLatin1String("canvas-menus")) return canvasMenus(window);
     if (name == QLatin1String("search")) return search(window);
     if (name == QLatin1String("held-keys")) return heldKeys(window);
     if (name == QLatin1String("export-as")) return exportAs(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as)\n", qPrintable(name));
+    if (name == QLatin1String("preferences")) return preferences(window);
+    if (name == QLatin1String("work-counters")) return workCounters(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters)\n", qPrintable(name));
     return 2;
 }
 

@@ -369,8 +369,8 @@ void AutomationServer::registerPixelsHandlers() {
         refuseSmartObject(session());
         document();
         const Layer* layer = session()->activeLayer();
-        if (!layer || layer->isGroup || !layer->asset || !layer->asset->image.u8()) fail("select an image layer");
-        const int w0 = layer->asset->image.u8()->width(), h0 = layer->asset->image.u8()->height();
+        if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) fail("select an image layer");
+        const int w0 = layer->asset->image.width(), h0 = layer->asset->image.height();
         int w = p.contains("width") ? p.value("width").toInt() : int(std::lround(w0 * p.value("widthPercent").toDouble(100) / 100));
         int h = p.contains("height") ? p.value("height").toInt() : int(std::lround(h0 * p.value("heightPercent").toDouble(100) / 100));
         QString error;
@@ -385,15 +385,17 @@ void AutomationServer::registerPixelsHandlers() {
         if (!s->canAdjustPixels()) fail("the active layer has no pixels; select a pixel layer");
         QString command = str(p, "command").trimmed();
         if (command.isEmpty()) fail("command is empty", invalidParams);
-        if (GmicRunner::executable().isEmpty()) fail("G'MIC is not installed (no gmic executable on PATH)");
+        if (!GmicRunner::available()) fail("G'MIC is not installed (no gmic executable on PATH)");
         if (QString why; !GmicRunner::allowedForAutomation(command, &why)) fail(why, invalidParams);
+        // The undo step's name after "G'MIC: ": the filter's name the dialog shows, else the command's first word.
+        const QString stepName = has(p, "name") && !str(p, "name").trimmed().isEmpty() ? str(p, "name").trimmed() : command.section(' ', 0, 0);
         LayerTransform transform;
         if (auto deep = s->adjustmentSource16(0, transform)) {
             QString error;
             auto result = GmicRunner::runSync(*deep, command, &error, std::clamp(integer(p, "timeoutMs", 300000), 1, 600000));
             if (!result) fail(error);
             if (auto coverage = s->selectionOnGrid16(transform, deep->width(), deep->height())) blendThroughCoverage(*result, *deep, *coverage);
-            s->commitPixels(Image16Ptr(result), transform, "G'MIC: " + command.section(' ', 0, 0));
+            s->commitPixels(Image16Ptr(result), transform, "G'MIC: " + stepName);
             return QJsonObject{{"applied", command}, {"gmic", GmicRunner::version()}};
         }
         auto source = s->adjustmentSource(0, transform);
@@ -402,7 +404,7 @@ void AutomationServer::registerPixelsHandlers() {
         auto result = GmicRunner::runSync(*source, command, &error, std::clamp(integer(p, "timeoutMs", 300000), 1, 600000));
         if (!result) fail(error);
         if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*result, *source, *coverage);
-        s->commitPixels(result, transform, "G'MIC: " + command.section(' ', 0, 0));
+        s->commitPixels(result, transform, "G'MIC: " + stepName);
         return QJsonObject{{"applied", command}, {"gmic", GmicRunner::version()}};
     });
     add("gmic.filters", [](const QJsonObject& p) {
@@ -450,9 +452,9 @@ void AutomationServer::registerPixelsHandlers() {
         auto source = deep ? std::shared_ptr<const Image>(narrowImage(*deep)) : s->adjustmentSource(0, transform);
         if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         std::string error;
-        const std::string modelPath = ModelStore::pathFor(ModelStore::selected()).toStdString();
         const bool detail = flag(p, "detail", false), mirror = flag(p, "flip", ModelStore::mirrorAverage());
-        auto mask = detail ? subjectMaskDetailed(*source, modelPath, nullptr, int(num(p, "detailWindows", 12)), &error, mirror) : subjectMask(*source, modelPath, &error, mirror);
+        // The mask the dialog showed, when it was made from these pixels (Remove Background's OK runs this method).
+        auto mask = ModelStore::subjectMask(*source, ModelStore::pathFor(ModelStore::selected()), mirror, detail ? std::max(1, int(num(p, "detailWindows", 12))) : 0, &error);
         if (!mask) fail("the model failed: " + qs(error));
         MatteSettings settings;
         settings.refineEdges = num(p, "refineEdges", settings.refineEdges);

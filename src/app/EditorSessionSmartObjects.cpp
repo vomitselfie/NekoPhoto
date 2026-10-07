@@ -5,6 +5,8 @@
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "TextLayer.h"
+#include <QJsonArray>
+#include <QJsonObject>
 #include "compositor/affinity.h"
 #include "compositor/depth.h"
 #include "compositor/png.h"
@@ -309,6 +311,20 @@ bool EditorSession::commitWarpCage(QString* error) {
     notifyDocument();
     emit transformChanged();
     return true;
+}
+
+bool EditorSession::commitWarpCageCommand(QString* error) {
+    if (!warpCage_) return false;
+    const compositor::WarpMesh cage = *warpCage_;
+    // The method warps the active layer from scratch: the cage must be over it, with its 16 points.
+    if (!commandsRouted() || activeLayerId_ != warpCageLayer_ || cage.xs.size() != 16 || cage.ys.size() != 16 || isMaskSelected_) return commitWarpCage(error);
+    QJsonArray points;
+    for (size_t i = 0; i < 16; i++) points.append(QJsonArray{cage.xs[i], cage.ys[i]});
+    cancelWarpCage();
+    if (runCommand(QStringLiteral("layers.setCage"), {{"points", points}})) return true;
+    // Refused (the error is shown): the cage comes back as it was, for another try or Esc.
+    if (beginWarpCage()) setWarpCage(cage);
+    return false;
 }
 
 void EditorSession::cancelWarpCage() {

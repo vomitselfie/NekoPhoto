@@ -7,10 +7,13 @@
 #include "compositor/filters.h"
 #include "compositor/smartfilter.h"
 #include "compositor/supports.h"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 
 using namespace compositor;
 
@@ -288,10 +291,90 @@ TEST_CASE(distortion_values) {
 #ifndef _WIN32
     checkHash("twirl/default", t, 0x96a3905a3a70a023ull);
     checkHash("wave/default", w, 0x71d8c35bc24232a8ull);
-    checkHash("polar/default", p, 0x92abd87429a9f2f8ull);
+    checkHash("polar/default", p, 0x4e20a8cbd5b87500ull);
     checkHash("zigzag/default", z, 0x57732b278a61b8d9ull);
     checkHash("spherize/default", s, 0x4a46c3bca7023850ull);
 #endif
+}
+
+TEST_CASE(radial_blur_zoom_at_every_depth_and_mode) {
+    // Zoom is the Smart Filter kernel's Zoom (Photoshop's Blur Method), at 8 and 16 bits and on CMYK's inks and Lab.
+    const auto img = card();
+    FilterSettings s = defaults(FilterKind::RadialBlur);
+    s.amount = 30;
+    s.style = 1;   // Zoom
+    const AnyImage zoom = run(FilterKind::RadialBlur, ImagePtr(img), s);
+    REQUIRE(zoom.u8());
+    SmartFilterStack stack;
+    stack.supported = true;
+    stack.entries.push_back({smartfilter::RadialBlur{30, 16, true}, "Radial Blur"});
+    auto ref = renderSmartFilterStack(PlacedRaster{std::make_shared<Image>(*img), 0, 0}, PixelRect{0, 0, img->width(), img->height()}, stack);
+    REQUIRE(ref && ref->image);
+    int differing = 0;
+    for (int y = 0; y < ref->image->height(); y++)
+        for (int x = 0; x < ref->image->width(); x++)
+            if (std::memcmp(ref->image->pixel(x, y), zoom.u8()->pixel(x + ref->x, y + ref->y), 4) != 0) differing++;
+    CHECK_EQ(differing, 0);
+    // Spin and Zoom differ.
+    FilterSettings spin = s;
+    spin.style = 0;
+    const AnyImage spun = run(FilterKind::RadialBlur, ImagePtr(img), spin);
+    CHECK(hashOf(spun) != hashOf(zoom));
+    // 16 bits: the 8-bit result within two levels.
+    const AnyImage deep = run(FilterKind::RadialBlur, Image16Ptr(widenImage(*img)), s);
+    REQUIRE(deep.u16());
+    int worst = 0;
+    for (int y = 0; y < img->height(); y++)
+        for (int x = 0; x < img->width(); x++)
+            for (int k = 0; k < 4; k++) worst = std::max(worst, std::abs(int(narrow16(deep.u16()->pixel(x, y)[k])) - int(zoom.u8()->pixel(x, y)[k])));
+    CHECK(worst <= 2);
+    // CMYK (the first three inks carry the card's channels) and Lab.
+    auto cmyk = std::make_shared<ImageC8>(img->width(), img->height(), 5);
+    for (int y = 0; y < img->height(); y++)
+        for (int x = 0; x < img->width(); x++) {
+            const uint8_t* p = img->pixel(x, y);
+            uint8_t* q = cmyk->pixel(x, y);
+            q[0] = p[0]; q[1] = p[1]; q[2] = p[2]; q[3] = p[3]; q[4] = p[3];
+        }
+    GridFilterContext c;
+    c.mode = ColorMode::CMYK;
+    const AnyImage inks = run(FilterKind::RadialBlur, ImageC8Ptr(cmyk), s, c);
+    REQUIRE(inks.c8());
+    CHECK(hashOf(inks) != hashOf(ImageC8Ptr(cmyk)));
+    c.mode = ColorMode::Lab;
+    const AnyImage lab = run(FilterKind::RadialBlur, ImagePtr(img), s, c);
+    REQUIRE(lab.u8());
+    CHECK(hashOf(lab) != hashOf(ImagePtr(img)));
+#ifndef _WIN32
+    checkHash("radial/zoom", zoom, 0x62b2c3b6d47f8e00ull);
+#endif
+}
+
+TEST_CASE(polar_coordinates_fills_the_corners_with_the_edge) {
+    // Rectangular to Polar maps the image into the disc inscribed in the area; Photoshop fills what lies past it (the
+    // corners) with the source's edge pixels repeated outwards, so an opaque layer stays opaque. Here the source's
+    // green rises from 0 at the top to 255 at the bottom row and red follows x: each corner is the bottom row's green,
+    // and its red the bottom row's red at the corner's angle.
+    const int w = 64, h = 48;
+    auto img = std::make_shared<Image>(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint8_t* p = img->pixel(x, y);
+            p[0] = uint8_t(x * 255 / (w - 1)); p[1] = uint8_t(y * 255 / (h - 1)); p[2] = 60; p[3] = 255;
+        }
+    const AnyImage out = run(FilterKind::PolarCoordinates, ImagePtr(img), defaults(FilterKind::PolarCoordinates));
+    REQUIRE(out.u8());
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) CHECK_EQ(int(out.u8()->pixel(x, y)[3]), 255);
+    const double pi = 3.14159265358979323846;
+    for (auto [x, y] : {std::pair{0, 0}, std::pair{w - 1, 0}, std::pair{0, h - 1}, std::pair{w - 1, h - 1}}) {
+        const uint8_t* q = out.u8()->pixel(x, y);
+        CHECK(q[1] >= 250);
+        double theta = std::atan2(x + 0.5 - w / 2.0, -(y + 0.5 - h / 2.0));
+        if (theta < 0) theta += 2 * pi;
+        const int column = std::clamp(int(theta / (2 * pi) * w), 0, w - 1);
+        CHECK(std::abs(int(q[0]) - int(img->pixel(column, h - 1)[0])) <= 10);
+    }
 }
 
 TEST_MAIN()

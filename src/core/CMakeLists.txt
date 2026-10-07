@@ -163,6 +163,7 @@ add_library(compositor_core STATIC
     src/mypaint.cpp
     src/tipbrush.cpp
     src/parallel.cpp
+    src/workcounters.cpp
     src/wand.cpp
     src/smartwand.cpp
     src/zip.cpp

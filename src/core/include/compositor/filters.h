@@ -57,7 +57,7 @@ struct FilterSettings {
     int cellSize = 10;
     /// Radial Blur quality: 0 Draft, 1 Good, 2 Best.
     int quality = 1;
-    /// The filter's choice: Spherize's mode (0 Normal, 1 Horizontal Only, 2 Vertical Only), Ripple's size (0 Small,
+    /// The filter's choice: Radial Blur's method (0 Spin, 1 Zoom), Spherize's mode (0 Normal, 1 Horizontal Only, 2 Vertical Only), Ripple's size (0 Small,
     /// 1 Medium, 2 Large), Polar Coordinates' direction (0 Rectangular to Polar, 1 Polar to Rectangular), ZigZag's
     /// style (0 Around Center, 1 Out From Center, 2 Pond Ripples), Wave's type (0 Sine, 1 Triangle, 2 Square),
     /// Minimum's and Maximum's Preserve (0 Squareness, 1 Roundness).

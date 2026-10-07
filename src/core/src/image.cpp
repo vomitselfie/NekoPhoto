@@ -2,6 +2,7 @@
 #include "compositor/image.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
+#include "compositor/workcounters.h"
 #include "compositor/simd.h"
 #include <algorithm>
 #include <cmath>
@@ -381,7 +382,9 @@ std::shared_ptr<const Img> MipCache::levelOf(std::vector<Entry<Img>>& entries, c
     entry->lastUse = ++clock_;
     if (level <= 0) return image;
     auto& levels = entry->levels;
-    if (level > int(levels.size()) || !levels[size_t(level - 1)]) {
+    const bool held = level <= int(levels.size()) && levels[size_t(level - 1)];
+    work::add(held ? work::Counter::MipHits : work::Counter::MipMisses);
+    if (!held) {
         // Built from the nearest level held above it (a released one is rebuilt by the same halvings, so to the same
         // pixels); the steps between are kept until the budget wants them back.
         int from = std::min(level - 1, int(levels.size()));
@@ -390,6 +393,7 @@ std::shared_ptr<const Img> MipCache::levelOf(std::vector<Entry<Img>>& entries, c
             const Img& above = k == 1 ? *image : *levels[size_t(k - 2)];
             if (above.width() <= 1 && above.height() <= 1) break;
             std::shared_ptr<const Img> next = halveMip(above);
+            work::add(work::Counter::MipBuiltPixels, uint64_t(next->width()) * uint64_t(next->height()));
             entry->bytes += next->byteCount();
             used_ += next->byteCount();
             if (k <= int(levels.size())) levels[size_t(k - 1)] = next;
@@ -453,6 +457,7 @@ void MipCache::refreshWithGaps(Entry<Img>& e, const Img* image, int channels, in
         x1 = std::min(x1, widths[size_t(k)]); y1 = std::min(y1, heights[size_t(k)]);
         if (x0 >= x1 || y0 >= y1) break;
         if (!held[size_t(k)]) continue;
+        work::add(work::Counter::MipRefreshPixels, uint64_t(x1 - x0) * uint64_t(y1 - y0));
         Img& level = const_cast<Img&>(*held[size_t(k)]);
         const int rx0 = x0, rx1 = x1;
         parallelRows(y0, y1, [&](int ya, int yb) {
@@ -480,6 +485,7 @@ void MipCache::refreshOf(std::vector<Entry<Img>>& entries, const Img* image, int
             Img& level = const_cast<Img&>(*levelPtr);
             x1 = std::min(x1, level.width()); y1 = std::min(y1, level.height());
             if (x0 >= x1 || y0 >= y1) break;
+            work::add(work::Counter::MipRefreshPixels, uint64_t(x1 - x0) * uint64_t(y1 - y0));
             const int sw = above->width(), sh = above->height();
             const Img& src = *above;
             parallelRows(y0, y1, [&](int ya, int yb) {
@@ -521,6 +527,7 @@ void MipCache::refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, i
             Img& level = const_cast<Img&>(*levelPtr);
             x1 = std::min(x1, level.width()); y1 = std::min(y1, level.height());
             if (x0 >= x1 || y0 >= y1) break;
+            work::add(work::Counter::MipRefreshPixels, uint64_t(x1 - x0) * uint64_t(y1 - y0));
             const int sw = above->width(), sh = above->height();
             const Img& src = *above;
             parallelRows(y0, y1, [&](int ya, int yb) {

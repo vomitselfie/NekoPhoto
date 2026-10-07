@@ -696,8 +696,9 @@ public:
     bool beginLayerStyleEdit(const compositor::Uuid& id);
     void previewLayerStyle(const compositor::LayerStyle& style);
     void endLayerStyleEdit(bool keep);
-    /// Gives a layer `style` as one undo step (automation's layers.setStyle).
-    bool applyLayerStyle(const compositor::Uuid& id, const compositor::LayerStyle& style);
+    /// Gives a layer `style` as one undo step named `step` (automation's layers.setStyle: Layer Style, Paste Layer Style
+    /// or Clear Layer Style).
+    bool applyLayerStyle(const compositor::Uuid& id, const compositor::LayerStyle& style, const char* step = "Layer Style");
     /// A style preset on a layer as one undo step ("Apply Style"): the document first gets the patterns it uses.
     bool applyStylePreset(const compositor::Uuid& id, const compositor::LayerStyle& style, const std::vector<compositor::PatternPreset>& patterns);
     /// Gives the document patterns it does not have (one undo step); how many were added.
@@ -705,6 +706,9 @@ public:
     /// Copy, Paste and Clear Layer Style on the active layer.
     void copyLayerStyle();
     bool canPasteLayerStyle() const { return styleClipboard_.has_value(); }
+    /// The style Copy Layer Style holds (Layer > Layer Style > Copy Layer Style puts layers.style's answer here).
+    const std::optional<compositor::LayerStyle>& styleClipboard() const { return styleClipboard_; }
+    void setStyleClipboard(const compositor::LayerStyle& style) { styleClipboard_ = style; }
     void pasteLayerStyle();
     void clearLayerStyle();
     bool activeLayerHasStyle() const;
@@ -855,6 +859,8 @@ public:
     /// For grouping steps after the fact (the automation server's edit groups): the document's revision now,
     /// the revisions of the recorded steps, those recorded since a revision, and merging them into one step.
     uint64_t historyRevision() const { return history_.revision(); }
+    /// Bytes only the undo history holds (DocumentHistory::retainedBytes); the work-counters self-test bounds it.
+    size_t historyRetainedBytes() const { return history_.retainedBytes(document_); }
     std::vector<uint64_t> historyRevisions() const { return history_.pastRevisions(); }
     std::optional<std::vector<uint64_t>> historyRevisionsSince(uint64_t since) const { return history_.revisionsSince(since); }
     int squashHistory(uint64_t since, const QString& name);
@@ -974,6 +980,9 @@ public:
     void moveWarpCagePoint(int index, QPointF documentPoint);
     void setWarpCage(const compositor::WarpMesh& cage);
     bool commitWarpCage(QString* error = nullptr);
+    /// Enter on the warp cage (CONTRIBUTING.md, "Commands"): the cage's 16 points as layers.setCage on the layer it is
+    /// over, when the command path reaches this session; otherwise, or when the method refuses, commitWarpCage.
+    bool commitWarpCageCommand(QString* error = nullptr);
     void cancelWarpCage();
     /// Adds a Smart Filter on top of the active smart object's stack; one undo step.
     bool addSmartFilter(const compositor::SmartFilterEntry& entry, QString* error = nullptr);

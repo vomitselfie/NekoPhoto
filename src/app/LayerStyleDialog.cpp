@@ -1,4 +1,5 @@
 #include "LayerStyleDialog.h"
+#include "Automation.h"
 #include "Names.h"
 #include "PresetLibrary.h"
 #include "compositor/blend.h"
@@ -222,6 +223,19 @@ LayerStyleDialog::~LayerStyleDialog() {
 }
 
 void LayerStyleDialog::accept() {
+    if (!finished_ && session_ && touched_ && session_->commandsRouted() && session_->document() && session_->document()->find(layer_)) {
+        // The command path: the layer goes back as it was and layers.setStyle gives it the style the dialog shows, as
+        // one step named Layer Style (the layer by id only when it is not the active one, so an action stays portable).
+        const compositor::LayerStyle style = output();
+        const compositor::ColorMode mode = session_->document()->colorMode;
+        session_->endLayerStyleEdit(false);
+        finished_ = true;
+        QJsonObject params{{"style", layerStyleRequest(style, mode)}};
+        if (session_->activeLayerId() != layer_) params["id"] = QString::fromStdString(layer_);
+        session_->runCommand(QStringLiteral("layers.setStyle"), params);
+        QDialog::accept();
+        return;
+    }
     if (!finished_ && session_) {
         // Nothing changed: the layer keeps the file's own bytes.
         session_->endLayerStyleEdit(touched_);

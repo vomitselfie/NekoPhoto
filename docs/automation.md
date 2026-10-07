@@ -134,7 +134,8 @@ icon .ico/.cur (a layer per size, the largest visible), an SVG (.svg/.svgz: shap
 shape layers), a PDF page (`page`, 1-based, and `resolution` in pixels per inch, default 150; when `app.info` reports
 `pdf`) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1
 at the bottom and the only one visible, with the frames, delays and loop count on the timeline), which open in a tab of their own and answer with `layers` and the import
-`notes`; or an image, .tga included; a camera RAW file always opens in a new tab, developed without the Camera Raw
+`notes`; or an image, .tga included (with a document already open it is imported as a layer, unless `asDocument`
+opens it in a tab of its own as File > Open does); a camera RAW file always opens in a new tab, developed without the Camera Raw
 dialog, as shot or with `settings` (the object `pixels.cameraRaw` takes; white balance as Camera Raw shows it for RAW:
 `temperature` in kelvin 2000..50000 and `tint` -150..150, `whiteBalance` `As Shot`, `Auto`, `Custom` or a preset the file
 records, and the reply's `settings` carry them as `rawTemperature` and `rawTint`; see
@@ -178,7 +179,7 @@ own), `smartObject.editContents` (opens a tab; a smart object made from a camera
 and Lab every one but Plastic Wrap, as in Photoshop) on top of a smart object's stack. `smartObject.filters` lists the stack (entries by `index` in running order, 0 applied
 first; each with its `kind`, `settings`, `enabled`, `opacity`, `blend`, and `drawn` false for one NekoPhoto does not draw,
 which makes the stack read-only), `smartObject.setFilter` changes an entry's settings, switch, opacity or blend (no
-`index`: `enabled` switches the whole stack), `smartObject.moveFilter` (`index`, `to`), `smartObject.removeFilter`
+`index`: `enabled` switches the whole stack; Radial Blur's `zoom` picks its Zoom method), `smartObject.moveFilter` (`index`, `to`), `smartObject.removeFilter`
 (`index`, or `all` to clear them), and `smartObject.filterMask` (`action`: enable, disable, invert, delete, or select
 to paint it with `brush.stroke` `mask` and the other mask tools, `show` to see it; deselect, or selecting a layer, ends that). `layers.cage` and `layers.setCage` read and apply a free warp cage (16 control points; a smart object keeps it as its
 own Custom warp). `layers.warp` bends a layer with one of Photoshop's fifteen presets (`style`, `bend`, `horizontal`, `vertical`,
@@ -203,10 +204,15 @@ selected and no selection, then Paste: `ids` to copy, default the selected ones;
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge` (`down` for Merge Down, `visible` for Merge Visible), `layers.group`, `adjustments.set`.
 `layers.style` gives a layer's effects (Photoshop's layer style) as JSON, every kind a list with switched-off
-effects kept (`enabled` false); `layers.setStyle` replaces them with an object of that shape (settings left out take
-Photoshop's defaults, `{}` clears the style). The style is written into the PSD as Photoshop's own `lfx2`.
-`layers.applyStyle` (`id`, `style`: an imported style preset's name) gives a layer a style preset, with the patterns it
-uses added to the document. `presets.import` (`path` or `paths`: Photoshop `.asl` styles, `.pat` patterns, `.grd`
+effects kept (`enabled` false), with the Blending Options' `blendIf` (as `layers.get` shows it), the effects' reference
+point (`referenceX`, `referenceY`) and a CMYK colour's inks beside its `#rrggbb` (`colorInk` and the like); `layers.setStyle`
+replaces them with an object of that shape (settings left out take Photoshop's defaults, `{}` clears the style as
+Clear Layer Style; `blendIf` and the reference point stay the layer's when left out; `paste: true` names the step Paste
+Layer Style). Layer > Layer Style's dialog, Copy (`layers.style`), Paste and Clear Layer Style run these. The style is
+written into the PSD as Photoshop's own `lfx2`.
+`layers.applyStyle` (`style`: an imported style preset's name) gives a layer a style preset, with the patterns it
+uses added to the document. The layer (`id`) is the active one when left out, for these three as for `layers.setCage`,
+`vectorMask.set`, `vectorMask.delete`, `vectorMask.target`, `text.toPath` and `text.toShape`. `presets.import` (`path` or `paths`: Photoshop `.asl` styles, `.pat` patterns, `.grd`
 gradients) fills the preset library and answers the names imported, `patternsAddedToDocument` (a `.pat`'s patterns join
 the open document) and notes; `presets.list` (`kind` styles, gradients or patterns) lists it, gradients with their
 stops; `presets.remove` (`kind` style, gradient or pattern, `name`) takes one out ([presets.md](presets.md)).
@@ -218,7 +224,7 @@ Pixels of the active layer, inside the selection: `pixels.adjust`,
 Surface Blur, Pinch, Polar Coordinates, Ripple, Shear, Spherize, Twirl, Wave, ZigZag, Add Noise, Dust & Scratches, Median, Mosaic,
 Clouds, Difference Clouds, Unsharp Mask, Emboss, Find Edges, High Pass, Maximum, Minimum, Offset and Lens Correction, with the keys
 `describe_method pixels.filter` lists; the distortions and Offset work inside the selection's bounds, Clouds paints between the
-foreground and background colours, and `seed` fixes Add Noise's, Wave's and the clouds' patterns; Lens Correction takes `bicubic: true` for a sharper resample; in a CMYK or
+foreground and background colours, Radial Blur takes `mode` `spin` or `zoom`, and `seed` fixes Add Noise's, Wave's and the clouds' patterns; Lens Correction takes `bicubic: true` for a sharper resample; in a CMYK or
 Lab document both work on the inks or L, a and b, each kind where Photoshop offers it ([color-modes.md](color-modes.md#adjustments-and-filters)):
 Levels and Curves take a fifth slot for CMYK's black, `channel` names such as `"Cyan"`, `"Black"` or `"Lightness"`, and
 Channel Mixer `cyan` ... `black` ink rows),
@@ -241,11 +247,14 @@ the selection's pixels move `dx`, `dy`, the hole is filled and the patch blended
 `contrast`, `shiftEdge`, `matting`: the band width in pixels in which hair opacity is solved,
 `cleanup`: half-transparent specks touching no edge go, `decontaminate`: the edge pixels take the
 subject's own colour; both default true; `detail`: the model runs again on full-resolution windows
-along the edge of a large photo, `detailWindows` at most, default 12; `flip`: average the mask with the
-mirrored image's, defaulting to the preference), `pixels.gmic` (`command`, a G'MIC
+along the edge of a large photo, `detailWindows` at most, default 12; `flip`: average the whole-image mask with the
+mirrored image's, defaulting to the preference; the mask Filter > Remove Background's dialog showed for the same pixels is
+used again rather than running the model twice), `pixels.gmic` (`command`, a G'MIC
 command line made of catalogue filters or common built-ins, each followed only by numbers: G'MIC can
 run shell commands and read or write files, so strings, paths, substitutions and other commands are
-refused unless `COMPOSITOR_GMIC_UNRESTRICTED=1` is set; the G'MIC dialog is not restricted;
+refused unless `COMPOSITOR_GMIC_UNRESTRICTED=1` is set; `name` is what the undo step calls it after "G'MIC: ", the
+filter's name when the G'MIC dialog's OK runs it; a command the dialog's typed line holds that the method refuses runs
+in the dialog as before;
 `gmic.filters` lists the catalogue with parameters and defaults, leaving out the filters that do not
 work here unless `all: true`, when they carry an `unsupported` reason).
 
@@ -254,7 +263,8 @@ Selection: `selection.all`, `selection.none`, `selection.invert`, `selection.res
 `selection.scribble` (`foreground` and `background`: lists of strokes, each a list of `[x, y]`
 points; `size`, `refine` 0..40, `clear`), `selection.subject` (click to select with the EfficientSAM
 model once downloaded: `foreground` and `background` points as `[x, y]` lists, an optional `box`
-`[x0, y0, x1, y1]`, `refine`, `clear`; `app.info` reports `clickSelect` when it can run) (all take
+`[x0, y0, x1, y1]`, `refine`, `clear`; `app.info` reports `clickSelect` when it can run; Select > Subject sends it a
+`box` 5% inside the canvas) (all take
 `mode` replace, add, subtract or intersect),
 `selection.fromLayer`, `selection.grow`, `selection.feather` (`radius`), `selection.smooth`
 (`radius`), `selection.border` (`width`).
@@ -321,7 +331,8 @@ custom shape, with fill and stroke), `shape.get` and `shape.set` read and change
 `pattern`; `strokeType`, `strokeGradient`, `strokePattern`), `op` (combine, subtract, intersect, exclude: a component of
 the active shape layer instead of a new layer) and, on `shape.set`, `live` (a live rectangle's or ellipse's box and corner
 radii, which `shape.get` lists); `paths.setOperation` and `paths.mergeComponents` work the target path's components;
-`vectorMask.get`, `vectorMask.set` (Reveal All, Hide All, the chosen path or a path), `vectorMask.delete` and
+`vectorMask.get`, `vectorMask.set` (Reveal All, Hide All, the chosen path or a path; on a layer without one,
+`revealAll`, `hideAll` and `currentPath` are Layer > Vector Mask's items, their step names and the new mask the target path), `vectorMask.delete` and
 `vectorMask.target` (the Pen's and Direct Selection's target) handle a layer's own vector mask; `text.toPath` and
 `text.toShape` are Type > Create Work Path and Convert to Shape. Quick Mask: `selection.quickMask` (`on` true enters, false turns the mask back into the selection; while on,
 paint the mask with `brush.stroke` and `mask: true`, white selecting). Painting by coordinates: `pixels.patch` (the selection repaired from `dx`, `dy` away), `pixels.bucket` (Paint Bucket at `x`, `y` with `color`, `opacity`, `tolerance`,
@@ -349,7 +360,8 @@ or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,
 brush settings and colours are restored afterwards.
 
 View: `tool.select` (`name`: move, marquee, lasso, wand, quickselect, crop, brush, healing, clone,
-smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set`, `color.sample` (the Eyedropper at `x`, `y`,
+smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set` (CSS colours; `#rrrrggggbbbb` gives 16 bits per
+channel, as `pixels.fill` takes it too), `color.sample` (the Eyedropper at `x`, `y`,
 `background` to set the background colour: answers `color` and the document's own `values`, linear R, G, B at 32 bits,
 C, M, Y, K ink percentages in CMYK, L, a, b in Lab, with `model`), `view.zoom`, `view.exposure` (a 32-bit
 document's view, not the pixels and not an undo step: `exposure` in stops, `gamma`, `method` exposure-gamma or

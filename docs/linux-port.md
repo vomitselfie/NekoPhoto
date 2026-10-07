@@ -273,7 +273,8 @@ packaging/                      .desktop, icon, MIME type
   files and their PSD exports (identical renders) and fuzzed under ASan.
 - Crash recovery (`src/app/Autosave.cpp`): in an ordinary launch, every tab
   with unsaved changes is saved as a project every few minutes (Preferences,
-  `autosave/minutes`, default 3, 0 off) into
+  `autosave/minutes`, default 3, 0 off; a change applies at once, while the
+  dialog is still open, and turning it on from Off starts it) into
   `~/.local/share/nekophoto/nekophoto/recovery/<instance>/`, on
   a worker thread from a copy of the document. A save or closing the tab
   removes its copy; a clean quit removes the folder. Each instance holds
@@ -347,7 +348,9 @@ packaging/                      .desktop, icon, MIME type
   for images from other apps) and Layer via Copy, through the system clipboard.
 - Selections: rectangular and elliptical marquee, freehand and polygonal
   lasso, magic wand (tolerance, contiguous, sample all layers), quick select
-  by scribble (GrabCut) or by click (EfficientSAM, a download) on Q, add/subtract
+  by scribble (GrabCut) or by click (EfficientSAM, a download) on Q, Select > Subject
+  (the same model given a box 5% inside the canvas; greyed, saying why, until the
+  model is downloaded), add/subtract
   with Shift/Alt, move the outline, select all, deselect, inverse, expand,
   contract, fill, clear, crop to selection, mask from selection.
 - Crop tool with snapping to canvas and layer edges, ratio presets and Alt

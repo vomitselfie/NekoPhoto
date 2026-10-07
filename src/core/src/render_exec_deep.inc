@@ -11,6 +11,7 @@
 #include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
 #include "compositor/parallel.h"
+#include "compositor/workcounters.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -504,6 +505,8 @@ struct RenderExecDeep {
 
     void adjust(const Layer& layer, Img& target, Cover coverage) {
         if (!layer.adjustment) return;
+        work::add(work::Counter::Adjustments);
+        work::add(work::Counter::AdjustmentPixels, uint64_t(target.width()) * uint64_t(target.height()));
         // The adjustment at the document's depth (adjustments_u16.cpp at 16 bits).
         Img adjusted = target;
         if constexpr (requires { O::adjust(document, *layer.adjustment, adjusted, region, scale); }) {

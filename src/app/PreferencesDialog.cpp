@@ -86,7 +86,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     auto showCpu = [cpu, cpuHint] {
         const QString level = cpu->currentData().toString();
         QString text = cpupower::describe(level);
-        if (level != cpupower::current()) text += QStringLiteral(" ") + tr("Takes effect the next time NekoPhoto starts.");
+        // The thread pools are sized at launch: say so whatever is chosen, not only once it differs.
+        text += QStringLiteral(" ") + tr("Takes effect the next time NekoPhoto starts.");
         cpuHint->setText(text);
     };
     connect(cpu, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [cpu, showCpu](int) { cpupower::setSetting(cpu->currentData().toString()); showCpu(); });
@@ -171,11 +172,13 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     auto* recoveryRow = new QHBoxLayout(recovery);
     recoveryRow->addWidget(new QLabel(tr("Autosave every")));
     auto* minutes = new QSpinBox;
+    minutes->setObjectName("autosaveMinutes");
     minutes->setRange(0, 120);
     minutes->setSuffix(tr(" min"));
     minutes->setSpecialValueText(tr("Off"));
     minutes->setValue(Autosave::intervalMinutes());
-    connect(minutes, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int v) { Autosave::setIntervalMinutes(v); });
+    // The new interval applies at once (and turning it on from Off starts it), not when the dialog closes.
+    connect(minutes, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { Autosave::setIntervalMinutes(v); emit autosaveIntervalChanged(v); });
     recoveryRow->addWidget(minutes);
     auto* recoveryHint = new QLabel(tr("Unsaved changes are kept aside in the background, and offered back if the editor quits unexpectedly. Your files are not touched."));
     recoveryHint->setWordWrap(true);
@@ -192,8 +195,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     connect(rpc, &QCheckBox::toggled, this, [](bool on) { QSettings().setValue("automation/enabled", on); });
     av->addWidget(rpc);
     auto* rpcInfo = new QLabel(tr("Lets an MCP bridge or a script drive the editor over a local socket (%1). "
-                                  "Only programs running as you can connect. Takes effect at the next launch; "
-                                  "nekophoto --rpc turns it on for one run.").arg(AutomationServer::defaultSocketPath()));
+                                  "Only programs running as you can connect; nekophoto --rpc turns it on for one run.").arg(AutomationServer::defaultSocketPath())
+                               + QStringLiteral(" ") + tr("Takes effect the next time NekoPhoto starts."));
     rpcInfo->setWordWrap(true);
     rpcInfo->setStyleSheet(hintStyle());
     av->addWidget(rpcInfo);

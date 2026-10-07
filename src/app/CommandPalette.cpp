@@ -178,6 +178,15 @@ QStringList CommandPalette::resultLabels() const {
     return out;
 }
 
+const PaletteEntry* CommandPalette::resultEntry(int row) const {
+    return row >= 0 && size_t(row) < shown_.size() ? &entries_[size_t(shown_[size_t(row)])] : nullptr;
+}
+
+QString CommandPalette::rowText(int row, int column) const {
+    const QTreeWidgetItem* item = list_->topLevelItem(row);
+    return item ? item->text(column) : QString();
+}
+
 void CommandPalette::refill() {
     const QString query = field_->text().trimmed();
     shown_.clear();
@@ -205,10 +214,13 @@ void CommandPalette::refill() {
     int first = -1;
     for (size_t row = 0; row < shown_.size(); row++) {
         const PaletteEntry& e = entries_[size_t(shown_[row])];
-        auto* item = new QTreeWidgetItem(list_, {e.label, e.path, e.shortcut});
         const bool enabled = e.isEnabled();
+        // A greyed command says why beside its menu path ("Nothing to undo", "Not available in 32-bit mode").
+        const QString why = enabled ? QString() : e.reason.isEmpty() ? tr("Not available now") : e.reason;
+        auto* item = new QTreeWidgetItem(list_, {e.label, why.isEmpty() ? e.path : tr("%1 · %2").arg(e.path, why), e.shortcut});
         for (int c = 0; c < 3; c++) item->setForeground(c, enabled ? (c == 0 ? palette().color(QPalette::Text) : hint) : dim);
-        if (!enabled) item->setToolTip(0, tr("Not available now"));
+        if (!enabled) for (int c = 0; c < 3; c++) item->setToolTip(c, why);
+        if (!e.commandId.isEmpty()) item->setData(0, Qt::UserRole, e.commandId);
         if (enabled && first < 0) first = int(row);
     }
     if (list_->topLevelItemCount() > 0) list_->setCurrentItem(list_->topLevelItem(std::max(first, 0)));

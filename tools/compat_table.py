@@ -120,13 +120,16 @@ def oracle():
     if not os.path.exists(path):
         return None
     floor = compared = None
+    flatten = 0
     for l in lines("tests/psd_oracle.txt"):
         word, _, value = l.partition(" ")
         if word == "floor":
             floor = int(value)
         elif word == "compared":
             compared = int(value)
-    return (floor, compared) if floor is not None else None
+        elif word == "flatten":
+            flatten = int(value)
+    return (floor, compared, flatten) if floor is not None else None
 
 
 def tables():
@@ -143,8 +146,9 @@ def tables():
 
     en = ["| Check | Result | How to rerun |", "|---|---|---|"]
     if orc:
-        en.append(f"| Photoshop's merged image as the oracle | **{orc[0]} of {orc[1]}** Patchy files with a merged image render within "
-                  "2 levels of it on 99% of pixels, mean under 1 level (the floor in `tests/psd_oracle.txt`; it may only rise) "
+        en.append(f"| Photoshop as the oracle | **{orc[0]} of {orc[1]}** Patchy files render within 2 levels of what Photoshop shows "
+                  f"on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for {orc[2]} of them, the merged image "
+                  "stored in the file for the rest (the floor in `tests/psd_oracle.txt`; it may only rise) "
                   "| `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |")
     en += [
         f"| Render hashes | **{scenes} scenes**: {modes}; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |",
@@ -167,7 +171,8 @@ def tables():
 
     ja = []
     if orc:
-        ja.append(f"- **Photoshop の統合画像との比較**: 統合画像を持つ Patchy のファイル {orc[1]} 個のうち **{orc[0]} 個**が、"
+        ja.append(f"- **Photoshop の表示との比較**: Patchy のファイル {orc[1]} 個(うち {orc[2]} 個はファイルに添えられた Photoshop 自身の"
+                  f"統合結果、残りはファイル内の統合画像と比較)のうち **{orc[0]} 個**が、"
                   "99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。")
     ja += [
         f"- **描画のハッシュ**: {scenes} シーン。**ゴールデン画像**: {gcases} テスト・参照 PNG {gpngs} 枚。"

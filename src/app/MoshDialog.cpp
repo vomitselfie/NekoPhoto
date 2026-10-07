@@ -327,6 +327,8 @@ void MoshDialog::refreshPreview() {
 }
 
 bool MoshDialog::apply() {
+    // The command path: pixels.mosh with the request the dialog's settings make (CONTRIBUTING.md, "Commands").
+    if (commitAsCommand(QStringLiteral("pixels.mosh"), moshRequest(settings_, auxLayer(), captionText()))) return true;
     const QString name = QString::fromUtf8(spec_.name.data(), qsizetype(spec_.name.size()));
     const MoshExtras more = extras();
     if (source16()) {

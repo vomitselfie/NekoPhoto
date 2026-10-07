@@ -48,7 +48,7 @@ const MethodDoc methodDocs[] = {
      "calls:array! {\"method\": ..., \"params\": {...}} objects; name:string Make the calls one undo step with this name, all or nothing"},
     // tools and view
     {"tool.select", "Pick the tool the person sees.", "name:<tool>! The tool"},
-    {"colors.set", "Set the foreground and background colours.", "foreground:color Foreground; background:color Background"},
+    {"colors.set", "Set the foreground and background colours.", "foreground:color Foreground (#rrrrggggbbbb gives 16 bits per channel); background:color Background"},
     {"color.sample", "The Eyedropper: sample the composite at a pixel and make it the foreground (or background) colour. Answers the colour and the document's own values: linear R, G, B at 32 bits, C, M, Y, K ink percentages in CMYK, L, a, b in Lab.",
      "x:number! Document pixel column; y:number! Document pixel row; background:bool=false Set the background colour instead"},
     {"color.settings", "Edit > Color Settings, the monitor profile and View > Proof Setup: read them, or change the keys given (docs/color-management.md). Untagged images are always treated as sRGB; new documents take the working space.",
@@ -96,12 +96,13 @@ const MethodDoc methodDocs[] = {
      "maxLayers:integer=80 List at most this many layers"},
     {"document.new", "A new document in the current tab (or a new tab if this one has a document).",
      "width:integer=1920 Pixels; height:integer=1080 Pixels; resolution:number=72 Pixels per inch; emptyLayer:bool=true Start with a blank pixel layer"},
-    {"document.open", "Open a project (a .nekophoto file or a .comp folder), Photoshop (.psd/.psb), Clip Studio (.clip), Affinity (.afphoto/.afdesign/.afpub/.af), Aseprite (.ase/.aseprite, its frames as a timeline), SVG (.svg/.svgz: shapes as editable vector shape layers, the rest as pixels), PDF (.pdf: one page as a pixel layer, when app.info reports pdf), icon (.ico/.cur, a layer per size), animated GIF (a layer per frame), image or camera RAW file (.tga included; RAW when app.info reports raw). Layered files open in a new tab and the reply lists their layers and notes; with a document already open, an image is imported as a layer. A camera RAW file always opens in a new tab, developed without the Camera Raw dialog: as shot, or with settings; asSmartObject makes Camera Raw's Open Object (a smart object keeping the RAW file and the settings). A PSD or PSB whose layers are past the budget can open as its merged image alone with mergedOnly (a new, untitled document).",
+    {"document.open", "Open a project (a .nekophoto file or a .comp folder), Photoshop (.psd/.psb), Clip Studio (.clip), Affinity (.afphoto/.afdesign/.afpub/.af), Aseprite (.ase/.aseprite, its frames as a timeline), SVG (.svg/.svgz: shapes as editable vector shape layers, the rest as pixels), PDF (.pdf: one page as a pixel layer, when app.info reports pdf), icon (.ico/.cur, a layer per size), animated GIF (a layer per frame), image or camera RAW file (.tga included; RAW when app.info reports raw). Layered files open in a new tab and the reply lists their layers and notes; with a document already open, an image is imported as a layer (asDocument opens it in a new tab instead, as File > Open does). A camera RAW file always opens in a new tab, developed without the Camera Raw dialog: as shot, or with settings; asSmartObject makes Camera Raw's Open Object (a smart object keeping the RAW file and the settings). A PSD or PSB whose layers are past the budget can open as its merged image alone with mergedOnly (a new, untitled document).",
      "path:string! File path; page:integer=1 PDF only: the page to open (1 is the first); resolution:number=150 PDF only: pixels per inch, 18..1200; "
      "settings:object Camera RAW only: the develop, keys as pixels.cameraRaw's settings. White balance for RAW: temperature in kelvin 2000..50000 with tint -150..150 (or rawTemperature and rawTint), whiteBalance As Shot|Auto|Custom or a preset the file records (Daylight|Cloudy|Shade|Tungsten|Fluorescent|Flash); Auto without numbers solves the white point; nothing about white balance opens As Shot; a temperature within -100..100 is the older form, relative to as shot. The reply's settings carry rawTemperature and rawTint; "
      "asSmartObject:bool=false Camera RAW only: open as a smart object whose source is the RAW file and the settings; "
      "bitsPerChannel:integer=16 Camera RAW only: 8 or 16; "
-     "mergedOnly:bool=false PSD/PSB only: open the merged image Photoshop stored, as one layer, without the layers"},
+     "mergedOnly:bool=false PSD/PSB only: open the merged image Photoshop stored, as one layer, without the layers; "
+     "asDocument:bool=false An image opens as a document of its own in a new tab even when a document is open (File > Open), instead of as a layer"},
     {"document.import", "Import an image file as a new layer.", "path:string! File path; x:number Left edge in document pixels; y:number Top edge"},
     {"document.save", "Save as a project: a single .nekophoto file, or a .comp project folder when the path ends in .comp (the extension decides; a path with neither gets .nekophoto).", "path:string Where to save (default: where it was opened or last saved, in the same form); overwrite:bool=false Replace an existing file or folder at path when it is not where the document already lives"},
     {"document.export", "Export as a layered Photoshop .psd (the reply lists what Photoshop cannot carry), as .svg (vector shape layers as paths, folders as groups, other layers as embedded PNGs; the reply counts them and lists what became images), the timeline's frames as an animated .gif (the composite when there are none), or the composite as .png, .jpg, .webp, .tif, .tga or .ico (16, 32, 48 and 256 px; the extension decides), at a new size or one layer alone as File > Export As does.",
@@ -140,14 +141,16 @@ const MethodDoc methodDocs[] = {
     {"layers.list", "The layer tree, top first: id, name, depth, kind, visibility, opacity, blend, transform, mask, text.",
      "thumbnails:bool=false Add each pixel layer's 96 px thumbnail as base64 PNG"},
     {"layers.get", "One layer, as layers.list reports it, with its Blend If ranges when it has any.", "id:layer! The layer"},
-    {"layers.style", "A layer's effects (Photoshop's layer style): each kind as a list, the ones switched off too.", "id:layer! The layer"},
-    {"layers.setStyle", "Replace a layer's effects, shaped as layers.style shows (settings left out take Photoshop's defaults; an empty object clears the style).",
-     "id:layer! The layer; style:object! dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays, strokes (lists), visible, maskHidesEffects, blendInteriorAsGroup"},
+    {"layers.style", "A layer's effects (Photoshop's layer style): each kind as a list, the ones switched off too, with the Blending Options' Blend If (blendIf, as layers.get shows it) and the effects' reference point (referenceX, referenceY). Layer > Layer Style > Copy Layer Style.", "id:layer The layer (default the active one)"},
+    {"layers.setStyle", "Replace a layer's effects, shaped as layers.style shows (settings left out take Photoshop's defaults; an empty object clears the style, the step Clear Layer Style). The Layer Style dialog's OK and Paste and Clear Layer Style run it.",
+     "id:layer The layer (default the active one); style:object! dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays, strokes (lists), visible, maskHidesEffects, blendInteriorAsGroup, "
+     "blendIf (Blend If's channels as layers.get shows them, the layer's ranges staying when it is left out), referenceX and referenceY (the effects' reference point, the layer's own when left out); "
+     "paste:bool=false Name the step Paste Layer Style (Layer > Layer Style > Paste Layer Style)"},
     {"layers.applyStyle", "Give a layer an imported style preset (presets.list): its effects replace the layer's, and the document gets the patterns the style uses. Blending options in the preset are not applied.",
-     "id:layer! The layer; style:string! The style preset's name"},
+     "id:layer The layer (default the active one); style:string! The style preset's name"},
     {"layers.cage", "A layer's warp cage (Edit ▸ Warp Cage): 16 [x, y] control points of a 4 x 4 Bezier mesh, row by row, in document pixels.", "id:layer! The layer"},
     {"layers.setCage", "Warp a layer through a cage (Photoshop's Custom warp): pixels are bent for good, a smart object keeps it as its own editable warp.",
-     "id:layer! The layer; points:array! 16 [x, y] points, row by row, as layers.cage gives them"},
+     "id:layer The layer (default the active one); points:array! 16 [x, y] points, row by row, as layers.cage gives them"},
     {"layers.select", "Make a layer (or its mask) active, or select several.",
      "id:layer The layer (the primary one with ids); ids:array Several layer ids; mask:bool=false Select the layer's mask for painting and filters"},
     {"layers.set", "Change a layer's properties.",
@@ -215,7 +218,7 @@ const MethodDoc methodDocs[] = {
      "radius:number Pixels (blurs, high pass, median, dust and scratches, surface blur, unsharp mask); threshold:number Levels (dust and scratches, surface blur, unsharp mask); "
      "amount:number Percent (unsharp mask, emboss, add noise) or Radial Blur's amount; angle:number Degrees (motion blur, emboss); distance:number Motion Blur pixels; "
      "highlight:number Plastic Wrap; detail:number Plastic Wrap; smoothness:number Plastic Wrap; cellSize:number Mosaic pixels; height:number Emboss pixels; "
-     "samples:number Radial Blur 8, 16 or 32; gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
+     "samples:number Radial Blur 8, 16 or 32; zoom:bool Radial Blur's Zoom method (else Spin); gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
      "opacity:number=100 Percent; blend:<blend> How it blends over what is below it in the stack"},
     {"smartObject.filters", "A smart object's Smart Filters: the stack's switch, its shared mask, and each entry in running order (index 0 is applied first) with its settings, switch, opacity and blend; drawn false marks one NekoPhoto does not draw (the stack is then read-only).",
      "id:layer The smart object layer (default: active)"},
@@ -223,7 +226,7 @@ const MethodDoc methodDocs[] = {
      "id:layer The smart object layer (default: active); index:integer Entry in running order (smartObject.filters); enabled:bool On or off (the entry, or the stack without index); radius:number Pixels (blurs, high pass, median, dust and scratches, surface blur, unsharp mask); threshold:number Levels (dust and scratches, surface blur, unsharp mask); "
      "amount:number Percent (unsharp mask, emboss, add noise) or Radial Blur's amount; angle:number Degrees (motion blur, emboss); distance:number Motion Blur pixels; "
      "highlight:number Plastic Wrap; detail:number Plastic Wrap; smoothness:number Plastic Wrap; cellSize:number Mosaic pixels; height:number Emboss pixels; "
-     "samples:number Radial Blur 8, 16 or 32; gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
+     "samples:number Radial Blur 8, 16 or 32; zoom:bool Radial Blur's Zoom method (else Spin); gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
      "opacity:number Percent; blend:<blend> How it blends over what is below it in the stack"},
     {"smartObject.removeFilter", "Delete one Smart Filter, or all of them (Clear Smart Filters); the last one takes the stack and its mask with it.",
      "id:layer The smart object layer (default: active); index:integer Entry in running order; all:bool=false Every Smart Filter"},
@@ -256,7 +259,7 @@ const MethodDoc methodDocs[] = {
      "distortion:number Lens Correction distortion -100..100; bicubic:bool Lens Correction: sharper resample; "
      "threshold:integer Dust & Scratches, Surface Blur, Unsharp Mask threshold in levels; height:integer Emboss height in pixels; "
      "cellSize:integer Mosaic cell size in pixels; quality:(draft|good|best) Radial Blur quality; "
-     "mode:string Spherize: normal, horizontalOnly or verticalOnly, Polar Coordinates: rectangularToPolar or polarToRectangular; "
+     "mode:string Radial Blur: spin or zoom, Spherize: normal, horizontalOnly or verticalOnly, Polar Coordinates: rectangularToPolar or polarToRectangular; "
      "size:(small|medium|large) Ripple size; style:(aroundCenter|outFromCenter|pondRipples) ZigZag style; ridges:number ZigZag ridges 0..20; "
      "type:(sine|triangle|square) Wave type; generators:integer Wave generators; wavelengthMin:number Wave; wavelengthMax:number Wave; "
      "amplitudeMin:number Wave; amplitudeMax:number Wave; undefinedAreas:(wrap|repeat|transparent) Wave, Shear and Offset (transparent: Offset only); "
@@ -287,7 +290,7 @@ const MethodDoc methodDocs[] = {
      "endY} on 0..1 from the lower left]}, calibration {process 1..6, shadowTint, redHue, redSaturation, greenHue, greenSaturation, blueHue, blueSaturation}; "
      "seed:integer=1 Grain seed"},
     {"pixels.invert", "Invert the active layer's colours inside the selection.", ""},
-    {"pixels.fill", "Fill the selection (or the whole layer) with a colour.", "color:color=#000000 The colour"},
+    {"pixels.fill", "Fill the selection (or the whole layer) with a colour.", "color:color=#000000 The colour (#rrrrggggbbbb gives 16 bits per channel)"},
     {"pixels.clear", "Clear the selection (or the whole layer) to transparent.", ""},
     {"pixels.copy", "Edit > Copy: the active layer's pixels (or its mask's) inside the selection, or all of them, to the clipboard; other apps get them at 8 bits, sRGB. layers.copy copies whole layers.", ""},
     {"pixels.copyMerged", "Edit > Copy Merged: every visible layer's pixels inside the selection (or the whole canvas) to the clipboard.", ""},
@@ -303,14 +306,14 @@ const MethodDoc methodDocs[] = {
      "width:integer New width in pixels; height:integer New height in pixels; widthPercent:number=100 Or the width in percent; heightPercent:number=100 Or the height in percent; "
      "protectSelection:bool=false Keep the selected pixels"},
     {"pixels.gmic", "Run a G'MIC command line on the active layer, inside the selection. Only catalogue filters and common built-ins followed by numbers are allowed.",
-     "command:string! E.g. \"fx_bokeh 3,8,0,30\", see gmic.filters; timeoutMs:integer=300000 Give up after this long, 1..600000 milliseconds"},
+     "command:string! E.g. \"fx_bokeh 3,8,0,30\", see gmic.filters; timeoutMs:integer=300000 Give up after this long, 1..600000 milliseconds; name:string What the undo step calls it after \"G'MIC: \" (default the command's first word, Filter > G'MIC passes the filter's name)"},
     {"gmic.filters", "The G'MIC filter catalogue with parameters and defaults; filters that do not work here are left out.",
      "search:string Only filters whose name or command contains this; all:bool=false Include the unsupported filters, with the reason"},
     {"pixels.removeBackground", "Mask the active layer's background away with the background-removal model (enable and download it in Preferences first).",
      "refine:bool=true Refine the edge; refineEdges:number Edge refinement radius; contrast:number Edge contrast; shiftEdge:number Move the edge in (negative) or out; "
      "matting:number Band width in pixels in which hair opacity is solved; cleanup:bool Remove half-transparent specks touching no edge (default true); "
      "decontaminate:bool Edge pixels take the subject's own colour (default true); detail:bool=false Run the model again on full-resolution windows along the edge of a large photo; "
-     "detailWindows:number=12 At most this many windows; flip:bool Average the mask with the mirrored image's (default the preference)"},
+     "detailWindows:number=12 At most this many windows; flip:bool Average the whole-image mask with the mirrored image's (default the preference)"},
     // selection
     {"selection.info", "The selection: whether there is one, its bounds and area.", ""},
     {"selection.render", "The selection as a greyscale PNG mask.", "maxSize:number=1024 Longest side; path:string Write the PNG here instead of returning base64; overwrite:bool=false Replace an existing file at path"},
@@ -415,12 +418,12 @@ const MethodDoc methodDocs[] = {
      "subpath:integer! A subpath of the component (its index in the path); op:(combine|subtract|intersect|exclude)! Photoshop's path operation"},
     {"paths.mergeComponents", "Merge Shape Components: flatten the target path's components into add-only outlines (curves become corner points).", ""},
     {"vectorMask.get", "A layer's own vector mask (not a shape layer's path): its subpaths and whether it is inverted.", "id:layer! The layer"},
-    {"vectorMask.set", "Give a layer a vector mask or replace it (Layer > Vector Mask): Reveal All, Hide All, the chosen path, or a path.",
-     "id:layer! The layer; mode:(revealAll|hideAll|currentPath|path) What it starts as (default path when path is given, else revealAll); path:array Subpaths as paths.list gives them; inverted:bool Hide inside instead"},
-    {"vectorMask.delete", "Delete a layer's vector mask.", "id:layer! The layer"},
-    {"vectorMask.target", "Make a layer's vector mask the target path for the Pen, Direct Selection and paths.addAnchor, setOperation and mergeComponents.", "id:layer! The layer"},
-    {"text.toPath", "Type > Create Work Path: a text layer's glyph outlines as the Work Path (id 1025).", "id:layer! The text layer"},
-    {"text.toShape", "Type > Convert to Shape: a text layer becomes a shape layer of its glyph outlines, filled with its colour.", "id:layer! The text layer"},
+    {"vectorMask.set", "Give a layer a vector mask or replace it (Layer > Vector Mask): Reveal All, Hide All, the chosen path, or a path. On a layer without one, revealAll, hideAll and currentPath are the menu's items (their steps' names, and the mask becomes the target path).",
+     "id:layer The layer (default the active one); mode:(revealAll|hideAll|currentPath|path) What it starts as (default path when path is given, else revealAll); path:array Subpaths as paths.list gives them; inverted:bool Hide inside instead"},
+    {"vectorMask.delete", "Delete a layer's vector mask.", "id:layer The layer (default the active one)"},
+    {"vectorMask.target", "Make a layer's vector mask the target path for the Pen, Direct Selection and paths.addAnchor, setOperation and mergeComponents.", "id:layer The layer (default the active one)"},
+    {"text.toPath", "Type > Create Work Path: a text layer's glyph outlines as the Work Path (id 1025).", "id:layer The text layer (default the active one)"},
+    {"text.toShape", "Type > Convert to Shape: a text layer becomes a shape layer of its glyph outlines, filled with its colour.", "id:layer The text layer (default the active one)"},
 };
 
 struct Param {
