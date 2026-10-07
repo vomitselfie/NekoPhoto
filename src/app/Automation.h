@@ -103,5 +103,8 @@ private:
 /// A layer style as layers.style answers and layers.setStyle takes it: the effects, Blend If's ranges (in the colour
 /// mode's channels) and the effects' reference point. The Layer Style dialog and Paste Layer Style send it.
 QJsonObject layerStyleRequest(const compositor::LayerStyle& style, compositor::ColorMode mode);
+/// The reverse: `request` read into `style` (which keeps its reference point when the request names none). False with
+/// `error` when the request is not a style.
+bool layerStyleFromRequest(const QJsonObject& request, compositor::ColorMode mode, compositor::LayerStyle& style, QString* error);
 
 } // namespace app

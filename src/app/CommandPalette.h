@@ -22,7 +22,9 @@ struct PaletteEntry {
     QString englishLabel;   // the source text, matched as well as the translation
     QString englishPath;
     QString shortcut;
-    QString id;             // stable across languages: kind and English path, for Recently Used
+    QString id;             // stable across languages, for Recently Used: "command:" and the registry id, or the kind and English path
+    QString commandId;      // the command registry's id (CommandRegistry.h), for a menu command
+    QString reason;         // why it is greyed now (the registry's reason), shown with it
     QPointer<QAction> action;          // runs it when set (its enabled state is the entry's)
     std::function<void()> run;         // otherwise this
     bool enabled = true;
@@ -47,8 +49,10 @@ class CommandPalette : public QFrame {
 public:
     CommandPalette(std::vector<PaletteEntry> entries, QWidget* parent);
     void setQuery(const QString& query);
-    /// The rows shown, best first (for the self-test).
+    /// The rows shown, best first (for the self-test): their labels, the entry behind a row, and a row's text.
     QStringList resultLabels() const;
+    const PaletteEntry* resultEntry(int row) const;
+    QString rowText(int row, int column) const;
     /// Runs the current row, if it is enabled; the palette closes.
     void runCurrent();
 

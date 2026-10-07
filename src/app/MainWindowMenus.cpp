@@ -1,5 +1,11 @@
 // The main window's menus, tool rail and colour swatches.
 #include "ExportAs.h"
+#include "Automation.h"
+#include "CommandPalette.h"
+#include "CommandRegistry.h"
+#include "compositor/channels.h"
+#include "compositor/vectorlayer.h"
+#include <QRegularExpression>
 #include "ContentFillDialog.h"
 #include "ChannelDialogs.h"
 #include "Names.h"
@@ -84,6 +90,50 @@ private:
 bool typingInField() {
     QWidget* focus = QApplication::focusWidget();
     return focus && (focus->inherits("QLineEdit") || focus->inherits("QAbstractSpinBox") || focus->inherits("QTextEdit") || focus->inherits("QPlainTextEdit"));
+}
+
+/// A command for the registry, written as a row: its id, label and keys, then what it needs and how it runs.
+struct Spec {
+    Command command;
+    Spec(const QString& id, const QString& label, QList<QKeySequence> keys = {}) {
+        command.id = id;
+        command.label = label;
+        command.shortcuts = std::move(keys);
+    }
+    Spec(const char* id, const QString& label, QList<QKeySequence> keys = {}) : Spec(QString::fromLatin1(id), label, std::move(keys)) {}
+    /// It needs a document; `feature` is the supports() feature it is (none: 8-bit RGB only).
+    Spec& document(const char* feature = nullptr) {
+        command.needsDocument = true;
+        if (feature) command.feature = QString::fromUtf8(feature);
+        return *this;
+    }
+    /// It runs `run` (a dialog, or a choice made first), which ends in automation method `method` when given.
+    Spec& runs(std::function<void()> run, const char* method = nullptr) {
+        command.run = std::move(run);
+        if (method) command.method = QString::fromLatin1(method);
+        return *this;
+    }
+    /// It is the request `method` with what `params` gives (nothing: nothing to do now); an error is titled `title`.
+    Spec& request(const char* method, std::function<std::optional<QJsonObject>()> params, const QString& title = {}) {
+        command.method = QString::fromLatin1(method);
+        command.params = std::move(params);
+        command.errorTitle = title;
+        return *this;
+    }
+    /// Why it cannot run now (empty when it can), beyond the document and its mode.
+    Spec& when(std::function<QString()> unavailable) {
+        command.unavailable = std::move(unavailable);
+        return *this;
+    }
+};
+
+/// A command id's last part from the interface's English words: "Gaussian Blur" is gaussianBlur, "soft-glitch" softGlitch.
+QString commandSlug(const QString& words) {
+    static const QRegularExpression separators(QStringLiteral("[^A-Za-z0-9]+"));
+    QString out;
+    for (const QString& word : words.split(separators, Qt::SkipEmptyParts))
+        out += out.isEmpty() ? word.toLower() : word.left(1).toUpper() + word.mid(1).toLower();
+    return out;
 }
 
 } // namespace
@@ -175,24 +225,17 @@ void MainWindow::buildToolRail() {
     for (QAction* a : rail->actions()) if (a->isCheckable()) { a->setAutoRepeat(false); a->installEventFilter(springs); }
     connect(swatches_, &ColorSwatches::foregroundClicked, this, [this] { chooseColor(false); });
     connect(swatches_, &ColorSwatches::backgroundClicked, this, [this] { chooseColor(true); });
-    auto* swap = new QAction(tr("Swap colours"), this);
-    swap->setShortcut(QKeySequence("X"));
-    connect(swap, &QAction::triggered, this, [this] {
+    // X and D run colors.set (a colour finer than the request can carry is set directly, and recorded as before).
+    QAction* swap = commands_->add(nullptr, Spec("colors.swap", tr("Swap colours"), {QKeySequence("X")}).runs([this] {
         // With the Crop tool, X turns the crop box (Photoshop's Swap Height and Width).
         if (session_->tool() == Tool::Crop && canvas_->cropRect()) { canvas_->swapCropOrientation(); return; }
-        std::swap(session_->foregroundColor, session_->backgroundColor);
-        updateColorSwatches();
-        recordAction("colors.set", {{"foreground", session_->foregroundColor.name()}, {"background", session_->backgroundColor.name()}});
-    });
-    addAction(swap);
+        setColors(session_->backgroundColor, session_->foregroundColor);
+    }, "colors.set").command);
+    swap->setObjectName("command.colors.swap");
     connect(swatches_, &ColorSwatches::swapRequested, swap, &QAction::trigger);
-    auto* defaults = new QAction(tr("Default colours"), this);
-    defaults->setShortcut(QKeySequence("D"));
-    connect(defaults, &QAction::triggered, this, [this] {
-        session_->foregroundColor = Qt::black; session_->backgroundColor = Qt::white; updateColorSwatches();
-        recordAction("colors.set", {{"foreground", "#000000"}, {"background", "#ffffff"}});
-    });
-    addAction(defaults);
+    QAction* defaults = commands_->add(nullptr, Spec("colors.default", tr("Default colours"), {QKeySequence("D")})
+                                                    .runs([this] { setColors(Qt::black, Qt::white); }, "colors.set").command);
+    defaults->setObjectName("command.colors.default");
     connect(swatches_, &ColorSwatches::defaultsRequested, defaults, &QAction::trigger);
     rail->addWidget(swatches_);
     addToolBar(Qt::LeftToolBarArea, rail);
@@ -260,140 +303,183 @@ void MainWindow::chooseColor(bool background) {
     QColor current = background ? session_->backgroundColor : session_->foregroundColor;
     QColor c = QColorDialog::getColor(current, this, background ? tr("Background Colour") : tr("Foreground Colour"));
     if (!c.isValid()) return;
-    (background ? session_->backgroundColor : session_->foregroundColor) = c;
+    if (background) setColors(session_->foregroundColor, c, false, true);
+    else setColors(c, session_->backgroundColor, true, false);
+}
+
+QString MainWindow::colorRequest(const QColor& color) {
+    // #rrggbb when it says the colour exactly, else #rrrrggggbbbb (16 bits per channel, as QColor reads it back).
+    if (QColor(color.name()) == color) return color.name();
+    const QRgba64 deep = color.rgba64();
+    const QString wide = QStringLiteral("#%1%2%3").arg(deep.red(), 4, 16, QLatin1Char('0')).arg(deep.green(), 4, 16, QLatin1Char('0')).arg(deep.blue(), 4, 16, QLatin1Char('0'));
+    return deep.alpha() == 0xffff && QColor(wide) == color ? wide : QString();
+}
+
+void MainWindow::setColors(const QColor& foreground, const QColor& background, bool setForeground, bool setBackground) {
+    // colors.set with the colours that change; one it cannot carry is set directly and recorded as the request was.
+    QJsonObject params;
+    const QString fg = colorRequest(foreground), bg = colorRequest(background);
+    if (setForeground) params["foreground"] = fg.isEmpty() ? foreground.name() : fg;
+    if (setBackground) params["background"] = bg.isEmpty() ? background.name() : bg;
+    if ((!setForeground || !fg.isEmpty()) && (!setBackground || !bg.isEmpty()) && session_->commandsRouted()) {
+        runCommand("colors.set", params, tr("Colours"));
+    } else {
+        if (setForeground) session_->foregroundColor = foreground;
+        if (setBackground) session_->backgroundColor = background;
+        recordAction("colors.set", params);
+    }
     updateColorSwatches();
-    recordAction("colors.set", {{background ? "background" : "foreground", c.name()}});
 }
 
 void MainWindow::buildMenus() {
-    // A document action names the supports() feature it is; without one it is 8-bit only (greyed in a 16-bit document).
-    auto needsDocument = [this](QAction* a, const char* feature = nullptr) { documentActions_ << a; if (feature) actionFeatures_[a] = QString::fromLatin1(feature); return a; };
+    // The menus are the command registry's (CommandRegistry.h): each item is a command with an id, its label, its
+    // keys and what it needs, added to its menu in order. A document command names the supports() feature it is;
+    // without one it is 8-bit RGB only (greyed in a 16-bit document).
+    CommandRegistry& reg = *commands_;
+    auto add = [&reg](QMenu* menu, Spec spec) { return reg.add(menu, std::move(spec.command)); };
     // Actions the canvas's context menu shows again (MainWindowCanvasMenu.cpp), so their shortcuts and enabled state match.
     auto nameAction = [this](const char* key, QAction* a) { named_[QString::fromLatin1(key)] = a; return a; };
     // F7, F12 and Ctrl+Alt+Z leave the keys alone while a text field has them.
     auto* fieldGuard = new ShortcutWatch(this, [](QAction* a, const QKeySequence&) { if (!typingInField()) a->trigger(); });
+    auto hasLayer = [this] { return session_->activeLayerId() ? QString() : tr("No active layer"); };
+
     QMenu* file = menuBar()->addMenu(tr("&File"));
-    file->addAction(tr("&New…"), QKeySequence::New, this, &MainWindow::newDocument);
-    file->addAction(tr("&Open…"), QKeySequence::Open, this, &MainWindow::openFiles);
-    file->addAction(tr("Open Project Folder…"), this, &MainWindow::openProject);   // a .comp folder; .nekophoto files open with Open
+    add(file, Spec("file.new", tr("&New…"), {QKeySequence::New}).runs([this] { newDocument(); }, "document.new"));
+    add(file, Spec("file.open", tr("&Open…"), {QKeySequence::Open}).runs([this] { openFiles(); }, "document.open"));
+    add(file, Spec("file.openProject", tr("Open Project Folder…")).runs([this] { openProject(); }, "document.open"));   // a .comp folder; .nekophoto files open with Open
     recentMenu_ = file->addMenu(tr("Open &Recent"));
-    file->addAction(tr("Import &File…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importFiles);
-    file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });
-    file->addAction(tr("I&mport Presets…"), this, [this] { importPresetsInteractively(this, session_); });
-    needsDocument(file->addAction(tr("Place &Embedded…"), this, [this] {
+    recentMenu_->setProperty("commandsDynamic", true);   // the recent files, listed as they are
+    add(file, Spec("file.import", tr("Import &File…"), {QKeySequence("Ctrl+Shift+O")}).runs([this] { importFiles(); }, "document.import"));
+    add(file, Spec("file.importBrushes", tr("Import &Brushes…")).runs([this] { importBrushesInteractively(this, session_); }, "brush.import"));
+    add(file, Spec("file.importPresets", tr("I&mport Presets…")).runs([this] { importPresetsInteractively(this, session_); }, "presets.import"));
+    add(file, Spec("file.placeEmbedded", tr("Place &Embedded…")).document("edit.smartObject").runs([this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Place Embedded"), QSettings().value("lastDir").toString(),
                                                           tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
         if (path.isEmpty()) return;
         QSettings().setValue("lastDir", QFileInfo(path).path());
         runCommand("smartObject.place", {{"path", path}}, tr("Couldn’t place %1").arg(QFileInfo(path).fileName()));
-    }), "edit.smartObject");
+    }, "smartObject.place"));
     file->addSeparator();
-    needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }), "document.save");
-    needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }), "document.save");
+    add(file, Spec("file.save", tr("&Save"), {QKeySequence::Save}).document("document.save").runs([this] { save(false); }, "document.save"));
+    add(file, Spec("file.saveAs", tr("Save &As…"), {QKeySequence::SaveAs}).document("document.save").runs([this] { save(true); }, "document.save"));
     // File > Revert: the file it was opened from or last saved to, read again as one undo step (no question: Undo
     // brings the document back, as in Photoshop CC). Greyed until the document has changed.
-    revertAction_ = file->addAction(tr("Re&vert"), QKeySequence("F12"), this, [this] { runCommand("document.revert", {}, tr("Revert")); });
+    revertAction_ = add(file, Spec("file.revert", tr("Re&vert"), {QKeySequence("F12")}).request("document.revert", [] { return QJsonObject{}; }, tr("Revert")).when([this] {
+        if (!session_->hasDocument()) return tr("No document is open");
+        return session_->canRevert() ? QString() : tr("Nothing to revert to: the document has not changed since it was opened or saved");
+    }));
     revertAction_->setObjectName("file.revert");
     revertAction_->installEventFilter(fieldGuard);
     file->addSeparator();
     // File > Export, as Photoshop's: Quick Export in the format Preferences choose, Export As for the flat formats
     // (PNG, JPEG, GIF, WebP, TIFF, TGA) with a size and a preview, then the formats with dialogs of their own.
     QMenu* exportMenu = file->addMenu(tr("E&xport"));
-    QAction* quickExportAction = needsDocument(exportMenu->addAction(tr("Quick Export"), this, [this] { quickExport(false); }), "export.png");
+    QAction* quickExportAction = add(exportMenu, Spec("file.export.quick", tr("Quick Export")).document("export.png").runs([this] { quickExport(false); }, "document.export"));
     quickExportAction->setObjectName("export.quick");
-    QAction* exportAsAction = needsDocument(exportMenu->addAction(tr("Export &As…"), this, [this] { exportAs(false); }), "export.png");
-    exportAsAction->setObjectName("export.as");
     // Ctrl+Alt+Shift+W is Photoshop's Export As; Ctrl+Alt+Shift+S (its Save for Web) opened Export JPEG here before.
-    exportAsAction->setShortcuts({QKeySequence("Ctrl+Alt+Shift+W"), QKeySequence("Ctrl+Alt+Shift+S")});
+    QAction* exportAsAction = add(exportMenu, Spec("file.export.as", tr("Export &As…"), {QKeySequence("Ctrl+Alt+Shift+W"), QKeySequence("Ctrl+Alt+Shift+S")})
+                                                  .document("export.png").runs([this] { exportAs(false); }, "document.export"));
+    exportAsAction->setObjectName("export.as");
     connect(exportMenu, &QMenu::aboutToShow, this, [this, quickExportAction] { quickExportAction->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat()))); });
     quickExportAction->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat())));
     exportMenu->addSeparator();
-    needsDocument(exportMenu->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd), "export.psd");
-    needsDocument(exportMenu->addAction(tr("Export S&VG…"), this, &MainWindow::exportSvg), "export.svg");
-    needsDocument(exportMenu->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco), "export.ico");
-    needsDocument(exportMenu->addAction(tr("E&xport Animated GIF…"), this, &MainWindow::exportGif), "export.gif");
+    add(exportMenu, Spec("file.export.psd", tr("Export as Photoshop &Document (PSD)…")).document("export.psd").runs([this] { exportPsd(); }));
+    add(exportMenu, Spec("file.export.svg", tr("Export S&VG…")).document("export.svg").runs([this] { exportSvg(); }));
+    add(exportMenu, Spec("file.export.ico", tr("Export &Icon (ICO)…")).document("export.ico").runs([this] { exportIco(); }));
+    add(exportMenu, Spec("file.export.gif", tr("E&xport Animated GIF…")).document("export.gif").runs([this] { exportGif(); }));
     exportMenu->addSeparator();
-    needsDocument(exportMenu->addAction(tr("Export Artboards to Files…"), this, [this] { exportBoxes(false); }), "export.artboards");
-    needsDocument(exportMenu->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }), "export.slices");
+    add(exportMenu, Spec("file.export.artboards", tr("Export Artboards to Files…")).document("export.artboards").runs([this] { exportBoxes(false); }));
+    add(exportMenu, Spec("file.export.slices", tr("Export S&lices…")).document("export.slices").runs([this] { exportBoxes(true); }));
     file->addSeparator();
     QMenu* automate = file->addMenu(tr("A&utomate"));
-    automate->addAction(tr("&Batch…"), this, [this] { showBatchDialog(); });
+    add(automate, Spec("file.automate.batch", tr("&Batch…")).runs([this] { showBatchDialog(); }, "actions.batch"));
     file->addSeparator();
-    file->addAction(tr("&Close Tab"), QKeySequence::Close, this, [this] { closeTab(current_); });
-    file->addAction(tr("New Tab"), QKeySequence::AddTab, this, [this] { addTab(false); });
-    file->addAction(tr("Next Tab"), QKeySequence("Ctrl+Tab"), this, [this] { if (tabs_.size() > 1) switchTo((current_ + 1) % int(tabs_.size())); });
-    file->addAction(tr("Previous Tab"), QKeySequence("Ctrl+Shift+Tab"), this, [this] { if (tabs_.size() > 1) switchTo((current_ + int(tabs_.size()) - 1) % int(tabs_.size())); });
-    file->addAction(tr("&Quit"), QKeySequence::Quit, this, &QWidget::close);
+    add(file, Spec("file.closeTab", tr("&Close Tab"), {QKeySequence::Close}).runs([this] { closeTab(current_); }));
+    // No default key: Ctrl+T (the platform's New Tab) is Photoshop's Free Transform.
+    add(file, Spec("file.newTab", tr("New Tab")).runs([this] { addTab(false); }));
+    add(file, Spec("file.nextTab", tr("Next Tab"), {QKeySequence("Ctrl+Tab")}).runs([this] { if (tabs_.size() > 1) switchTo((current_ + 1) % int(tabs_.size())); }));
+    add(file, Spec("file.previousTab", tr("Previous Tab"), {QKeySequence("Ctrl+Shift+Tab")}).runs([this] { if (tabs_.size() > 1) switchTo((current_ + int(tabs_.size()) - 1) % int(tabs_.size())); }));
+    add(file, Spec("file.quit", tr("&Quit"), {QKeySequence::Quit}).runs([this] { close(); }));
 
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
-    undoAction_ = edit->addAction(tr("&Undo"), QKeySequence::Undo, this, [this] { session_->undo(); });
-    redoAction_ = edit->addAction(tr("&Redo"), QKeySequence("Ctrl+Shift+Z"), this, [this] { session_->redo(); });
+    // Undo and Redo run history.undo and history.redo (history steps are not recorded in actions).
+    undoAction_ = add(edit, Spec("edit.undo", tr("&Undo"), {QKeySequence::Undo}).request("history.undo", [] { return QJsonObject{}; }, tr("Undo"))
+                                .when([this] { return session_->canUndo() ? QString() : tr("Nothing to undo"); }));
+    undoAction_->setObjectName("command.history.undo");
+    redoAction_ = add(edit, Spec("edit.redo", tr("&Redo"), {QKeySequence("Ctrl+Shift+Z")}).request("history.redo", [] { return QJsonObject{}; }, tr("Redo"))
+                                .when([this] { return session_->canRedo() ? QString() : tr("Nothing to redo"); }));
+    redoAction_->setObjectName("command.history.redo");
     // Photoshop CC's Toggle Last State: undoes the last step, or redoes the one just undone.
-    toggleStateAction_ = edit->addAction(tr("Toggle &Last State"), QKeySequence("Ctrl+Alt+Z"), this, [this] { session_->toggleLastState(); });
+    toggleStateAction_ = add(edit, Spec("edit.toggleLastState", tr("Toggle &Last State"), {QKeySequence("Ctrl+Alt+Z")}).runs([this] { session_->toggleLastState(); })
+                                       .when([this] { return session_->canUndo() || session_->canRedo() ? QString() : tr("Nothing to undo or redo"); }));
     toggleStateAction_->setObjectName("edit.toggleLastState");
     toggleStateAction_->installEventFilter(fieldGuard);
     edit->addSeparator();
     // The pixel clipboard runs pixels.cut, pixels.copy, pixels.copyMerged and pixels.paste (layers.copy and
     // layers.paste for whole layers); with nothing to copy or paste the items do nothing, as before.
-    nameAction("edit.cut", needsDocument(edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] {
+    nameAction("edit.cut", add(edit, Spec("edit.cut", tr("Cu&t"), {QKeySequence::Cut}).document("edit.clipboard").runs([this] {
         if (!session_->document()->selection || !session_->canCopyPixels()) return;
         // A smart object: copied, then the question about rasterizing it (pixels.cut refuses one).
         if (session_->smartObjectBlocksPixels()) { session_->cutSelection(); return; }
         runCommand("pixels.cut", {}, tr("Cut"));
-    }), "edit.clipboard"))->setObjectName("command.pixels.cut");
-    nameAction("edit.copy", needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] {
+    }, "pixels.cut")))->setObjectName("command.pixels.cut");
+    nameAction("edit.copy", add(edit, Spec("edit.copy", tr("&Copy"), {QKeySequence::Copy}).document("edit.clipboard").runs([this] {
         // As Photoshop: with no selection, the selected layers themselves (pasted whole in any document).
         if (!session_->document()->selection && !session_->selectedLayerIds().empty()) { runCommand("layers.copy", {}, tr("Copy")); return; }
         if (session_->canCopyPixels()) runCommand("pixels.copy", {}, tr("Copy"));
-    }), "edit.clipboard"))->setObjectName("command.pixels.copy");
-    needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] {
+    }, "pixels.copy")))->setObjectName("command.pixels.copy");
+    add(edit, Spec("edit.copyMerged", tr("Copy &Merged"), {QKeySequence("Ctrl+Shift+C")}).document("edit.clipboard").runs([this] {
         if (session_->canEditLayers() && !(session_->document()->selection && session_->document()->selection->isEmpty())) runCommand("pixels.copyMerged", {}, tr("Copy Merged"));
-    }), "edit.clipboard")->setObjectName("command.pixels.copyMerged");
-    nameAction("edit.paste", needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] {
+    }, "pixels.copyMerged"))->setObjectName("command.pixels.copyMerged");
+    nameAction("edit.paste", add(edit, Spec("edit.paste", tr("&Paste"), {QKeySequence::Paste}).document("edit.clipboard").runs([this] {
         if (EditorSession::hasLayerClipboard()) { if (session_->canPaste()) runCommand("layers.paste", {}, tr("Paste")); return; }
         if (session_->hasPixelsToPaste()) runCommand("pixels.paste", {}, tr("Paste"));
-    }), "edit.clipboard"))->setObjectName("command.pixels.paste");
+    }, "pixels.paste")))->setObjectName("command.pixels.paste");
     edit->addSeparator();
     // Free Transform is interactive: Ctrl+T invokes it, the canvas updates it, and Enter or Apply commits it through
     // the command layers.setTransform (EditorSession::commitTransformCommand).
-    nameAction("edit.freeTransform", needsDocument(edit->addAction(tr("&Free Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }), "layers.transform"))->setObjectName("command.transform");
-    nameAction("edit.warp", needsDocument(edit->addAction(tr("&Warp…"), this, [this] { WarpDialog(session_, this).exec(); }), "edit.distort"));
-    needsDocument(edit->addAction(tr("Warp Ca&ge"), this, [this] {
+    nameAction("edit.freeTransform", add(edit, Spec("edit.freeTransform", tr("&Free Transform"), {QKeySequence("Ctrl+T")}).document("layers.transform")
+                                                   .runs([this] { session_->transformCommand(); }, "layers.setTransform")))->setObjectName("command.transform");
+    // Warp's OK runs layers.warp; the Warp Cage's Enter runs layers.setCage (EditorSession::commitWarpCageCommand).
+    nameAction("edit.warp", add(edit, Spec("edit.warp", tr("&Warp…")).document("edit.distort").runs([this] { WarpDialog(session_, this).exec(); }, "layers.warp").when(hasLayer)));
+    add(edit, Spec("edit.warpCage", tr("Warp Ca&ge")).document("edit.distort").runs([this] {
         QString error;
         if (!session_->beginWarpCage(&error)) showError(tr("Warp Cage"), error);
         else statusBar()->showMessage(tr("Drag the cage's points; Enter applies, Esc cancels."), 8000);
-    }), "edit.distort");
-    nameAction("edit.fillForeground", needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { fillWith(session_->foregroundColor); }), "edit.fill"))->setObjectName("command.pixels.fill");
-    nameAction("edit.fillBackground", needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { fillWith(session_->backgroundColor); }), "edit.fill"));
-    QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] {
+    }, "layers.setCage"));
+    nameAction("edit.fillForeground", add(edit, Spec("edit.fillForeground", tr("Fill with Foreground"), {QKeySequence("Alt+Backspace")}).document("edit.fill")
+                                                    .runs([this] { fillWith(session_->foregroundColor); }, "pixels.fill")))->setObjectName("command.pixels.fill");
+    nameAction("edit.fillBackground", add(edit, Spec("edit.fillBackground", tr("Fill with Background"), {QKeySequence("Ctrl+Backspace")}).document("edit.fill")
+                                                    .runs([this] { fillWith(session_->backgroundColor); }, "pixels.fill")));
+    QAction* clear = add(edit, Spec("edit.clear", tr("Clear"), {QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace)}).document("layers.structure").runs([this] {
         if (session_->document() && session_->document()->selection) runCommand("pixels.clear", {}, tr("Clear"));
         else deleteLayersCommand();
-    }), "layers.structure");
+    }, "pixels.clear"));
     clear->setObjectName("command.pixels.clear");
-    clear->setShortcuts({QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace)});
-    nameAction("edit.contentAwareFill", needsDocument(edit->addAction(tr("Content-Aware Fill…"), QKeySequence("Shift+F5"), this, [this] {
+    nameAction("edit.contentAwareFill", add(edit, Spec("edit.contentAwareFill", tr("Content-Aware Fill…"), {QKeySequence("Shift+F5")}).document("edit.fill").runs([this] {
         if (!session_->canAdjustPixels() || !session_->document()->selection || !session_->document()->selection->coverage) { showError(tr("Content-Aware Fill"), tr("Select a visible image layer and an area to fill.")); return; }
         (new ContentFillDialog(session_, this))->show();
-    }), "edit.fill"));
-    needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }), "edit.contentAware");
+    }, "pixels.contentAwareFill")));
+    add(edit, Spec("edit.contentAwareScale", tr("Content-Aware Scale…"), {QKeySequence("Ctrl+Alt+Shift+C")}).document("edit.contentAware")
+                  .runs([this] { (new ContentAwareScaleDialog(session_, this))->show(); }, "pixels.contentAwareScale"));
 
     // Colour management (docs/color-management.md), as in Photoshop's Edit menu.
     edit->addSeparator();
-    edit->addAction(tr("Color Settings…"), QKeySequence("Ctrl+Shift+K"), this, [this] { color::showColorSettings(this); });
+    add(edit, Spec("edit.colorSettings", tr("Color Settings…"), {QKeySequence("Ctrl+Shift+K")}).runs([this] { color::showColorSettings(this); }, "color.settings"));
     auto profileKey = [](const compositor::ColorProfile& p) -> QString {
         if (p.empty()) return QStringLiteral("none");
         auto s = compositor::matchingWorkingSpace(p);
         return s && p == compositor::builtinProfile(*s) ? QString::fromLatin1(compositor::workingSpaceKey(*s)) : QString();
     };
-    needsDocument(edit->addAction(tr("Assign Profile…"), this, [this, profileKey] {
+    add(edit, Spec("edit.assignProfile", tr("Assign Profile…")).document("document.profile").runs([this, profileKey] {
         auto profile = color::askAssignProfile(this, session_->document()->profile);
         if (!profile) return;
         // A profile the method names runs as the command; an ICC file chosen from disk is assigned directly (and
         // not recorded: the method takes a key or a path, and the dialog keeps no path).
         if (const QString key = profileKey(*profile); !key.isEmpty()) runCommand("document.profile", {{"action", "assign"}, {"profile", key}}, tr("Assign Profile"));
         else session_->assignProfile(*profile);
-    }), "document.profile");
-    needsDocument(edit->addAction(tr("Convert to Profile…"), this, [this, profileKey] {
+    }, "document.profile"));
+    add(edit, Spec("edit.convertToProfile", tr("Convert to Profile…")).document("document.profile").runs([this, profileKey] {
         auto choice = color::askConvertProfile(this, session_->document()->profile);
         if (!choice) return;
         const QString key = profileKey(choice->profile);
@@ -408,49 +494,53 @@ void MainWindow::buildMenus() {
         const bool ok = session_->convertToProfile(choice->profile, choice->options, &error);
         QApplication::restoreOverrideCursor();
         if (!ok) showError(tr("Convert to Profile"), error);
-    }), "document.profile");
+    }, "document.profile"));
 
     edit->addSeparator();
     // Photoshop's Edit > Search (Ctrl+F): every command, tool and G'MIC filter by name.
-    searchAction_ = edit->addAction(tr("&Search…"), QKeySequence("Ctrl+F"), this, [this] { showCommandPalette(); });
+    searchAction_ = add(edit, Spec("edit.search", tr("&Search…"), {QKeySequence("Ctrl+F")}).runs([this] { showCommandPalette(); }));
     searchAction_->setObjectName("edit.search");
     // Photoshop's Ctrl+K, and the platform's own Preferences key where it has one.
-    QAction* preferences = edit->addAction(tr("Prefere&nces…"), this, &MainWindow::showPreferences);
     QList<QKeySequence> preferenceKeys{QKeySequence("Ctrl+K")};
     for (const QKeySequence& key : QKeySequence::keyBindings(QKeySequence::Preferences)) if (!preferenceKeys.contains(key)) preferenceKeys << key;
-    preferences->setShortcuts(preferenceKeys);
+    add(edit, Spec("edit.preferences", tr("Prefere&nces…"), preferenceKeys).runs([this] { showPreferences(); }));
 
     QMenu* image = menuBar()->addMenu(tr("&Image"));
     // Photoshop's Image > Mode: the document's bits per channel (docs/bit-depth.md).
     QMenu* mode = image->addMenu(tr("&Mode"));
-    needsDocument(mode->menuAction(), "document.mode");
-    // The colour modes (docs/color-modes.md): RGB, CMYK and Lab, as Photoshop lists them above the depths.
+    reg.adopt(nullptr, mode->menuAction(), Spec("image.mode", plainText(mode->title())).document("document.mode").command);
+    // The colour modes (docs/color-modes.md): RGB, CMYK and Lab, as Photoshop lists them above the depths. 32 bits is
+    // RGB only, as in Photoshop: CMYK Color and Lab Color are greyed in a 32-bit document, 32 Bits/Channel in a CMYK
+    // or Lab one.
+    auto rgbOnlyAt32 = [this] { return session_->sampleType() == SampleType::F32 ? session_->unavailableTip("mode.cmykLab") : QString(); };
     auto* colorModes = new QActionGroup(this);
-    modeRgbAction_ = needsDocument(mode->addAction(tr("&RGB Color"), this, [this] { convertColorMode(ColorMode::RGB); }), "document.mode");
-    modeCmykAction_ = needsDocument(mode->addAction(tr("&CMYK Color"), this, [this] { convertColorMode(ColorMode::CMYK); }), "document.mode");
-    modeLabAction_ = needsDocument(mode->addAction(tr("&Lab Color"), this, [this] { convertColorMode(ColorMode::Lab); }), "document.mode");
+    modeRgbAction_ = add(mode, Spec("image.mode.rgb", tr("&RGB Color")).document("document.mode").runs([this] { convertColorMode(ColorMode::RGB); }, "image.mode"));
+    modeCmykAction_ = add(mode, Spec("image.mode.cmyk", tr("&CMYK Color")).document("document.mode").runs([this] { convertColorMode(ColorMode::CMYK); }, "image.mode").when(rgbOnlyAt32));
+    modeLabAction_ = add(mode, Spec("image.mode.lab", tr("&Lab Color")).document("document.mode").runs([this] { convertColorMode(ColorMode::Lab); }, "image.mode").when(rgbOnlyAt32));
     for (QAction* a : {modeRgbAction_, modeCmykAction_, modeLabAction_}) { a->setCheckable(true); colorModes->addAction(a); }
     modeRgbAction_->setChecked(true);
     mode->addSeparator();
     auto* depths = new QActionGroup(this);
-    mode8Action_ = needsDocument(mode->addAction(tr("&8 Bits/Channel"), this, [this] { convertMode(SampleType::U8); }), "document.mode");
-    mode16Action_ = needsDocument(mode->addAction(tr("&16 Bits/Channel"), this, [this] { convertMode(SampleType::U16); }), "document.mode");
-    mode32Action_ = needsDocument(mode->addAction(tr("&32 Bits/Channel"), this, [this] { convertMode(SampleType::F32); }), "document.mode");
+    mode8Action_ = add(mode, Spec("image.mode.bits8", tr("&8 Bits/Channel")).document("document.mode").runs([this] { convertMode(SampleType::U8); }, "image.mode"));
+    mode16Action_ = add(mode, Spec("image.mode.bits16", tr("&16 Bits/Channel")).document("document.mode").runs([this] { convertMode(SampleType::U16); }, "image.mode"));
+    mode32Action_ = add(mode, Spec("image.mode.bits32", tr("&32 Bits/Channel")).document("document.mode").runs([this] { convertMode(SampleType::F32); }, "image.mode").when([this] {
+        return session_->colorMode() != ColorMode::RGB ? session_->unavailableTip("document.mode") : QString();
+    }));
     for (QAction* a : {mode8Action_, mode16Action_, mode32Action_}) { a->setCheckable(true); depths->addAction(a); }
     mode8Action_->setChecked(true);
     image->addSeparator();
-    needsDocument(image->addAction(tr("&Canvas Size…"), QKeySequence("Ctrl+Alt+C"), this, [this] {
+    add(image, Spec("image.canvasSize", tr("&Canvas Size…"), {QKeySequence("Ctrl+Alt+C")}).document("canvas.size").runs([this] {
         auto o = askCanvasSize(this, session_->document()->width, session_->document()->height);
         if (!o) return;
         runCommand("canvas.resize", {{"width", o->width}, {"height", o->height}, {"anchorX", o->anchorX}, {"anchorY", o->anchorY}}, tr("Canvas Size"));
-    }), "canvas.size");
-    needsDocument(image->addAction(tr("&Image Size…"), QKeySequence("Ctrl+Alt+I"), this, [this] {
+    }, "canvas.resize"));
+    add(image, Spec("image.imageSize", tr("&Image Size…"), {QKeySequence("Ctrl+Alt+I")}).document("edit.imageSize").runs([this] {
         auto o = askImageSize(this, session_->document()->width, session_->document()->height, session_->document()->resolution);
         if (!o) return;
         runCommand("image.resize", {{"width", o->width}, {"height", o->height}, {"resolution", o->resolution},
                                     {"sampling", o->sampling == 0 ? "nearest" : o->sampling == 1 ? "smooth" : "high"}}, tr("Image Size"));
-    }), "edit.imageSize");
-    needsDocument(image->addAction(tr("&Trim…"), this, [this] {
+    }, "image.resize"));
+    add(image, Spec("image.trim", tr("&Trim…")).document("edit.crop").runs([this] {
         // Photoshop's dialog: what to trim by, and which sides.
         QDialog dialog(this);
         dialog.setWindowTitle(tr("Trim"));
@@ -484,8 +574,8 @@ void MainWindow::buildMenus() {
         o.tolerance = uint8_t(tolerance->value());
         static const char* const bases[] = {"transparent", "topLeft", "bottomRight"};
         trimCommand({{"basedOn", bases[std::clamp(basedOn->currentIndex(), 0, 2)]}, {"top", o.top}, {"left", o.left}, {"bottom", o.bottom}, {"right", o.right}, {"tolerance", int(o.tolerance)}});
-    }), "edit.crop");
-    needsDocument(image->addAction(tr("Crop to Selection"), this, [this] {
+    }, "image.trim"));
+    add(image, Spec("image.cropToSelection", tr("Crop to Selection")).document("edit.crop").runs([this] {
         const auto& d = session_->document();
         if (d && d->selection) {
             Rect b = d->selection->bounds();
@@ -494,15 +584,16 @@ void MainWindow::buildMenus() {
                     runCommand("selection.none", {}, tr("Crop to Selection"));
             }
         }
-    }), "edit.crop")->setObjectName("command.canvas.crop");
+    }, "canvas.crop"))->setObjectName("command.canvas.crop");
     image->addSeparator();
     QMenu* adjustments = image->addMenu(tr("&Adjustments"));
-    auto pixelAdjustment = [this, adjustments, &needsDocument](const QString& label, const QKeySequence& key, AdjustmentKind kind) {
-        needsDocument(adjustments->addAction(label, key, this, [this, kind] {
+    auto pixelAdjustment = [this, adjustments, &add](const QString& label, const QKeySequence& key, AdjustmentKind kind) {
+        const QString id = QStringLiteral("image.adjustments.") + commandSlug(QString::fromUtf8(adjustmentKindName(kind)));
+        add(adjustments, Spec(id, label, key.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{key}).document((std::string("adjustment.") + adjustmentKindName(kind)).c_str()).runs([this, kind] {
             if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Adjustments"), tr("Select a visible image layer (not a mask) to adjust its pixels.")); return; }
             (new PixelAdjustmentDialog(session_, kind, this))->show();
-        }), (std::string("adjustment.") + adjustmentKindName(kind)).c_str());
+        }, "pixels.adjust"));
     };
     pixelAdjustment(tr("&Levels…"), QKeySequence("Ctrl+L"), AdjustmentKind::Levels);
     pixelAdjustment(tr("&Curves…"), QKeySequence("Ctrl+M"), AdjustmentKind::Curves);
@@ -521,68 +612,116 @@ void MainWindow::buildMenus() {
     pixelAdjustment(tr("P&osterize…"), QKeySequence(), AdjustmentKind::Posterize);
     pixelAdjustment(tr("&Threshold…"), QKeySequence(), AdjustmentKind::Threshold);
     adjustments->addSeparator();
-    needsDocument(adjustments->addAction(tr("&Invert"), QKeySequence("Ctrl+I"), this, [this] { runCommand("pixels.invert", {}, tr("Invert")); }), "adjustment.Invert")->setObjectName("command.pixels.invert");
+    add(adjustments, Spec("image.adjustments.invert", tr("&Invert"), {QKeySequence("Ctrl+I")}).document("adjustment.Invert")
+                         .request("pixels.invert", [] { return QJsonObject{}; }, tr("Invert")))->setObjectName("command.pixels.invert");
     image->addSeparator();
-    needsDocument(image->addAction(tr("Flip Canvas Horizontal"), this, [this] { runCommand("canvas.flip", {}, tr("Flip Canvas Horizontal")); }), "canvas.flip")->setObjectName("command.canvas.flip");
-    needsDocument(image->addAction(tr("Flip Canvas Vertical"), this, [this] { runCommand("canvas.flip", {{"vertical", true}}, tr("Flip Canvas Vertical")); }), "canvas.flip");
+    add(image, Spec("image.flipCanvasHorizontal", tr("Flip Canvas Horizontal")).document("canvas.flip")
+                   .request("canvas.flip", [] { return QJsonObject{}; }, tr("Flip Canvas Horizontal")))->setObjectName("command.canvas.flip");
+    add(image, Spec("image.flipCanvasVertical", tr("Flip Canvas Vertical")).document("canvas.flip")
+                   .request("canvas.flip", [] { return QJsonObject{{"vertical", true}}; }, tr("Flip Canvas Vertical")));
 
     QMenu* layer = menuBar()->addMenu(tr("&Layer"));
     // Converted to the command path (CONTRIBUTING.md, "Commands"): the item runs the automation method itself.
-    nameAction("layer.new", needsDocument(layer->addAction(tr("&New Layer"), QKeySequence("Ctrl+Shift+N"), this, [this] { runCommand("layers.add", {}, tr("New Layer")); }), "layers.structure"))->setObjectName("command.layers.add");
-    needsDocument(layer->addAction(tr("New Layer &Below"), this, [this] { runCommand("layers.add", {{"below", true}}, tr("New Layer Below")); }), "layers.structure")->setObjectName("command.layers.addBelow");
-    needsDocument(layer->addAction(tr("New &Folder"), this, [this] { runCommand("layers.add", {{"kind", "group"}}, tr("New Folder")); }), "layers.structure")->setObjectName("command.layers.addGroup");
-    needsDocument(layer->addAction(tr("&Group Layers"), QKeySequence("Ctrl+G"), this, [this] { runCommand("layers.group", {}, tr("Group Layers")); }), "layers.structure")->setObjectName("command.layers.group");
-    nameAction("layer.viaCopy", needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] {
+    nameAction("layer.new", add(layer, Spec("layer.new", tr("&New Layer"), {QKeySequence("Ctrl+Shift+N")}).document("layers.structure")
+                                           .request("layers.add", [] { return QJsonObject{}; }, tr("New Layer"))))->setObjectName("command.layers.add");
+    add(layer, Spec("layer.newBelow", tr("New Layer &Below")).document("layers.structure")
+                   .request("layers.add", [] { return QJsonObject{{"below", true}}; }, tr("New Layer Below")))->setObjectName("command.layers.addBelow");
+    add(layer, Spec("layer.newFolder", tr("New &Folder")).document("layers.structure")
+                   .request("layers.add", [] { return QJsonObject{{"kind", "group"}}; }, tr("New Folder")))->setObjectName("command.layers.addGroup");
+    add(layer, Spec("layer.group", tr("&Group Layers"), {QKeySequence("Ctrl+G")}).document("layers.structure")
+                   .request("layers.group", [] { return QJsonObject{}; }, tr("Group Layers")))->setObjectName("command.layers.group");
+    nameAction("layer.viaCopy", add(layer, Spec("layer.viaCopy", tr("Layer via &Copy"), {QKeySequence("Ctrl+J")}).document("edit.clipboard").request("layers.viaCopy", [this]() -> std::optional<QJsonObject> {
         const Layer* l = session_->activeLayer();
-        if (l && !l->isGroup) runCommand("layers.viaCopy", {}, tr("Layer via Copy"));
-    }), "edit.clipboard"));
-    nameAction("layer.duplicate", needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { runCommand("layers.duplicate", {}, tr("Duplicate Layer")); }), "layers.structure"))->setObjectName("command.layers.duplicate");
-    nameAction("layer.delete", needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteLayersCommand(); }), "layers.structure"))->setObjectName("command.layers.delete");
-    mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { runCommand("layers.merge", {}, mergeAction_->text().remove('&')); }), "layers.merge");
+        if (!l || l->isGroup) return std::nullopt;
+        return QJsonObject{};
+    }, tr("Layer via Copy"))));
+    nameAction("layer.duplicate", add(layer, Spec("layer.duplicate", tr("&Duplicate Layer")).document("layers.structure")
+                                                 .request("layers.duplicate", [] { return QJsonObject{}; }, tr("Duplicate Layer"))))->setObjectName("command.layers.duplicate");
+    nameAction("layer.delete", add(layer, Spec("layer.delete", tr("De&lete Layer")).document("layers.structure").runs([this] { deleteLayersCommand(); }, "layers.delete")))
+        ->setObjectName("command.layers.delete");
+    mergeAction_ = add(layer, Spec("layer.mergeDown", tr("Merge Do&wn"), {QKeySequence("Ctrl+E")}).document("layers.merge")
+                                  .runs([this] { runCommand("layers.merge", {}, mergeAction_->text().remove('&')); }, "layers.merge")
+                                  .when([this] { return session_->canMergeLayers() ? QString() : tr("Nothing to merge: select the layers to merge, or a layer with a layer below it"); }));
     mergeAction_->setObjectName("command.layers.merge");
     named_["layer.merge"] = mergeAction_;
-    mergeVisibleAction_ = needsDocument(layer->addAction(tr("Merge &Visible"), QKeySequence("Ctrl+Shift+E"), this, [this] { runCommand("layers.merge", {{"visible", true}}, tr("Merge Visible")); }), "layers.merge");
+    mergeVisibleAction_ = add(layer, Spec("layer.mergeVisible", tr("Merge &Visible"), {QKeySequence("Ctrl+Shift+E")}).document("layers.merge")
+                                         .request("layers.merge", [] { return QJsonObject{{"visible", true}}; }, tr("Merge Visible"))
+                                         .when([this] { return session_->canMergeVisible() ? QString() : tr("Nothing to merge: fewer than two layers are visible"); }));
     mergeVisibleAction_->setObjectName("command.layers.mergeVisible");
-    editTextAction_ = nameAction("layer.editText", needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }), "edit.text"));
-    nameAction("layer.rename", needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
+    editTextAction_ = nameAction("layer.editText", add(layer, Spec("layer.editText", tr("Edit &Text…")).document("edit.text").runs([this] {
+        const Layer* l = session_->activeLayer();
+        if (l && l->isLiveText()) session_->requestTextEdit(l->id);
+    }).when([this] {
+        if (session_->featuresGated()) return session_->unavailableTip();
+        const Layer* l = session_->activeLayer();
+        return l && l->isLiveText() ? QString() : tr("The active layer is not a text layer");
+    })));
+    nameAction("layer.rename", add(layer, Spec("layer.rename", tr("&Rename Layer…")).document("layers.structure").runs([this] {
         const Layer* active = session_->activeLayer();
         if (!active) return;
         bool ok;
         QString name = QInputDialog::getText(this, tr("Rename Layer"), tr("Name"), QLineEdit::Normal, QString::fromStdString(active->name), &ok);
         if (ok) runCommand("layers.set", {{"name", name}}, tr("Rename Layer"));
-    }), "layers.structure"));
-    needsDocument(layer->addAction(tr("Move &Out of Folder"), QKeySequence("Ctrl+Shift+["), this, [this] { session_->moveActiveLayerOutOfGroup(); }), "layers.structure");
+    }, "layers.set")));
+    // Move Out of Folder: layers.move, the layer placed directly above its folder in the folder's own parent.
+    add(layer, Spec("layer.moveOutOfFolder", tr("Move &Out of Folder"), {QKeySequence("Ctrl+Shift+[")}).document("layers.structure").request("layers.move", [this]() -> std::optional<QJsonObject> {
+        const Layer* l = session_->activeLayer();
+        const Layer* folder = l && l->parentId ? session_->document()->find(*l->parentId) : nullptr;
+        if (!folder) return std::nullopt;
+        QJsonObject params{{"id", QString::fromStdString(l->id)}, {"above", QString::fromStdString(folder->id)}};
+        if (folder->parentId) params["parent"] = QString::fromStdString(*folder->parentId);
+        return params;
+    }, tr("Move Out of Folder")))->setObjectName("command.layers.moveOut");
     // The active layer alone, cropped to its visible pixels, as Photoshop's Layer > Quick Export and Export As.
     layer->addSeparator();
-    QAction* layerQuickExport = needsDocument(layer->addAction(tr("Quick Export"), QKeySequence("Ctrl+Shift+'"), this, [this] { quickExport(true); }), "export.png");
+    QAction* layerQuickExport = add(layer, Spec("layer.quickExport", tr("Quick Export"), {QKeySequence("Ctrl+Shift+'")}).document("export.png").runs([this] { quickExport(true); }, "document.export"));
     layerQuickExport->setObjectName("export.layerQuick");
     layerQuickExport->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat())));
-    needsDocument(layer->addAction(tr("Export As…"), QKeySequence("Ctrl+Alt+Shift+'"), this, [this] { exportAs(true); }), "export.png")->setObjectName("export.layerAs");
+    add(layer, Spec("layer.exportAs", tr("Export As…"), {QKeySequence("Ctrl+Alt+Shift+'")}).document("export.png").runs([this] { exportAs(true); }, "document.export"))->setObjectName("export.layerAs");
     connect(layer, &QMenu::aboutToShow, this, [this, layerQuickExport] { layerQuickExport->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat()))); });
     layer->addSeparator();
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
     for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
-        needsDocument(adjustmentLayers->addAction(names::adjustmentKind(kind), this, [this, kind] { runCommand("layers.add", {{"kind", "adjustment"}, {"adjustmentKind", QString::fromUtf8(adjustmentKindName(kind))}}, tr("New Adjustment Layer")); }),
-                      (std::string("adjustment.") + adjustmentKindName(kind)).c_str());
+        add(adjustmentLayers, Spec(QStringLiteral("layer.newAdjustment.") + commandSlug(QString::fromUtf8(adjustmentKindName(kind))), names::adjustmentKind(kind))
+                                  .document((std::string("adjustment.") + adjustmentKindName(kind)).c_str())
+                                  .request("layers.add", [kind] { return QJsonObject{{"kind", "adjustment"}, {"adjustmentKind", QString::fromUtf8(adjustmentKindName(kind))}}; }, tr("New Adjustment Layer")));
     }
     QMenu* styles = layer->addMenu(tr("Layer St&yle"));
     const char* const stylePages[] = {QT_TRANSLATE_NOOP("app::MainWindow", "Blending Options…"), QT_TRANSLATE_NOOP("app::MainWindow", "Bevel & Emboss…"), QT_TRANSLATE_NOOP("app::MainWindow", "Stroke…"), QT_TRANSLATE_NOOP("app::MainWindow", "Inner Shadow…"), QT_TRANSLATE_NOOP("app::MainWindow", "Inner Glow…"), QT_TRANSLATE_NOOP("app::MainWindow", "Satin…"), QT_TRANSLATE_NOOP("app::MainWindow", "Color Overlay…"),
                                       QT_TRANSLATE_NOOP("app::MainWindow", "Gradient Overlay…"), QT_TRANSLATE_NOOP("app::MainWindow", "Pattern Overlay…"), QT_TRANSLATE_NOOP("app::MainWindow", "Outer Glow…"), QT_TRANSLATE_NOOP("app::MainWindow", "Drop Shadow…")};
     for (int page = 0; page < int(std::size(stylePages)); page++) {
-        needsDocument(styles->addAction(tr(stylePages[page]), this, [this, page] {
+        // The dialog's OK runs layers.setStyle with the style it shows.
+        add(styles, Spec(QStringLiteral("layer.style.") + commandSlug(QString::fromLatin1(stylePages[page])), tr(stylePages[page])).document("edit.style").runs([this, page] {
             if (session_->activeLayerId()) LayerStyleDialog(session_, *session_->activeLayerId(), this, page).exec();
-        }), "edit.style");
+        }, "layers.setStyle").when(hasLayer));
         if (page == 0) styles->addSeparator();
     }
     styles->addSeparator();
-    needsDocument(styles->addAction(tr("&Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }), "edit.style");
-    needsDocument(styles->addAction(tr("&Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }), "edit.style");
-    needsDocument(styles->addAction(tr("C&lear Layer Style"), this, [this] { session_->clearLayerStyle(); }), "edit.style");
+    // Copy Layer Style keeps what layers.style answers; Paste and Clear run layers.setStyle (Photoshop's step names).
+    add(styles, Spec("layer.style.copy", tr("&Copy Layer Style")).document("edit.style").runs([this] {
+        if (!session_->activeLayerHasStyle()) return;
+        const auto answer = runCommand("layers.style", {}, tr("Copy Layer Style"));
+        if (!answer) return;
+        compositor::LayerStyle style;
+        if (QString error; layerStyleFromRequest(answer->toObject(), session_->document()->colorMode, style, &error)) session_->setStyleClipboard(style);
+        else showError(tr("Copy Layer Style"), error);
+    }, "layers.style"))->setObjectName("command.layers.copyStyle");
+    add(styles, Spec("layer.style.paste", tr("&Paste Layer Style")).document("edit.style").request("layers.setStyle", [this]() -> std::optional<QJsonObject> {
+        const auto& copied = session_->styleClipboard();
+        const auto id = session_->activeLayerId();
+        if (!copied || !id || !session_->canStyleLayer(*id)) return std::nullopt;
+        return QJsonObject{{"style", layerStyleRequest(*copied, session_->document()->colorMode)}, {"paste", true}};
+    }, tr("Paste Layer Style")))->setObjectName("command.layers.pasteStyle");
+    add(styles, Spec("layer.style.clear", tr("C&lear Layer Style")).document("edit.style").request("layers.setStyle", [this]() -> std::optional<QJsonObject> {
+        if (!session_->activeLayerHasStyle() || !session_->canStyleLayer(*session_->activeLayerId())) return std::nullopt;
+        return QJsonObject{{"style", QJsonObject{}}};
+    }, tr("Clear Layer Style")))->setObjectName("command.layers.clearStyle");
     styles->addSeparator();
-    // Imported style presets (.asl): the submenu lists the library as it is when it opens.
+    // Imported style presets (.asl): the submenu lists the library as it is when it opens; each runs layers.applyStyle.
     QMenu* applyStyle = styles->addMenu(tr("&Apply Style"));
-    needsDocument(applyStyle->menuAction(), "edit.style");
+    applyStyle->setProperty("commandsDynamic", true);
+    reg.adopt(nullptr, applyStyle->menuAction(), Spec("layer.style.apply", plainText(applyStyle->title())).document("edit.style").command);
     connect(applyStyle, &QMenu::aboutToShow, this, [this, applyStyle] {
         applyStyle->clear();
         const auto& presets = PresetLibrary::instance().styles();
@@ -590,135 +729,182 @@ void MainWindow::buildMenus() {
         for (const auto& preset : presets) {
             const QString name = QString::fromStdString(preset.name);
             applyStyle->addAction(name, this, [this, name] {
-                const StylePreset* p = PresetLibrary::instance().findStyle(name);
-                if (!p || !session_->activeLayerId()) return;
-                const StylePreset copy = *p;
-                if (!session_->applyStylePreset(*session_->activeLayerId(), copy.style, PresetLibrary::instance().patternsFor(copy.style)))
-                    showError(tr("Couldn’t apply the style"), tr("This layer cannot have effects."));
+                if (!PresetLibrary::instance().findStyle(name) || !session_->activeLayerId()) return;
+                runCommand("layers.applyStyle", {{"style", name}}, tr("Couldn’t apply the style"));
             });
         }
     });
-    styles->addAction(tr("&Import Styles…"), this, [this] { importPresetsInteractively(this, session_); });
+    add(styles, Spec("layer.style.import", tr("&Import Styles…")).runs([this] { importPresetsInteractively(this, session_); }, "presets.import"));
     QMenu* smart = layer->addMenu(tr("Smart Ob&jects"));
-    nameAction("smart.convert", needsDocument(smart->addAction(tr("&Convert to Smart Object"), this, [this] {
-        runCommand("smartObject.convert", {}, tr("Couldn’t convert to a smart object"));
-    }), "edit.smartObject"));
-    nameAction("smart.viaCopy", needsDocument(smart->addAction(tr("New Smart Object via &Copy"), this, [this] {
+    nameAction("smart.convert", add(smart, Spec("layer.smartObject.convert", tr("&Convert to Smart Object")).document("edit.smartObject")
+                                               .request("smartObject.convert", [] { return QJsonObject{}; }, tr("Couldn’t convert to a smart object"))));
+    nameAction("smart.viaCopy", add(smart, Spec("layer.smartObject.viaCopy", tr("New Smart Object via &Copy")).document("edit.smartObject").request("smartObject.viaCopy", [this]() -> std::optional<QJsonObject> {
         const Layer* l = session_->activeLayer();
-        if (l && l->isLiveSmartObject()) runCommand("smartObject.viaCopy", {}, tr("Couldn’t copy the smart object"));
-    }), "edit.smartObject"));
-    nameAction("smart.edit", needsDocument(smart->addAction(tr("&Edit Contents"), this, [this] { editSmartObjectContents(); }), "edit.smartObject"));
-    nameAction("smart.replace", needsDocument(smart->addAction(tr("&Replace Contents…"), this, [this] {
+        if (!l || !l->isLiveSmartObject()) return std::nullopt;
+        return QJsonObject{};
+    }, tr("Couldn’t copy the smart object"))));
+    nameAction("smart.edit", add(smart, Spec("layer.smartObject.editContents", tr("&Edit Contents")).document("edit.smartObject").runs([this] {
+        // A camera RAW smart object reopens in Camera Raw (the dialog is the interface); the rest run
+        // smartObject.editContents, the contents in a tab of their own.
+        if (session_->activeRawSmartObject()) { editSmartObjectContents(); return; }
+        runCommand("smartObject.editContents", {}, tr("Couldn’t open the contents"));
+    }, "smartObject.editContents")))->setObjectName("command.smartObject.editContents");
+    nameAction("smart.replace", add(smart, Spec("layer.smartObject.replace", tr("&Replace Contents…")).document("edit.smartObject").runs([this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Replace Contents"), QSettings().value("lastDir").toString(),
                                                           tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
         if (path.isEmpty()) return;
         runCommand("smartObject.replace", {{"path", path}}, tr("Couldn’t replace the contents"));
-    }), "edit.smartObject"));
-    nameAction("smart.rasterize", needsDocument(smart->addAction(tr("R&asterize"), this, [this] {
+    }, "smartObject.replace")));
+    nameAction("smart.rasterize", add(smart, Spec("layer.smartObject.rasterize", tr("R&asterize")).document("edit.smartObject").request("smartObject.rasterize", [this]() -> std::optional<QJsonObject> {
         const Layer* l = session_->activeLayer();
-        if (l && l->smartObject) runCommand("smartObject.rasterize", {}, tr("Rasterize"));
-    }), "edit.smartObject"));
+        if (!l || !l->smartObject) return std::nullopt;
+        return QJsonObject{};
+    }, tr("Rasterize"))));
     layer->addSeparator();
     QMenu* mask = layer->addMenu(tr("Layer &Mask"));
-    nameAction("mask.add", needsDocument(mask->addAction(tr("Reveal All"), this, [this] { maskCommand({{"action", "add"}}); }), "layers.mask"));
-    needsDocument(mask->addAction(tr("Hide All"), this, [this] { maskCommand({{"action", "add"}, {"revealing", false}}); }), "layers.mask");
-    needsDocument(mask->addAction(tr("From Selection (Reveal)"), this, [this] { maskCommand({{"action", "addFromSelection"}}); }), "edit.selection");
-    needsDocument(mask->addAction(tr("From Selection (Hide)"), this, [this] { maskCommand({{"action", "addFromSelection"}, {"revealing", false}}); }), "edit.selection");
+    // layers.mask, on the active layer (none: nothing to do).
+    auto maskItem = [&](QMenu* menu, const char* id, const QString& label, const char* feature, QJsonObject params) {
+        return add(menu, Spec(id, label).document(feature).request("layers.mask", [this, params]() -> std::optional<QJsonObject> {
+            if (!session_->activeLayerId()) return std::nullopt;
+            return params;
+        }, tr("Layer Mask")).when(hasLayer));
+    };
+    nameAction("mask.add", maskItem(mask, "layer.mask.revealAll", tr("Reveal All"), "layers.mask", {{"action", "add"}}));
+    maskItem(mask, "layer.mask.hideAll", tr("Hide All"), "layers.mask", {{"action", "add"}, {"revealing", false}});
+    maskItem(mask, "layer.mask.fromSelectionReveal", tr("From Selection (Reveal)"), "edit.selection", {{"action", "addFromSelection"}});
+    maskItem(mask, "layer.mask.fromSelectionHide", tr("From Selection (Hide)"), "edit.selection", {{"action", "addFromSelection"}, {"revealing", false}});
     mask->addSeparator();
-    nameAction("mask.toggle", needsDocument(mask->addAction(tr("Enable / Disable"), this, [this] { maskCommand({{"action", "toggle"}}); }), "layers.mask"));
-    nameAction("mask.invert", needsDocument(mask->addAction(tr("Invert"), this, [this] { maskCommand({{"action", "invert"}}); }), "layers.mask"));
-    nameAction("mask.apply", needsDocument(mask->addAction(tr("Apply"), this, [this] { maskCommand({{"action", "apply"}}); }), "layers.applyMask"));
-    nameAction("mask.delete", needsDocument(mask->addAction(tr("Delete"), this, [this] { maskCommand({{"action", "delete"}}); }), "layers.mask"));
-    // Photoshop's Layer > Vector Mask: a path that cuts the layer, edited with the Pen and Direct Selection.
+    nameAction("mask.toggle", maskItem(mask, "layer.mask.toggle", tr("Enable / Disable"), "layers.mask", {{"action", "toggle"}}));
+    nameAction("mask.invert", maskItem(mask, "layer.mask.invert", tr("Invert"), "layers.mask", {{"action", "invert"}}));
+    nameAction("mask.apply", maskItem(mask, "layer.mask.apply", tr("Apply"), "layers.applyMask", {{"action", "apply"}}));
+    nameAction("mask.delete", maskItem(mask, "layer.mask.delete", tr("Delete"), "layers.mask", {{"action", "delete"}}));
+    // Photoshop's Layer > Vector Mask: a path that cuts the layer, edited with the Pen and Direct Selection. The items
+    // run vectorMask.set, vectorMask.target and vectorMask.delete on the active layer.
     QMenu* vectorMask = layer->addMenu(tr("&Vector Mask"));
-    auto addVector = [this](EditorSession::VectorMaskKind kind) {
-        QString error;
-        if (!session_->addVectorMask(kind, &error) && !error.isEmpty()) QMessageBox::information(this, tr("Vector Mask"), error);
-    };
-    needsDocument(vectorMask->addAction(tr("Reveal All"), this, [addVector] { addVector(EditorSession::VectorMaskKind::RevealAll); }), "edit.vector");
-    needsDocument(vectorMask->addAction(tr("Hide All"), this, [addVector] { addVector(EditorSession::VectorMaskKind::HideAll); }), "edit.vector");
-    needsDocument(vectorMask->addAction(tr("Current Path"), this, [addVector] { addVector(EditorSession::VectorMaskKind::CurrentPath); }), "edit.vector");
-    vectorMask->addSeparator();
-    needsDocument(vectorMask->addAction(tr("Edit"), this, [this] { if (session_->activeLayerId()) session_->targetVectorMask(*session_->activeLayerId()); }), "edit.vector");
-    needsDocument(vectorMask->addAction(tr("Delete"), this, [this] { session_->deleteVectorMask(); }), "edit.vector");
-    nameAction("layer.clipping", needsDocument(layer->addAction(tr("Create / Release Cl&ipping Mask"), QKeySequence("Ctrl+Alt+G"), this, [this] {
+    auto addVector = [this](const char* kind) -> std::optional<QJsonObject> {
         const Layer* l = session_->activeLayer();
-        if (l && session_->canToggleClippingMask(l->id)) runCommand("layers.set", {{"clipping", !l->maskSourceId.has_value()}}, tr("Clipping Mask"));
-    }), "layers.structure"))->setObjectName("command.layers.clipping");
-    layer->addSeparator();
-    needsDocument(layer->addAction(tr("Bring Forward"), QKeySequence("Ctrl+]"), this, [this] { if (session_->canMoveActiveLayer(1)) runCommand("layers.reorder", {{"offset", 1}}, tr("Bring Forward")); }), "layers.structure")->setObjectName("command.layers.forward");
-    needsDocument(layer->addAction(tr("Send Backward"), QKeySequence("Ctrl+["), this, [this] { if (session_->canMoveActiveLayer(-1)) runCommand("layers.reorder", {{"offset", -1}}, tr("Send Backward")); }), "layers.structure");
-    layer->addSeparator();
-    needsDocument(layer->addAction(tr("Flip Layer Horizontal"), this, [this] { runCommand("layers.flip", {}, tr("Flip Layer Horizontal")); }), "layers.transform")->setObjectName("command.layers.flip");
-    needsDocument(layer->addAction(tr("Flip Layer Vertical"), this, [this] { runCommand("layers.flip", {{"vertical", true}}, tr("Flip Layer Vertical")); }), "layers.transform");
-    QMenu* sampling = layer->addMenu(tr("Resampling"));
-    needsDocument(sampling->addAction(tr("High Quality"), this, [this] { samplingCommand(Sampling::High); }), "layers.structure");
-    needsDocument(sampling->addAction(tr("Smooth"), this, [this] { samplingCommand(Sampling::Smooth); }), "layers.structure");
-    needsDocument(sampling->addAction(tr("Nearest Neighbour"), this, [this] { samplingCommand(Sampling::Nearest); }), "layers.structure");
-
-    // Photoshop's Type menu: the active text layer's outlines as a path or a shape.
-    QMenu* type = menuBar()->addMenu(tr("&Type"));
-    auto fromText = [this](bool shape) {
-        QString error;
-        const auto id = session_->activeLayerId();
-        const bool ok = id && (shape ? session_->textToShape(*id, &error) : session_->textToWorkPath(*id, &error));
-        if (!ok) QMessageBox::information(this, shape ? tr("Convert to Shape") : tr("Create Work Path"), error.isEmpty() ? tr("Choose a text layer first.") : error);
+        if (l && compositor::hasLayerVectorMask(*l)) { QMessageBox::information(this, tr("Vector Mask"), EditorSession::tr("The layer has a vector mask already.")); return std::nullopt; }
+        return QJsonObject{{"mode", kind}};
     };
-    nameAction("type.workPath", needsDocument(type->addAction(tr("Create &Work Path"), this, [fromText] { fromText(false); }), "edit.text"));
-    nameAction("type.shape", needsDocument(type->addAction(tr("Convert to &Shape"), this, [fromText] { fromText(true); }), "edit.paint"));
+    auto ownVectorMask = [this]() -> std::optional<QJsonObject> {
+        const Layer* l = session_->activeLayer();
+        if (!l || !compositor::hasLayerVectorMask(*l)) return std::nullopt;
+        return QJsonObject{};
+    };
+    add(vectorMask, Spec("layer.vectorMask.revealAll", tr("Reveal All")).document("edit.vector").request("vectorMask.set", [addVector] { return addVector("revealAll"); }, tr("Vector Mask")).when(hasLayer))
+        ->setObjectName("command.vectorMask.revealAll");
+    add(vectorMask, Spec("layer.vectorMask.hideAll", tr("Hide All")).document("edit.vector").request("vectorMask.set", [addVector] { return addVector("hideAll"); }, tr("Vector Mask")).when(hasLayer));
+    add(vectorMask, Spec("layer.vectorMask.currentPath", tr("Current Path")).document("edit.vector").request("vectorMask.set", [addVector] { return addVector("currentPath"); }, tr("Vector Mask")).when(hasLayer));
+    vectorMask->addSeparator();
+    add(vectorMask, Spec("layer.vectorMask.edit", tr("Edit")).document("edit.vector").request("vectorMask.target", ownVectorMask, tr("Vector Mask")).when(hasLayer))
+        ->setObjectName("command.vectorMask.edit");
+    add(vectorMask, Spec("layer.vectorMask.delete", tr("Delete")).document("edit.vector").request("vectorMask.delete", ownVectorMask, tr("Vector Mask")).when(hasLayer))
+        ->setObjectName("command.vectorMask.delete");
+    nameAction("layer.clipping", add(layer, Spec("layer.clippingMask", tr("Create / Release Cl&ipping Mask"), {QKeySequence("Ctrl+Alt+G")}).document("layers.structure").request("layers.set", [this]() -> std::optional<QJsonObject> {
+        const Layer* l = session_->activeLayer();
+        if (!l || !session_->canToggleClippingMask(l->id)) return std::nullopt;
+        return QJsonObject{{"clipping", !l->maskSourceId.has_value()}};
+    }, tr("Clipping Mask"))))->setObjectName("command.layers.clipping");
+    layer->addSeparator();
+    add(layer, Spec("layer.bringForward", tr("Bring Forward"), {QKeySequence("Ctrl+]")}).document("layers.structure").request("layers.reorder", [this]() -> std::optional<QJsonObject> {
+        if (!session_->canMoveActiveLayer(1)) return std::nullopt;
+        return QJsonObject{{"offset", 1}};
+    }, tr("Bring Forward")))->setObjectName("command.layers.forward");
+    add(layer, Spec("layer.sendBackward", tr("Send Backward"), {QKeySequence("Ctrl+[")}).document("layers.structure").request("layers.reorder", [this]() -> std::optional<QJsonObject> {
+        if (!session_->canMoveActiveLayer(-1)) return std::nullopt;
+        return QJsonObject{{"offset", -1}};
+    }, tr("Send Backward")));
+    layer->addSeparator();
+    add(layer, Spec("layer.flipHorizontal", tr("Flip Layer Horizontal")).document("layers.transform")
+                   .request("layers.flip", [] { return QJsonObject{}; }, tr("Flip Layer Horizontal")))->setObjectName("command.layers.flip");
+    add(layer, Spec("layer.flipVertical", tr("Flip Layer Vertical")).document("layers.transform")
+                   .request("layers.flip", [] { return QJsonObject{{"vertical", true}}; }, tr("Flip Layer Vertical")));
+    QMenu* sampling = layer->addMenu(tr("Resampling"));
+    auto samplingItem = [&](const char* id, const QString& label, Sampling s) {
+        add(sampling, Spec(id, label).document("layers.structure").runs([this, s] { samplingCommand(s); }, "layers.set"));
+    };
+    samplingItem("layer.resampling.high", tr("High Quality"), Sampling::High);
+    samplingItem("layer.resampling.smooth", tr("Smooth"), Sampling::Smooth);
+    samplingItem("layer.resampling.nearest", tr("Nearest Neighbour"), Sampling::Nearest);
+
+    // Photoshop's Type menu: the active text layer's outlines as a path (text.toPath) or a shape (text.toShape).
+    QMenu* type = menuBar()->addMenu(tr("&Type"));
+    auto fromText = [this](bool shape) -> std::optional<QJsonObject> {
+        if (!session_->activeLayerId()) { QMessageBox::information(this, shape ? tr("Convert to Shape") : tr("Create Work Path"), tr("Choose a text layer first.")); return std::nullopt; }
+        return QJsonObject{};
+    };
+    nameAction("type.workPath", add(type, Spec("type.createWorkPath", tr("Create &Work Path")).document("edit.text")
+                                              .request("text.toPath", [fromText] { return fromText(false); }, tr("Create Work Path"))))->setObjectName("command.text.toPath");
+    nameAction("type.shape", add(type, Spec("type.convertToShape", tr("Convert to &Shape")).document("edit.paint")
+                                           .request("text.toShape", [fromText] { return fromText(true); }, tr("Convert to Shape"))))->setObjectName("command.text.toShape");
 
     // Everything about the selection in one place, as Photoshop's Select menu: the whole-canvas commands,
     // then Modify, then loading a layer's pixels or mask as the selection.
     QMenu* select = menuBar()->addMenu(tr("&Select"));
-    nameAction("select.all", needsDocument(select->addAction(tr("&All"), QKeySequence::SelectAll, this, [this] { runCommand("selection.all", {}, tr("Select All")); }), "edit.selection"));
-    nameAction("select.deselect", needsDocument(select->addAction(tr("&Deselect"), QKeySequence("Ctrl+D"), this, [this] { runCommand("selection.none", {}, tr("Deselect")); }), "edit.selection"));
-    nameAction("select.reselect", needsDocument(select->addAction(tr("&Reselect"), QKeySequence("Shift+Ctrl+D"), this, [this] { if (session_->canReselect()) runCommand("selection.reselect", {}, tr("Reselect")); }), "edit.selection"));
-    nameAction("select.inverse", needsDocument(select->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { runCommand("selection.invert", {}, tr("Inverse")); }), "edit.selection"));
-    needsDocument(select->addAction(tr("Edit in &Quick Mask Mode"), QKeySequence("Q"), this, [this] { session_->toggleQuickMask(); }), "edit.selection");
+    nameAction("select.all", add(select, Spec("select.all", tr("&All"), {QKeySequence::SelectAll}).document("edit.selection")
+                                             .request("selection.all", [] { return QJsonObject{}; }, tr("Select All"))));
+    nameAction("select.deselect", add(select, Spec("select.deselect", tr("&Deselect"), {QKeySequence("Ctrl+D")}).document("edit.selection")
+                                                  .request("selection.none", [] { return QJsonObject{}; }, tr("Deselect"))));
+    nameAction("select.reselect", add(select, Spec("select.reselect", tr("&Reselect"), {QKeySequence("Shift+Ctrl+D")}).document("edit.selection").request("selection.reselect", [this]() -> std::optional<QJsonObject> {
+        if (!session_->canReselect()) return std::nullopt;
+        return QJsonObject{};
+    }, tr("Reselect"))));
+    nameAction("select.inverse", add(select, Spec("select.inverse", tr("&Inverse"), {QKeySequence("Ctrl+Shift+I")}).document("edit.selection")
+                                                 .request("selection.invert", [] { return QJsonObject{}; }, tr("Inverse"))));
+    // Quick Mask: selection.quickMask, on or off.
+    add(select, Spec("select.quickMask", tr("Edit in &Quick Mask Mode"), {QKeySequence("Q")}).document("edit.selection")
+                    .request("selection.quickMask", [] { return QJsonObject{}; }, tr("Quick Mask")))->setObjectName("command.selection.quickMask");
     select->addSeparator();
     QMenu* modify = select->addMenu(tr("&Modify"));
-    needsDocument(modify->addAction(tr("&Expand…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) runCommand("selection.grow", {{"amount", n}}, tr("Expand Selection")); }), "edit.selection");
-    needsDocument(modify->addAction(tr("&Contract…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Contract Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) runCommand("selection.grow", {{"amount", -n}}, tr("Contract Selection")); }), "edit.selection");
-    nameAction("select.feather", needsDocument(modify->addAction(tr("&Feather…"), QKeySequence("Shift+F6"), this, [this] { bool ok; double r = QInputDialog::getDouble(this, tr("Feather Selection"), tr("Radius (pixels)"), 5, 0.1, 250, 1, &ok); if (ok) runCommand("selection.feather", {{"radius", r}}, tr("Feather Selection")); }), "edit.selection"));
-    needsDocument(modify->addAction(tr("&Smooth…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Smooth Selection"), tr("Sample radius (pixels)"), 3, 1, 100, 1, &ok); if (ok) runCommand("selection.smooth", {{"radius", n}}, tr("Smooth Selection")); }), "edit.selection");
-    needsDocument(modify->addAction(tr("&Border…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Border Selection"), tr("Width (pixels)"), 4, 1, 200, 1, &ok); if (ok) runCommand("selection.border", {{"width", n}}, tr("Border Selection")); }), "edit.selection");
+    add(modify, Spec("select.modify.expand", tr("&Expand…")).document("edit.selection").runs([this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) runCommand("selection.grow", {{"amount", n}}, tr("Expand Selection")); }, "selection.grow"));
+    add(modify, Spec("select.modify.contract", tr("&Contract…")).document("edit.selection").runs([this] { bool ok; int n = QInputDialog::getInt(this, tr("Contract Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) runCommand("selection.grow", {{"amount", -n}}, tr("Contract Selection")); }, "selection.grow"));
+    nameAction("select.feather", add(modify, Spec("select.modify.feather", tr("&Feather…"), {QKeySequence("Shift+F6")}).document("edit.selection").runs([this] { bool ok; double r = QInputDialog::getDouble(this, tr("Feather Selection"), tr("Radius (pixels)"), 5, 0.1, 250, 1, &ok); if (ok) runCommand("selection.feather", {{"radius", r}}, tr("Feather Selection")); }, "selection.feather")));
+    add(modify, Spec("select.modify.smooth", tr("&Smooth…")).document("edit.selection").runs([this] { bool ok; int n = QInputDialog::getInt(this, tr("Smooth Selection"), tr("Sample radius (pixels)"), 3, 1, 100, 1, &ok); if (ok) runCommand("selection.smooth", {{"radius", n}}, tr("Smooth Selection")); }, "selection.smooth"));
+    add(modify, Spec("select.modify.border", tr("&Border…")).document("edit.selection").runs([this] { bool ok; int n = QInputDialog::getInt(this, tr("Border Selection"), tr("Width (pixels)"), 4, 1, 200, 1, &ok); if (ok) runCommand("selection.border", {{"width", n}}, tr("Border Selection")); }, "selection.border"));
     select->addSeparator();
     QMenu* load = select->addMenu(tr("&Load as Selection"));
-    needsDocument(load->addAction(tr("Layer Pixels"), this, [this] { if (session_->activeLayerId()) runCommand("selection.fromLayer", {}, tr("Load as Selection")); }), "edit.selection");
-    needsDocument(load->addAction(tr("Layer Mask"), this, [this] { if (session_->activeLayerId()) runCommand("selection.fromLayer", {{"mask", true}}, tr("Load as Selection")); }), "edit.selection");
+    auto loadItem = [&](const char* id, const QString& label, QJsonObject params) {
+        add(load, Spec(id, label).document("edit.selection").request("selection.fromLayer", [this, params]() -> std::optional<QJsonObject> {
+            if (!session_->activeLayerId()) return std::nullopt;
+            return params;
+        }, tr("Load as Selection")).when(hasLayer));
+    };
+    loadItem("select.load.layerPixels", tr("Layer Pixels"), {});
+    loadItem("select.load.layerMask", tr("Layer Mask"), {{"mask", true}});
     load->addSeparator();
-    needsDocument(load->addAction(tr("Add Layer Pixels"), this, [this] { if (session_->activeLayerId()) runCommand("selection.fromLayer", {{"mode", "add"}}, tr("Load as Selection")); }), "edit.selection");
-    needsDocument(load->addAction(tr("Subtract Layer Pixels"), this, [this] { if (session_->activeLayerId()) runCommand("selection.fromLayer", {{"mode", "subtract"}}, tr("Load as Selection")); }), "edit.selection");
-    needsDocument(load->addAction(tr("Intersect with Layer Pixels"), this, [this] { if (session_->activeLayerId()) runCommand("selection.fromLayer", {{"mode", "intersect"}}, tr("Load as Selection")); }), "edit.selection");
-    // Selections kept as alpha channels (the Channels panel; docs/channels.md).
-    needsDocument(select->addAction(tr("Load Selection…"), this, [this] { (new LoadSelectionDialog(session_, this))->open(); }), "edit.channels");
-    nameAction("select.save", needsDocument(select->addAction(tr("Save Selection…"), this, [this] {
+    loadItem("select.load.addLayerPixels", tr("Add Layer Pixels"), {{"mode", "add"}});
+    loadItem("select.load.subtractLayerPixels", tr("Subtract Layer Pixels"), {{"mode", "subtract"}});
+    loadItem("select.load.intersectLayerPixels", tr("Intersect with Layer Pixels"), {{"mode", "intersect"}});
+    // Selections kept as alpha channels (the Channels panel; docs/channels.md): the dialogs' OK runs
+    // channels.loadSelection and channels.saveSelection.
+    add(select, Spec("select.loadSelection", tr("Load Selection…")).document("edit.channels").runs([this] { (new LoadSelectionDialog(session_, this))->open(); }, "channels.loadSelection"));
+    nameAction("select.save", add(select, Spec("select.saveSelection", tr("Save Selection…")).document("edit.channels").runs([this] {
         if (!session_->document()->selection) { showError(tr("Save Selection"), tr("Make a selection first.")); return; }
         (new SaveSelectionDialog(session_, this))->open();
-    }), "edit.channels"));
+    }, "channels.saveSelection")));
     // Photoshop's channel keys: Ctrl+2 the composite, then one key per colour channel (Ctrl+3, 4, 5 red, green and
     // blue; Ctrl+3 to 6 cyan to black in CMYK), then the first alpha channels up to Ctrl+9; with Alt, the channel is
-    // loaded as a selection instead.
-    auto channelKey = [this](int n, bool load) {
-        if (!session_->hasDocument()) return;
-        const auto& channels = session_->document()->channels;
-        const int firstAlpha = 3 + colorModeColorChannels(session_->document()->colorMode);
-        if (n >= firstAlpha && size_t(n - firstAlpha) >= channels.size()) return;
-        if (load) {
-            SelectionSource source;
-            source.kind = n == 2 ? SelectionSource::Composite : n == 3 ? SelectionSource::Red : n == 4 ? SelectionSource::Green : n == 5 ? SelectionSource::Blue
-                          : n < firstAlpha ? SelectionSource::Black : SelectionSource::AlphaChannel;
-            if (n >= firstAlpha) source.id = channels[size_t(n - firstAlpha)].id;
-            session_->loadSelectionFromSource(source, false, SelectionMode::Replace);
-        } else if (n < firstAlpha) session_->selectColorChannels(n == 2 ? session_->allColors() : 1u << (n - 3));
-        else session_->selectAlphaChannel(channels[size_t(n - firstAlpha)].id);
+    // loaded as a selection instead. They run channels.select and channels.loadSelection.
+    auto channelOfKey = [this](int n) -> std::optional<QString> {
+        if (!session_->hasDocument()) return std::nullopt;
+        const Document& d = *session_->document();
+        const int firstAlpha = 3 + colorModeColorChannels(d.colorMode);
+        if (n == 2) return QString::fromLatin1(colorModeKey(d.colorMode));
+        if (n < firstAlpha) return QString::fromLatin1(colorChannelName(d.colorMode, n - 3)).toLower();
+        if (size_t(n - firstAlpha) >= d.channels.size()) return std::nullopt;
+        return QString::fromStdString(d.channels[size_t(n - firstAlpha)].id);
     };
     for (int n = 2; n <= 9; n++)
-        for (bool load : {false, true}) {
-            auto* key = needsDocument(new QAction(load ? tr("Load Channel %1 as Selection").arg(n - 1) : tr("Select Channel %1").arg(n - 1), this), "edit.channels");
-            key->setShortcut(QKeySequence(QString::fromLatin1(load ? "Ctrl+Alt+%1" : "Ctrl+%1").arg(n)));
-            connect(key, &QAction::triggered, this, [channelKey, n, load] { channelKey(n, load); });
-            addAction(key);
+        for (bool loadKey : {false, true}) {
+            const QString id = QStringLiteral("select.channel.%1%2").arg(loadKey ? QStringLiteral("load") : QStringLiteral("target")).arg(n - 1);
+            add(nullptr, Spec(id, loadKey ? tr("Load Channel %1 as Selection").arg(n - 1) : tr("Select Channel %1").arg(n - 1),
+                              {QKeySequence(QString::fromLatin1(loadKey ? "Ctrl+Alt+%1" : "Ctrl+%1").arg(n))})
+                             .document("edit.channels")
+                             .request(loadKey ? "channels.loadSelection" : "channels.select", [channelOfKey, n]() -> std::optional<QJsonObject> {
+                                 const auto channel = channelOfKey(n);
+                                 if (!channel) return std::nullopt;
+                                 return QJsonObject{{"channel", *channel}};
+                             }));
         }
 
     QMenu* filter = menuBar()->addMenu(tr("Filte&r"));
@@ -728,8 +914,9 @@ void MainWindow::buildMenus() {
         return kind == FilterKind::GaussianBlur || kind == FilterKind::MotionBlur || kind == FilterKind::AddNoise
                || compositor::smartFilterParametersFor(kind, compositor::FilterSettings::defaults(kind)).has_value();
     };
-    auto filterAction = [this, &needsDocument, smartCapable](QMenu* menu, const QString& label, FilterKind kind) {
-        needsDocument(menu->addAction(label, this, [this, kind, smartCapable] {
+    auto filterAction = [this, &add, smartCapable](QMenu* menu, const QString& group, const QString& label, FilterKind kind) {
+        add(menu, Spec(QStringLiteral("filter.") + group + commandSlug(QString::fromUtf8(filterKindName(kind))), label)
+                      .document((std::string("filter.") + filterKindName(kind)).c_str()).runs([this, kind, smartCapable] {
             if (smartCapable(kind) && session_->canAddSmartFilter()) { (new FilterDialog(session_, kind, this, true))->show(); return; }
             if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
@@ -740,53 +927,54 @@ void MainWindow::buildMenus() {
                 return;
             }
             (new FilterDialog(session_, kind, this))->show();
-        }), (std::string("filter.") + filterKindName(kind)).c_str());
+        }, "pixels.filter"));
     };
     // Photoshop's places: the top-level filters, then the submenus in its order, each in its own order.
-    // Photoshop's shortcut. A destructive filter here: on a smart object it asks first, like the others.
-    needsDocument(filter->addAction(tr("Camera &Raw Filter…"), QKeySequence("Shift+Ctrl+A"), this, [this] {
+    // Photoshop's shortcut. A destructive filter here: on a smart object it asks first, like the others. OK runs
+    // pixels.cameraRaw.
+    add(filter, Spec("filter.cameraRaw", tr("Camera &Raw Filter…"), {QKeySequence("Shift+Ctrl+A")}).document("filter.Camera Raw").runs([this] {
         if (session_->smartObjectBlocksPixels(true)) return;
         if (!session_->canAdjustPixels()) { showError(tr("Camera Raw Filter"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
         (new CameraRawDialog(session_, this))->show();
-    }), "filter.Camera Raw");
-    filterAction(filter, tr("&Lens Correction…"), FilterKind::LensCorrection);
+    }, "pixels.cameraRaw"));
+    filterAction(filter, QString(), tr("&Lens Correction…"), FilterKind::LensCorrection);
     filter->addSeparator();
     QMenu* blurMenu = filter->addMenu(tr("&Blur"));
-    filterAction(blurMenu, tr("&Box Blur…"), FilterKind::BoxBlur);
-    filterAction(blurMenu, tr("&Gaussian Blur…"), FilterKind::GaussianBlur);
-    filterAction(blurMenu, tr("&Motion Blur…"), FilterKind::MotionBlur);
-    filterAction(blurMenu, tr("&Radial Blur…"), FilterKind::RadialBlur);
-    filterAction(blurMenu, tr("&Surface Blur…"), FilterKind::SurfaceBlur);
+    filterAction(blurMenu, QStringLiteral("blur."), tr("&Box Blur…"), FilterKind::BoxBlur);
+    filterAction(blurMenu, QStringLiteral("blur."), tr("&Gaussian Blur…"), FilterKind::GaussianBlur);
+    filterAction(blurMenu, QStringLiteral("blur."), tr("&Motion Blur…"), FilterKind::MotionBlur);
+    filterAction(blurMenu, QStringLiteral("blur."), tr("&Radial Blur…"), FilterKind::RadialBlur);
+    filterAction(blurMenu, QStringLiteral("blur."), tr("&Surface Blur…"), FilterKind::SurfaceBlur);
     QMenu* distortMenu = filter->addMenu(tr("&Distort"));
-    filterAction(distortMenu, tr("&Pinch…"), FilterKind::Pinch);
-    filterAction(distortMenu, tr("P&olar Coordinates…"), FilterKind::PolarCoordinates);
-    filterAction(distortMenu, tr("&Ripple…"), FilterKind::Ripple);
-    filterAction(distortMenu, tr("S&hear…"), FilterKind::Shear);
-    filterAction(distortMenu, tr("&Spherize…"), FilterKind::Spherize);
-    filterAction(distortMenu, tr("&Twirl…"), FilterKind::Twirl);
-    filterAction(distortMenu, tr("&Wave…"), FilterKind::Wave);
-    filterAction(distortMenu, tr("&ZigZag…"), FilterKind::ZigZag);
+    filterAction(distortMenu, QStringLiteral("distort."), tr("&Pinch…"), FilterKind::Pinch);
+    filterAction(distortMenu, QStringLiteral("distort."), tr("P&olar Coordinates…"), FilterKind::PolarCoordinates);
+    filterAction(distortMenu, QStringLiteral("distort."), tr("&Ripple…"), FilterKind::Ripple);
+    filterAction(distortMenu, QStringLiteral("distort."), tr("S&hear…"), FilterKind::Shear);
+    filterAction(distortMenu, QStringLiteral("distort."), tr("&Spherize…"), FilterKind::Spherize);
+    filterAction(distortMenu, QStringLiteral("distort."), tr("&Twirl…"), FilterKind::Twirl);
+    filterAction(distortMenu, QStringLiteral("distort."), tr("&Wave…"), FilterKind::Wave);
+    filterAction(distortMenu, QStringLiteral("distort."), tr("&ZigZag…"), FilterKind::ZigZag);
     QMenu* noiseMenu = filter->addMenu(tr("&Noise"));
-    filterAction(noiseMenu, tr("Add &Noise…"), FilterKind::AddNoise);
-    filterAction(noiseMenu, tr("&Dust && Scratches…"), FilterKind::DustAndScratches);
-    filterAction(noiseMenu, tr("&Median…"), FilterKind::Median);
+    filterAction(noiseMenu, QStringLiteral("noise."), tr("Add &Noise…"), FilterKind::AddNoise);
+    filterAction(noiseMenu, QStringLiteral("noise."), tr("&Dust && Scratches…"), FilterKind::DustAndScratches);
+    filterAction(noiseMenu, QStringLiteral("noise."), tr("&Median…"), FilterKind::Median);
     QMenu* pixelateMenu = filter->addMenu(tr("&Pixelate"));
-    filterAction(pixelateMenu, tr("&Mosaic…"), FilterKind::Mosaic);
+    filterAction(pixelateMenu, QStringLiteral("pixelate."), tr("&Mosaic…"), FilterKind::Mosaic);
     QMenu* renderMenu = filter->addMenu(tr("R&ender"));
-    filterAction(renderMenu, tr("&Clouds"), FilterKind::Clouds);
-    filterAction(renderMenu, tr("&Difference Clouds"), FilterKind::DifferenceClouds);
+    filterAction(renderMenu, QStringLiteral("render."), tr("&Clouds"), FilterKind::Clouds);
+    filterAction(renderMenu, QStringLiteral("render."), tr("&Difference Clouds"), FilterKind::DifferenceClouds);
     QMenu* sharpenMenu = filter->addMenu(tr("S&harpen"));
-    filterAction(sharpenMenu, tr("&Unsharp Mask…"), FilterKind::UnsharpMask);
+    filterAction(sharpenMenu, QStringLiteral("sharpen."), tr("&Unsharp Mask…"), FilterKind::UnsharpMask);
     QMenu* stylizeMenu = filter->addMenu(tr("St&ylize"));
-    filterAction(stylizeMenu, tr("&Emboss…"), FilterKind::Emboss);
-    filterAction(stylizeMenu, tr("&Find Edges"), FilterKind::FindEdges);
+    filterAction(stylizeMenu, QStringLiteral("stylize."), tr("&Emboss…"), FilterKind::Emboss);
+    filterAction(stylizeMenu, QStringLiteral("stylize."), tr("&Find Edges"), FilterKind::FindEdges);
     QMenu* otherMenu = filter->addMenu(tr("O&ther"));
-    filterAction(otherMenu, tr("&High Pass…"), FilterKind::HighPass);
-    filterAction(otherMenu, tr("Ma&ximum…"), FilterKind::Maximum);
-    filterAction(otherMenu, tr("M&inimum…"), FilterKind::Minimum);
-    filterAction(otherMenu, tr("&Offset…"), FilterKind::Offset);
+    filterAction(otherMenu, QStringLiteral("other."), tr("&High Pass…"), FilterKind::HighPass);
+    filterAction(otherMenu, QStringLiteral("other."), tr("Ma&ximum…"), FilterKind::Maximum);
+    filterAction(otherMenu, QStringLiteral("other."), tr("M&inimum…"), FilterKind::Minimum);
+    filterAction(otherMenu, QStringLiteral("other."), tr("&Offset…"), FilterKind::Offset);
     filter->addSeparator();
-    // OpenMosh's glitch, distortion and retro effects (docs/mosh.md), a submenu per category.
+    // OpenMosh's glitch, distortion and retro effects (docs/mosh.md), a submenu per category; OK runs pixels.mosh.
     QMenu* moshMenu = filter->addMenu(tr("M&osh"));
     for (int c = 0; c < compositor::mosh::categoryCount; c++) {
         const auto category = compositor::mosh::Category(c);
@@ -795,16 +983,17 @@ void MainWindow::buildMenus() {
             if (spec.category != category) continue;
             if (!sub) sub = moshMenu->addMenu(names::mosh(compositor::mosh::categoryName(category)));
             const compositor::mosh::EffectSpec* effect = &spec;
-            needsDocument(sub->addAction(tr("%1…").arg(names::mosh(spec.name)), this, [this, effect] {
+            add(sub, Spec(QStringLiteral("filter.mosh.") + commandSlug(QString::fromUtf8(spec.id.data(), qsizetype(spec.id.size()))), tr("%1…").arg(names::mosh(spec.name)))
+                         .document("filter.Mosh").runs([this, effect] {
                 if (session_->smartObjectBlocksPixels(true)) return;
                 if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
                 (new MoshDialog(session_, *effect, this))->show();
-            }), "filter.Mosh");
+            }, "pixels.mosh"));
         }
     }
     filter->addSeparator();
-    gmicAction_ = needsDocument(filter->addAction(tr("&G'MIC…"), QKeySequence("Ctrl+Shift+G"), this, [this] { openGmic(); }), "filter.G'MIC");
-    removeBackgroundAction_ = needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {
+    gmicAction_ = add(filter, Spec("filter.gmic", tr("&G'MIC…"), {QKeySequence("Ctrl+Shift+G")}).document("filter.G'MIC").runs([this] { openGmic(); }, "pixels.gmic"));
+    removeBackgroundAction_ = add(filter, Spec("filter.removeBackground", tr("Remove &Background…")).document("edit.removeBackground").runs([this] {
         if (!ModelStore::ready()) {
             // Off, or no model yet: the preferences page is where it gets turned on and fetched.
             auto answer = QMessageBox::question(this, tr("Remove Background"),
@@ -815,20 +1004,25 @@ void MainWindow::buildMenus() {
             return;
         }
         if (session_->smartObjectBlocksPixels(true)) return;
-            if (!session_->canAdjustPixels()) { showError(tr("Remove Background"), tr("Select a visible image layer (not a mask) to remove its background.")); return; }
+        if (!session_->canAdjustPixels()) { showError(tr("Remove Background"), tr("Select a visible image layer (not a mask) to remove its background.")); return; }
         const ModelInfo* quick = ModelStore::modelById("pphumanseg");
         QString quickPath = quick && ModelStore::isPresent(*quick) ? ModelStore::pathFor(*quick) : QString();
         (new BackgroundDialog(session_, ModelStore::pathFor(ModelStore::selected()), quickPath, this))->show();
-    }), "edit.removeBackground");
+    }, "pixels.removeBackground"));
     refreshBackgroundAction();
 
     QMenu* view = menuBar()->addMenu(tr("&View"));
-    needsDocument(view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { session_->zoomTo(session_->viewport.zoom * 1.25); }), "view");
-    needsDocument(view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { session_->zoomTo(session_->viewport.zoom / 1.25); }), "view");
-    needsDocument(view->addAction(tr("&Fit on Screen"), QKeySequence("Ctrl+0"), this, [this] { session_->fitView(); }), "view");
-    needsDocument(view->addAction(tr("&Actual Pixels"), QKeySequence("Ctrl+1"), this, [this] { session_->zoomTo(1); }), "view");
+    // The zoom runs view.zoom (the view, not the document: nothing is recorded).
+    add(view, Spec("view.zoomIn", tr("Zoom &In"), {QKeySequence::ZoomIn}).document("view").request("view.zoom", [this] { return QJsonObject{{"zoom", session_->viewport.zoom * 1.25}}; }))
+        ->setObjectName("command.view.zoomIn");
+    add(view, Spec("view.zoomOut", tr("Zoom &Out"), {QKeySequence::ZoomOut}).document("view").request("view.zoom", [this] { return QJsonObject{{"zoom", session_->viewport.zoom / 1.25}}; }));
+    add(view, Spec("view.fitOnScreen", tr("&Fit on Screen"), {QKeySequence("Ctrl+0")}).document("view").request("view.zoom", [] { return QJsonObject{{"fit", true}}; }))
+        ->setObjectName("command.view.fit");
+    add(view, Spec("view.actualPixels", tr("&Actual Pixels"), {QKeySequence("Ctrl+1")}).document("view").request("view.zoom", [] { return QJsonObject{{"zoom", 1}}; }))
+        ->setObjectName("command.view.actualPixels");
     view->addSeparator();
-    rulersAction_ = view->addAction(tr("&Rulers"), QKeySequence("Ctrl+R"), this, [this](bool on) {
+    rulersAction_ = add(view, Spec("view.rulers", tr("&Rulers"), {QKeySequence("Ctrl+R")}));
+    connect(rulersAction_, &QAction::triggered, this, [this](bool on) {
         for (auto& tab : tabs_) tab.frame->setRulersVisible(on);
         QSettings().setValue("view/rulers", on);
     });
@@ -838,9 +1032,8 @@ void MainWindow::buildMenus() {
     // Photoshop's guides and snapping: View > Show > Guides (Ctrl+;) and Smart Guides, Snap (Shift+Ctrl+;) and Snap To,
     // Lock Guides (Alt+Ctrl+;), Clear Guides and New Guide. The switches are the app's (ViewOptions), the guides the
     // document's: adding and clearing them are undo steps, run as the guides.* commands.
-    auto viewOption = [this](QMenu* menu, const QString& label, const QKeySequence& key, bool ViewOptions::*field) {
-        QAction* a = menu->addAction(label);
-        if (!key.isEmpty()) a->setShortcut(key);
+    auto viewOption = [this, &reg](QMenu* menu, const char* id, const QString& label, const QKeySequence& key, bool ViewOptions::*field) {
+        QAction* a = reg.add(menu, Spec(id, label, key.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{key}).command);
         a->setCheckable(true);
         a->setChecked(ViewOptions::get().*field);
         connect(a, &QAction::toggled, this, [this, field](bool on) {
@@ -852,15 +1045,15 @@ void MainWindow::buildMenus() {
         return a;
     };
     QMenu* show = view->addMenu(tr("S&how"));
-    QAction* showGuides = viewOption(show, tr("&Guides"), QKeySequence("Ctrl+;"), &ViewOptions::showGuides);
-    viewOption(show, tr("&Smart Guides"), QKeySequence(), &ViewOptions::smartGuides);
+    QAction* showGuides = viewOption(show, "view.show.guides", tr("&Guides"), QKeySequence("Ctrl+;"), &ViewOptions::showGuides);
+    viewOption(show, "view.show.smartGuides", tr("&Smart Guides"), QKeySequence(), &ViewOptions::smartGuides);
     addAction(showGuides);   // the shortcut works with the menu closed
-    QAction* snap = viewOption(view, tr("Sn&ap"), QKeySequence("Shift+Ctrl+;"), &ViewOptions::snap);
+    QAction* snap = viewOption(view, "view.snap", tr("Sn&ap"), QKeySequence("Shift+Ctrl+;"), &ViewOptions::snap);
     addAction(snap);
     QMenu* snapTo = view->addMenu(tr("Snap &To"));
-    QList<QAction*> snapTargets{viewOption(snapTo, tr("&Guides"), QKeySequence(), &ViewOptions::snapToGuides),
-                                viewOption(snapTo, tr("&Layers"), QKeySequence(), &ViewOptions::snapToLayers),
-                                viewOption(snapTo, tr("&Document Bounds"), QKeySequence(), &ViewOptions::snapToBounds)};
+    QList<QAction*> snapTargets{viewOption(snapTo, "view.snapTo.guides", tr("&Guides"), QKeySequence(), &ViewOptions::snapToGuides),
+                                viewOption(snapTo, "view.snapTo.layers", tr("&Layers"), QKeySequence(), &ViewOptions::snapToLayers),
+                                viewOption(snapTo, "view.snapTo.documentBounds", tr("&Document Bounds"), QKeySequence(), &ViewOptions::snapToBounds)};
     snapTo->addSeparator();
     auto setAllTargets = [snapTargets](bool on) {
         ViewOptions& o = ViewOptions::get();
@@ -868,44 +1061,51 @@ void MainWindow::buildMenus() {
         o.save();
         for (QAction* a : snapTargets) { QSignalBlocker block(a); a->setChecked(on); }
     };
-    snapTo->addAction(tr("&All", "snap to"), this, [setAllTargets] { setAllTargets(true); });
-    snapTo->addAction(tr("&None", "snap to"), this, [setAllTargets] { setAllTargets(false); });
+    add(snapTo, Spec("view.snapTo.all", tr("&All", "snap to")).runs([setAllTargets] { setAllTargets(true); }));
+    add(snapTo, Spec("view.snapTo.none", tr("&None", "snap to")).runs([setAllTargets] { setAllTargets(false); }));
     view->addSeparator();
-    QAction* lockGuides = viewOption(view, tr("Lock Gu&ides"), QKeySequence("Alt+Ctrl+;"), &ViewOptions::lockGuides);
+    QAction* lockGuides = viewOption(view, "view.lockGuides", tr("Lock Gu&ides"), QKeySequence("Alt+Ctrl+;"), &ViewOptions::lockGuides);
     addAction(lockGuides);
-    needsDocument(view->addAction(tr("C&lear Guides"), this, [this] { if (!session_->guides().empty()) runCommand("guides.delete", {{"all", true}}, tr("Clear Guides")); }));
-    needsDocument(view->addAction(tr("&New Guide…"), this, [this] {
+    add(view, Spec("view.clearGuides", tr("C&lear Guides")).document().request("guides.delete", [this]() -> std::optional<QJsonObject> {
+        if (session_->guides().empty()) return std::nullopt;
+        return QJsonObject{{"all", true}};
+    }, tr("Clear Guides")));
+    add(view, Spec("view.newGuide", tr("&New Guide…")).document().runs([this] {
         auto guide = askNewGuide(this);
         if (!guide) return;
         runCommand("guides.add", {{"orientation", guide->vertical() ? "vertical" : "horizontal"}, {"position", guide->position}}, tr("New Guide"));
-    }));
+    }, "guides.add"));
     view->addSeparator();
     layersDock_->toggleViewAction()->setText(tr("&Layers Panel"));
     layersDock_->toggleViewAction()->setShortcut(QKeySequence("F7"));   // Photoshop's Window > Layers
     layersDock_->toggleViewAction()->setObjectName("window.layers");
     layersDock_->toggleViewAction()->installEventFilter(fieldGuard);
     adjustDock_->toggleViewAction()->setText(tr("&Adjustments Panel"));
-    view->addAction(layersDock_->toggleViewAction());
+    reg.adopt(view, layersDock_->toggleViewAction(), Spec("window.layers", layersDock_->toggleViewAction()->text(), {QKeySequence("F7")}).command);
     pathsDock_->toggleViewAction()->setText(tr("&Paths Panel"));
-    view->addAction(pathsDock_->toggleViewAction());
-    view->addAction(adjustDock_->toggleViewAction());
+    reg.adopt(view, pathsDock_->toggleViewAction(), Spec("window.paths", pathsDock_->toggleViewAction()->text()).command);
+    reg.adopt(view, adjustDock_->toggleViewAction(), Spec("window.adjustments", adjustDock_->toggleViewAction()->text()).command);
     view->addSeparator();
     // A 32-bit document's view (docs/bit-depth.md, "32 bits"): not an undo step; the canvas shows it as it changes.
-    previewOptionsAction_ = view->addAction(tr("32-bit Pre&view Options…"), this, [this] {
+    previewOptionsAction_ = add(view, Spec("view.previewOptions32", tr("32-bit Pre&view Options…")).runs([this] {
         const View32 before = session_->view32();
         auto chosen = askPreviewOptions(this, before, [this](const View32& v) { session_->setView32(v); });
         session_->setView32(chosen ? *chosen : before);
-    });
+    }, "view.exposure").when([this] {
+        return session_->hasDocument() && session_->sampleType() == SampleType::F32 ? QString() : tr("For 32-bit documents");
+    }));
     // Soft proofing (docs/color-management.md): Photoshop's Proof Setup, Proof Colors and Gamut Warning.
     QMenu* proofSetup = view->addMenu(tr("Proof Set&up"));
-    proofSetup->addAction(tr("Custom…"), this, [this] { color::showProofSetup(this); });
+    add(proofSetup, Spec("view.proofSetup.custom", tr("Custom…")).runs([this] { color::showProofSetup(this); }, "color.settings"));
     proofSetup->addSeparator();
     // Photoshop's default proof: the press the Working CMYK describes.
-    QAction* proofCmyk = proofSetup->addAction(tr("Working CMYK"), this, [] { color::Settings s = color::settings(); s.proofProfile = QStringLiteral("working-cmyk"); color::setSettings(s); });
+    QAction* proofCmyk = add(proofSetup, Spec("view.proofSetup.workingCmyk", tr("Working CMYK")).runs([] { color::Settings s = color::settings(); s.proofProfile = QStringLiteral("working-cmyk"); color::setSettings(s); }, "color.settings"));
     proofCmyk->setCheckable(true);
     proofCmyk->setChecked(color::settings().proofProfile == QLatin1String("working-cmyk"));
-    QAction* proof = view->addAction(tr("Proof Colo&rs"), QKeySequence("Ctrl+Y"), this, [](bool on) { color::Settings s = color::settings(); s.proofColors = on; color::setSettings(s); });
-    QAction* gamut = view->addAction(tr("Gamut Wa&rning"), QKeySequence("Ctrl+Shift+Y"), this, [](bool on) { color::Settings s = color::settings(); s.gamutWarning = on; color::setSettings(s); });
+    QAction* proof = add(view, Spec("view.proofColors", tr("Proof Colo&rs"), {QKeySequence("Ctrl+Y")}));
+    connect(proof, &QAction::triggered, this, [](bool on) { color::Settings s = color::settings(); s.proofColors = on; color::setSettings(s); });
+    QAction* gamut = add(view, Spec("view.gamutWarning", tr("Gamut Wa&rning"), {QKeySequence("Ctrl+Shift+Y")}));
+    connect(gamut, &QAction::triggered, this, [](bool on) { color::Settings s = color::settings(); s.gamutWarning = on; color::setSettings(s); });
     for (QAction* a : {proof, gamut}) a->setCheckable(true);
     connect(color::notifier(), &color::Notifier::changed, this, [this, proof, gamut, proofCmyk] {
         proof->setChecked(color::settings().proofColors);
@@ -914,10 +1114,12 @@ void MainWindow::buildMenus() {
         updateColorSwatches();
     });
     view->addSeparator();
-    QAction* grid = view->addAction(tr("Pixel &Grid"), this, [this](bool on) { session_->showsPixelGrid = on; canvas_->update(); });
+    QAction* grid = add(view, Spec("view.pixelGrid", tr("Pixel &Grid")));
+    connect(grid, &QAction::triggered, this, [this](bool on) { session_->showsPixelGrid = on; canvas_->update(); });
     grid->setCheckable(true);
     grid->setChecked(true);
-    QAction* controls = view->addAction(tr("Transform &Controls"), QKeySequence("Ctrl+H"), this, [this](bool on) { session_->showsTransformControls = on; emit session_->transformChanged(); });
+    QAction* controls = add(view, Spec("view.transformControls", tr("Transform &Controls"), {QKeySequence("Ctrl+H")}));
+    connect(controls, &QAction::triggered, this, [this](bool on) { session_->showsTransformControls = on; emit session_->transformChanged(); });
     controls->setCheckable(true);
     controls->setChecked(true);
 
@@ -925,27 +1127,27 @@ void MainWindow::buildMenus() {
     QMenu* window = menuBar()->addMenu(tr("&Window"));
     actionsDock_->toggleViewAction()->setText(tr("&Actions"));
     actionsDock_->toggleViewAction()->setShortcut(QKeySequence("Alt+F9"));
-    window->addAction(actionsDock_->toggleViewAction());
+    reg.adopt(window, actionsDock_->toggleViewAction(), Spec("window.actions", actionsDock_->toggleViewAction()->text(), {QKeySequence("Alt+F9")}).command);
     window->addAction(adjustDock_->toggleViewAction());
     window->addAction(layersDock_->toggleViewAction());
     channelsDock_->toggleViewAction()->setText(tr("&Channels"));
-    window->addAction(channelsDock_->toggleViewAction());
+    reg.adopt(window, channelsDock_->toggleViewAction(), Spec("window.channels", channelsDock_->toggleViewAction()->text()).command);
     histogramDock_->toggleViewAction()->setText(tr("&Histogram"));
-    window->addAction(histogramDock_->toggleViewAction());
+    reg.adopt(window, histogramDock_->toggleViewAction(), Spec("window.histogram", histogramDock_->toggleViewAction()->text()).command);
     window->addAction(pathsDock_->toggleViewAction());
     timelineDock_->toggleViewAction()->setText(tr("&Timeline"));
-    window->addAction(timelineDock_->toggleViewAction());
+    reg.adopt(window, timelineDock_->toggleViewAction(), Spec("window.timeline", timelineDock_->toggleViewAction()->text()).command);
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
-    help->addAction(tr("&Welcome to NekoPhoto"), this, &MainWindow::showWelcome);
-    help->addAction(tr("&About NekoPhoto"), this, [this] {
+    add(help, Spec("help.welcome", tr("&Welcome to NekoPhoto")).runs([this] { showWelcome(); }));
+    add(help, Spec("help.about", tr("&About NekoPhoto")).runs([this] {
         QMessageBox::about(this, tr("About NekoPhoto"), tr("<b>NekoPhoto</b> %3<br>A layered photo editor and painting app for Linux. "
             "It began as a Linux port of <a href=\"https://github.com/robbietilton/Compositor\">Compositor</a> for macOS, and still opens its projects.<br><br>"
             "Qt %1 &middot; project format version %2<br><br>"
             "Free software under the GNU General Public License, version 3 or later, with ABSOLUTELY NO WARRANTY. "
             "Compositor's own code is MIT licensed by Wonder Assembly LLC; the licences of the bundled components "
             "are in THIRD-PARTY-NOTICES.md, installed with the program.").arg(QT_VERSION_STR).arg(projectFormatVersion).arg(QApplication::applicationVersion()));
-    });
+    }));
     refreshRecent();
 }
 
@@ -990,9 +1192,18 @@ void MainWindow::refreshDepthGating() {
             a->setProperty("depthTip", QVariant());
         }
     };
-    for (QAction* a : documentActions_) {
-        const QString feature = actionFeatures_.value(a);
-        gate(a, !deep || (!feature.isEmpty() && session_->supportsFeature(feature.toStdString())), has, feature.toStdString());
+    // The registry's commands: one that needs a document is greyed without one or where its feature is not supported
+    // (saying so in its tooltip); any command is greyed while its own reason holds.
+    for (const Command* c : commands_->all()) {
+        QAction* a = c->action;
+        if (!a) continue;
+        if (!c->needsDocument) {
+            if (c->unavailable) a->setEnabled(!session_ || c->unavailable().isEmpty());
+            continue;
+        }
+        const std::string feature = c->feature.toStdString();
+        const bool allowed = !deep || (!feature.empty() && session_->supportsFeature(feature));
+        gate(a, allowed, has && (!allowed || !c->unavailable || c->unavailable().isEmpty()), feature);
     }
     for (auto it = toolActions_.begin(); it != toolActions_.end(); ++it) gate(it.value(), !deep || session_->toolSupportedAtDepth(it.key()), true, EditorSession::toolFeature(it.key()));
     gate(eraserAction_, !deep || session_->toolSupportedAtDepth(Tool::Brush), true, "tool.brush");
@@ -1014,7 +1225,6 @@ void MainWindow::refreshDepthGating() {
     // Lab Color in a 32-bit one.
     if (has && mode32Action_ && colorMode != ColorMode::RGB) gate(mode32Action_, false, true, "document.mode");
     if (has && modeCmykAction_ && depth == SampleType::F32) for (QAction* a : {modeCmykAction_, modeLabAction_}) gate(a, false, true, "mode.cmykLab");
-    if (previewOptionsAction_) previewOptionsAction_->setEnabled(depth == SampleType::F32);
     refreshExposure();
 }
 

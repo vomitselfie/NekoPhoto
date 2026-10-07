@@ -978,6 +978,9 @@ public:
     void moveWarpCagePoint(int index, QPointF documentPoint);
     void setWarpCage(const compositor::WarpMesh& cage);
     bool commitWarpCage(QString* error = nullptr);
+    /// Enter on the warp cage (CONTRIBUTING.md, "Commands"): the cage's 16 points as layers.setCage on the layer it is
+    /// over, when the command path reaches this session; otherwise, or when the method refuses, commitWarpCage.
+    bool commitWarpCageCommand(QString* error = nullptr);
     void cancelWarpCage();
     /// Adds a Smart Filter on top of the active smart object's stack; one undo step.
     bool addSmartFilter(const compositor::SmartFilterEntry& entry, QString* error = nullptr);

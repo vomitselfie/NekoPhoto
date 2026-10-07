@@ -88,6 +88,31 @@ QJsonObject layerStyleRequest(const LayerStyle& style, ColorMode mode) {
     return o;
 }
 
+bool layerStyleFromRequest(const QJsonObject& request, ColorMode mode, LayerStyle& style, QString* error) {
+    QJsonObject given = request;
+    const QJsonValue blendIf = given.take("blendIf");
+    const QJsonValue referenceX = given.take("referenceX"), referenceY = given.take("referenceY");
+    const double x = style.referenceX, y = style.referenceY;
+    std::string why;
+    if (!layerStyleFromJson(QJsonDocument(given).toJson(QJsonDocument::Compact).toStdString(), style, &why)) {
+        if (error) *error = QString::fromStdString(why.empty() ? "style must be an object, shaped as layers.style shows" : why);
+        return false;
+    }
+    try {
+        if (!blendIf.isUndefined()) style.blendIf = blendIfFrom(blendIf, BlendIf{}, mode);
+    } catch (const RpcError& e) {
+        if (error) *error = QString::fromUtf8(e.what());
+        return false;
+    }
+    if ((!referenceX.isUndefined() && !referenceX.isDouble()) || (!referenceY.isUndefined() && !referenceY.isDouble())) {
+        if (error) *error = QStringLiteral("referenceX and referenceY must be numbers");
+        return false;
+    }
+    style.referenceX = referenceX.isDouble() ? referenceX.toDouble() : x;
+    style.referenceY = referenceY.isDouble() ? referenceY.toDouble() : y;
+    return true;
+}
+
 void AutomationServer::registerLayersHandlers() {
     MainWindow* w = window_;
     const SessionOf session{w};
@@ -335,20 +360,12 @@ void AutomationServer::registerLayersHandlers() {
     add("layers.setStyle", [session, layerOrActive, styleJson](const QJsonObject& p) {
         const Uuid id = layerOrActive(p).id;
         if (!p.value("style").isObject()) fail("style must be an object, shaped as layers.style shows", invalidParams);
-        QJsonObject given = p.value("style").toObject();
-        const QJsonValue blendIf = given.take("blendIf");
-        const QJsonValue referenceX = given.take("referenceX"), referenceY = given.take("referenceY");
-        LayerStyle style;
-        std::string error;
-        const QByteArray json = QJsonDocument(given).toJson(QJsonDocument::Compact);
-        if (!layerStyleFromJson(json.toStdString(), style, &error))
-            fail(QString::fromStdString(error.empty() ? "style must be an object, shaped as layers.style shows" : error), invalidParams);
-        const ColorMode mode = session()->document()->colorMode;
-        if (!blendIf.isUndefined()) style.blendIf = blendIfFrom(blendIf, BlendIf{}, mode);
         // The effects' reference point stays the layer's unless the style names one (a copied style carries its own).
         const LayerStyle current = session()->layerStyle(id);
-        style.referenceX = referenceX.isDouble() ? referenceX.toDouble() : current.referenceX;
-        style.referenceY = referenceY.isDouble() ? referenceY.toDouble() : current.referenceY;
+        LayerStyle style;
+        style.referenceX = current.referenceX;
+        style.referenceY = current.referenceY;
+        if (QString error; !layerStyleFromRequest(p.value("style").toObject(), session()->document()->colorMode, style, &error)) fail(error, invalidParams);
         // Photoshop's step names: Paste Layer Style, Clear Layer Style (a style without effects), else Layer Style.
         const char* step = flag(p, "paste", false) ? QT_TRANSLATE_NOOP("History", "Paste Layer Style")
                            : !hasAnyEffect(style) && !style.blendIf ? QT_TRANSLATE_NOOP("History", "Clear Layer Style")
