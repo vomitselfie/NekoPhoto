@@ -11,7 +11,7 @@ with the artboard's layers and stays inside the rectangle.
   layer stack; move layers into it in the Layers panel). Drag inside an artboard to move it together with everything
   in it (layers, nested folders, their masks, raster or vector, and shapes; one undo step), drag an edge or a corner to resize it (its layers stay put). Ctrl turns snapping off. The options bar
   sets the active artboard's background: White, Black, Transparent or Other (a colour).
-- **File > Export Artboards to Files**: every visible artboard as its own PNG, JPEG (over white), WebP or TIFF, named after the
+- **File > Export > Export Artboards to Files**: every visible artboard as its own PNG, JPEG (over white), WebP or TIFF, named after the
   artboard with an optional prefix, into a folder you choose.
 - **Undo**: adding, moving, resizing and recolouring are one step each.
 
@@ -37,7 +37,7 @@ Slices are named rectangles for export (Photoshop's Save for Web slices), kept o
 
 - **Slice tool** (Shift+C, next to Crop): drag to add a slice, drag inside one to move it, an edge or corner to
   resize it. The slices and their numbers show while the tool is chosen; the options bar can delete them all.
-- **File > Export Slices**: each slice as its own PNG, JPEG, WebP or TIFF, named after the slice.
+- **File > Export > Export Slices**: each slice as its own PNG, JPEG, WebP or TIFF, named after the slice.
 
 A 16-bit document writes PNG (and TIFF, where Qt's TIFF writer keeps 16 bits) at 16 bits and dithers the rest to 8.
 

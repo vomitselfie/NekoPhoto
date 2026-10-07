@@ -179,12 +179,17 @@ private:
     void openFiles();
     void importFiles();
     bool save(bool asNew);
-    void exportPng();
-    void exportJpeg();
+    /// File > Export > Export As… (layer: Layer > Export As…, the active layer alone): the dialog, a file name, then
+    /// document.export through the command path.
+    void exportAs(bool layer, const QString& format = {});
+    /// File (or Layer) > Export > Quick Export as <format>: Preferences' format with its remembered settings, beside the
+    /// document (a folder is asked for when it has never been saved).
+    void quickExport(bool layer);
+    /// Runs document.export with `params` (path included) and reports the result in the status bar.
+    void writeExport(const QJsonObject& params);
+    /// The name an export suggests: the active layer's (layer), else the document's.
+    QString exportBaseName(bool layer) const;
     void exportSvg();
-    void exportWebp();
-    void exportTiff();
-    void exportTga();
     /// A multi-size .ico (16, 32, 48 and 256 px).
     void exportIco();
     /// File ▸ Export Artboards to Files, or Export Slices: each one as its own PNG or JPEG in a chosen folder.
@@ -194,7 +199,7 @@ private:
     /// The timeline's frames as an animated GIF (the composite when there are none).
     void exportGif();
 
-    QString askExportPath(const QString& title, const QString& filter, const QStringList& suffixes);
+    QString askExportPath(const QString& title, const QString& filter, const QStringList& suffixes, const QString& baseName = {});
     bool confirmDiscard();
     void importFile(const QString& path, std::optional<QPointF> at = std::nullopt);
     void addRecent(const QString& path);

@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "PreferencesDialog.h"
 #include "ColorManagement.h"
+#include "ExportAs.h"
 #include "Automation.h"
 #include "Theme.h"
 #include "CpuPower.h"
@@ -149,6 +150,22 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     locationRow->addWidget(open);
     v->addLayout(locationRow);
     layout->addWidget(group);
+
+    // File > Export > Quick Export's format, written with the settings Export As last used for it.
+    auto* exportBox = new QGroupBox(tr("Export"));
+    auto* exportRow = new QHBoxLayout(exportBox);
+    exportRow->addWidget(new QLabel(tr("Quick Export format")));
+    auto* quickFormat = new QComboBox;
+    quickFormat->setObjectName("quickExportFormat");
+    for (const QString& f : exportas::formats()) quickFormat->addItem(exportas::formatLabel(f), f);
+    quickFormat->setCurrentIndex(std::max(0, quickFormat->findData(exportas::quickExportFormat())));
+    connect(quickFormat, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [quickFormat](int) { exportas::setQuickExportFormat(quickFormat->currentData().toString()); });
+    exportRow->addWidget(quickFormat, 1);
+    auto* exportHint = new QLabel(tr("Quick Export writes beside the document with the settings File > Export > Export As last used for the format."));
+    exportHint->setWordWrap(true);
+    exportHint->setStyleSheet(hintStyle());
+    exportRow->addWidget(exportHint, 2);
+    layout->addWidget(exportBox);
 
     auto* recovery = new QGroupBox(tr("Crash recovery"));
     auto* recoveryRow = new QHBoxLayout(recovery);

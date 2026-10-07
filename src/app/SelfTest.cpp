@@ -17,6 +17,7 @@
 #include "CanvasWidget.h"
 #include "ChannelsPanel.h"
 #include "CommandPalette.h"
+#include "ExportAsDialog.h"
 #include "FilterDialog.h"
 #include "LayersPanel.h"
 #include "Names.h"
@@ -32,6 +33,10 @@
 #include <QSpinBox>
 #include <QTreeWidgetItemIterator>
 #include <QTimer>
+#include <QTemporaryDir>
+#include <QImageReader>
+#include <QSettings>
+#include <QFileInfo>
 #include <QToolButton>
 #include <functional>
 #include <memory>
@@ -1058,6 +1063,95 @@ int heldKeys(MainWindow& w) {
     return failures ? 1 : 0;
 }
 
+/// File > Export > Export As, Quick Export and Layer > Export As: the dialog's estimate is the file's size, a scale
+/// gives the file that size, each format's settings come back next time, and a layer exports cropped to its pixels.
+int exportAs(MainWindow& w) {
+    EditorSession& s = *w.session();
+    buildDemoDocument(s);
+    int failures = 0;
+    auto expect = [&](bool ok, const QString& what) { if (!ok) { std::fprintf(stderr, "%s\n", qPrintable(what)); failures++; } };
+    QTemporaryDir dir;
+    if (!dir.isValid()) { std::fprintf(stderr, "no temporary folder\n"); return 1; }
+    // Held open for the whole test: the settings stay in memory even where the file cannot be written.
+    QSettings held;
+    held.remove("export");
+    // Errors the window would show in a dialog are collected and fail the test instead.
+    QString errors;
+    w.setErrorSink(&errors);
+    const Document& doc = *s.document();
+    // Writes what the dialog chose through document.export, as File > Export > Export As does.
+    auto write = [&](ExportAsDialog& dialog, const QString& name) -> QString {
+        QJsonObject params = dialog.commandParams();
+        params["path"] = dir.filePath(name);
+        params["overwrite"] = true;
+        const auto reply = w.runCommand("document.export", params);
+        w.setErrorSink(&errors);   // the request clears it when it ends
+        expect(reply.has_value(), "document.export refused " + name);
+        return dir.filePath(name);
+    };
+    {
+        ExportAsDialog dialog(&s, false, QStringLiteral("png"), &w);
+        expect(dialog.ready() && dialog.sourceSize() == QSize(doc.width, doc.height), "Export As does not start at the document's size");
+        dialog.refreshNow();
+        const QString png = write(dialog, "full.png");
+        expect(dialog.estimateExact() && dialog.estimatedBytes() == QFileInfo(png).size(),
+               QString("PNG estimate %1 is not the file's %2 bytes").arg(dialog.estimatedBytes()).arg(QFileInfo(png).size()));
+        // JPEG at quality 40 and half the size: the estimate is still the file, and the file is that size.
+        dialog.setFormat("jpg");
+        if (auto* quality = dialog.findChild<QSlider*>("quality")) quality->setValue(40);
+        dialog.setScalePercent(50);
+        const int halfWidth = int(std::lround(doc.width * 0.5)), halfHeight = int(std::lround(doc.height * 0.5));
+        expect(dialog.outputWidth() == halfWidth && dialog.outputHeight() == halfHeight, "50% does not halve the size");
+        dialog.refreshNow();
+        const QString jpg = write(dialog, "half.jpg");
+        const QSize jpgSize = QImageReader(jpg).size();
+        expect(jpgSize == QSize(halfWidth, halfHeight), QString("the JPEG is %1x%2").arg(jpgSize.width()).arg(jpgSize.height()));
+        expect(dialog.estimatedBytes() == QFileInfo(jpg).size(), QString("JPEG estimate %1 is not the file's %2 bytes").arg(dialog.estimatedBytes()).arg(QFileInfo(jpg).size()));
+        // Nearest neighbour at 200%: every pixel doubled.
+        dialog.setFormat("png");
+        if (auto* resample = dialog.findChild<QComboBox*>("resample")) resample->setCurrentIndex(resample->findData("nearest"));
+        dialog.setScalePercent(200);
+        const QString big = write(dialog, "double.png");
+        const QImage doubled = QImage(big).convertToFormat(QImage::Format_ARGB32);
+        const QImage single = QImage(png).convertToFormat(QImage::Format_ARGB32);
+        expect(doubled.size() == single.size() * 2 && doubled.pixel(21, 33) == single.pixel(10, 16), "nearest neighbour at 200% does not double the pixels");
+        dialog.setFormat("jpg");
+        dialog.rememberSettings();
+    }
+    {
+        // The next Export As opens on JPEG with its quality; PNG kept its own choices; the size is the image's own again.
+        ExportAsDialog again(&s, false, {}, &w);
+        expect(again.format() == "jpg" && again.settings().quality == 40, QString("remembered %1 at %2").arg(again.format()).arg(again.settings().quality));
+        expect(exportas::remembered("jpg").quality == 40 && exportas::remembered("png").resample == exportas::Resample::Bicubic, "the settings were not kept per format");
+        expect(again.outputWidth() == doc.width, "the size was remembered; it starts at the image's own");
+    }
+    {
+        // Layer > Export As: the Red layer alone, cropped to its pixels.
+        select(s, "Red");
+        ExportAsDialog dialog(&s, true, QStringLiteral("png"), &w);
+        const Layer* red = s.activeLayer();
+        const Rect bounds = red->transform.bounds().integral().intersection(doc.rect());
+        expect(dialog.ready() && dialog.sourceSize().width() <= int(bounds.width) && dialog.sourceSize().height() <= int(bounds.height) && dialog.sourceSize().width() < doc.width,
+               QString("the layer exports at %1x%2, its bounds are %3x%4").arg(dialog.sourceSize().width()).arg(dialog.sourceSize().height()).arg(bounds.width).arg(bounds.height));
+        const QString layerPng = write(dialog, "red.png");
+        expect(QImageReader(layerPng).size() == dialog.sourceSize(), "the layer's file is not its visible size");
+    }
+    {
+        // Quick Export: beside the saved document, in Preferences' format, with that format's remembered settings.
+        QString error;
+        expect(s.saveProject(dir.filePath("Quick.nekophoto"), &error), "couldn't save the project: " + error);
+        exportas::setQuickExportFormat("jpg");
+        w.setErrorSink(&errors);
+        if (QAction* quick = action(w, "export.quick")) quick->trigger();
+        const QString quick = dir.filePath("Quick.jpg");
+        expect(QFileInfo::exists(quick) && QImageReader(quick).size() == QSize(doc.width, doc.height), "Quick Export did not write Quick.jpg at full size");
+    }
+    w.setErrorSink(nullptr);
+    expect(errors.isEmpty(), "errors: " + errors);
+    std::printf("export-as: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
 } // namespace
 
 int runSelfTest(MainWindow& window, const QString& name) {
@@ -1069,7 +1163,8 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("canvas-menus")) return canvasMenus(window);
     if (name == QLatin1String("search")) return search(window);
     if (name == QLatin1String("held-keys")) return heldKeys(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys)\n", qPrintable(name));
+    if (name == QLatin1String("export-as")) return exportAs(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as)\n", qPrintable(name));
     return 2;
 }
 

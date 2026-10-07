@@ -28,7 +28,7 @@ shows; select each frame and hide it where it should not appear, as in Photoshop
 
 - **Projects** keep the frames in the manifest's `animation` object ([project-format.md](project-format.md)). Older
   projects open as still documents, and the Mac app ignores the key.
-- **Animated GIF export** (File > Export Animated GIF, or `document.export` to a `.gif`) writes each frame flattened,
+- **Animated GIF export** (File > Export > Export Animated GIF, or `document.export` to a `.gif`) writes each frame flattened,
   quantised to its own palette of up to 255 colours (the exact colours when there are few enough, else a median cut)
   with pixels below half opacity transparent, the delays rounded to hundredths of a second and the loop count in the
   NETSCAPE2.0 block (none for Once). A document without frames exports as a still GIF. The LZW encoder follows

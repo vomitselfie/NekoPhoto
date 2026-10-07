@@ -144,7 +144,12 @@ records, and the reply's `settings` carry them as `rawTemperature` and `rawTint`
 with neither gets .nekophoto; without `path`, where it was opened or last saved, in the same form; answers `macCompatible`: false past the 100 megapixels of layers Compositor for
 macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); an animated .gif of the timeline's frames (the composite when there are none; `frames` counts them); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG; PNG, JPEG, WebP, TIFF and PSD carry the
 document's colour profile, `embedProfile: false` leaves it out, and `convertToSrgb` converts to sRGB first, the default
-for GIF), `document.close`. `document.info` reports the document's `profile`.
+for GIF; as File > Export > Export As, the flat formats (.png, .jpg, .webp, .tif, .tga, .gif, .ico) take `width` and/or
+`height` (the other in proportion) or `scale` (a factor of the full size), `resample` (`bicubic`, the default, `bilinear`,
+`nearest` or `lanczos`), `transparency: false` to flatten onto `background`, `layer` (an id, or `active`) to write that
+layer alone, cropped to its visible pixels unless `trim: false` (Layer > Export As), and `animated: false` for a still GIF
+of the composite (any of the others also gives one); the reply carries the file's `bytes`; the menus, Quick Export and the
+Export As dialog all commit through this method), `document.close`. `document.info` reports the document's `profile`.
 
 Artboards and slices (docs/artboards-slices.md): `artboards.list`, `artboards.add` (`x`, `y`, `width`, `height`, `name`,
 `background`: white, black, transparent or a CSS colour), `artboards.set` (the same by `id`; a move takes its layers along

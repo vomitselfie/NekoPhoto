@@ -347,15 +347,24 @@ def document_save(path: Optional[str] = None, overwrite: bool = False) -> str:
 
 @outside("Export an image")
 def document_export(path: str, quality: int = 85, background: str = "#ffffff", embed_profile: bool = True,
-                    convert_to_srgb: Optional[bool] = None, overwrite: bool = False) -> str:
+                    convert_to_srgb: Optional[bool] = None, overwrite: bool = False, width: Optional[int] = None,
+                    height: Optional[int] = None, scale: Optional[float] = None, resample: Optional[str] = None,
+                    transparency: Optional[bool] = None, layer: Optional[str] = None, trim: Optional[bool] = None,
+                    animated: Optional[bool] = None) -> str:
     """Flatten and export to a .png, .webp, .tif or .tga (these keep transparency; WebP at quality 100 is
     lossless), a .ico (16, 32, 48 and 256 px sizes), or .jpg (over background, at quality); .psd/.psb keep layers;
     an .svg writes vector shape layers as paths, folders as groups and every other layer as an embedded PNG; a .gif
-    writes the timeline's frames as an animated GIF (the composite when there are none). PNG, JPEG, WebP, TIFF and PSD
-    carry the document's colour profile (embed_profile=false leaves it out); convert_to_srgb converts the pixels to
-    sRGB first, for the web (the default for GIF). An existing file is refused unless overwrite=true."""
+    writes the timeline's frames as an animated GIF (the composite when there are none; animated=false for a still).
+    PNG, JPEG, WebP, TIFF and PSD carry the document's colour profile (embed_profile=false leaves it out);
+    convert_to_srgb converts the pixels to sRGB first, for the web (the default for GIF). As File > Export As, the
+    flat formats take a new size (width and/or height in pixels, or scale, a factor: 0.5 is half) resampled with
+    resample (bicubic, bilinear, nearest or lanczos), transparency=false to flatten onto background, and layer (an
+    id, or "active") to export one layer alone, cropped to its visible pixels unless trim=false. An existing file is
+    refused unless overwrite=true."""
     return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background,
-                     embedProfile=embed_profile, convertToSrgb=convert_to_srgb, overwrite=overwrite or None))
+                     embedProfile=embed_profile, convertToSrgb=convert_to_srgb, overwrite=overwrite or None,
+                     width=width, height=height, scale=scale, resample=resample, transparency=transparency,
+                     layer=layer, trim=trim, animated=animated))
 
 
 # ---- actions and the timeline --------------------------------------------------------------------

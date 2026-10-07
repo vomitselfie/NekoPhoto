@@ -81,9 +81,16 @@ void setWriteRoots(const QStringList& list) {
 
 QStringList writeRoots() { return roots(); }
 
+namespace {
+int personsRequests = 0;
+}
+
+PersonsRequest::PersonsRequest() { personsRequests++; }
+PersonsRequest::~PersonsRequest() { personsRequests--; }
+
 QString writeRootRefusal(const QString& path) {
     const QStringList& r = roots();
-    if (r.isEmpty()) return {};
+    if (r.isEmpty() || personsRequests > 0) return {};
     if (QFileInfo(path).isSymLink()) return QStringLiteral("%1 is a symbolic link; automation writes don't follow links while write roots are set").arg(path);
     const QString target = resolved(path);
     if (!target.isEmpty())

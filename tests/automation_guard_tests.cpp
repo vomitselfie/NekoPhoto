@@ -78,6 +78,12 @@ TEST_CASE(write_roots_confine_writes) {
     REQUIRE(QFile::link(other.filePath("target.png"), root.filePath("link.png")));
     CHECK(automation::writeRootRefusal(root.filePath("link.png")).contains("symbolic link"));
 #endif
+    {
+        // A menu or dialog request is the person's own: roots don't fence it.
+        automation::PersonsRequest persons;
+        CHECK(automation::writeRootRefusal(other.filePath("x.png")).isEmpty());
+    }
+    CHECK(!automation::writeRootRefusal(other.filePath("x.png")).isEmpty());
     automation::setWriteRoots({});
     CHECK(automation::writeRootRefusal(other.filePath("x.png")).isEmpty());
 }

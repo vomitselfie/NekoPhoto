@@ -32,6 +32,14 @@ QStringList writeRoots();
 /// outside every write root (the parent folder resolved through symbolic links), or a symbolic link itself while
 /// roots are set. `path` should be absolute.
 QString writeRootRefusal(const QString& path);
+/// While one lives, write roots don't apply: the request is the person's own, made from a menu or dialog through
+/// the command path (MainWindow::runCommand), and they chose the file in a file dialog. Actions are not covered.
+struct PersonsRequest {
+    PersonsRequest();
+    ~PersonsRequest();
+    PersonsRequest(const PersonsRequest&) = delete;
+    PersonsRequest& operator=(const PersonsRequest&) = delete;
+};
 /// writeRootRefusal, and then, unless `overwrite`, a refusal when `path` already exists.
 QString writeRefusal(const QString& path, bool overwrite);
 

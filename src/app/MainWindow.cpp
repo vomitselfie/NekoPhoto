@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "AutomationGuard.h"
 #include "Scrub.h"
 #include "ImportBanner.h"
 #include "Names.h"
@@ -769,7 +770,10 @@ void MainWindow::showPanel(const QString& name) {
 
 std::optional<QJsonValue> MainWindow::runCommand(const QString& method, const QJsonObject& params, const QString& title) {
     // The same request the socket, --call and --batch send: parameters checked against the method's description,
-    // the depth gate, one undo step, and one Actions step when an action is recording.
+    // the depth gate, one undo step, and one Actions step when an action is recording. Write roots fence automation,
+    // not the person's own menu choices; a played action stays fenced (it may have been imported).
+    std::optional<automation::PersonsRequest> persons;
+    if (!method.startsWith(QLatin1String("actions."))) persons.emplace();
     const QJsonObject reply = automationEngine()->handle(QJsonObject{{"jsonrpc", "2.0"}, {"id", 0}, {"method", method}, {"params", params}});
     if (reply.contains("error")) {
         showError(title.isEmpty() ? tr("Couldn’t do that") : title, reply.value("error").toObject().value("message").toString());

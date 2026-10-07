@@ -451,7 +451,8 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl Z, Ctrl Shift Z, Ctrl Alt Z | Undo (again for earlier steps), redo, toggle last state (Photoshop CC's defaults) |
 | F7 | Show or hide the Layers panel |
 | F12 | File ▸ Revert: the project as last saved (asks first when there are unsaved changes; the history starts afresh) |
-| Ctrl Alt Shift S | Export JPEG |
+| Ctrl Alt Shift W (also Ctrl Alt Shift S) | File ▸ Export ▸ Export As |
+| Ctrl Shift ', Ctrl Alt Shift ' | Layer ▸ Quick Export, Layer ▸ Export As (the active layer alone) |
 | Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |
 | Ctrl K (also Ctrl ,) | Preferences |
 | Ctrl F | Edit ▸ Search: find any command, tool or G'MIC filter by name and run it (arrows, Enter, Esc) |

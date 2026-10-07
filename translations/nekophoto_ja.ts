@@ -29,6 +29,41 @@
     </message>
 </context>
 <context>
+    <name>ExportAs</name>
+    <message>
+        <source>Bilinear</source>
+        <translation>バイリニア法</translation>
+    </message>
+    <message>
+        <source>Nearest Neighbour (hard edges)</source>
+        <translation>ニアレストネイバー法(ハードなエッジ)</translation>
+    </message>
+    <message>
+        <source>Lanczos (sharpest when reducing)</source>
+        <translation>Lanczos 法(縮小時に最もシャープ)</translation>
+    </message>
+    <message>
+        <source>Bicubic</source>
+        <translation>バイキュービック法</translation>
+    </message>
+    <message>
+        <source>about %1 MB</source>
+        <translation>約 %1 MB</translation>
+    </message>
+    <message>
+        <source>%1 MB</source>
+        <translation>%1 MB</translation>
+    </message>
+    <message>
+        <source>about %1 KB</source>
+        <translation>約 %1 KB</translation>
+    </message>
+    <message>
+        <source>%1 KB</source>
+        <translation>%1 KB</translation>
+    </message>
+</context>
+<context>
     <name>History</name>
     <message>
         <source>Camera Raw Filter</source>
@@ -1993,46 +2028,6 @@
     <message>
         <source>Resize</source>
         <translation>サイズを変更</translation>
-    </message>
-    <message>
-        <source>Export WebP</source>
-        <translation>WebP を書き出し</translation>
-    </message>
-    <message>
-        <source>Export JPEG</source>
-        <translation>JPEG を書き出し</translation>
-    </message>
-    <message>
-        <source>Quality</source>
-        <translation>画質</translation>
-    </message>
-    <message>
-        <source>White</source>
-        <translation>ホワイト</translation>
-    </message>
-    <message>
-        <source>Black</source>
-        <translation>ブラック</translation>
-    </message>
-    <message>
-        <source>Behind transparency</source>
-        <translation>透明部分の背景</translation>
-    </message>
-    <message>
-        <source>File size</source>
-        <translation>ファイルサイズ</translation>
-    </message>
-    <message>
-        <source>about %1 MB</source>
-        <translation>約 %1 MB</translation>
-    </message>
-    <message>
-        <source>about %1 KB</source>
-        <translation>約 %1 KB</translation>
-    </message>
-    <message>
-        <source>Colour behind transparent areas</source>
-        <translation>透明部分の背後のカラー</translation>
     </message>
     <message>
         <source>The format must be png, jpeg, webp or tiff.</source>
@@ -5286,6 +5281,153 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::ExportAsDialog</name>
+    <message>
+        <source>Export Layer As</source>
+        <translation>レイヤーを書き出し形式で書き出し</translation>
+    </message>
+    <message>
+        <source>Export As</source>
+        <translation>書き出し形式</translation>
+    </message>
+    <message>
+        <source>Select a layer to export.</source>
+        <translation>書き出すレイヤーを選択してください。</translation>
+    </message>
+    <message>
+        <source>Open a document to export.</source>
+        <translation>書き出すドキュメントを開いてください。</translation>
+    </message>
+    <message>
+        <source>The layer has no visible pixels to export.</source>
+        <translation>このレイヤーには書き出せる表示ピクセルがありません。</translation>
+    </message>
+    <message>
+        <source>File Settings</source>
+        <translation>ファイル設定</translation>
+    </message>
+    <message>
+        <source>Format</source>
+        <translation>形式</translation>
+    </message>
+    <message>
+        <source>Quality</source>
+        <translation>品質</translation>
+    </message>
+    <message>
+        <source>Transparency</source>
+        <translation>透明部分</translation>
+    </message>
+    <message>
+        <source>Matte</source>
+        <translation>マット</translation>
+    </message>
+    <message>
+        <source>Image Size</source>
+        <translation>画像サイズ</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>Keep proportions</source>
+        <translation>縦横比を固定</translation>
+    </message>
+    <message>
+        <source>Width</source>
+        <translation>幅</translation>
+    </message>
+    <message>
+        <source>Height</source>
+        <translation>高さ</translation>
+    </message>
+    <message>
+        <source>Scale</source>
+        <translation>拡大・縮小</translation>
+    </message>
+    <message>
+        <source>Resample</source>
+        <translation>再サンプル</translation>
+    </message>
+    <message>
+        <source>Color Space</source>
+        <translation>カラースペース</translation>
+    </message>
+    <message>
+        <source>Convert to sRGB</source>
+        <translation>sRGB に変換</translation>
+    </message>
+    <message>
+        <source>Embed Color Profile</source>
+        <translation>カラープロファイルを埋め込み</translation>
+    </message>
+    <message>
+        <source>Export…</source>
+        <translation>書き出し…</translation>
+    </message>
+    <message>
+        <source>White</source>
+        <translation>ホワイト</translation>
+    </message>
+    <message>
+        <source>Black</source>
+        <translation>ブラック</translation>
+    </message>
+    <message>
+        <source>A still image of the composite; File &gt; Export &gt; Animated GIF writes the timeline&apos;s frames.</source>
+        <translation>合成画像の静止画です。タイムラインのフレームは ファイル &gt; 書き出し &gt; アニメーション GIF を書き出し で書き出せます。</translation>
+    </message>
+    <message>
+        <source>At most 256 colours; pixels less than half opaque become transparent.</source>
+        <translation>最大 256 色です。不透明度が半分未満のピクセルは透明になります。</translation>
+    </message>
+    <message>
+        <source>Quality 100 is lossless.</source>
+        <translation>品質 100 で可逆圧縮になります。</translation>
+    </message>
+    <message>
+        <source>Written at 16 bits per channel.</source>
+        <translation>16 ビット/チャンネルで書き出します。</translation>
+    </message>
+    <message>
+        <source>Written at 8 bits per channel, dithered.</source>
+        <translation>ディザをかけて 8 ビット/チャンネルで書き出します。</translation>
+    </message>
+    <message>
+        <source>%1 documents are written in sRGB.</source>
+        <translation>%1 のドキュメントは sRGB で書き出されます。</translation>
+    </message>
+    <message>
+        <source>The pixels are converted from %1 to sRGB, which needs no profile.</source>
+        <translation>ピクセルは %1 から sRGB に変換されます。sRGB にはプロファイルは不要です。</translation>
+    </message>
+    <message>
+        <source>%1 files carry no colour profile.</source>
+        <translation>%1 ファイルにはカラープロファイルを埋め込めません。</translation>
+    </message>
+    <message>
+        <source>The document is in sRGB.</source>
+        <translation>ドキュメントは sRGB です。</translation>
+    </message>
+    <message>
+        <source>The pixels keep the document’s profile; viewers that ignore profiles show them as sRGB.</source>
+        <translation>ピクセルはドキュメントのプロファイルのままです。プロファイルを無視するビューアーでは sRGB として表示されます。</translation>
+    </message>
+    <message>
+        <source>Can’t encode: %1</source>
+        <translation>エンコードできません: %1</translation>
+    </message>
+    <message>
+        <source>%1 × %2 px, %3</source>
+        <translation>%1 × %2 px、%3</translation>
+    </message>
+    <message>
+        <source>No preview for this format.</source>
+        <translation>この形式はプレビューできません。</translation>
+    </message>
+</context>
+<context>
     <name>app::FilterDialog</name>
     <message>
         <source>%1 (Smart Filter)</source>
@@ -7001,20 +7143,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>保存しました。レイヤーが %1 メガピクセルあるため、このプロジェクトは macOS 版 Compositor で開ける上限 (100) を超えていますが、ここでは開けます。</translation>
     </message>
     <message>
-        <source>Export PNG</source>
-        <translation>PNG を書き出し</translation>
-    </message>
-    <message>
         <source>PNG image (*.png)</source>
         <translation>PNG 画像 (*.png)</translation>
-    </message>
-    <message>
-        <source>Couldn’t export PNG</source>
-        <translation>PNG を書き出せませんでした</translation>
-    </message>
-    <message>
-        <source>Exported %1 at 16 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).</source>
-        <translation>%1 を 16 bit/チャンネルで書き出しました。32 bit/チャンネルから露光量 0 でトーンマッピングしています（白を超える値はクリップされます）。</translation>
     </message>
     <message>
         <source>Exported %1 at 8 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).</source>
@@ -7131,52 +7261,20 @@ File &gt; New creates a blank canvas.</source>
         </translation>
     </message>
     <message>
-        <source>Export JPEG</source>
-        <translation>JPEG を書き出し</translation>
-    </message>
-    <message>
         <source>JPEG image (*.jpg *.jpeg)</source>
         <translation>JPEG 画像 (*.jpg *.jpeg)</translation>
-    </message>
-    <message>
-        <source>Couldn’t export JPEG</source>
-        <translation>JPEG を書き出せませんでした</translation>
-    </message>
-    <message>
-        <source>Export WebP</source>
-        <translation>WebP を書き出し</translation>
     </message>
     <message>
         <source>WebP image (*.webp)</source>
         <translation>WebP 画像 (*.webp)</translation>
     </message>
     <message>
-        <source>Couldn’t export WebP</source>
-        <translation>WebP を書き出せませんでした</translation>
-    </message>
-    <message>
-        <source>Export TIFF</source>
-        <translation>TIFF を書き出し</translation>
-    </message>
-    <message>
         <source>TIFF image (*.tif *.tiff)</source>
         <translation>TIFF 画像 (*.tif *.tiff)</translation>
     </message>
     <message>
-        <source>Couldn’t export TIFF</source>
-        <translation>TIFF を書き出せませんでした</translation>
-    </message>
-    <message>
-        <source>Export TGA</source>
-        <translation>TGA を書き出し</translation>
-    </message>
-    <message>
         <source>TGA image (*.tga)</source>
         <translation>TGA 画像 (*.tga)</translation>
-    </message>
-    <message>
-        <source>Couldn’t export TGA</source>
-        <translation>TGA を書き出せませんでした</translation>
     </message>
     <message>
         <source>Export Icon</source>
@@ -7197,6 +7295,42 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>GIF image (*.gif)</source>
         <translation>GIF 画像 (*.gif)</translation>
+    </message>
+    <message>
+        <source>Export Layer As</source>
+        <translation>レイヤーを書き出し形式で書き出し</translation>
+    </message>
+    <message>
+        <source>Export As</source>
+        <translation>書き出し形式</translation>
+    </message>
+    <message>
+        <source>Quick Export To</source>
+        <translation>クイック書き出し先</translation>
+    </message>
+    <message>
+        <source>Quick Export</source>
+        <translation>クイック書き出し</translation>
+    </message>
+    <message>
+        <source>%1 already exists in %2. Replace it?</source>
+        <translation>%2 には既に %1 があります。置き換えますか?</translation>
+    </message>
+    <message>
+        <source>Replace</source>
+        <translation>置き換え</translation>
+    </message>
+    <message>
+        <source>Couldn’t export %1</source>
+        <translation>%1 を書き出せませんでした</translation>
+    </message>
+    <message>
+        <source>Exported %1 (%2 × %3 px)</source>
+        <translation>%1 を書き出しました(%2 × %3 px)</translation>
+    </message>
+    <message>
+        <source>Exported %1 at %2 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).</source>
+        <translation>%1 を %2 ビット/チャンネルで書き出しました。32 ビットから露光量 0 でトーンマッピングしています(白を超える値はクリップされます)。</translation>
     </message>
     <message>
         <source>Couldn’t export the GIF</source>
@@ -7517,28 +7651,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>Photoshop ドキュメント (PSD) として書き出し(&amp;D)...</translation>
     </message>
     <message>
-        <source>Export &amp;PNG…</source>
-        <translation>PNG を書き出し(&amp;P)...</translation>
-    </message>
-    <message>
-        <source>Export &amp;JPEG…</source>
-        <translation>JPEG を書き出し(&amp;J)...</translation>
-    </message>
-    <message>
         <source>Export S&amp;VG…</source>
         <translation>SVG を書き出し(&amp;V)...</translation>
-    </message>
-    <message>
-        <source>Export &amp;WebP…</source>
-        <translation>WebP を書き出し(&amp;W)...</translation>
-    </message>
-    <message>
-        <source>Export &amp;TIFF…</source>
-        <translation>TIFF を書き出し(&amp;T)...</translation>
-    </message>
-    <message>
-        <source>Export T&amp;GA…</source>
-        <translation>TGA を書き出し(&amp;G)...</translation>
     </message>
     <message>
         <source>Export &amp;Icon (ICO)…</source>
@@ -7555,6 +7669,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>E&amp;xport Animated GIF…</source>
         <translation>アニメーション GIF を書き出し(&amp;X)...</translation>
+    </message>
+    <message>
+        <source>E&amp;xport</source>
+        <translation>書き出し(&amp;X)</translation>
+    </message>
+    <message>
+        <source>Export &amp;As…</source>
+        <translation>書き出し形式(&amp;A)…</translation>
+    </message>
+    <message>
+        <source>Quick Export as %1</source>
+        <translation>%1 としてクイック書き出し</translation>
     </message>
     <message>
         <source>A&amp;utomate</source>
@@ -7991,6 +8117,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Move &amp;Out of Folder</source>
         <translation>グループから出す(&amp;O)</translation>
+    </message>
+    <message>
+        <source>Export As…</source>
+        <translation>書き出し形式…</translation>
     </message>
     <message>
         <source>New &amp;Adjustment Layer</source>
@@ -9029,6 +9159,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Show Folder</source>
         <translation>フォルダーを表示</translation>
+    </message>
+    <message>
+        <source>Export</source>
+        <translation>書き出し</translation>
+    </message>
+    <message>
+        <source>Quick Export format</source>
+        <translation>クイック書き出しの形式</translation>
+    </message>
+    <message>
+        <source>Quick Export writes beside the document with the settings File &gt; Export &gt; Export As last used for the format.</source>
+        <translation>クイック書き出しは、ドキュメントと同じフォルダーに、ファイル &gt; 書き出し &gt; 書き出し形式 でその形式に最後に使った設定で書き出します。</translation>
     </message>
     <message>
         <source>Crash recovery</source>
