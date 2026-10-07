@@ -14,13 +14,13 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 <!-- BEGIN GENERATED at-a-glance: tools/compat_table.py --write; do not edit by hand -->
 | Check | Result | How to rerun |
 |---|---|---|
-| Photoshop's merged image as the oracle | **33 of 47** Patchy files with a merged image render within 2 levels of it on 99% of pixels, mean under 1 level (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
-| Render hashes | **692 scenes**: 156 at 8-bit RGB, 154 at 16-bit RGB, 120 at 32-bit RGB, 70 at 8-bit CMYK, 70 at 16-bit CMYK, 61 at 8-bit Lab, 61 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
+| Photoshop's merged image as the oracle | **39 of 46** Patchy files with a merged image render within 2 levels of it on 99% of pixels, mean under 1 level (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
+| Render hashes | **697 scenes**: 156 at 8-bit RGB, 155 at 16-bit RGB, 120 at 32-bit RGB, 71 at 8-bit CMYK, 71 at 16-bit CMYK, 62 at 8-bit Lab, 62 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
-| Test suites | **82 CTest tests** registered (700 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
+| Test suites | **85 CTest tests** registered (709 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
-| Automation | **182 methods**, 181 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
+| Automation | **183 methods**, 182 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
 | Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` |
 
@@ -186,9 +186,9 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
 <!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
-- **Photoshop の統合画像との比較**: 統合画像を持つ Patchy のファイル 47 個のうち **33 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
-- **描画のハッシュ**: 692 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 82 個(700 `TEST_CASE`)。
-- **自動操作**: メソッド 182 個、うち 181 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
+- **Photoshop の統合画像との比較**: 統合画像を持つ Patchy のファイル 46 個のうち **39 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
+- **描画のハッシュ**: 697 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 85 個(709 `TEST_CASE`)。
+- **自動操作**: メソッド 183 個、うち 182 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
   クリッピング、調整レイヤー、レイヤースタイル、ブレンド条件(このレイヤー・下になっているレイヤー、チャンネルごと、分割した

@@ -396,6 +396,9 @@ def main():
     ap.add_argument("--budget", type=float, default=0, help="stop starting new methods after this many seconds (0: no limit)")
     ap.add_argument("--keep", action="store_true", help="keep the temporary folder (logs, written files)")
     ap.add_argument("--verbose", action="store_true", help="print every error reply")
+    ap.add_argument("--start", type=int, default=int(os.environ.get("GITHUB_RUN_NUMBER", "0") or 0),
+                    help="rotate the method order by this many places, so a budgeted run starts somewhere else each time "
+                         "(default: GitHub's run number; 0 starts at the first)")
     ap.add_argument("--deep", type=int, default=1000, help="at most this many settings mutations, spread evenly (0: all of them)")
     args = ap.parse_args()
     if not os.path.exists(args.bin):
@@ -440,6 +443,11 @@ def main():
         ensure_document(ed, ctx)
         skipped = [m for m in methods if m in SKIP]
         todo = [m for m in methods if m not in SKIP and (not args.only or re.search(args.only, m))]
+        if todo and args.budget:
+            # A budget cuts the tail: rotating the order per run lets successive CI runs cover every method.
+            k = args.start % len(todo)
+            todo = todo[k:] + todo[:k]
+            print(f"starting at {todo[0]} ({k} of {len(todo)})")
         todo.sort(key=lambda m: LAST.index(m) + 1 if m in LAST else 0)
         out_of_time = False
         for n, method in enumerate(todo):
