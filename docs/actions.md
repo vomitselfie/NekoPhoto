@@ -39,16 +39,22 @@ the same format: `{"format": "nekophoto.actions", "version": 1, "actions": [{"na
 | You do | Recorded as |
 | --- | --- |
 | Any editing request on the automation socket (from an agent, a script or `--batch`) | the request itself |
+| File > New, Open, Import File, Save, Save As | `document.new`, `document.open` (an image as a document of its own: `asDocument`), `document.import`, `document.save` (Save As with the file's path) |
 | Image > Mode (RGB, CMYK, Lab; 8, 16, 32 Bits, with HDR Toning's settings) | `image.mode` |
 | Image > Canvas Size, Image Size, Trim, Crop to Selection, Flip Canvas | `canvas.resize`, `image.resize`, `image.trim`, `canvas.crop`, `canvas.flip` |
 | Image > Adjustments (every dialog), Invert | `pixels.adjust` with the dialog's settings, `pixels.invert` |
 | Filter > Gaussian Blur, Motion Blur, Add Noise (with its seed), Lens Correction | `pixels.filter` |
 | Edit > Fill with Foreground / Background, Clear, Content-Aware Fill | `pixels.fill` with the colour, `pixels.clear` (or `layers.delete` without a selection), `pixels.contentAwareFill` (Auto and Wide Area sampling) |
 | Edit > Assign Profile, Convert to Profile (a built-in profile or none) | `document.profile` |
+| Edit > Warp, Warp Cage (applied with Enter), Content-Aware Scale | `layers.warp`, `layers.setCage` with the cage's points, `pixels.contentAwareScale` |
 | Edit > Cut, Copy, Copy Merged, Paste | `pixels.cut`, `pixels.copy`, `pixels.copyMerged`, `pixels.paste`; with layers selected and no selection, Copy is `layers.copy`, and Paste of copied layers `layers.paste` |
 | Layer > New Layer, New Layer Below, New Folder, Layer via Copy, Group, Duplicate, Delete, Merge Down, New Adjustment Layer, Layer Mask (every item), Flip Layer | `layers.add`, `layers.viaCopy`, `layers.group`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.mask`, `layers.flip` |
 | Layer > Rename Layer, Create / Release Clipping Mask, Resampling | `layers.set` on the active layer (no id) |
 | Layer > Bring Forward, Send Backward | `layers.reorder` |
+| Layer > Move Out of Folder; Delete with several layers selected (the menu, or the Layers panel's bin) | `layers.move` (by the layers' ids); `layers.delete` with their ids (and `bakeClipping` as answered) |
+| Layer > Layer Style: the dialog's OK, Paste and Clear Layer Style, Apply Style | `layers.setStyle` with the whole style (Copy Layer Style records nothing), `layers.applyStyle` |
+| Layer > Vector Mask (every item); Type > Create Work Path, Convert to Shape | `vectorMask.set`, `vectorMask.target`, `vectorMask.delete`; `text.toPath`, `text.toShape` on the active layer |
+| Layer > Smart Objects > Edit Contents | `smartObject.editContents` |
 | Layer > Smart Objects > Convert to Smart Object, Replace Contents, Rasterize | `smartObject.convert`, `smartObject.replace` with the file, `smartObject.rasterize` |
 | Select > All, Deselect, Inverse, Reselect, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) | `selection.all`, `selection.none`, `selection.invert`, `selection.reselect`, `selection.grow`, `selection.feather`, `selection.smooth`, `selection.border`, `selection.fromLayer` |
 | The Layers panel: New layer, New folder, a new adjustment layer, Add layer mask, Delete, Duplicate, Merge Down and the mask items of a row's menu | `layers.add`, `layers.mask`, `layers.delete`, `layers.duplicate`, `layers.merge` |
@@ -56,6 +62,8 @@ the same format: `{"format": "nekophoto.actions", "version": 1, "actions": [{"na
 | The Layers panel: a row dragged to another place | `layers.move` (by the layers' ids) |
 | The Paths panel: Make Work Path, Fill, Stroke, Make Selection, Add to Selection, Make Shape Layer, Delete | `paths.fromSelection`, `paths.fill`, `paths.stroke`, `paths.toSelection`, `paths.toShape`, `paths.delete` (by the path's id: the Work Path's is the same in every document) |
 | The Channels panel: Save selection as channel, New Channel | `channels.saveSelection`, `channels.new` |
+| Select > Edit in Quick Mask Mode, Load Selection…, Save Selection…; the channel keys (Ctrl+2 to 9, with Alt to load) | `selection.quickMask`, `channels.loadSelection`, `channels.saveSelection`, `channels.select` |
+| Filter > Camera Raw Filter, G'MIC, Remove Background, Mosh (the dialogs' OK) | `pixels.cameraRaw`, `pixels.gmic` (a typed command the method refuses is not recorded), `pixels.removeBackground`, `pixels.mosh` |
 | A rectangular or elliptical marquee | `selection.rect` with its box and mode |
 | Free Transform of a layer, applied (Enter, Apply or a double-click) | `layers.setTransform` with the box's position, size, angle and flips |
 | A guide dragged out of a ruler, moved, or dragged off; View > New Guide…, Clear Guides | `guides.add`, `guides.move`, `guides.delete` |
@@ -68,10 +76,9 @@ and an eye clicked on a layer other than the active one; those ids belong to the
 edit or switch off such steps before playing the action elsewhere.
 
 Not recorded (yet): the Move tool's drags and a distortion or a transform of several layers, a mask alone or selected pixels, the lasso and magic wand, Quick Select, the Gradient,
-Shape, Text, Clone, Healing, Smudge and Dodge tools, an eye swipe across several layers, deleting several layers
-from the Layers panel, Alt-dragging a layer or a mask there, G'MIC, Camera Raw and Remove Background dialogs, layer styles, smart objects' Edit Contents and filters,
-vector masks, Type > Create Work Path and Convert to Shape (their methods name the layer), and the Channels panel's
-other items (they name a channel). Each can
+Shape, Text, Clone, Healing, Smudge and Dodge tools, an eye swipe across several layers, Alt-dragging a layer or a mask
+in the Layers panel, smart objects' filters, a camera RAW file or a PDF opened through its own dialog, and the
+Channels panel's other items (they name a channel). Each can
 still be added by hand as the request that does it (`rpc.describe` lists every method's parameters). Looking
 (`layers.list`, `render`, `document.info` and the like), tab switching, undo and redo are never recorded.
 

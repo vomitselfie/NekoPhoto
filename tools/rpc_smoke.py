@@ -198,6 +198,42 @@ def presets(rpc, work, layer_id):
     assert not any(g["name"].startswith("rpc-smoke") for g in rpc.call("presets.list", kind="gradients")["gradients"])
 
 
+def menu_requests(rpc, work, layer_id, image):
+    """What the menus and dialogs send through the command path (CONTRIBUTING.md, "Commands"): the active layer when
+    no id is given, Paste and Clear Layer Style's step names with Blend If and the reference point in the style, the
+    Vector Mask items' steps, 16-bit colours, and File > Open's image as a document of its own."""
+    rpc.call("layers.select", id=layer_id)
+    style = rpc.call("layers.style")
+    assert "blendIf" in style and "referenceX" in style and "referenceY" in style, style
+    pasted = rpc.call("layers.setStyle", style={"dropShadows": [{"distance": 3}], "blendIf": style["blendIf"],
+                                                "referenceX": style["referenceX"], "referenceY": style["referenceY"]}, paste=True)
+    assert pasted["dropShadows"][0]["distance"] == 3 and rpc.call("history.info")["undo"] == "Paste Layer Style", pasted
+    assert "dropShadows" not in rpc.call("layers.setStyle", style={})
+    assert rpc.call("history.info")["undo"] == "Clear Layer Style"
+    expect_refused(rpc, "blendIf", "layers.setStyle", style={"blendIf": "all"})
+    # Layer > Vector Mask on a layer without one: the menu's steps, and the new mask is the target path.
+    masked = rpc.call("vectorMask.set", mode="hideAll")
+    assert masked["inverted"] and masked["targeted"] and rpc.call("history.info")["undo"] == "Hide All Vector Mask", masked
+    assert rpc.call("vectorMask.target")["targeted"]
+    assert rpc.call("vectorMask.delete")["deleted"] and rpc.call("history.info")["undo"] == "Delete Vector Mask"
+    # A 16-bit pick: #rrrrggggbbbb for the colours and a fill.
+    colours = rpc.call("colors.set", foreground="#9c4004d2ffff", background="#000000000000")
+    assert colours["foreground"].startswith("#") and colours["background"] == "#000000", colours
+    rpc.call("layers.add", name="Sixteen")
+    rpc.call("pixels.fill", color="#9c4004d2ffff")
+    assert rpc.call("history.info")["undo"] == "Fill"
+    rpc.call("history.undo")
+    rpc.call("history.undo")
+    rpc.call("layers.select", id=layer_id)
+    # File > Open's image: a tab of its own even with a document open.
+    listed = rpc.call("tabs.list")
+    here = next(t["index"] for t in listed if t["current"])
+    opened = rpc.call("document.open", path=image, asDocument=True)
+    assert len(rpc.call("tabs.list")) == len(listed) + 1 and opened["tab"] == len(listed), opened
+    rpc.call("tabs.close", index=opened["tab"], discard=True)
+    rpc.call("tabs.select", index=here)
+
+
 def document_files(rpc):
     """Projects as single .nekophoto files and as .comp folders: saved, reopened, and followed on disk when another
     program rewrites them; in tabs of their own that are closed afterwards."""
@@ -395,6 +431,7 @@ def remaining_methods(rpc):
         print("expected error:", e)
     assert "strokes" not in rpc.call("layers.setStyle", id=placed["id"], style={})
     presets(rpc, work, placed["id"])
+    menu_requests(rpc, work, placed["id"], image)
     rpc.call("selection.fromLayer", id=placed["id"])
     try:   # needs the downloaded model; without it, a clear error
         rpc.call("pixels.removeBackground")
@@ -641,6 +678,9 @@ def sixteen_bit(rpc):
     if rpc.call("gmic.filters", search="sharpen")["installed"]:
         assert rpc.call("pixels.gmic", command="blur 1.5")["applied"] == "blur 1.5"
         assert rpc.call("history.info")["undo"] == "G'MIC: blur"
+        # The step named as Filter > G'MIC names it, after the filter.
+        rpc.call("pixels.gmic", command="blur 1", name="Soft Blur")
+        assert rpc.call("history.info")["undo"] == "G'MIC: Soft Blur"
     # Remove Background at 16 bits, when the model is downloaded: a 16-bit mask. Without it, the model's error, not
     # a refusal for the depth.
     try:
@@ -722,6 +762,8 @@ def sixteen_bit(rpc):
     ranged = rpc.call("text.styleRange", id=words["id"], start=5, length=4, color="#ff0000", size=36)
     assert [r["length"] for r in ranged["text"]["runs"]] == [5, 4], ranged
     assert rpc.call("text.toPath", id=words["id"])["subpaths"] >= 4
+    rpc.call("layers.select", id=words["id"])
+    assert rpc.call("text.toPath")["subpaths"] >= 4   # Type > Create Work Path: the active layer
     assert rpc.call("text.toShape", id=words["id"])["kind"] == "shape"
     # Shapes, paths and vector masks at 16 bits: a gradient shape with a stroke, a path operation, Fill and Stroke Path.
     assert rpc.call("tool.select", name="shape")["tool"] == "shape"
