@@ -9,6 +9,7 @@
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
+#include "compositor/workcounters.h"
 #include "compositor/resample.h"
 #include "compositor/warp.h"
 #include "compositor/modetransform.h"
@@ -129,6 +130,8 @@ void drawLayer(const DrawParams16& params, const Rect& region, double scale, con
     const int pw = full.width(), ph = full.height();
     Mapping m = mappingFor(params.transform, pw, ph, region, scale, out.width(), out.height(), 1);
     if (m.outputRect.isEmpty()) return;
+    work::add(work::Counter::LayerDraws);
+    work::add(work::Counter::LayerDrawPixels, uint64_t(m.outputRect.width) * uint64_t(m.outputRect.height));
     const bool nearest = params.transform.sampling == Sampling::Nearest;
     MipChoice mip = mipFor(params.transform.sampling, params.transform.size.width * scale, params.transform.size.height * scale, pw, ph);
     Image16Ptr source = MipCache::shared().level(params.image, mip.level);
@@ -302,6 +305,8 @@ void render16(const Document& document, const RenderOptions& options, Image16& o
     // A CMYK or Lab document renders at its own layout, then converts to sRGB (render_modes.h).
     if (document.colorMode != ColorMode::RGB) { renderModeAsRgb16(document, options, out, overrides, cache); return; }
     renderDeep<SampleType::U16>(document, options, out, overrides, cache);
+    work::add(work::Counter::Renders);
+    work::add(work::Counter::RenderPixels, uint64_t(out.width()) * uint64_t(out.height()));
 }
 
 std::shared_ptr<Image16> renderFlattened16(const Document& document) {

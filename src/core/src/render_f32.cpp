@@ -10,6 +10,7 @@
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
+#include "compositor/workcounters.h"
 #include "compositor/warp.h"
 #include <algorithm>
 #include <cmath>
@@ -118,6 +119,8 @@ void drawLayer(const DrawParamsF& params, const Rect& region, double scale, cons
     const int pw = full.width(), ph = full.height();
     Mapping m = mappingFor(params.transform, pw, ph, region, scale, out.width(), out.height(), 1);
     if (m.outputRect.isEmpty()) return;
+    work::add(work::Counter::LayerDraws);
+    work::add(work::Counter::LayerDrawPixels, uint64_t(m.outputRect.width) * uint64_t(m.outputRect.height));
     const bool nearest = params.transform.sampling == Sampling::Nearest;
     MipChoice mip = mipFor(params.transform.sampling, params.transform.size.width * scale, params.transform.size.height * scale, pw, ph);
     ImageFPtr source = MipCache::shared().level(params.image, mip.level);
@@ -287,6 +290,8 @@ void renderForDisplayF(const RenderPlan& plan, const Rect& region, double scale,
 void renderF(const Document& document, const RenderOptions& options, ImageF& out, const Overrides* overrides, RenderCache* cache) {
     FloatRenderScope scope(document, options.view32, options.peak);
     renderDeep<SampleType::F32>(document, options, out, overrides, cache);
+    work::add(work::Counter::Renders);
+    work::add(work::Counter::RenderPixels, uint64_t(out.width()) * uint64_t(out.height()));
 }
 
 std::shared_ptr<ImageF> renderFlattenedF(const Document& document) {

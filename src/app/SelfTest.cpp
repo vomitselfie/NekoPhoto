@@ -1375,6 +1375,8 @@ int preferences(MainWindow& w) {
     return failures;
 }
 
+int workCounters(MainWindow& window);   // SelfTestWork.cpp
+
 int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("command-path")) {
         const int first = commandPath(window);
@@ -1386,7 +1388,8 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("held-keys")) return heldKeys(window);
     if (name == QLatin1String("export-as")) return exportAs(window);
     if (name == QLatin1String("preferences")) return preferences(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences)\n", qPrintable(name));
+    if (name == QLatin1String("work-counters")) return workCounters(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters)\n", qPrintable(name));
     return 2;
 }
 

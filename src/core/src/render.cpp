@@ -4,6 +4,7 @@
 #include "compositor/blend.h"
 #include "compositor/colormgmt.h"
 #include "compositor/parallel.h"
+#include "compositor/workcounters.h"
 #include "compositor/resample.h"
 #include "compositor/warp.h"
 #include "compositor/depth.h"
@@ -199,6 +200,8 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
     int pw = full.width(), ph = full.height();
     Mapping m = mappingFor(params.transform, pw, ph, region, scale, out.width(), out.height(), 1);
     if (m.outputRect.isEmpty()) return;
+    work::add(work::Counter::LayerDraws);
+    work::add(work::Counter::LayerDrawPixels, uint64_t(m.outputRect.width) * uint64_t(m.outputRect.height));
     bool nearest = params.transform.sampling == Sampling::Nearest;
     MipChoice mip = mipFor(params.transform.sampling, params.transform.size.width * scale, params.transform.size.height * scale, pw, ph);
     ImagePtr source = MipCache::shared().level(params.image, mip.level);
@@ -491,6 +494,8 @@ void render(const Document& document, const RenderOptions& options, Image& out, 
     int w = std::max(1, int(std::ceil(region.width * scale - 1e-9))), h = std::max(1, int(std::ceil(region.height * scale - 1e-9)));
     if (out.width() != w || out.height() != h) out = Image(w, h);
     else if (options.clear) out.clear();
+    work::add(work::Counter::Renders);
+    work::add(work::Counter::RenderPixels, uint64_t(w) * uint64_t(h));
     RenderPlan plan(document, overrides);
     plan.build();
     // The cache replaces the whole frame, so it only applies when the frame is being cleared anyway.

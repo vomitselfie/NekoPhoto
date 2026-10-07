@@ -274,6 +274,13 @@ sample's area (0.3 s of the 2.1) and placing the dabs (0.1 s) are next. A tip br
 from 65 536 pixels; lowering it to 4 096 did not help the textured tip measurably. The round brush's 8-bit recompose
 has a branch per pixel and stays scalar.
 
+## Work counters
+
+The benchmarks time the work; `work_counter_tests` and the `work-counters` self-test (both in ctest) count it, so a
+change that makes an operation do more work fails on any machine, loaded or not: pixels rendered per brush move and per
+pan step, layers drawn per adjustment slider tick, reductions built, Smart Filters run, history bytes kept. What each
+counter measures, how its bounds were chosen and how to update them: [work-counters.md](work-counters.md).
+
 ## Render hashes
 
 The matching correctness gate is `render_hash_tests` (in ctest): 235 scenes (133 at 8 bits, 102 at 16 bits) hashed with FNV-1a 64 against
