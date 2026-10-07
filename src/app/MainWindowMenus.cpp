@@ -166,9 +166,13 @@ void MainWindow::buildToolRail() {
             spotHealingType_ = before.spotHealingType;
             session_->toning.kind = before.toning;
             session_->blurMode = before.blur;
-            if (before.tool == Tool::Brush && before.erase) eraserAction_->trigger();
-            else if (QAction* back = toolActions_.value(before.tool)) back->trigger();
-            else session_->selectTool(before.tool);
+            if (before.tool == Tool::Brush && before.erase) {
+                eraserAction_->trigger();
+            } else if (QAction* back = toolActions_.value(before.tool)) {
+                back->trigger();
+            } else {
+                session_->selectTool(before.tool);
+            }
             emit session_->toolChanged();
         });
     });
@@ -305,7 +309,7 @@ void MainWindow::buildMenus() {
     exportAsAction->setObjectName("export.as");
     // Ctrl+Alt+Shift+W is Photoshop's Export As; Ctrl+Alt+Shift+S (its Save for Web) opened Export JPEG here before.
     exportAsAction->setShortcuts({QKeySequence("Ctrl+Alt+Shift+W"), QKeySequence("Ctrl+Alt+Shift+S")});
-    connect(exportMenu, &QMenu::aboutToShow, this, [this, quickExportAction] { quickExportAction->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat()))); });
+    connect(exportMenu, &QMenu::aboutToShow, this, [quickExportAction] { quickExportAction->setText(MainWindow::tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat()))); });
     quickExportAction->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat())));
     exportMenu->addSeparator();
     needsDocument(exportMenu->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd), "export.psd");
@@ -558,7 +562,7 @@ void MainWindow::buildMenus() {
     layerQuickExport->setObjectName("export.layerQuick");
     layerQuickExport->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat())));
     needsDocument(layer->addAction(tr("Export As…"), QKeySequence("Ctrl+Alt+Shift+'"), this, [this] { exportAs(true); }), "export.png")->setObjectName("export.layerAs");
-    connect(layer, &QMenu::aboutToShow, this, [this, layerQuickExport] { layerQuickExport->setText(tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat()))); });
+    connect(layer, &QMenu::aboutToShow, this, [layerQuickExport] { layerQuickExport->setText(MainWindow::tr("Quick Export as %1").arg(exportas::formatLabel(exportas::quickExportFormat()))); });
     layer->addSeparator();
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
     for (int i = 0; i < adjustmentKindCount; i++) {
