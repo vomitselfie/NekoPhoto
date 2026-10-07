@@ -62,12 +62,12 @@ void EditorSession::transformCommand() {
     else { selectTool(Tool::Move); beginTransform(true); }
 }
 
-void EditorSession::beginTransform(bool persistent) {
+void EditorSession::beginTransform(bool persistent, bool selectMoveTool) {
     if (transformEdit_ || !canTransform()) return;
     resolveGradient();
     const Layer* layer = activeLayer();
     if (!layer) return;
-    tool_ = Tool::Move;
+    if (selectMoveTool) tool_ = Tool::Move;
     if (transformsAsGroup()) {
         auto box = groupTransformBox();
         if (!box) return;
@@ -123,7 +123,7 @@ void EditorSession::beginSelectionTransform() {
     emit transformChanged();
 }
 
-void EditorSession::beginDuplicateTransform() {
+void EditorSession::beginDuplicateTransform(bool selectMoveTool) {
     if (transformDuplicate_ || transformsAsGroup() || !activeLayerId_) return;
     Uuid source = *activeLayerId_;
     commitTransform();
@@ -132,7 +132,7 @@ void EditorSession::beginDuplicateTransform() {
     duplicateActiveLayer();
     if (!activeLayerId_ || *activeLayerId_ == source) { endEdit(); return; }
     transformDuplicate_ = std::make_pair(*activeLayerId_, source);
-    beginTransform(false);
+    beginTransform(false, selectMoveTool);
 }
 
 void EditorSession::previewTransform(const LayerTransform& value) {

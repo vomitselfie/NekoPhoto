@@ -7050,6 +7050,26 @@ File &gt; New creates a blank canvas.</source>
         <source>NekoPhoto project folder (*.comp)</source>
         <translation>NekoPhoto プロジェクトフォルダー (*.comp)</translation>
     </message>
+    <message>
+        <source>Revert to the saved version of “%1”?</source>
+        <translation>「%1」を保存されたバージョンに復帰しますか?</translation>
+    </message>
+    <message>
+        <source>Your unsaved changes and the history are lost.</source>
+        <translation>保存されていない変更とヒストリーは失われます。</translation>
+    </message>
+    <message>
+        <source>Couldn’t revert</source>
+        <translation>復帰できませんでした</translation>
+    </message>
+    <message>
+        <source>“%1” could not be read.</source>
+        <translation>「%1」を読み込めませんでした。</translation>
+    </message>
+    <message>
+        <source>Reverted to the saved version.</source>
+        <translation>保存されたバージョンに復帰しました。</translation>
+    </message>
     <message numerus="yes">
         <source>, %n folder(s)</source>
         <translation>
@@ -7489,6 +7509,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>別名で保存(&amp;A)...</translation>
     </message>
     <message>
+        <source>Re&amp;vert</source>
+        <translation>復帰(&amp;V)</translation>
+    </message>
+    <message>
         <source>Export as Photoshop &amp;Document (PSD)…</source>
         <translation>Photoshop ドキュメント (PSD) として書き出し(&amp;D)...</translation>
     </message>
@@ -7563,6 +7587,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Edit</source>
         <translation>編集(&amp;E)</translation>
+    </message>
+    <message>
+        <source>Toggle &amp;Last State</source>
+        <translation>最後の状態を切り替え(&amp;L)</translation>
     </message>
     <message>
         <source>Cu&amp;t</source>

@@ -38,6 +38,8 @@
 #include "ViewOptions.h"
 #include <QSignalBlocker>
 #include <QJsonObject>
+#include <QShortcutEvent>
+#include <functional>
 #include "compositor/project.h"
 #include <QActionGroup>
 #include <QApplication>
@@ -56,6 +58,34 @@
 using namespace compositor;
 
 namespace app {
+
+namespace {
+
+/// Sees an action's shortcut before the action does, and runs `f` in its place (the action and the keys pressed).
+class ShortcutWatch : public QObject {
+public:
+    ShortcutWatch(QObject* parent, std::function<void(QAction*, const QKeySequence&)> f) : QObject(parent), f_(std::move(f)) {}
+protected:
+    bool eventFilter(QObject* watched, QEvent* e) override {
+        if (e->type() != QEvent::Shortcut) return false;
+        auto* shortcut = static_cast<QShortcutEvent*>(e);
+        auto* action = qobject_cast<QAction*>(watched);
+        if (!action || shortcut->isAmbiguous() || !action->isEnabled()) return false;
+        f_(action, shortcut->key());
+        return true;
+    }
+private:
+    std::function<void(QAction*, const QKeySequence&)> f_;
+};
+
+/// Whether the keyboard is in a text field (a name, a number), where window shortcuts that edit the document or
+/// rearrange the window should leave the keys alone.
+bool typingInField() {
+    QWidget* focus = QApplication::focusWidget();
+    return focus && (focus->inherits("QLineEdit") || focus->inherits("QAbstractSpinBox") || focus->inherits("QTextEdit") || focus->inherits("QPlainTextEdit"));
+}
+
+} // namespace
 
 void MainWindow::buildToolRail() {
     auto* rail = new QToolBar(tr("Tools"), this);
@@ -109,6 +139,20 @@ void MainWindow::buildToolRail() {
     tool(Tool::Zoom, tr("Zoom"), "zoom-in", QKeySequence("Z"));
     rail->addSeparator();
     swatches_ = new ColorSwatches;
+    // Photoshop's spring-loaded tool keys: a tool's letter held a moment (or held while the tool is used) goes back
+    // to the tool before it when let go; a tap keeps the new tool. Held keys do not repeat the switch.
+    auto* springs = new ShortcutWatch(this, [this](QAction* a, const QKeySequence& keys) {
+        const Tool before = session_->tool();
+        const bool erasing = session_->brushErase;
+        a->trigger();
+        if (keys.isEmpty() || (session_->tool() == before && session_->brushErase == erasing)) return;
+        canvas_->armToolSpring(keys[0].key(), [this, before, erasing] {
+            if (before == Tool::Brush && erasing) eraserAction_->trigger();
+            else if (QAction* back = toolActions_.value(before)) back->trigger();
+            else session_->selectTool(before);
+        });
+    });
+    for (QAction* a : rail->actions()) if (a->isCheckable()) { a->setAutoRepeat(false); a->installEventFilter(springs); }
     connect(swatches_, &ColorSwatches::foregroundClicked, this, [this] { chooseColor(false); });
     connect(swatches_, &ColorSwatches::backgroundClicked, this, [this] { chooseColor(true); });
     auto* swap = new QAction(tr("Swap colours"), this);
@@ -198,6 +242,8 @@ void MainWindow::buildMenus() {
     auto needsDocument = [this](QAction* a, const char* feature = nullptr) { documentActions_ << a; if (feature) actionFeatures_[a] = QString::fromLatin1(feature); return a; };
     // Actions the canvas's context menu shows again (MainWindowCanvasMenu.cpp), so their shortcuts and enabled state match.
     auto nameAction = [this](const char* key, QAction* a) { named_[QString::fromLatin1(key)] = a; return a; };
+    // F7, F12 and Ctrl+Alt+Z leave the keys alone while a text field has them.
+    auto* fieldGuard = new ShortcutWatch(this, [](QAction* a, const QKeySequence&) { if (!typingInField()) a->trigger(); });
     QMenu* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New…"), QKeySequence::New, this, &MainWindow::newDocument);
     file->addAction(tr("&Open…"), QKeySequence::Open, this, &MainWindow::openFiles);
@@ -216,6 +262,9 @@ void MainWindow::buildMenus() {
     file->addSeparator();
     needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }), "document.save");
     needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }), "document.save");
+    revertAction_ = file->addAction(tr("Re&vert"), QKeySequence("F12"), this, &MainWindow::revertDocument);
+    revertAction_->setObjectName("file.revert");
+    revertAction_->installEventFilter(fieldGuard);
     file->addSeparator();
     needsDocument(file->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd), "export.psd");
     needsDocument(file->addAction(tr("Export &PNG…"), this, &MainWindow::exportPng), "export.png");
@@ -241,6 +290,10 @@ void MainWindow::buildMenus() {
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
     undoAction_ = edit->addAction(tr("&Undo"), QKeySequence::Undo, this, [this] { session_->undo(); });
     redoAction_ = edit->addAction(tr("&Redo"), QKeySequence("Ctrl+Shift+Z"), this, [this] { session_->redo(); });
+    // Photoshop CC's Toggle Last State: undoes the last step, or redoes the one just undone.
+    toggleStateAction_ = edit->addAction(tr("Toggle &Last State"), QKeySequence("Ctrl+Alt+Z"), this, [this] { session_->toggleLastState(); });
+    toggleStateAction_->setObjectName("edit.toggleLastState");
+    toggleStateAction_->installEventFilter(fieldGuard);
     edit->addSeparator();
     // The pixel clipboard runs pixels.cut, pixels.copy, pixels.copyMerged and pixels.paste (layers.copy and
     // layers.paste for whole layers); with nothing to copy or paste the items do nothing, as before.
@@ -782,6 +835,9 @@ void MainWindow::buildMenus() {
     }));
     view->addSeparator();
     layersDock_->toggleViewAction()->setText(tr("&Layers Panel"));
+    layersDock_->toggleViewAction()->setShortcut(QKeySequence("F7"));   // Photoshop's Window > Layers
+    layersDock_->toggleViewAction()->setObjectName("window.layers");
+    layersDock_->toggleViewAction()->installEventFilter(fieldGuard);
     adjustDock_->toggleViewAction()->setText(tr("&Adjustments Panel"));
     view->addAction(layersDock_->toggleViewAction());
     pathsDock_->toggleViewAction()->setText(tr("&Paths Panel"));

@@ -428,7 +428,7 @@ void EditorSession::undo() {
     // tolerances, so the next Shift- or Alt-click goes on from there.
     const bool wandClick = !wandRetuning_ && wandSessionLive() && !wandSession_->clicks.empty() && wandSession_->clicks.back().hasStep;
     auto snapshot = history_.undo();
-    if (snapshot) restore(*snapshot);
+    if (snapshot) { lastStepUndone_ = true; restore(*snapshot); }
     if (wandClick) {
         wandSession_->clicks.pop_back();
         if (wandSession_->clicks.empty()) wandSession_.reset();
@@ -441,7 +441,13 @@ void EditorSession::redo() {
     if (!canRedo()) return;
     wandSession_.reset();   // a redone click is a plain selection step; a new click starts a new session
     auto snapshot = history_.redo();
-    if (snapshot) restore(*snapshot);
+    if (snapshot) { lastStepUndone_ = false; restore(*snapshot); }
+}
+
+void EditorSession::toggleLastState() {
+    // A step made since the undo clears what could be redone, so the toggle undoes it, as Photoshop's does.
+    if (lastStepUndone_ && canRedo()) redo();
+    else undo();
 }
 
 void EditorSession::restore(const DocumentHistory::Snapshot& snapshot) {

@@ -115,6 +115,7 @@ interface language, and runs it; the last eight used come first.
 - Scrubby labels, as in Photoshop: drag the label beside a number (Size, Opacity, a filter's Radius, a Layer Style's Distance, the transform fields, Camera Raw's sliders) left or right to change it, with Shift for fine steps and Alt or Ctrl for coarse ones; a click on the label still types in the field, and one drag is one undo step
 - Opening a file that could not be carried over whole (PSD, PSB, Clip Studio, Affinity, SVG, PDF, imported brushes) shows a bar over the canvas instead of a dialog: how many things changed and the first of them, Details for the full list, Undo Open to close the document again
 - Shift + a tool's letter steps through its group, as in Photoshop (Shift+J: Spot Healing, Healing Brush, Patch, Content-Aware Move; Shift+O: Dodge, Burn, Sponge; and the others in [linux-port.md](linux-port.md#keyboard-shortcuts))
+- Photoshop's held keys: Ctrl is the Move tool while held, Alt the Eyedropper with the Brush, Paint Bucket and Gradient, Ctrl+Space and Ctrl+Alt+Space zoom in and out, and a tool's letter held while using it springs back to the tool before when let go; Ctrl+Alt+Z toggles the last state, F7 shows the Layers panel, F12 reverts to the saved project, and Ctrl+Shift+> / < size the type being typed
 
 ## Automation
 - Scripts and AI agents can drive the editor through a socket or MCP; see [automation.md](automation.md). `document.histogram` returns the Histogram panel's bins and statistics
@@ -223,6 +224,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - スクラブ(Photoshop と同じ):数値の横のラベル(直径、不透明度、フィルターの半径、レイヤースタイルの距離、変形の数値欄、Camera Raw のスライダー)を左右にドラッグして値を変えられます。Shift で細かく、Alt または Ctrl で大きく動きます。ラベルのクリックでは従来どおり数値を入力でき、1 回のドラッグは 1 つの取り消し単位です
 - そのままでは引き継げない要素のあるファイル(PSD、PSB、クリップスタジオ、Affinity、SVG、PDF、読み込んだブラシ)を開くと、ダイアログではなくカンバス上部のバーで知らせます:変更の件数と最初の 1 件、詳細で全件の一覧、開くの取り消しでドキュメントを閉じます
 - Shift + ツールのキーで同じグループのツールを順に切り替えます(Photoshop と同じ。Shift+J:スポット修復ブラシ・修復ブラシ・パッチ・コンテンツに応じた移動、Shift+O:覆い焼き・焼き込み・スポンジ。ほかは [linux-port.md](linux-port.md#keyboard-shortcuts))
+- Photoshop と同じ押している間だけのキー:Ctrl を押している間は移動ツール、ブラシ・塗りつぶしツール・グラデーションでは Alt でスポイト、Ctrl+Space と Ctrl+Alt+Space でズームイン・ズームアウト、ツールのキーを押したまま使うと離したときに元のツールへ戻ります。Ctrl+Alt+Z で最後の状態を切り替え、F7 でレイヤーパネルの表示、F12 で保存されたプロジェクトに復帰、Ctrl+Shift+> / < で入力中の文字サイズを変更
 
 ### 自動化
 - スクリプトや AI エージェントからソケットまたは MCP 経由で操作できます。詳しくは [automation.md](automation.md)(英語)。`document.histogram` はヒストグラムパネルのビンと統計情報を返します

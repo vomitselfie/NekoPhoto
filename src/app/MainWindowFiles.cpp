@@ -493,6 +493,23 @@ bool MainWindow::save(bool asNew) {
     return true;
 }
 
+void MainWindow::revertDocument() {
+    if (!session_->hasDocument() || session_->projectPath().isEmpty()) return;
+    const QString name = QFileInfo(session_->projectPath()).fileName();
+    if (session_->isModified()) {
+        QMessageBox box(QMessageBox::Warning, tr("Revert"), tr("Revert to the saved version of “%1”?").arg(name), QMessageBox::NoButton, this);
+        box.setInformativeText(tr("Your unsaved changes and the history are lost."));
+        QPushButton* revert = box.addButton(tr("Revert"), QMessageBox::DestructiveRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(QMessageBox::Cancel);
+        box.exec();
+        if (box.clickedButton() != revert) return;
+    }
+    canvas_->cancelType();
+    if (!session_->revertToSaved()) { showError(tr("Couldn’t revert"), tr("“%1” could not be read.").arg(name)); return; }
+    statusBar()->showMessage(tr("Reverted to the saved version."), 4000);
+}
+
 void MainWindow::exportPng() {
     session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
