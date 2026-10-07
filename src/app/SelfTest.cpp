@@ -754,6 +754,9 @@ int menuCommands(MainWindow& w) {
              s.addTextLayer(QPointF(20, 60), text, false);
          }, trigger({"Type", "Create Work Path"}), [](EditorSession& s, auto&) { s.textToWorkPath(*s.activeLayerId()); }, {"text.toPath"}},
         {"Convert to Shape", nullptr, {}, trigger({"Type", "Convert to Shape"}), [](EditorSession& s, auto&) { s.textToShape(*s.activeLayerId()); }, {"text.toShape"}},
+        // The shape made from the type goes again: a first glyph layout in a process can sit 1/64 px off the later ones
+        // on some Qt versions (6.4 on CI, despite the warm-up above), and Merge Visible at the end would carry that on.
+        {"Delete the Shape", nullptr, {}, trigger({"Layer", "Delete Layer"}), [](EditorSession& s, auto&) { s.deleteLayersResolvingClipping({*s.activeLayerId()}, false); }, {"layers.delete"}},
         // Quick Mask, the channel keys (Ctrl+3 red, Ctrl+2 the composite, Ctrl+Alt+3 red as the selection).
         {"Quick Mask On", "Background", {}, trigger({"Select", "Edit in Quick Mask Mode"}), [](EditorSession& s, auto&) { s.toggleQuickMask(); }, {"selection.quickMask"}},
         {"Quick Mask Off", nullptr, {}, trigger({"Select", "Edit in Quick Mask Mode"}), [](EditorSession& s, auto&) { s.toggleQuickMask(); }, {"selection.quickMask"}},
@@ -1718,6 +1721,7 @@ int registry(MainWindow& w) {
     std::map<QString, QString> defaults;
     for (const Command* c : reg.all())
         for (const QKeySequence& key : c->shortcuts) {
+            if (key.isEmpty()) continue;   // a standard key the platform leaves unset (Save As, Quit on a bare Qt)
             auto [at, added] = defaults.emplace(key.toString(QKeySequence::PortableText), c->id);
             if (!added && at->second != c->id) { std::fprintf(stderr, "registry: %s is the default key of %s and %s\n", qPrintable(at->first), qPrintable(at->second), qPrintable(c->id)); failures++; }
         }
