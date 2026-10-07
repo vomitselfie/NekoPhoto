@@ -179,11 +179,13 @@ int workCounters(MainWindow& window) {
         // Each tick renders the view once (no panel renders the document again): the pixel layers drawn once each over
         // at most the view, and the Levels pass. Measured a tick: 1 render of the document's 303 372 visible pixels, 4
         // draws (the blank layer draws nothing), 1 adjustment. Bounds: one render of the view, each layer once.
-        b.at("slider ticks", drag, Counter::Renders, ticks);
+        // One more render is allowed over the whole drag: on Windows a paint left over from adding the layer lands
+        // in the first tick (21 renders of the same view, measured on GitHub's Windows runner; 20 elsewhere).
+        b.at("slider ticks", drag, Counter::Renders, ticks + 1);
         b.at("slider ticks", drag, Counter::RenderPixels, view * ticks);
         b.at("slider ticks", drag, Counter::LayerDraws, pixelLayers * ticks);
         b.at("slider ticks", drag, Counter::LayerDrawPixels, pixelLayers * view * ticks);
-        b.at("slider ticks", drag, Counter::Adjustments, ticks);
+        b.at("slider ticks", drag, Counter::Adjustments, ticks + 1);   // that render's Levels pass
         // Every layer from its cached reduction: none built during the drag.
         b.at("slider ticks", drag, Counter::MipMisses, 0);
         b.at("slider ticks", drag, Counter::MipBuiltPixels, 0);

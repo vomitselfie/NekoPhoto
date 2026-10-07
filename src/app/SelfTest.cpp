@@ -937,7 +937,9 @@ int menuCommands(MainWindow& w) {
     if (!ModelStore::promptReady()) {
         QAction* subject = menuItem(w, {"Select", "Subject"});
         if (!subject) failures++;
-        else if (subject->isEnabled() || subject->toolTip().isEmpty() || !subject->toolTip().contains(QLatin1String("model"))) {
+        // Greyed, saying why: the model isn't downloaded, or (Windows, no OpenCV) the build can't run it at all.
+        else if (subject->isEnabled() || subject->toolTip().isEmpty()
+                 || !(subject->toolTip().contains(QLatin1String("model")) || subject->toolTip().contains(QLatin1String("OpenCV")))) {
             std::fprintf(stderr, "Select > Subject without the click-to-select model: enabled %d, tooltip \"%s\"\n", subject->isEnabled(), qPrintable(subject->toolTip()));
             failures++;
         }
