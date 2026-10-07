@@ -150,6 +150,8 @@ add_library(compositor_core STATIC
     src/document.cpp
     src/filters.cpp
     src/filters_modes.cpp
+    src/filters_grid.cpp
+    src/filters_photocraft.cpp
     src/filters_u16.cpp
     src/history.cpp
     src/image.cpp

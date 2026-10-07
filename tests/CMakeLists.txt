@@ -416,3 +416,8 @@ add_test(NAME histogram_tests COMMAND histogram_tests)
 add_executable(document_file_tests document_file_tests.cpp)
 target_link_libraries(document_file_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME document_file_tests COMMAND document_file_tests)
+
+# The Filter menu's grid filters: the Smart Filter kernels run destructively and the PhotoCraft ports.
+add_executable(gridfilter_tests gridfilter_tests.cpp)
+target_link_libraries(gridfilter_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME gridfilter_tests COMMAND gridfilter_tests)

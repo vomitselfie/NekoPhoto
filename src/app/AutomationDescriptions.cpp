@@ -241,10 +241,21 @@ const MethodDoc methodDocs[] = {
     // pixels
     {"pixels.adjust", "Apply an adjustment destructively to the active layer's pixels, inside the selection.",
      "kind:<adjustment>! The adjustment; settings:object Settings over the defaults (see adjustments.defaults)"},
-    {"pixels.filter", "Run a filter on the active layer's pixels, inside the selection; settings not given keep the dialog's last values.",
-     "kind:<filter>! The filter; radius:number Gaussian Blur radius in pixels; angle:number Motion Blur angle in degrees; distance:number Motion Blur distance in pixels; "
-     "amount:number Add Noise amount in percent; gaussian:bool Add Noise: Gaussian rather than uniform; monochromatic:bool Add Noise: grey noise; seed:integer=1 Add Noise seed; "
-     "distortion:number Lens Correction distortion -100..100; bicubic:bool Lens Correction: sharper resample"},
+    {"pixels.filter", "Run a filter on the active layer's pixels, inside the selection; settings not given take the filter's defaults. "
+                     "The distortions and Offset work inside the selection's bounds (the whole layer without one); Clouds paints between the "
+                     "foreground and background colours.",
+     "kind:<filter>! The filter; radius:number In pixels: Gaussian Blur, Box Blur, Surface Blur, Dust & Scratches, Median, Unsharp Mask, High Pass, Maximum, Minimum; "
+     "angle:number In degrees: Motion Blur, Emboss, Twirl; distance:number Motion Blur distance in pixels; "
+     "amount:number Add Noise and Unsharp Mask in percent, Emboss in percent, Radial Blur 1..100, Pinch, Spherize, Ripple, ZigZag and Shear -100..100 (Ripple -999..999); "
+     "gaussian:bool Add Noise: Gaussian rather than uniform; monochromatic:bool Add Noise: grey noise; seed:integer=1 The pattern of Add Noise, Wave, Clouds and Difference Clouds; "
+     "distortion:number Lens Correction distortion -100..100; bicubic:bool Lens Correction: sharper resample; "
+     "threshold:integer Dust & Scratches, Surface Blur, Unsharp Mask threshold in levels; height:integer Emboss height in pixels; "
+     "cellSize:integer Mosaic cell size in pixels; quality:(draft|good|best) Radial Blur quality; "
+     "mode:string Spherize: normal, horizontalOnly or verticalOnly, Polar Coordinates: rectangularToPolar or polarToRectangular; "
+     "size:(small|medium|large) Ripple size; style:(aroundCenter|outFromCenter|pondRipples) ZigZag style; ridges:number ZigZag ridges 0..20; "
+     "type:(sine|triangle|square) Wave type; generators:integer Wave generators; wavelengthMin:number Wave; wavelengthMax:number Wave; "
+     "amplitudeMin:number Wave; amplitudeMax:number Wave; undefinedAreas:(wrap|repeat|transparent) Wave, Shear and Offset (transparent: Offset only); "
+     "preserve:(squareness|roundness) Minimum and Maximum; horizontal:integer Offset right in pixels; vertical:integer Offset down in pixels"},
     {"pixels.mosh", "Filter > Mosh: one of OpenMosh's effects on the active layer's pixels, inside the selection "
                     "(docs/mosh.md lists every effect and its parameters). Replies with the settings it applied.",
      "effect:string! An OpenMosh id: glitch (soft-glitch, hard-glitch, decimate, data-mosh, splitter, jitter, slices, shake, pixel-sort, strobe), "
@@ -419,7 +430,7 @@ QStringList valuesNamed(const QString& list) {
     if (list == "blend") out = blendModeNames() << QStringLiteral("Pass Through");   // Pass Through: folders only
     else if (list == "sampling") for (int i = 0; i < 3; i++) out << QString::fromUtf8(samplingName(Sampling(i)));
     else if (list == "adjustment") for (int i = 0; i < adjustmentKindCount; i++) out << QString::fromUtf8(adjustmentKindName(AdjustmentKind(i)));
-    else if (list == "filter") for (int i = 0; i < 4; i++) out << QString::fromUtf8(filterKindName(FilterKind(i)));
+    else if (list == "filter") for (int i = 0; i < filterKindCount; i++) out << QString::fromUtf8(filterKindName(FilterKind(i)));
     else if (list == "tool") out = toolNames();
     else if (list == "selectionMode") out = {"replace", "add", "subtract", "intersect"};
     return out;

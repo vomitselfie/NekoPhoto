@@ -102,9 +102,9 @@ std::optional<Sampling> samplingNamed(const QString& name) {
 }
 
 std::optional<FilterKind> filterKindNamed(QString name) {
-    name = name.toLower().remove(' ').remove('-');
-    for (int i = 0; i < 4; i++) {
-        QString n = QString::fromUtf8(filterKindName(FilterKind(i))).toLower().remove(' ').remove('-');
+    name = name.toLower().remove(' ').remove('-').remove('&').remove("and");
+    for (int i = 0; i < filterKindCount; i++) {
+        QString n = QString::fromUtf8(filterKindName(FilterKind(i))).toLower().remove(' ').remove('-').remove('&').remove("and");
         if (n == name) return FilterKind(i);
     }
     if (name == "gaussian" || name == "blur") return FilterKind::GaussianBlur;

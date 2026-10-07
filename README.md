@@ -75,7 +75,7 @@ Coming next:
 - **Artboards and slices,** exported to files in one go ([docs/artboards-slices.md](docs/artboards-slices.md))
 - **Actions and Batch:** record steps, play them back, and run them over a folder of files; almost every menu command and the Layers panel's controls are recorded ([docs/actions.md](docs/actions.md))
 - **Animation:** a frame Timeline with animated GIF export; GIF and Aseprite files open with their frames ([docs/animation.md](docs/animation.md))
-- **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise and lens correction; hold Alt while dragging Levels or Curves to see exactly what clips
+- **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, and the Filter menu's blurs, distortions (Twirl, Wave, Spherize, Polar Coordinates and more), noise, Mosaic, Clouds, Unsharp Mask, Emboss, Find Edges, High Pass, Maximum, Minimum, Offset and lens correction, in Photoshop's submenus; hold Alt while dragging Levels or Curves to see exactly what clips
 - **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
 - **G'MIC:** over 850 more filters with a live preview, when `gmic` is installed
 - **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; Photoshop's layer styles, vector shapes and masks drawn as it draws them ([docs/layer-styles.md](docs/layer-styles.md), [docs/vector-masks.md](docs/vector-masks.md)); smart objects you can place, convert, edit and replace without losing resolution ([docs/smart-objects.md](docs/smart-objects.md)); text that stays editable both ways; layered PSD export; projects of up to a gigapixel of layers; camera RAW (opens in Camera Raw first, white balance in Kelvin and Tint, and Open Object keeps the RAW file inside a smart object you can re-develop), Affinity, SVG, PDF, GIF, TGA and ICO; a Photoshop file too big to open can open as its flattened image instead; PNG, JPEG, WebP, TIFF, SVG, GIF, TGA and ICO export; several projects in tabs; crash recovery
@@ -248,7 +248,7 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 - **アートボードとスライス:** まとめてファイルに書き出せます
 - **アクションとバッチ:** 操作を記録・再生し、フォルダー内のファイルに一括適用できます。ほとんどのメニューコマンドとレイヤーパネルの操作が記録されます
 - **アニメーション:** フレームタイムラインとアニメーション GIF の書き出し。GIF・Aseprite ファイルはフレームごと開けます
-- **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、ぼかし、ノイズ、レンズ補正。レベル補正やトーンカーブで Alt を押しながらドラッグすると、白飛び・黒つぶれする部分が表示されます
+- **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、そして Photoshop と同じサブメニューに並ぶフィルター(ぼかし、ツイスト・波形・球面・極座標などの変形、ノイズ、モザイク、雲模様、アンシャープマスク、エンボス、輪郭検出、ハイパス、明るさの最大値・最小値、オフセット、レンズ補正)。レベル補正やトーンカーブで Alt を押しながらドラッグすると、白飛び・黒つぶれする部分が表示されます
 - **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
 - **G'MIC:** `gmic` をインストールすると、850 種類以上のフィルターをライブプレビュー付きで使えます
 - **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開け、レイヤー付き PSD に書き出せます。1 ギガピクセルまでのプロジェクト、カメラ RAW(まず Camera Raw で開き、ホワイトバランスは色温度と色かぶり補正。「オブジェクトとして開く」なら RAW を含むスマートオブジェクトとして後から現像し直せます)・Affinity・SVG・PDF・GIF・TGA・ICO の読み込み、大きすぎて開けない Photoshop ファイルは統合画像として開くこともできます、PNG・JPEG・WebP・TIFF・SVG・GIF・TGA・ICO 書き出し、タブで複数のプロジェクト、クラッシュからの復元

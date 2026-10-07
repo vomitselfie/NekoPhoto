@@ -551,6 +551,7 @@ def sixteen_bit(rpc):
     rpc.call("selection.feather", radius=3)
     rpc.call("pixels.adjust", kind="Levels", settings={"ranges": [{"black": 10, "gamma": 1.3, "white": 240, "outputBlack": 0, "outputWhite": 255}]})
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
+    grid_filters(rpc)
     assert rpc.call("pixels.mosh", effect="vhs", seed=3)["applied"] == "vhs"
     # Camera Raw at 16 bits, White Balance > Auto included.
     raw = rpc.call("pixels.cameraRaw", settings={"exposure": 0.4, "clarity": 20, "whiteBalance": "Auto", "detail": {"sharpenAmount": 30}})
@@ -770,6 +771,29 @@ def sixteen_bit(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+# The Filter menu's grid filters (filters.h, applyGridFilter) with settings off their defaults.
+GRID_FILTERS = (
+    ("Box Blur", {"radius": 3}), ("Radial Blur", {"amount": 12, "quality": "draft"}), ("Surface Blur", {"radius": 4, "threshold": 20}),
+    ("Dust & Scratches", {"radius": 2, "threshold": 8}), ("Median", {"radius": 2}), ("Unsharp Mask", {"amount": 120, "radius": 1.5, "threshold": 2}),
+    ("High Pass", {"radius": 6}), ("Emboss", {"angle": 120, "height": 2, "amount": 150}), ("Mosaic", {"cellSize": 6}),
+    ("Twirl", {"angle": 120}), ("Pinch", {"amount": -40}), ("Spherize", {"amount": 60, "mode": "horizontalOnly"}),
+    ("Wave", {"generators": 3, "type": "triangle", "undefinedAreas": "repeat", "seed": 4}), ("Ripple", {"amount": 200, "size": "large"}),
+    ("Polar Coordinates", {"mode": "polarToRectangular"}), ("ZigZag", {"amount": 30, "ridges": 4, "style": "aroundCenter"}),
+    ("Shear", {"amount": 30}), ("Maximum", {"radius": 2, "preserve": "roundness"}), ("Minimum", {"radius": 1}),
+    ("Offset", {"horizontal": 7, "vertical": -3, "undefinedAreas": "transparent"}), ("Clouds", {"seed": 3}), ("Difference Clouds", {"seed": 5}),
+    ("Find Edges", {}),
+)
+
+
+def grid_filters(rpc, kinds=None):
+    """Runs the grid filters (all, or `kinds`) on the active layer, one undo step each, named for the filter."""
+    for kind, extra in GRID_FILTERS:
+        if kinds is not None and kind not in kinds:
+            continue
+        assert rpc.call("pixels.filter", kind=kind, **extra)["applied"] == kind
+        assert rpc.call("history.info")["undo"] == kind, (kind, rpc.call("history.info"))
+
+
 def expect_refused(rpc, words, method, **params):
     """Calls a method that must be refused, and checks the reason names `words`."""
     try:
@@ -937,6 +961,10 @@ def thirty_two_bit_editing(rpc):
     for kind, extra in (("Gaussian Blur", {"radius": 2}), ("Motion Blur", {"angle": 30, "distance": 8}), ("Add Noise", {"amount": 10, "seed": 7}),
                         ("Lens Correction", {"distortion": 20})):
         rpc.call("pixels.filter", kind=kind, **extra)
+    # The geometric grid filters work on linear float; the Smart Filter kernels and Clouds wait for a port.
+    grid_filters(rpc, {"Twirl", "Wave", "Polar Coordinates", "Maximum", "Minimum", "Offset"})
+    expect_refused(rpc, "32-bit", "pixels.filter", kind="Median")
+    expect_refused(rpc, "32-bit", "pixels.filter", kind="Clouds")
     # Pixel edits: clear, fill, Image Size, Crop, Trim, Canvas Size, warps.
     rpc.call("pixels.clear")
     rpc.call("selection.none")
@@ -1373,6 +1401,9 @@ def colour_mode_adjustments(rpc):
             rpc.call("pixels.filter", kind=kind, **extra)
         undo = rpc.call("history.list")["undo"]
         assert len(undo) - steps == len(offered[mode]) + 4 + 1, ("one undo step each", undo[steps:])
+        # The grid filters on the inks or L, a and b; Clouds paints sRGB colours and stays RGB for now.
+        grid_filters(rpc, {kind for kind, _ in GRID_FILTERS} - {"Clouds", "Difference Clouds"})
+        expect_refused(rpc, "mode", "pixels.filter", kind="Clouds")
         rpc.call("selection.none")
         # Adjustment layers draw in the mode; what Photoshop lacks there cannot be added.
         for kind in offered[mode]:
@@ -2035,6 +2066,15 @@ def main():
     rpc.call("layers.select", id=target["id"])
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
     rpc.call("pixels.filter", kind="Lens Correction", distortion=20, bicubic=True)
+    # The grid filters, by name and by a loose spelling; a choice outside its names is refused.
+    grid_filters(rpc)
+    assert rpc.call("pixels.filter", kind="dust and scratches", radius=1)["applied"] == "Dust & Scratches"
+    expect_refused(rpc, "must be one of", "pixels.filter", kind="Spherize", mode="sideways")
+    expect_refused(rpc, "kind must be one of", "pixels.filter", kind="Lens Flare")
+    # Inside a selection: Twirl turns only within its bounds.
+    rpc.call("selection.rect", x=4, y=4, width=24, height=16)
+    rpc.call("pixels.filter", kind="Twirl", angle=300)
+    rpc.call("selection.none")
     # Filter > Mosh: an OpenMosh effect by id and key, one undo step named for it; the same seed repeats the pattern.
     before = rpc.call("layers.render", id=target["id"], maxSize=64)
     moshed = rpc.call("pixels.mosh", effect="pixel-sort", params={"low": 0.1, "reverse": True}, seed=12.5)

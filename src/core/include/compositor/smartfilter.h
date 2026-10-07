@@ -4,6 +4,7 @@
 // other entry keeps the preview the file carried (docs/smart-objects.md).
 #pragma once
 #include "document.h"
+#include "filters.h"
 #include "image.h"
 #include "psd_carry.h"
 #include "smartobject.h"
@@ -118,6 +119,14 @@ std::optional<PlacedRaster> renderSmartFilterStack(const PlacedRaster& placed, c
 /// against the 8-bit one (docs/smart-objects.md gives the figures). None when the stack is not supported, or has an
 /// entry not drawn at 16 bits (smartFilterDrawsAt16).
 std::optional<PlacedRaster16> renderSmartFilterStack(const PlacedRaster16& placed, const PixelRect& canvas, const SmartFilterStack& stack);
+/// The stack over a raster of any depth and layout placed at (`x`, `y`) in a document of `mode`: RGB or Lab (4
+/// samples), CMYK (5, run as two 4-sample halves), at 8 or 16 bits. None when a filter is not drawn in that mode
+/// (smartFilterDrawsInMode) or the stack is not supported.
+std::optional<AnyPlacedRaster> renderSmartFilterStackAny(const AnyImage& placed, int x, int y, const PixelRect& canvas, const SmartFilterStack& stack,
+                                                         ColorMode mode);
+/// The Smart Filter a Filter menu filter drawn by these kernels is (Box Blur, Radial Blur, Surface Blur, Dust & Scratches,
+/// Median, Unsharp Mask, High Pass, Emboss, Mosaic), its settings held in range; none for the others.
+std::optional<SmartFilterParameters> smartFilterParametersFor(FilterKind kind, const FilterSettings& settings);
 /// Whether a filter is drawn at 16 bits.
 bool smartFilterDrawsAt16(const SmartFilterParameters& parameters);
 

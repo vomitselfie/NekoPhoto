@@ -117,6 +117,19 @@ void PixelDialog::capture(int margin, int previewLimit) {
     previewCoverage_ = previewSource_ == source_ ? coverage_ : coverageCopy(coverage_, previewSource_->width(), previewSource_->height());
 }
 
+void PixelDialog::captureAny(int margin) {
+    if (!session_) return;
+    source_.reset(); previewSource_.reset(); coverage_.reset(); previewCoverage_.reset();
+    source16_.reset(); previewSource16_.reset(); coverage16_.reset(); previewCoverage16_.reset();
+    sourceF_.reset(); previewSourceF_.reset(); coverageF_.reset(); previewCoverageF_.reset();
+    curve_ = session_->documentCurve();
+    previewScale_ = 1;
+    mode_ = session_->colorMode();
+    profile_ = session_->document() ? session_->document()->profile : ColorProfile();
+    sourceNative_ = session_->adjustmentSourceAny(margin, transform_, layerId_);
+    coverageNative_ = sourceNative_ ? session_->selectionOnGridAny(transform_, sourceNative_.width(), sourceNative_.height()) : AnyGray();
+}
+
 QCheckBox* PixelDialog::addPreviewAndButtons(QVBoxLayout* layout) {
     preview_ = new QCheckBox(tr("Preview"));
     preview_->setChecked(true);

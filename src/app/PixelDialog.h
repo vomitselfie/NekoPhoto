@@ -26,6 +26,10 @@ protected:
     /// copies reduced to `previewLimit` on the longest side for previewing (0 previews at full size). In a 16- or
     /// 32-bit document the accessors of that depth hold them (source16(), sourceF() and so on) and the others are null.
     void capture(int margin, int previewLimit);
+    /// The same for a filter that works on any depth and layout: the pinned layer's own buffer in sourceNative() and
+    /// the selection on its grid in coverageNative(), whatever the mode (the RGB accessors stay null), previewed at
+    /// full size.
+    void captureAny(int margin);
     /// Adds the Preview check box and the OK / Cancel buttons at the bottom of `layout`; returns the check box.
     QCheckBox* addPreviewAndButtons(QVBoxLayout* layout);
     bool previewing() const;
@@ -68,6 +72,7 @@ protected:
     /// In a CMYK or Lab document the layer's own samples (modeedit.h), previewed at full size; the RGB accessors are
     /// null there, so no RGB kernel ever meets them.
     const compositor::AnyImage& sourceNative() const { return sourceNative_; }
+    const compositor::AnyGray& coverageNative() const { return coverageNative_; }
     compositor::ColorMode colorMode() const { return mode_; }
     const compositor::ColorProfile& documentProfile() const { return profile_; }
     /// Whether the pinned layer's pixels were captured at all, at any depth.

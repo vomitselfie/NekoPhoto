@@ -145,6 +145,7 @@ void applyFilter(FilterKind kind, ImageF& image, const FilterSettings& settings,
         lensDistortF(source, image, s.distortion / 100 * lensStrength, s.bicubic);
         break;
     }
+    default: break;   // the grid filters: applyGridFilter
     }
 }
 

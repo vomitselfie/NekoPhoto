@@ -459,13 +459,12 @@ bool smartFilterDrawsInMode(const SmartFilterParameters& parameters, ColorMode m
     return mode == ColorMode::RGB || !std::holds_alternative<smartfilter::PlasticWrap>(parameters);
 }
 
-namespace {
-
-/// The stack on a CMYK or Lab raster: Lab's four samples run the kernels as they are; CMYK's five as (C, M, Y, alpha)
-/// and (K, K, K, alpha), which see the same alpha and so grow and trim alike, joined back. The kernels weigh the stored
-/// samples as they weigh red, green and blue.
-std::optional<AnyPlacedRaster> filteredInMode(const AnyImage& placed, int x, int y, const PixelRect& canvas, const SmartFilterStack& stack) {
-    for (const SmartFilterEntry& e : stack.entries) if (!smartFilterDrawsInMode(e.parameters, ColorMode::CMYK)) return std::nullopt;
+// The stack on a raster of any layout: RGB's and Lab's four samples run the kernels as they are; CMYK's five as
+// (C, M, Y, alpha) and (K, K, K, alpha), which see the same alpha and so grow and trim alike, joined back. The kernels
+// weigh the stored samples as they weigh red, green and blue.
+std::optional<AnyPlacedRaster> renderSmartFilterStackAny(const AnyImage& placed, int x, int y, const PixelRect& canvas, const SmartFilterStack& stack,
+                                                         ColorMode mode) {
+    for (const SmartFilterEntry& e : stack.entries) if (!smartFilterDrawsInMode(e.parameters, mode)) return std::nullopt;
     auto placedAt = [](AnyImage image, int px, int py) {
         const Size size(image.width(), image.height());
         return AnyPlacedRaster{std::move(image), px, py, LayerTransform(Point(px, py), size)};
@@ -497,6 +496,8 @@ std::optional<AnyPlacedRaster> filteredInMode(const AnyImage& placed, int x, int
     return std::nullopt;
 }
 
+namespace {
+
 /// drawSmartObjectRaster in a CMYK or Lab document: the contents in its layout, placed through the warp (or flat),
 /// then the Smart Filters on them.
 std::optional<AnyPlacedRaster> drawInMode(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance, const AnyImage& image,
@@ -516,7 +517,7 @@ std::optional<AnyPlacedRaster> drawInMode(const std::vector<PsdBlock>& globals, 
     auto raster = renderWarpedImageAny(image, mesh ? *mesh : flat, quad, clip ? &*clip : nullptr);
     if (!raster || !raster->image) return std::nullopt;
     const int x = int(std::lround(raster->transform.origin.x)), y = int(std::lround(raster->transform.origin.y));
-    if (how == SmartObjectDraw::Filtered) return filteredInMode(raster->image, x, y, cache->canvas, *stack);
+    if (how == SmartObjectDraw::Filtered) return renderSmartFilterStackAny(raster->image, x, y, cache->canvas, *stack, ColorMode::CMYK);
     AnyPlacedRaster r{raster->image, x, y, LayerTransform(Point(x, y), Size(raster->image.width(), raster->image.height()))};
     if (how == SmartObjectDraw::Warped) r.transform = raster->transform;
     return r;

@@ -85,6 +85,29 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Motion Blur | `filter.Motion Blur` | native | native | native | native | native | native | native |  |
 | Add Noise | `filter.Add Noise` | native | native | native | native | native | native | native |  |
 | Lens Correction | `filter.Lens Correction` | native | native | native | native | native | native | native |  |
+| Box Blur | `filter.Box Blur` | native | native | greyed (not yet) | native | native | native | native |  |
+| Radial Blur | `filter.Radial Blur` | native | native | greyed (not yet) | native | native | native | native |  |
+| Surface Blur | `filter.Surface Blur` | native | native | greyed (not yet) | native | native | native | native |  |
+| Dust & Scratches | `filter.Dust & Scratches` | native | native | greyed (not yet) | native | native | native | native |  |
+| Median | `filter.Median` | native | native | greyed (not yet) | native | native | native | native |  |
+| Unsharp Mask | `filter.Unsharp Mask` | native | native | greyed (not yet) | native | native | native | native |  |
+| High Pass | `filter.High Pass` | native | native | greyed (not yet) | native | native | native | native |  |
+| Emboss | `filter.Emboss` | native | native | greyed (not yet) | native | native | native | native |  |
+| Mosaic | `filter.Mosaic` | native | native | greyed (not yet) | native | native | native | native |  |
+| Twirl | `filter.Twirl` | native | native | native | native | native | native | native |  |
+| Pinch | `filter.Pinch` | native | native | native | native | native | native | native |  |
+| Spherize | `filter.Spherize` | native | native | native | native | native | native | native |  |
+| Wave | `filter.Wave` | native | native | native | native | native | native | native |  |
+| Ripple | `filter.Ripple` | native | native | native | native | native | native | native |  |
+| Polar Coordinates | `filter.Polar Coordinates` | native | native | native | native | native | native | native |  |
+| ZigZag | `filter.ZigZag` | native | native | native | native | native | native | native |  |
+| Shear | `filter.Shear` | native | native | native | native | native | native | native |  |
+| Maximum | `filter.Maximum` | native | native | native | native | native | native | native |  |
+| Minimum | `filter.Minimum` | native | native | native | native | native | native | native |  |
+| Offset | `filter.Offset` | native | native | native | native | native | native | native |  |
+| Clouds | `filter.Clouds` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Difference Clouds | `filter.Difference Clouds` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Find Edges | `filter.Find Edges` | native | native | greyed (not yet) | native | native | native | native |  |
 | Camera Raw Filter | `filter.Camera Raw` | native | native | greyed (not yet) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | G'MIC | `filter.G'MIC` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Mosh | `filter.Mosh` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |

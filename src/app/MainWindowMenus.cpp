@@ -23,6 +23,9 @@
 #include "ImageConvert.h"
 #include "CameraRawDialog.h"
 #include "FilterDialog.h"
+#include "GridFilters.h"
+#include "compositor/smartfilter.h"
+#include <random>
 #include "MoshDialog.h"
 #include "GmicDialog.h"
 #include "ColorDialogs.h"
@@ -620,19 +623,69 @@ void MainWindow::buildMenus() {
         }
 
     QMenu* filter = menuBar()->addMenu(tr("Filte&r"));
-    auto filterAction = [this, filter, &needsDocument](const QString& label, FilterKind kind) {
-        needsDocument(filter->addAction(label, this, [this, kind] {
-            // On a smart object the blurs and noise go on as Smart Filters, as in Photoshop.
-            if (kind != FilterKind::LensCorrection && session_->canAddSmartFilter()) { (new FilterDialog(session_, kind, this, true))->show(); return; }
+    // Photoshop's filters on a smart object go on as Smart Filters: the blurs, noise and the ones the Smart Filter
+    // kernels draw. The rest change pixels, so on a smart object they ask to rasterize first.
+    auto smartCapable = [](FilterKind kind) {
+        return kind == FilterKind::GaussianBlur || kind == FilterKind::MotionBlur || kind == FilterKind::AddNoise
+               || compositor::smartFilterParametersFor(kind, compositor::FilterSettings::defaults(kind)).has_value();
+    };
+    auto filterAction = [this, &needsDocument, smartCapable](QMenu* menu, const QString& label, FilterKind kind) {
+        needsDocument(menu->addAction(label, this, [this, kind, smartCapable] {
+            if (smartCapable(kind) && session_->canAddSmartFilter()) { (new FilterDialog(session_, kind, this, true))->show(); return; }
             if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
+            if (compositor::filterRunsDirectly(kind)) {
+                // No dialog, as in Photoshop: Clouds draws a new pattern each time.
+                const uint32_t seed = uint32_t(std::random_device{}() % 1000000000u);
+                runCommand("pixels.filter", gridFilterStep(kind, compositor::FilterSettings::defaults(kind), seed), names::filterKind(kind));
+                return;
+            }
             (new FilterDialog(session_, kind, this))->show();
         }), (std::string("filter.") + filterKindName(kind)).c_str());
     };
-    filterAction(tr("&Gaussian Blur…"), FilterKind::GaussianBlur);
-    filterAction(tr("&Motion Blur…"), FilterKind::MotionBlur);
-    filterAction(tr("Add &Noise…"), FilterKind::AddNoise);
-    filterAction(tr("&Lens Correction…"), FilterKind::LensCorrection);
+    // Photoshop's places: the top-level filters, then the submenus in its order, each in its own order.
+    // Photoshop's shortcut. A destructive filter here: on a smart object it asks first, like the others.
+    needsDocument(filter->addAction(tr("Camera &Raw Filter…"), QKeySequence("Shift+Ctrl+A"), this, [this] {
+        if (session_->smartObjectBlocksPixels(true)) return;
+        if (!session_->canAdjustPixels()) { showError(tr("Camera Raw Filter"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
+        (new CameraRawDialog(session_, this))->show();
+    }), "filter.Camera Raw");
+    filterAction(filter, tr("&Lens Correction…"), FilterKind::LensCorrection);
+    filter->addSeparator();
+    QMenu* blurMenu = filter->addMenu(tr("&Blur"));
+    filterAction(blurMenu, tr("&Box Blur…"), FilterKind::BoxBlur);
+    filterAction(blurMenu, tr("&Gaussian Blur…"), FilterKind::GaussianBlur);
+    filterAction(blurMenu, tr("&Motion Blur…"), FilterKind::MotionBlur);
+    filterAction(blurMenu, tr("&Radial Blur…"), FilterKind::RadialBlur);
+    filterAction(blurMenu, tr("&Surface Blur…"), FilterKind::SurfaceBlur);
+    QMenu* distortMenu = filter->addMenu(tr("&Distort"));
+    filterAction(distortMenu, tr("&Pinch…"), FilterKind::Pinch);
+    filterAction(distortMenu, tr("P&olar Coordinates…"), FilterKind::PolarCoordinates);
+    filterAction(distortMenu, tr("&Ripple…"), FilterKind::Ripple);
+    filterAction(distortMenu, tr("S&hear…"), FilterKind::Shear);
+    filterAction(distortMenu, tr("&Spherize…"), FilterKind::Spherize);
+    filterAction(distortMenu, tr("&Twirl…"), FilterKind::Twirl);
+    filterAction(distortMenu, tr("&Wave…"), FilterKind::Wave);
+    filterAction(distortMenu, tr("&ZigZag…"), FilterKind::ZigZag);
+    QMenu* noiseMenu = filter->addMenu(tr("&Noise"));
+    filterAction(noiseMenu, tr("Add &Noise…"), FilterKind::AddNoise);
+    filterAction(noiseMenu, tr("&Dust && Scratches…"), FilterKind::DustAndScratches);
+    filterAction(noiseMenu, tr("&Median…"), FilterKind::Median);
+    QMenu* pixelateMenu = filter->addMenu(tr("&Pixelate"));
+    filterAction(pixelateMenu, tr("&Mosaic…"), FilterKind::Mosaic);
+    QMenu* renderMenu = filter->addMenu(tr("R&ender"));
+    filterAction(renderMenu, tr("&Clouds"), FilterKind::Clouds);
+    filterAction(renderMenu, tr("&Difference Clouds"), FilterKind::DifferenceClouds);
+    QMenu* sharpenMenu = filter->addMenu(tr("S&harpen"));
+    filterAction(sharpenMenu, tr("&Unsharp Mask…"), FilterKind::UnsharpMask);
+    QMenu* stylizeMenu = filter->addMenu(tr("St&ylize"));
+    filterAction(stylizeMenu, tr("&Emboss…"), FilterKind::Emboss);
+    filterAction(stylizeMenu, tr("&Find Edges"), FilterKind::FindEdges);
+    QMenu* otherMenu = filter->addMenu(tr("O&ther"));
+    filterAction(otherMenu, tr("&High Pass…"), FilterKind::HighPass);
+    filterAction(otherMenu, tr("Ma&ximum…"), FilterKind::Maximum);
+    filterAction(otherMenu, tr("M&inimum…"), FilterKind::Minimum);
+    filterAction(otherMenu, tr("&Offset…"), FilterKind::Offset);
     filter->addSeparator();
     // OpenMosh's glitch, distortion and retro effects (docs/mosh.md), a submenu per category.
     QMenu* moshMenu = filter->addMenu(tr("M&osh"));
@@ -650,12 +703,6 @@ void MainWindow::buildMenus() {
             }), "filter.Mosh");
         }
     }
-    // Photoshop's shortcut. A destructive filter here: on a smart object it asks first, like the others.
-    needsDocument(filter->addAction(tr("Camera &Raw Filter…"), QKeySequence("Shift+Ctrl+A"), this, [this] {
-        if (session_->smartObjectBlocksPixels(true)) return;
-        if (!session_->canAdjustPixels()) { showError(tr("Camera Raw Filter"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
-        (new CameraRawDialog(session_, this))->show();
-    }), "filter.Camera Raw");
     filter->addSeparator();
     gmicAction_ = needsDocument(filter->addAction(tr("&G'MIC…"), QKeySequence("Ctrl+Shift+G"), this, [this] { openGmic(); }), "filter.G'MIC");
     removeBackgroundAction_ = needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {

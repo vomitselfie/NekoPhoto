@@ -801,9 +801,28 @@ def pixels_adjust(kind: str, settings: Optional[dict] = None) -> str:
 
 
 @edit("Filter pixels")
-def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[float] = None, distance: Optional[float] = None, amount: Optional[float] = None, gaussian: Optional[bool] = None, monochromatic: Optional[bool] = None, distortion: Optional[float] = None, bicubic: Optional[bool] = None) -> str:
-    """Run a filter on the active layer's pixels: Gaussian Blur (radius), Motion Blur (angle, distance), Add Noise (amount, gaussian, monochromatic) or Lens Correction (distortion -100..100, bicubic for a sharper resample)."""
-    return text(call("pixels.filter", kind=kind, radius=radius, angle=angle, distance=distance, amount=amount, gaussian=gaussian, monochromatic=monochromatic, distortion=distortion, bicubic=bicubic))
+def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[float] = None, distance: Optional[float] = None, amount: Optional[float] = None, gaussian: Optional[bool] = None, monochromatic: Optional[bool] = None, distortion: Optional[float] = None, bicubic: Optional[bool] = None,
+                  threshold: Optional[int] = None, height: Optional[int] = None, cellSize: Optional[int] = None, quality: Optional[str] = None,
+                  mode: Optional[str] = None, size: Optional[str] = None, style: Optional[str] = None, ridges: Optional[float] = None,
+                  type: Optional[str] = None, generators: Optional[int] = None, wavelengthMin: Optional[float] = None, wavelengthMax: Optional[float] = None,
+                  amplitudeMin: Optional[float] = None, amplitudeMax: Optional[float] = None, undefinedAreas: Optional[str] = None,
+                  preserve: Optional[str] = None, horizontal: Optional[int] = None, vertical: Optional[int] = None, seed: Optional[int] = None) -> str:
+    """Run a filter on the active layer's pixels, inside the selection; settings left out take the filter's defaults.
+    Blur: Gaussian Blur (radius), Box Blur (radius), Motion Blur (angle, distance), Radial Blur (amount 1..100, quality
+    draft/good/best; Spin about the layer's centre), Surface Blur (radius, threshold). Distort: Pinch (amount -100..100),
+    Polar Coordinates (mode rectangularToPolar/polarToRectangular), Ripple (amount -999..999, size small/medium/large),
+    Shear (amount -100..100, undefinedAreas wrap/repeat), Spherize (amount, mode normal/horizontalOnly/verticalOnly),
+    Twirl (angle -999..999), Wave (generators, wavelengthMin/Max, amplitudeMin/Max, type sine/triangle/square,
+    undefinedAreas, seed), ZigZag (amount, ridges, style aroundCenter/outFromCenter/pondRipples); the distortions work
+    inside the selection's bounds. Noise: Add Noise (amount, gaussian, monochromatic, seed), Dust & Scratches (radius,
+    threshold), Median (radius). Pixelate: Mosaic (cellSize). Render: Clouds and Difference Clouds (foreground to
+    background colour, seed). Sharpen: Unsharp Mask (amount %, radius, threshold). Stylize: Emboss (angle, height,
+    amount), Find Edges. Other: High Pass (radius), Maximum and Minimum (radius, preserve squareness/roundness), Offset
+    (horizontal, vertical, undefinedAreas wrap/repeat/transparent). Lens Correction (distortion -100..100, bicubic)."""
+    return text(call("pixels.filter", kind=kind, radius=radius, angle=angle, distance=distance, amount=amount, gaussian=gaussian, monochromatic=monochromatic, distortion=distortion, bicubic=bicubic,
+                     threshold=threshold, height=height, cellSize=cellSize, quality=quality, mode=mode, size=size, style=style, ridges=ridges,
+                     type=type, generators=generators, wavelengthMin=wavelengthMin, wavelengthMax=wavelengthMax, amplitudeMin=amplitudeMin,
+                     amplitudeMax=amplitudeMax, undefinedAreas=undefinedAreas, preserve=preserve, horizontal=horizontal, vertical=vertical, seed=seed))
 
 
 @edit("Mosh effect")

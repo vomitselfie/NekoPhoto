@@ -480,7 +480,15 @@ int run(int argc, char** argv) {
             static const QMap<QString, FilterKind> filters{{"blur", FilterKind::GaussianBlur}, {"motion-blur", FilterKind::MotionBlur}, {"noise", FilterKind::AddNoise}, {"lens", FilterKind::LensCorrection}};
             app::EditorSession* s = window.session();
             if (auto* banner = window.findChild<app::ImportBanner*>()) banner->hide();   // dialog shots show the dialog, not an open's notes
+            // Any filter by its name in lower case with dashes ("unsharp-mask", "twirl", "dust-scratches").
+            std::optional<FilterKind> filterNamed;
+            for (int i = 0; i < compositor::filterKindCount; i++) {
+                QString n = QString::fromUtf8(compositor::filterKindName(FilterKind(i))).toLower().remove('&');
+                n = n.simplified().replace(' ', '-');
+                if (n == name) filterNamed = FilterKind(i);
+            }
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
+            else if (filterNamed && !filters.contains(name)) (new app::FilterDialog(s, *filterNamed, &window))->show();
             else if (name == "levels-clip" || name == "curves-clip") {
                 // The clipping display as Alt on the white point (Levels, Input white at 170) or the black point
                 // (Curves, moved in to 60) shows it.
