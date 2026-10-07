@@ -8,6 +8,8 @@
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
 #include "psd/psd_descriptor.hpp"
+#include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <set>
 
@@ -787,6 +789,80 @@ TEST_CASE(psb_export_reads_back_with_even_composite_rows) {
     REQUIRE(!counts.empty());
     CHECK(rowsTotal > 0);
     for (size_t n : counts) CHECK(n % 2 == 0);
+}
+
+namespace {
+
+std::vector<uint8_t> fileBytes(const std::filesystem::path& path) {
+    std::FILE* f = std::fopen(path.string().c_str(), "rb");
+    std::vector<uint8_t> out;
+    if (!f) return out;
+    uint8_t buffer[4096];
+    for (size_t n; (n = std::fread(buffer, 1, sizeof buffer, f)) > 0;) out.insert(out.end(), buffer, buffer + n);
+    std::fclose(f);
+    return out;
+}
+
+const char* failingStep = nullptr;
+
+} // namespace
+
+TEST_CASE(psd_save_that_fails_leaves_the_old_file_and_no_temporary) {
+    // A save that fails at any step (the temporary file not created, a short write, the rename refused) leaves the
+    // file that was there byte for byte, and removes its temporary file.
+    const auto dir = std::filesystem::temp_directory_path() / "nekophoto-psd-save-failure";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto path = dir / "kept.psd";
+    Document old(20, 10);
+    old.layers.push_back(pixels("Old", solid(20, 10, 10, 200, 30), {0, 0}));
+    std::string error;
+    REQUIRE(exportPsd(old, path.string(), {}, nullptr, &error));
+    const std::vector<uint8_t> before = fileBytes(path);
+    REQUIRE(!before.empty());
+
+    Document changed(20, 10);
+    changed.layers.push_back(pixels("New", solid(20, 10, 220, 20, 90), {0, 0}));
+    for (const char* step : {"open", "write", "rename"}) {
+        failingStep = step;
+        detail::psdSaveFault = [](const char* at) { return std::strcmp(at, failingStep) == 0; };
+        error.clear();
+        const bool saved = exportPsd(changed, path.string(), {}, nullptr, &error);
+        detail::psdSaveFault = nullptr;
+        if (saved) std::fprintf(stderr, "  a failing %s still saved\n", step);
+        CHECK(!saved);
+        CHECK(!error.empty());
+        CHECK(fileBytes(path) == before);
+        CHECK(!std::filesystem::exists(dir / "kept.psd.part"));
+        size_t entries = 0;
+        for ([[maybe_unused]] const auto& e : std::filesystem::directory_iterator(dir)) entries++;
+        CHECK_EQ(entries, size_t(1));
+    }
+
+#ifndef _WIN32
+    // A real refusal: a folder that cannot be written to (not where permissions do not bind, as for root).
+    std::filesystem::permissions(dir, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec);
+    std::FILE* probe = std::fopen((dir / "probe").string().c_str(), "wb");
+    if (probe) { std::fclose(probe); std::filesystem::remove(dir / "probe"); }
+    else {
+        error.clear();
+        CHECK(!exportPsd(changed, path.string(), {}, nullptr, &error));
+        CHECK(fileBytes(path) == before);
+        CHECK(!std::filesystem::exists(dir / "kept.psd.part"));
+    }
+    std::filesystem::permissions(dir, std::filesystem::perms::owner_all);
+#endif
+
+    // And with nothing failing the new document replaces the old one, with no temporary left.
+    error.clear();
+    REQUIRE(exportPsd(changed, path.string(), {}, nullptr, &error));
+    CHECK(fileBytes(path) != before);
+    CHECK(!std::filesystem::exists(dir / "kept.psd.part"));
+    auto back = importPsd(path.string(), &error);
+    REQUIRE(back.has_value());
+    REQUIRE(back->document.layers.size() == 1u);
+    CHECK_EQ(back->document.layers[0].name, std::string("New"));
+    std::filesystem::remove_all(dir);
 }
 
 TEST_MAIN()
