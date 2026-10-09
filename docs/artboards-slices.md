@@ -41,12 +41,6 @@ Slices are named rectangles for export (Photoshop's Save for Web slices), kept o
 
 A 16-bit document writes PNG (and TIFF, where Qt's TIFF writer keeps 16 bits) at 16 bits and dithers the rest to 8.
 
-## In CMYK and Lab documents
-
-Artboards, the Artboard tool, slices and the Slice tool work as in RGB. An artboard's background colour is kept as
-sRGB and drawn through the document's profile (Image ▸ Mode converts it as any stored colour). Exported artboards and
-slices are drawn through the profile to sRGB, as the flat exports are ([color-modes.md](color-modes.md#exports)).
-
 ### In PSD
 
 Image resource 1050. NekoPhoto reads version 6 (binary records) and versions 7 and 8 (a descriptor with a `slices`
@@ -60,6 +54,12 @@ alt text.
 
 The manifest's `slices` array: `id`, `name`, `x`, `y`, `width`, `height`, `url`, `target`, `message`, `altTag`.
 Slices also make the project version 8.
+
+## In CMYK and Lab documents
+
+Artboards, the Artboard tool, slices and the Slice tool work as in RGB. An artboard's background colour is kept as
+sRGB and drawn through the document's profile (Image ▸ Mode converts it as any stored colour). Exported artboards and
+slices are drawn through the profile to sRGB, as the flat exports are ([color-modes.md](color-modes.md#exports)).
 
 ## Automation
 

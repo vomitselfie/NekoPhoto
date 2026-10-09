@@ -1,7 +1,6 @@
 # The edge-aware Magic Wand
 
-Milestone 1 of the Smart Wand research plan (`NekoPhoto_Smart_Wand_2026_Research_Plan.md`, beside the
-repository). The code is `src/core/src/smartwand.cpp`; the benchmark `tests/wand_bench.cpp`.
+The Magic Wand's Edge Aware mode. The code is `src/core/src/smartwand.cpp`; the benchmark `tests/wand_bench.cpp`.
 
 ## What it does
 
@@ -173,6 +172,6 @@ shipped wand falls below its recorded scores (IoU at 32 at least 0.86, best at l
   are not seen as texture.
 - The unmixing assumes two colours meet at an edge; where three do (a line between two background colours) the
   fringe is unmixed against the nearer pair only.
-- Not done from the plan: superpixels for very large canvases (4; a 4096 x 4096 click takes 0.1 to 0.5 s,
-  so it has not been needed). Boundary matting (5) is the refined edge above, for line art; hair and fur in
-  photographs are Remove Background's job.
+- No superpixels for very large canvases (a 4096 x 4096 click takes 0.1 to 0.5 s, so they have not been needed).
+  Boundary matting is the refined edge above, for line art; hair and fur in photographs are Remove Background's
+  job.

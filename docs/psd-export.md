@@ -13,16 +13,21 @@ in `tests/psd_writer_tests.cpp` checks each step.
 ## What is carried
 
 - Pixel layers with their names (Unicode, in `luni`, beside an ASCII legacy name), positions (also past the
-  canvas edge), visibility, opacity and blend modes. All thirteen of NekoPhoto's blend modes have Photoshop
+  canvas edge), visibility, opacity and blend modes. All 27 of NekoPhoto's blend modes have Photoshop
   keys.
-- Folders, nested, as Photoshop's section records; folders are written pass-through, which is how NekoPhoto
-  draws them (a folder opened from a PSD keeps its own mode).
-- For a document opened from a PSD, what NekoPhoto does not model: layer styles, editable text, smart
-  objects, vector masks, Fill, Blend If, the file's resources, while each is still true of its layer
+- Folders, nested, as Photoshop's section records, in their own mode and opacity (Pass Through, or isolated in any
+  other mode, as NekoPhoto draws them).
+- For a document opened from a PSD, the file's own blocks and resources while each is still true of its layer:
+  layer styles, editable text, smart objects, vector masks, Fill, Blend If and every block NekoPhoto does not read
   ([psd-roundtrip.md](psd-roundtrip.md)).
+- 8, 16 and 32 bits per channel, in RGB, CMYK or Lab ([bit-depth.md](bit-depth.md), [color-modes.md](color-modes.md)),
+  with the document's colour profile.
 - Layer masks and folder masks, including disabled ones.
 - Clipping, where the clipped layers sit directly above their base, as PSD requires.
-- Levels, Curves and Exposure adjustment layers, and Hue/Saturation: master and the six colour ranges (reds,
+- Adjustment layers as Photoshop's own: Levels, Curves, Exposure, Brightness/Contrast, Invert, Posterize, Threshold,
+  Black & White, Color Balance, Vibrance, Photo Filter, Channel Mixer, Selective Color and Color Lookup (a block read
+  from a PSD goes back byte for byte while its settings are unchanged, and is written anew in Photoshop's layout once
+  edited), a Gradient Map read from a PSD and left alone, and Hue/Saturation: master and the six colour ranges (reds,
   yellows, greens, cyans, blues, magentas), each with its four range points (the begin and end falloffs, linear as in
   Photoshop; untouched ranges keep Photoshop's defaults), and Colorize. Saturation is exact on Photoshop's
   saturation curve (the default for Hue/Saturation layers opened from a PSD); a layer on the plain scale is written
@@ -45,15 +50,14 @@ Each is listed before you export (the export dialog) or in the reply (`warnings`
   between its ends is NekoPhoto's own (one read from a PSD and left alone goes back as it was); Hue/Saturation that moves saturation on the plain scale, or with Invert Range on) become a pixel layer holding the adjusted look of
   everything beneath, in the adjustment's place. The layers beneath stay in the file (a warning).
 - **A layer clipped to one that is not right beneath it** is written unclipped, as it shows (a warning).
-- **Folder opacity and folder blend modes** are written as set, but NekoPhoto does not apply them while
-  Photoshop does, so such a folder looks different there (a warning).
 
 ## Limits
 
 - PSD, or PSB (Photoshop's large format: export to a `.psb` path). Every merged image is written with even-length
   compressed rows, which Photoshop requires of a smart object's embedded file when the document keeps Smart Filter
   caches.
-- 8 bits per channel, RGB.
+- Bitmap, indexed, grayscale, duotone and multichannel are not export modes: such a file opens as RGB and exports as
+  RGB. 16-bit and 32-bit files and PSBs leave their Smart Filter caches for Photoshop to rebuild.
 - Text, layer styles ([layer-styles.md](layer-styles.md)), shape layers and smart objects
   ([smart-objects.md](smart-objects.md)) are written as Photoshop's own; adjustments Photoshop has no equivalent for
   are baked as described above.

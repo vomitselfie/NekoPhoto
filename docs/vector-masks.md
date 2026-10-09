@@ -40,11 +40,11 @@ combine ops 0.00, both masks 0.05 (and with parameters 0.05), vector mask on a p
 parameters 0.27, shape feather 0.38 (the last three were 0.52, 5.29 and 4.60 before the feather model above). Before,
 these ran from 17 to 156.
 
-## Not yet
+## What is left
 
 What is left on the shape fixtures: photoshop-shape-solid (and its PSB) keeps 1.3% of pixels 3 to 10 levels off on
 its curves, where Photoshop's own curve flattening is not known; photoshop-shape-strokes 3.1%, mostly the dashed open
 curve (dash lengths measured along the curve and round caps placed differently, as Patchy notes) and the stroke's
 edge coverage; photoshop-stroke-aa-matte and photoshop-outer-glow are the Stroke and Outer Glow effects' own edges
-(layer styles over pixel layers, not this rasteriser). Editing paths (a pen tool), gradient and pattern strokes,
-live-shape origination ('vogk', left out once a shape moves).
+(layer styles over pixel layers, not this rasteriser). Paths are edited with the Pen and Direct Selection, gradient
+and pattern strokes are drawn, and live shapes move with their layer ([vector-tools.md](vector-tools.md)).

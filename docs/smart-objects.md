@@ -2,8 +2,8 @@
 
 A smart object is a source (an embedded file, or a linked one) that layers place without owning it; each
 instance has its own placement. The model is NekoPhoto's (`src/core/include/compositor/smartobject.h`), not a
-wrapper around Photoshop's blocks: PSD is one mapping of it. It follows `NekoPhoto_Smart_Objects_Roadmap.md`
-(phases 1 and the start of 2) and the architecture notes beside it (sources shared by identity, nesting bounded).
+wrapper around Photoshop's blocks: PSD is one mapping of it. Sources are shared by identity and nesting is
+bounded.
 
 - **Sources** live on the document (`Document::smartObjects`, by id): the embedded file's bytes (shared by
   every copy and every undo step), its name and type, a linked file's path, and the contents as an image.
@@ -199,9 +199,10 @@ horizontal and vertical distortion (`warpLayer` in `smartobject_edit.cpp`):
 
 A smart object already warped or filtered is refused (rasterize it to warp it again).
 
-**Smart Filters** (`addSmartFilter` in `smartfilter.cpp`, `smartObject.addFilter`): Filter ▸ Gaussian Blur, Motion
-Blur and Add Noise on a smart object add a Smart Filter, as in Photoshop, instead of asking to rasterize;
-automation adds any of the thirteen, with opacity and blend. The placement gets its `filterFX` in Photoshop 2026's
+**Smart Filters** (`addSmartFilter` in `smartfilter.cpp`, `smartObject.addFilter`): the Filter menu's entries for
+the drawn filters (Gaussian Blur, Box Blur, Motion Blur, Radial Blur, Surface Blur, Add Noise, Median, Dust &
+Scratches, Unsharp Mask, High Pass, Emboss, Mosaic) on a smart object add a Smart Filter, as in Photoshop, instead of
+asking to rasterize; automation adds any of the thirteen (Plastic Wrap too), with opacity and blend. The placement gets its `filterFX` in Photoshop 2026's
 shape (Patchy's authoring: `filterFXStyle`, each entry with its name, blend options, colours, `Fltr` and
 `filterID`, before the trailing `comp`); the document's `FEid` block gets the instance's record (a new block when
 the file had none), the unfiltered contents over the canvas and the mask kept or all white; the layer is drawn

@@ -17,9 +17,10 @@ Per layer and folder, as the file's bytes:
 | Opacity and Fill as two values | while the combined opacity is unchanged; otherwise our opacity, Fill 100% |
 | Vector masks (`vmsk`, `vsms`) | always, the path moved with the layer ([vector-masks.md](vector-masks.md)) |
 | A shape's stroke and fill content (`vstk`, `vscg`) | always |
-| A shape's live-shape origination (`vogk`, `vowv`) | while the layer has not moved or changed size |
-| Editable text (`TySh`), fill layers (`SoCo`, `GdFl`, `PtFl`), the adjustment layers we have no counterpart for (Brightness/Contrast, Color Balance, Selective Color ...) | while the pixels are the ones imported, and in place |
-| The mask section and mask channels as stored (vector-mask coverage, mask density and feather, both masks) | while the mask and the layer's place are unchanged (8-bit PSD sources) |
+| A shape's live-shape origination (`vogk`, `vowv`) | while the layer has not moved or changed size; after that, `vogk` is written anew with the live shapes moved along, those still true of the path ([vector-tools.md](vector-tools.md)) |
+| Editable text (`TySh`) and fill layers (`SoCo`, `GdFl`, `PtFl`) | while the pixels are the ones imported, and in place |
+| Adjustment blocks (`levl`, `curv`, `hue2`, `brit`, `blnc`, `selc` ...) | while the settings are the ones read; once edited, written anew in Photoshop's layout ([psd-export.md](psd-export.md)) |
+| The mask section and mask channels as stored (vector-mask coverage, mask density and feather, both masks) | while the mask and the layer's place are unchanged, into a PSD (not a PSB) of the depth it was read at |
 | Photoshop's layer id (`lyid`), and the folder's closed state and end-marker blocks | always (ids stay unique: duplicates get new ones) |
 | Smart objects (`SoLd`, `SoLE`, `PlLd`) | as long as the layer still places its source, the placement patched to where it is ([smart-objects.md](smart-objects.md)) |
 
@@ -29,11 +30,11 @@ text engine data, filter masks).
 
 What is not carried: the resolution (ours), thumbnails, what indexes layers or alpha channels by
 position, the ID seed; guides, slices and paths once the canvas size changes; the colour profile of a
-CMYK, Lab or grayscale file (the export is RGB); and 16-bit or PSB smart-filter caches (`FEid`, `FXid`,
-which Photoshop rebuilds).
+grayscale, indexed, duotone or multichannel file (it opens and exports as RGB; CMYK and Lab files keep their mode and
+profile); and 16-bit, 32-bit or PSB smart-filter caches (`FEid`, `FXid`, which Photoshop rebuilds).
 
-Adjustment and fill layers we have no counterpart for now open as empty layers that carry them, instead of
-being dropped; painting on one turns it into a pixel layer on export (a warning says so).
+An adjustment layer whose settings cannot be read opens as an empty layer that carries its block, instead of being
+dropped (a note says so); painting on one turns it into a pixel layer on export (a warning says so).
 
 "Unchanged pixels" is a fingerprint of the layer's pixels (`psdContentHash`), stable across a project
 save and reopen. When a carried block is left out, the export summary says which and why.
@@ -51,7 +52,7 @@ stays even without a pad after its end-anchored tail. The metrics come from the 
 has no font engine, and without them text is written as pixels. A flipped layer is written as pixels.
 
 **Import.** A Photoshop type layer opens as NekoPhoto text when our model can hold it: horizontal point text, one
-alignment, RGB fill, no skew, mirroring, horizontal or vertical scale, superscript or subscript. Turned text
+alignment, an RGB or CMYK fill, no skew, mirroring, horizontal or vertical scale, superscript or subscript. Turned text
 opens as text too: drawn upright at its scale, the layer turned by Photoshop's angle about the anchor on its first
 redraw; later redraws keep a turned layer's top-left corner where it is (a turned layer turns about its centre, so a
 new size would otherwise slide it). Glyphs are drawn unhinted, as Photoshop draws them. Warp Text opens as text when its style is one of the fifteen
@@ -71,7 +72,8 @@ uneven (under 1.5%, a transform nudged by hand) is read as its vertical scale. I
 pixels until it is edited; the first redraw puts our first baseline where Photoshop anchored its own. The face is
 found among the installed families by its PostScript name ("ArialMT" is Arial); one that is not installed is spelled
 out for fontconfig ("TimesNewRomanPSMT" asks for Times New Roman, which gets its metric twin) and noted. Photoshop's
-leading, fixed or automatic, becomes our line spacing. Everything else (box text, vertical, warped)
+leading, fixed or automatic, becomes our line spacing. Everything else (vertical text, text on a path, a warp style not
+drawn here, justified text)
 shows as Photoshop's pixels, and its own 'TySh' comes back on export while those pixels are unchanged; so does the
 original block of a layer opened as text and not edited, since it says more than ours.
 
@@ -132,8 +134,10 @@ tags; a pass-through folder says `norm` in its record and `pass` in `lsct`; ever
 `build/tests/psd_roundtrip DIR` opens every PSD in a folder, exports it and compares the two files record
 by record: every carried block, Blend If, the mask section, blend key, flags, folder state, opacity and
 clipping, the resources and the global blocks, byte for byte; then reopens our file. Over Patchy's 117
-Photoshop-saved fixtures (text, smart objects and smart filters, shapes, styles, masks, Blend If, 16-bit
-and PSB): all pass, 3,675 blocks back unchanged. `psd_writer_tests` covers the edit cases (painted, moved,
+fixtures (all but two saved by Photoshop 2026: text, smart objects and smart filters, shapes, styles, masks, Blend
+If, 16-bit and PSB): all pass, 3,675 blocks back unchanged. `PSD_ROUNDTRIP_16=1` does the same through a 16-bit
+export: all 118 files (Patchy's and K.psd) pass ([compatibility.md](compatibility.md)), and the Photoshop composite
+oracle there compares the renders. `psd_writer_tests` covers the edit cases (painted, moved,
 opacity changed, a project save, a canvas change).
 
 Not verified: that Photoshop opens our files without a warning, or re-lays our type layers exactly where we drew
@@ -142,7 +146,9 @@ wrote, but the files have not been opened in Photoshop; that check is still to d
 
 ## Colour
 
-A CMYK file (or a CMYK smart object's contents) converts to sRGB through the file's own ICC profile with the
+A CMYK file opens as a CMYK document in its own profile ([color-modes.md](color-modes.md)). Where its colours meet
+RGB (a CMYK smart object's contents in an RGB document, the screen, Image ▸ Mode) they convert through the file's
+own ICC profile with the
 vendored Little CMS (`src/core/src/colour.cpp`; relative colorimetric, black point compensation, no dither, as
 Patchy calibrated against Photoshop's conversion); only a file without a profile falls back to the plain formula.
 On a CMYK-illustrated styleguide this brought the smart objects within 0.3 levels of Photoshop's own render.
