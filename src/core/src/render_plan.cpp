@@ -21,9 +21,9 @@ bool RenderPlan::within(const Layer& layer, const Uuid& group) const {
 void RenderPlan::prepareGroupStyles() {
     for (const Layer& g : document.layers) {
         // A folder needs handling around its children when it has a style, isolates them (anything but Pass
-        // Through), or fades them (Pass Through below full opacity).
+        // Through), fades them (Pass Through below full opacity), or excludes channels from their blending.
         if (!g.isGroup || !g.visible || suppressedGroups.count(g.id)) continue;
-        if (!layerStyleOf(g, document) && !isolates(g) && !fades(g)) continue;
+        if (!layerStyleOf(g, document) && !isolates(g) && !fades(g) && !excluded(g)) continue;
         // An artboard's own entry (its background) belongs inside: it takes the folder's mode and opacity with its
         // layers instead of painting beneath the folder at full strength.
         size_t first = SIZE_MAX, last = 0;
@@ -87,6 +87,7 @@ bool RenderPlan::plainAbove(const Layer& l) const {
     return !l.adjustment && !l.maskSourceId && !stacks.count(l.id) && !stacked.count(l.id) && blendOf(l) == BlendMode::Normal
         && !layerStyleOf(l, document)   // effects blend in their own modes
         && !hasBlendIf(l)                // gated by what is under it
+        && !excluded(l)                  // keeps channels of what is under it
         && !photoshopType(l);            // type blends with its own gamma
 }
 

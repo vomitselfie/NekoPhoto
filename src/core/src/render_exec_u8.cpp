@@ -89,11 +89,38 @@ struct RenderExec<SampleType::U8> {
         return source;
     }
 
+    /// Advanced Blending's Channels (blendif.h): `target` holds a layer drawn over `before`; the channels it excludes
+    /// keep their premultiplied values from `before`, and with every channel excluded the whole pixel does.
+    void keepChannels(uint8_t excluded, const Image& before, Image& target) {
+        const bool all = excluded == allBlendChannels(document.colorMode);
+        parallelRows(0, outHeight, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                const uint8_t* b = before.row(y);
+                uint8_t* d = target.row(y);
+                if (all) { std::memcpy(d, b, size_t(outWidth) * 4); continue; }
+                for (int x = 0; x < outWidth; x++, b += 4, d += 4)
+                    for (int k = 0; k < 3; k++) if (excluded & (1u << k)) d[k] = std::min(b[k], d[3]);
+            }
+        });
+    }
+
+    /// Runs `draw` over `target` with `layer`'s channel exclusions; a layer that excludes every channel is not drawn.
+    template <class Draw>
+    void excluding(const Layer& layer, Image& target, Draw&& draw) {
+        const uint8_t excluded = plainOnly ? 0 : plan.excluded(layer);
+        if (!excluded) { draw(); return; }
+        if (excluded == allBlendChannels(document.colorMode)) return;
+        const Image before = target;
+        draw();
+        keepChannels(excluded, before, target);
+    }
+
     static bool isolates(const Layer& g) { return RenderPlan::isolates(g); }
     static bool fades(const Layer& g) { return RenderPlan::fades(g); }
 
-    /// The folders being drawn: an isolated one draws into its own buffer, a fading one keeps what was under it.
-    struct Frame { const Layer* group; std::unique_ptr<Image> buffer; std::unique_ptr<Image> before; Image* parent; };
+    /// The folders being drawn: an isolated one draws into its own buffer, a fading one keeps what was under it, one
+    /// that excludes channels keeps what was under it before its effects.
+    struct Frame { const Layer* group; std::unique_ptr<Image> buffer; std::unique_ptr<Image> before; Image* parent; std::unique_ptr<Image> unexcluded; };
     std::vector<Frame> frames;
 
     /// NEKOPHOTO_DUMP_FOLDERS=<dir>: every styled folder's stages as PNGs (a developer's aid for comparing with
@@ -109,9 +136,11 @@ struct RenderExec<SampleType::U8> {
 
     void openGroup(const Layer& g, Image*& cur) {
         dumpStage(g, "1-backdrop", *cur);
+        // Excluded channels hold over the folder's effects and every child, Pass Through or not.
+        std::unique_ptr<Image> unexcluded = plan.excluded(g) ? std::make_unique<Image>(*cur) : nullptr;
         if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
         dumpStage(g, "2-exterior", *cur);
-        Frame f{&g, nullptr, nullptr, cur};
+        Frame f{&g, nullptr, nullptr, cur, std::move(unexcluded)};
         if (isolates(g)) { f.buffer = std::make_unique<Image>(outWidth, outHeight); cur = f.buffer.get(); }
         else if (fades(g) || folderContentFill(g) < 1) f.before = std::make_unique<Image>(*cur);
         frames.push_back(std::move(f));
@@ -156,6 +185,7 @@ struct RenderExec<SampleType::U8> {
         dumpStage(g, "4-opacity", *cur);
         if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, foldsInteriors ? StyledDraw::Phase::InteriorRest : StyledDraw::Phase::Interior);
         dumpStage(g, "5-interior", *cur);
+        if (f.unexcluded) keepChannels(plan.excluded(g), *f.unexcluded, *cur);
     }
 
     /// Blend Interior Effects as Group on a folder with a style: its overlays and satins join its result before its
@@ -545,15 +575,21 @@ struct RenderExec<SampleType::U8> {
         if (blendOf(layer) != BlendMode::Normal || clamp(layer.opacity, 0.0, 1.0) < 1) return std::nullopt;
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image.u8()) return std::nullopt;
         if (foldersCoverage(layer.parentId)) return std::nullopt;
-        if (plan.hasBlendIf(layer)) return std::nullopt;
+        if (plan.hasBlendIf(layer) || plan.excluded(layer)) return std::nullopt;
         AdjustmentSettings settings;
         if (!AdjustmentSettings::parse(layer.adjustment->json, settings)) return std::nullopt;
         return adjustmentTransfer(settings);
     }
 
+    /// One entry of the drawing order: a layer (with the layers clipped to it), an adjustment, or an artboard's
+    /// background; through the layer's channel exclusions (a clipping base's hold over its whole clipped result).
     void drawComposite(const Layer& layer, Image& out) {
         if (layer.isGroup) { if (layer.artboard) drawArtboardBackground(layer, out); return; }
         if (stacked.count(layer.id)) return;
+        excluding(layer, out, [&] { drawUnexcluded(layer, out); });
+    }
+
+    void drawUnexcluded(const Layer& layer, Image& out) {
         std::shared_ptr<GrayImage> folders = foldersCoverage(layer.parentId);
         if (layer.adjustment) {
             if (!layer.maskSourceId) adjust(layer, out, folders);
@@ -569,8 +605,10 @@ struct RenderExec<SampleType::U8> {
             for (auto& childId : stack->second) {
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
-                if (it->second->adjustment) adjust(*it->second, out, clip);
-                else drawOwn(*it->second, out, clip.get());
+                excluding(*it->second, out, [&] {
+                    if (it->second->adjustment) adjust(*it->second, out, clip);
+                    else drawOwn(*it->second, out, clip.get());
+                });
             }
             return;
         }
@@ -589,8 +627,11 @@ struct RenderExec<SampleType::U8> {
         for (auto& childId : stack->second) {
             auto it = byId.find(childId);
             if (it == byId.end()) continue;
-            if (it->second->adjustment) adjust(*it->second, group, nullptr);
-            else drawOwn(*it->second, group, nullptr);
+            // A clipped layer's excluded channels keep the base's colours.
+            excluding(*it->second, group, [&] {
+                if (it->second->adjustment) adjust(*it->second, group, nullptr);
+                else drawOwn(*it->second, group, nullptr);
+            });
         }
         layer_restore_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
         BlendMode mode = blendOf(layer);

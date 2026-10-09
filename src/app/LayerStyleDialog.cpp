@@ -198,6 +198,7 @@ LayerStyleDialog::LayerStyleDialog(EditorSession* session, const Uuid& layer, QW
     checkRow(blending, tr("Show effects"), &style_.visible);
     checkRow(blending, tr("Layer mask hides effects"), &style_.maskHidesEffects);
     checkRow(blending, tr("Blend interior effects as group"), &style_.blendInteriorAsGroup);
+    channelRows(blending);
     blendIfRows(blending);
     addEffectPages();
 
@@ -280,6 +281,32 @@ LayerStyle LayerStyleDialog::output() const {
 }
 
 // ---- Pages ---------------------------------------------------------------------------------------------------
+
+void LayerStyleDialog::channelRows(QFormLayout* form) {
+    // Advanced Blending's Channels (blendif.h): an unchecked channel keeps what is under the layer.
+    if (!style_.excludedChannels) style_.excludedChannels = 0;
+    const ColorMode mode = session_ && session_->document() ? session_->document()->colorMode : ColorMode::RGB;
+    static const char* const rgb[] = {QT_TR_NOOP("R"), QT_TR_NOOP("G"), QT_TR_NOOP("B")};
+    static const char* const cmyk[] = {QT_TR_NOOP("C"), QT_TR_NOOP("M"), QT_TR_NOOP("Y"), QT_TR_NOOP("K")};
+    static const char* const lab[] = {QT_TR_NOOP("L"), QT_TR_NOOP("a"), QT_TR_NOOP("b")};
+    const char* const* names = mode == ColorMode::CMYK ? cmyk : mode == ColorMode::Lab ? lab : rgb;
+    auto* row = new QWidget;
+    auto* box = new QHBoxLayout(row);
+    box->setContentsMargins(0, 0, 0, 0);
+    for (int k = 0; k < colorModeColorChannels(mode); k++) {
+        auto* check = new QCheckBox(tr(names[k]), row);
+        check->setObjectName(QStringLiteral("channel%1").arg(k));
+        check->setChecked(!(*style_.excludedChannels & (1u << k)));
+        connect(check, &QCheckBox::toggled, this, [this, k](bool on) {
+            uint8_t& excluded = *style_.excludedChannels;
+            excluded = on ? uint8_t(excluded & ~(1u << k)) : uint8_t(excluded | (1u << k));
+            changed();
+        });
+        box->addWidget(check);
+    }
+    box->addStretch(1);
+    form->addRow(tr("Channels"), row);
+}
 
 void LayerStyleDialog::blendIfRows(QFormLayout* form) {
     // Blend If: the channel, then This Layer's and Underlying Layer's sliders for it (blendif.h).

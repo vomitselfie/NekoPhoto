@@ -190,7 +190,10 @@ clipping, `blendIf`: Blending Options' Blend If on any layer, folders and adjust
 channels by name (`gray`, `red`, `green`, `blue`; in CMYK `gray`, `cyan`, `magenta`, `yellow`, `black`; in Lab
 `lightness`, `a`, `b`), each with `thisLayer` and/or `underlying` as `[blackLow, blackHigh, whiteLow, whiteHigh]`
 0..255, a split handle where low and high differ; channels left out stay, `reset: true` clears the rest first;
-`layers.get` reports `blendIf` when a layer has any; see docs/layer-styles.md), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
+`layers.get` reports `blendIf` when a layer has any; see docs/layer-styles.md), `channels`: Blending Options' Advanced
+Blending Channels, one undo step: `red`, `green`, `blue` (in CMYK `cyan`, `magenta`, `yellow`, `black`; in Lab
+`lightness`, `a`, `b`), each `true` to blend it or `false` to leave it out (the backdrop's value stays there); channels
+left out stay; `layers.get` reports `channels` when a layer leaves one out), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
 `italic`, `color`, `align`; `below: true` puts it under the active layer), `text.set` (a text layer's
 content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in several styles, which
 `layers.get` lists as `text.runs`, the change carries into every run and a new size scales each), `text.styleRange` (some letters' style, as
@@ -204,10 +207,10 @@ selected and no selection, then Paste: `ids` to copy, default the selected ones;
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge` (`down` for Merge Down, `visible` for Merge Visible), `layers.group`, `adjustments.set`.
 `layers.style` gives a layer's effects (Photoshop's layer style) as JSON, every kind a list with switched-off
-effects kept (`enabled` false), with the Blending Options' `blendIf` (as `layers.get` shows it), the effects' reference
+effects kept (`enabled` false), with the Blending Options' `blendIf` and `channels` (as `layers.get` shows them), the effects' reference
 point (`referenceX`, `referenceY`) and a CMYK colour's inks beside its `#rrggbb` (`colorInk` and the like); `layers.setStyle`
 replaces them with an object of that shape (settings left out take Photoshop's defaults, `{}` clears the style as
-Clear Layer Style; `blendIf` and the reference point stay the layer's when left out; `paste: true` names the step Paste
+Clear Layer Style; `blendIf`, `channels` and the reference point stay the layer's when left out; `paste: true` names the step Paste
 Layer Style). Layer > Layer Style's dialog, Copy (`layers.style`), Paste and Clear Layer Style run these. The style is
 written into the PSD as Photoshop's own `lfx2`.
 `layers.applyStyle` (`style`: an imported style preset's name) gives a layer a style preset, with the patterns it

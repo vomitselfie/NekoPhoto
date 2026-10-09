@@ -138,6 +138,9 @@ struct LayerStyle {
     /// blending ranges, not in the effects block, so setLayerStyle leaves it alone (the editor applies it with
     /// setLayerBlendIf); none leaves the layer's ranges as they are.
     std::optional<BlendIf> blendIf;
+    /// Advanced Blending's Channels, the same way: the channels left out of the layer's blending (bit k: colour channel
+    /// k; setLayerExcludedChannels applies it); none leaves the layer's as they are.
+    std::optional<uint8_t> excludedChannels;
     bool empty() const;
     /// How far, in document pixels, the effects reach past the layer's pixels (or read past them).
     double reach() const;

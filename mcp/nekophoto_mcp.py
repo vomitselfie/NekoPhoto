@@ -473,10 +473,11 @@ def layers_get(id: str) -> str:
 
 @edit("Set layer properties")
 def layers_set(id: Optional[str] = None, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None,
-               blend_if: Optional[dict] = None, sampling: Optional[str] = None) -> str:
+               blend_if: Optional[dict] = None, channels: Optional[dict] = None, sampling: Optional[str] = None) -> str:
     """Change a layer's name, visibility, opacity (0..1), blend mode (any of Photoshop's: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath; sampling (Nearest, Smooth, High quality) is how it resamples when transformed. id defaults to the active layer.
-    blend_if is Blending Options' Blend If: channels (gray, red, green, blue; in CMYK gray, cyan, magenta, yellow, black; in Lab lightness, a, b), each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255; a split handle is low != high and fades between them. Example: {"gray": {"underlying": [0, 0, 120, 200]}} lets the layer show only over darker pixels, fading out from 120 to 200. Channels left out stay; {"reset": true} clears them. layers_get reports blendIf."""
-    return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping, blendIf=blend_if, sampling=sampling))
+    blend_if is Blending Options' Blend If: channels (gray, red, green, blue; in CMYK gray, cyan, magenta, yellow, black; in Lab lightness, a, b), each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255; a split handle is low != high and fades between them. Example: {"gray": {"underlying": [0, 0, 120, 200]}} lets the layer show only over darker pixels, fading out from 120 to 200. Channels left out stay; {"reset": true} clears them. layers_get reports blendIf.
+    channels is Blending Options' Advanced Blending Channels: red, green, blue (in CMYK cyan, magenta, yellow, black; in Lab lightness, a, b), each true to blend it or false to leave it out, so the backdrop's value stays there. Example: {"green": false}. Channels left out stay; layers_get reports channels when one is left out."""
+    return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping, blendIf=blend_if, channels=channels, sampling=sampling))
 
 
 @edit("Add a layer")
@@ -562,13 +563,13 @@ def layers_set_transform(id: str, x: Optional[float] = None, y: Optional[float] 
 
 @look("Layer style")
 def layers_style(id: Optional[str] = None) -> str:
-    """A layer's effects (Photoshop's layer style; the active layer when id is left out): dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays and strokes, each a list (switched-off ones too, with enabled false), plus visible, maskHidesEffects and blendInteriorAsGroup, the Blending Options' blendIf and the effects' referenceX and referenceY."""
+    """A layer's effects (Photoshop's layer style; the active layer when id is left out): dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays and strokes, each a list (switched-off ones too, with enabled false), plus visible, maskHidesEffects and blendInteriorAsGroup, the Blending Options' blendIf and channels, and the effects' referenceX and referenceY."""
     return text(call("layers.style", id=id))
 
 
 @edit("Set layer style")
 def layers_set_style(style: dict, id: Optional[str] = None, paste: bool = False) -> str:
-    """Replace a layer's effects, shaped as layers_style shows; settings left out take Photoshop's defaults and {} clears the style. Colours are "#rrggbb"; opacity, scale and depth are fractions (1 = 100%); spread, choke and range percent; sizes and distances pixels; angles degrees; mode a blend mode (normal, multiply, screen, overlay, linearDodge, ...). Example: {"dropShadows": [{"distance": 8, "size": 10}], "strokes": [{"size": 3, "color": "#ffffff", "position": "outside"}]}. blendIf (as layers_get shows it) and referenceX/referenceY are kept from the layer when left out. The active layer when id is left out; paste=true names the step Paste Layer Style."""
+    """Replace a layer's effects, shaped as layers_style shows; settings left out take Photoshop's defaults and {} clears the style. Colours are "#rrggbb"; opacity, scale and depth are fractions (1 = 100%); spread, choke and range percent; sizes and distances pixels; angles degrees; mode a blend mode (normal, multiply, screen, overlay, linearDodge, ...). Example: {"dropShadows": [{"distance": 8, "size": 10}], "strokes": [{"size": 3, "color": "#ffffff", "position": "outside"}]}. blendIf and channels (as layers_get shows them) and referenceX/referenceY are kept from the layer when left out. The active layer when id is left out; paste=true names the step Paste Layer Style."""
     return text(call("layers.setStyle", id=id, style=style, paste=paste or None))
 
 

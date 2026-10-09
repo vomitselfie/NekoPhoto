@@ -691,6 +691,9 @@ public:
     bool canStyleLayer(const compositor::Uuid& id) const;
     /// Blending Options' Blend If (blendif.h) on any layer, folders and adjustment layers too: one undo step.
     bool setLayerBlendIf(const compositor::Uuid& id, const compositor::BlendIf& blendIf);
+    /// Advanced Blending's Channels (blendif.h): the colour channels left out of the layer's blending, any layer kind;
+    /// one undo step.
+    bool setLayerExcludedChannels(const compositor::Uuid& id, uint8_t excluded);
     /// The Layer Style dialog's live edit: begin, show each change on the layer, then keep it as one undo step or put
     /// the layer back as it was (its carried style bytes untouched when nothing changed).
     bool beginLayerStyleEdit(const compositor::Uuid& id);

@@ -96,6 +96,7 @@ brush/round_soft_half 4db27ef56abf0571
 brush/round_unstamped 704cbf86272cf505
 brush/tip_jitter_grain 2bd36b973b49cd1a
 brush/tip_square 52c291b922c60133
+channels/base_clip_folder_adjustment e19499f27a9668c1
 cmyk/adjust/colour a78a1d00d1059e9a
 cmyk/adjust/levels_curves 050c64dcbb6880f6
 cmyk/adjust/tones 9a7c93fc9fa9ecf4
@@ -129,6 +130,7 @@ cmyk/blend/soft_light de55f04f6215d2e1
 cmyk/blend/subtract 92499ed7aae75574
 cmyk/blend/vivid_light 2a1936347569f963
 cmyk/blendif/layer_folder_clip_adjustment 8b1ae172f7abdad3
+cmyk/channels/base_clip_folder_adjustment 53273ad1905483b2
 cmyk/filter/add_noise fc8b7c8d1a82d113
 cmyk/filter/add_noise_mono 85b6676d24642caa
 cmyk/filter/gaussian_blur bbc3a0dccc3bad4d
@@ -200,6 +202,7 @@ cmyk16/blend/soft_light 23b0631f85428056
 cmyk16/blend/subtract 95dc26703b1c914c
 cmyk16/blend/vivid_light b3decfe3da3a9fd8
 cmyk16/blendif/layer_folder_clip_adjustment 4b8eea3a79d5ceb2
+cmyk16/channels/base_clip_folder_adjustment df21e62014401cf8
 cmyk16/filter/add_noise 16c1c7734e5a7dcb
 cmyk16/filter/add_noise_mono 2c552b42ba11bed0
 cmyk16/filter/gaussian_blur 08785e74ce7efadd
@@ -318,6 +321,7 @@ f32/blend/subtract@0.5 0e733f79e25f5aab
 f32/blend/vivid_light 8a7ee6e335ac1009
 f32/blend/vivid_light@0.5 f0d3b8b2005f1b7d
 f32/blendif/layer_folder_clip_adjustment 59f1c212be966ffc
+f32/channels/base_clip_folder_adjustment 5718b9cc8e25ef18
 f32/convert/to_16_highlight_compression 794c6e949cd55a51
 f32/convert/to_8_exposure_gamma e1a4109d4904c1df
 f32/edit/distort 5b57178109d92042
@@ -420,6 +424,7 @@ lab/blend/screen e0da3522c9234d2d
 lab/blend/soft_light 03ffc3c7e824d054
 lab/blend/vivid_light 25f705d60cfaa3ef
 lab/blendif/layer_folder_clip_adjustment aa2846de7f89613a
+lab/channels/base_clip_folder_adjustment b1eec30344906e84
 lab/filter/add_noise 31990614922ee36f
 lab/filter/add_noise_mono 4211e5b5a88394cd
 lab/filter/gaussian_blur 068ee2e7d2675d45
@@ -482,6 +487,7 @@ lab16/blend/screen c18bc2241a35d472
 lab16/blend/soft_light ac563be5b0d6fc5c
 lab16/blend/vivid_light a5033852efceab3c
 lab16/blendif/layer_folder_clip_adjustment ed89d79811e2dffd
+lab16/channels/base_clip_folder_adjustment e9241f7ca860cfbd
 lab16/filter/add_noise f0661eb15bdf88dc
 lab16/filter/add_noise_mono 4ba00d809ff271c3
 lab16/filter/gaussian_blur 11a54188b78dcbf0
@@ -636,6 +642,7 @@ u16/camera_raw/detail_optics c47426ee5832053e
 u16/camera_raw/effects 7e48353457c0603f
 u16/camera_raw/geometry b3a9a9ce871dab65
 u16/camera_raw/light a5971e4a87834586
+u16/channels/base_clip_folder_adjustment 0cbe9a549942e8e5
 u16/export/artboard_rect 96889daae3a81d02
 u16/export/svg 726261fedab83944
 u16/fill_layer/gradient c8af46e5fa6b5d53

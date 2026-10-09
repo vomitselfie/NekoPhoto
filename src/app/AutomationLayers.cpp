@@ -78,11 +78,42 @@ BlendIf blendIfFrom(const QJsonValue& v, BlendIf b, ColorMode mode) {
     return b;
 }
 
+/// Advanced Blending's Channels by their automation names: red, green, blue; cyan, magenta, yellow, black; lightness,
+/// a, b (Blend If's names for the colour channels).
+QString channelKey(ColorMode mode, int k) { return blendIfKey(mode, k + 1); }
+
+/// The channels as layers.get reports them: each of the mode's colour channels, true when it takes part in blending.
+QJsonObject channelsJson(uint8_t excluded, ColorMode mode) {
+    QJsonObject o;
+    for (int k = 0; k < colorModeColorChannels(mode); k++) o[channelKey(mode, k)] = !(excluded & (1u << k));
+    return o;
+}
+
+/// layers.set's `channels` over the layer's excluded ones: each channel named is switched in (true) or left out (false).
+uint8_t excludedFrom(const QJsonValue& v, uint8_t excluded, ColorMode mode) {
+    if (!v.isObject()) fail("channels must be an object of channels, each true (blended) or false (left out)", invalidParams);
+    const QJsonObject o = v.toObject();
+    for (auto it = o.begin(); it != o.end(); ++it) {
+        int channel = -1;
+        for (int k = 0; k < colorModeColorChannels(mode); k++) if (channelKey(mode, k) == it.key()) channel = k;
+        if (channel < 0) {
+            QStringList names;
+            for (int k = 0; k < colorModeColorChannels(mode); k++) names << channelKey(mode, k);
+            fail("unknown channel '" + it.key() + "'; this document has " + names.join(", "), invalidParams);
+        }
+        if (!it.value().isBool()) fail("channels." + it.key() + " must be true or false", invalidParams);
+        if (it.value().toBool()) excluded = uint8_t(excluded & ~(1u << channel));
+        else excluded = uint8_t(excluded | (1u << channel));
+    }
+    return excluded;
+}
+
 } // namespace
 
 QJsonObject layerStyleRequest(const LayerStyle& style, ColorMode mode) {
     QJsonObject o = QJsonDocument::fromJson(QByteArray::fromStdString(layerStyleToJson(style))).object();
     if (style.blendIf) o["blendIf"] = blendIfJson(*style.blendIf, mode);
+    if (style.excludedChannels) o["channels"] = channelsJson(*style.excludedChannels, mode);
     o["referenceX"] = style.referenceX;
     o["referenceY"] = style.referenceY;
     return o;
@@ -91,6 +122,7 @@ QJsonObject layerStyleRequest(const LayerStyle& style, ColorMode mode) {
 bool layerStyleFromRequest(const QJsonObject& request, ColorMode mode, LayerStyle& style, QString* error) {
     QJsonObject given = request;
     const QJsonValue blendIf = given.take("blendIf");
+    const QJsonValue channels = given.take("channels");
     const QJsonValue referenceX = given.take("referenceX"), referenceY = given.take("referenceY");
     const double x = style.referenceX, y = style.referenceY;
     std::string why;
@@ -100,6 +132,7 @@ bool layerStyleFromRequest(const QJsonObject& request, ColorMode mode, LayerStyl
     }
     try {
         if (!blendIf.isUndefined()) style.blendIf = blendIfFrom(blendIf, BlendIf{}, mode);
+        if (!channels.isUndefined()) style.excludedChannels = excludedFrom(channels, 0, mode);
     } catch (const RpcError& e) {
         if (error) *error = QString::fromUtf8(e.what());
         return false;
@@ -349,6 +382,7 @@ void AutomationServer::registerLayersHandlers() {
         QJsonObject o = layerJson(l, 0);
         const ColorMode mode = session()->document()->colorMode;
         if (auto b = layerBlendIf(l, mode)) o["blendIf"] = blendIfJson(*b, mode);
+        if (const uint8_t excluded = layerExcludedChannels(l, mode)) o["channels"] = channelsJson(excluded, mode);
         return o;
     });
     // A layer's style as layers.style shows it: the effects (compositor's layer style JSON), the Blending Options' Blend If
@@ -368,7 +402,7 @@ void AutomationServer::registerLayersHandlers() {
         if (QString error; !layerStyleFromRequest(p.value("style").toObject(), session()->document()->colorMode, style, &error)) fail(error, invalidParams);
         // Photoshop's step names: Paste Layer Style, Clear Layer Style (a style without effects), else Layer Style.
         const char* step = flag(p, "paste", false) ? QT_TRANSLATE_NOOP("History", "Paste Layer Style")
-                           : !hasAnyEffect(style) && !style.blendIf ? QT_TRANSLATE_NOOP("History", "Clear Layer Style")
+                           : !hasAnyEffect(style) && !style.blendIf && !style.excludedChannels ? QT_TRANSLATE_NOOP("History", "Clear Layer Style")
                                                                      : QT_TRANSLATE_NOOP("History", "Layer Style");
         if (!session()->applyLayerStyle(id, style, step)) fail("this layer cannot have effects (an adjustment layer, or a locked document)");
         return styleJson(session()->layerStyle(id));
@@ -454,10 +488,16 @@ void AutomationServer::registerLayersHandlers() {
             const BlendIf b = blendIfFrom(p["blendIf"], current ? editableBlendIf(*current, mode) : BlendIf{}, mode);
             if (!s->setLayerBlendIf(id, b)) fail("Blend If can't be changed now");
         }
+        if (has(p, "channels")) {
+            const Layer* current = s->document()->find(id);
+            const uint8_t excluded = excludedFrom(p["channels"], current ? layerExcludedChannels(*current, mode) : 0, mode);
+            if (!s->setLayerExcludedChannels(id, excluded)) fail("the layer's channels can't be changed now");
+        }
         const Layer* now = s->document()->find(id);
         if (!now) return QJsonObject{};
         QJsonObject o = layerJson(*now, 0);
         if (auto b = layerBlendIf(*now, mode)) o["blendIf"] = blendIfJson(*b, mode);
+        if (const uint8_t excluded = layerExcludedChannels(*now, mode)) o["channels"] = channelsJson(excluded, mode);
         return o;
     });
     add("layers.add", [session, document](const QJsonObject& p) {

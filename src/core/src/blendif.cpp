@@ -1,4 +1,5 @@
-// Blend If: the model, its bytes in a PSD layer record, and the gates the renderer applies (blendif.h).
+// Blend If and Advanced Blending's Channels: the models, their bytes in a PSD layer record, and the gates the renderer
+// applies (blendif.h).
 #include "compositor/blendif.h"
 #include "compositor/document.h"
 #include "compositor/psd_carry.h"
@@ -92,6 +93,47 @@ bool setLayerBlendIf(Layer& layer, const BlendIf& blendIf, ColorMode mode) {
     if (editableBlendIf(layer, mode) == wanted) return false;
     auto carry = layer.psdCarry ? std::make_shared<PsdLayerCarry>(*layer.psdCarry) : std::make_shared<PsdLayerCarry>();
     carry->blendingRanges = encodeBlendIf(wanted, carry->blendingRanges, mode);
+    layer.psdCarry = std::move(carry);
+    return true;
+}
+
+uint8_t allBlendChannels(ColorMode mode) { return uint8_t((1u << colours(mode)) - 1); }
+
+std::optional<uint8_t> parseBlendChannels(const std::vector<uint8_t>& bytes, ColorMode mode) {
+    if (bytes.size() % 4) return std::nullopt;
+    uint8_t excluded = 0;
+    for (size_t at = 0; at < bytes.size(); at += 4) {
+        const uint32_t index = uint32_t(bytes[at]) << 24 | uint32_t(bytes[at + 1]) << 16 | uint32_t(bytes[at + 2]) << 8 | bytes[at + 3];
+        if (index < uint32_t(colours(mode))) excluded |= uint8_t(1u << index);
+    }
+    return excluded;
+}
+
+std::vector<uint8_t> encodeBlendChannels(uint8_t excluded, ColorMode mode) {
+    std::vector<uint8_t> out;
+    for (int k = 0; k < colours(mode); k++)
+        if (excluded & (1u << k)) out.insert(out.end(), {0, 0, 0, uint8_t(k)});
+    return out;
+}
+
+uint8_t layerExcludedChannels(const Layer& layer, ColorMode mode) {
+    if (!layer.psdCarry) return 0;
+    for (const PsdBlock& b : layer.psdCarry->blocks)
+        if (b.key == "brst") return parseBlendChannels(b.data, mode).value_or(0);
+    return 0;
+}
+
+bool setLayerExcludedChannels(Layer& layer, uint8_t excluded, ColorMode mode) {
+    excluded &= allBlendChannels(mode);
+    if (layerExcludedChannels(layer, mode) == excluded) return false;
+    auto carry = layer.psdCarry ? std::make_shared<PsdLayerCarry>(*layer.psdCarry) : std::make_shared<PsdLayerCarry>();
+    auto& blocks = carry->blocks;
+    blocks.erase(std::remove_if(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "brst"; }), blocks.end());
+    if (excluded) {
+        // Where Photoshop writes it: after the layer's protection flags ('lspf'), else last.
+        auto at = std::find_if(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "lspf"; });
+        blocks.insert(at == blocks.end() ? at : at + 1, PsdBlock{"brst", encodeBlendChannels(excluded, mode)});
+    }
     layer.psdCarry = std::move(carry);
     return true;
 }

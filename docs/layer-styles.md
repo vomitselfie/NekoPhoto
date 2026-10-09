@@ -85,6 +85,31 @@ Lightness, a and b in Lab.
   106 levels off when the ranges were ignored); `build/tests/blendif_tests` checks it when Patchy is beside the
   checkout.
 
+## Channels (Advanced Blending)
+
+Blending Options' Advanced Blending Channels are drawn and editable (`blendif.h`): a channel left unchecked is left out
+of the layer's blending, and there the backdrop shows through. RGB offers R, G and B; CMYK C, M, Y and K; Lab L, a
+and b. The PSD keeps them in the layer record's `brst` block (the excluded channels' indices); a layer never edited
+keeps its bytes.
+
+- Drawing follows Photoshop 2026 as Patchy calibrated it: an excluded channel keeps the backdrop's premultiplied
+  value once the layer is drawn with all its effects, exterior and interior; the other channels and alpha composite
+  as usual, so over transparency an excluded channel reads 0. Every channel excluded removes the layer, its effects
+  and alpha included. Fill, Blend If and the blend mode work as before on the other channels; an adjustment layer
+  leaves the excluded channels unadjusted. A folder's exclusion holds over everything its children and effects draw,
+  Pass Through too (it does not isolate, unlike Blend If). A clipping base's exclusion keeps the backdrop's channel
+  under the whole clipped result; a clipped layer's keeps the base's.
+- Depths and modes: the same rule at 8, 16 and 32 bits; CMYK and Lab keep the stored value (CMYK's is the inverted
+  ink, so over transparency an excluded ink reads as full ink, as the PSD stores it). No Photoshop-saved CMYK or Lab
+  file with excluded channels exists here: unverified there. Converting the colour mode lets every channel take part
+  again (the channels mean something else).
+- Editing: Layer ▸ Layer Style ▸ Blending Options (the Channels boxes), Copy and Paste Layer Style, and automation's
+  `layers.set` `channels` (any layer kind, folders and adjustment layers included; `layers.get` reports them when one
+  is left out). Projects keep them.
+- How close: Patchy's `photoshop-channel-restrictions` (Normal, Multiply, Linear Burn at Fill 50%, a layer with
+  effects, all three left out) matches Photoshop's render exactly (it was 39.5 levels off on average when the block
+  was ignored); `blendif_tests` checks it, with the rule at every depth and mode.
+
 ## Gradient methods
 
 Gradients follow Photoshop's Method (gradient overlays, layer-style strokes, gradient fill layers and shape strokes,

@@ -542,6 +542,49 @@ void addBlendIfScenes() {
         }
 }
 
+// ---- Advanced Blending: Channels (blendif.h) ----------------------------------------------------------------------
+//
+// The blend document with channels excluded: green on the clipping base (its whole clipped result), red on the clipped
+// layer (it keeps the base's), blue on a pass-through folder, and red and blue on a Levels adjustment layer; at 8, 16
+// and 32 bits and in CMYK and Lab (each mode's own channels).
+
+Document excludedChannelsDocument(ColorMode mode = ColorMode::RGB) {
+    Document doc = blendDocument(BlendMode::Multiply);
+    Layer adj("Levels", doc.size());
+    AdjustmentSettings levels = AdjustmentSettings::defaults(AdjustmentKind::Levels);
+    levels.levels.ranges[0] = {40, 1.4, 220, 0, 255};
+    adj.adjustment = levels.toLayerAdjustment();
+    doc.layers.push_back(adj);
+    for (Layer& l : doc.layers) if (l.isGroup) l.passThrough = true;
+    return doc;
+}
+
+void excludeChannels(Document& doc) {
+    const ColorMode mode = doc.colorMode;
+    for (Layer& l : doc.layers) {
+        if (l.name == "top") setLayerExcludedChannels(l, 0b010, mode);
+        if (l.name == "clipped") setLayerExcludedChannels(l, 0b001, mode);
+        if (l.isGroup) setLayerExcludedChannels(l, mode == ColorMode::CMYK ? 0b1000 : 0b100, mode);
+        if (l.adjustment) setLayerExcludedChannels(l, 0b101, mode);
+    }
+}
+
+void addExcludedChannelScenes() {
+    auto rgb = [] { Document doc = excludedChannelsDocument(); excludeChannels(doc); return doc; };
+    scene("channels/base_clip_folder_adjustment", [=] { return hashImage(*renderFlattened(rgb())); });
+    scene("u16/channels/base_clip_folder_adjustment", [=] { return hash16(sixteen(rgb())); });
+    scene("f32/channels/base_clip_folder_adjustment", [=] { return hashF(thirtyTwo(rgb())); });
+    for (ColorMode colorMode : {ColorMode::CMYK, ColorMode::Lab})
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            const std::string prefix = std::string(colorMode == ColorMode::CMYK ? "cmyk" : "lab") + (type == SampleType::U16 ? "16" : "") + "/";
+            scene(prefix + "channels/base_clip_folder_adjustment", [=] {
+                Document doc = inColorMode(excludedChannelsDocument(), colorMode, type);
+                excludeChannels(doc);   // after the conversion, which lets every channel take part again
+                return hashNative(renderNative(doc));
+            });
+        }
+}
+
 uint64_t hash16(const Document& doc, const RenderOptions& options) {
     Image16 out;
     render16(doc, options, out);
@@ -1791,6 +1834,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     addColorModeScenes();
     addAdjustmentScenes();
     addBlendIfScenes();
+    addExcludedChannelScenes();
     addFilterScenes();
     addBrushScenes();
     add16BitScenes();

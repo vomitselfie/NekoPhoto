@@ -206,6 +206,8 @@ bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& t
             for (int c = 1; c < BlendIf::maxChannels; c++) blendIf.channels[size_t(c)] = BlendIfChannel{};
             if (!(editableBlendIf(layer, from) == blendIf)) setLayerBlendIf(layer, blendIf, to);
         }
+        // Advanced Blending's Channels name the old mode's channels: every channel takes part again.
+        if (layerExcludedChannels(layer, from)) setLayerExcludedChannels(layer, 0, from);
         // Adjustment layers: colours converted, per-channel curves and levels reset (the channels mean something else
         // now), and a kind the new mode does not offer kept but made dormant: hidden and marked, so converting back
         // wakes it as it was.

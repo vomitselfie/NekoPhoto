@@ -64,6 +64,32 @@ BlendIf editableBlendIf(const Layer& layer, ColorMode mode);
 /// Returns whether anything changed.
 bool setLayerBlendIf(Layer& layer, const BlendIf& blendIf, ColorMode mode);
 
+// ---- Advanced Blending: Channels ------------------------------------------------------------------------------------
+//
+// Layer Style ▸ Blending Options ▸ Advanced Blending's Channels checkboxes (R, G, B; C, M, Y, K; L, a, b): a channel
+// left unchecked is excluded from the layer's blending. The PSD record keeps it in a 'brst' tagged block (the layer's
+// carry): the big-endian u32 indices of the EXCLUDED channels in ascending order, written only when one is.
+//
+// Drawing (Photoshop 2026, Patchy's photoshop-channel-restrictions fixture and docs/ps-compat.md): an excluded channel
+// keeps the backdrop's premultiplied value, out[c] = before[c], once the layer is drawn with its effects (exterior and
+// interior); the other channels and alpha composite as usual. All channels excluded removes the layer, effects and
+// alpha included. An adjustment leaves the excluded channels unadjusted. A folder's exclusion holds over everything its
+// children and effects draw (Pass Through too: it does not isolate). A clipping base's exclusion applies to the whole
+// clipped result against the backdrop; a clipped layer's keeps the base's value.
+
+/// The colour channels a mode has, as a bit mask (bit k: the document's colour channel k).
+uint8_t allBlendChannels(ColorMode mode);
+/// The excluded channels in a 'brst' block's bytes (indices the mode does not have are ignored); none when the bytes
+/// are not a list of indices.
+std::optional<uint8_t> parseBlendChannels(const std::vector<uint8_t>& bytes, ColorMode mode);
+/// The bytes of a 'brst' block for `excluded` (empty: nothing excluded, no block).
+std::vector<uint8_t> encodeBlendChannels(uint8_t excluded, ColorMode mode);
+/// The channels the layer (or folder) excludes, 0 for none.
+uint8_t layerExcludedChannels(const Layer& layer, ColorMode mode);
+/// Excludes `excluded` (the others included), through a copy of the layer's carry; a layer that already excludes
+/// them keeps its bytes. Returns whether anything changed.
+bool setLayerExcludedChannels(Layer& layer, uint8_t excluded, ColorMode mode);
+
 /// The gates as tables, made once per layer per render.
 struct BlendIfGate {
     ColorMode mode = ColorMode::RGB;

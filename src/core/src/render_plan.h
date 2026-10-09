@@ -44,6 +44,8 @@ struct RenderPlan {
     static bool isolates(const Layer& g) { return !g.passThrough || hasBlendIf(g); }
     static bool hasBlendIf(const Layer& l) { return l.psdCarry && !l.psdCarry->blendingRanges.empty() && layerBlendIf(l, ColorMode::CMYK); }
     static bool fades(const Layer& g) { return g.passThrough && g.opacity < 1 && !hasBlendIf(g); }
+    /// The colour channels the layer or folder leaves out of its blending (blendif.h), 0 for none.
+    uint8_t excluded(const Layer& l) const { return layerExcludedChannels(l, document.colorMode); }
 
     const LayerOverride* over(const Uuid& id) const {
         if (!overrides) return nullptr;
