@@ -69,8 +69,17 @@ public:
     /// hold no buffer in that slot: undo pastes `before` into a copy of the buffer in the document as it stands
     /// (the entry's after state), redo pastes `after` into a copy of the undone one. An `inherited` slot is one
     /// the entry did not change, whose buffer a later entry patched: both sides take the neighbouring state's.
+    /// An inherited slot can be one-sided: the entry left the buffer as the next state holds it on its near side (the
+    /// after side in the undo list, the before side in the redo list), but its far side has the slot with a buffer of
+    /// its own, or no such slot at all (the step made the layer, channel or selection, or replaced the buffer whole).
+    /// Only the near side then takes the neighbouring state's buffer; undoing or redoing the step, which leaves that
+    /// state for good, hands the buffer the document is letting go to the near side, so the step keeps it whole only
+    /// while nothing else does.
     struct RegionPatch {
+        enum class Sides : uint8_t { Both, Before, After };
         bool inherited = false;
+        Sides sides = Sides::Both;   // an inherited slot's sides that take the neighbouring state's buffer
+        bool takes(bool beforeSide) const { return sides == Sides::Both || (sides == Sides::Before) == beforeSide; }
         const void* source = nullptr;   // the before buffer's identity, while the entry is recorded
         enum class Slot : uint8_t { LayerPixels, LayerMask, Channel, Selection };
         Slot slot = Slot::LayerPixels;
@@ -99,8 +108,13 @@ private:
     /// Lists the entry's buffers and patch bytes; true when its after side holds a buffer its before side does not.
     static bool countBuffers(Entry& entry);
     /// Entries next to `list.back()` holding, unchanged, a buffer it patched (`changed`: the patch and the
-    /// buffer's identity) leave it to the chain.
-    static void inheritPatched(std::vector<Entry>& list, const std::vector<std::pair<const RegionPatch*, const void*>>& changed);
+    /// buffer's identity) leave it to the chain. `nearAfter`: the list is the undo list, whose entries meet the next
+    /// one on their after side (the redo list's meet it on their before side). An entry holding the buffer on that
+    /// side only leaves that side to the chain, and ends the walk.
+    static void inheritPatched(std::vector<Entry>& list, const std::vector<std::pair<const RegionPatch*, const void*>>& changed, bool nearAfter);
+    /// Before an undo (`undoing`) or redo moves `entry` across: its one-sided inherited slots take, on their near side,
+    /// the buffer the document holds there now (the tip's), which the step is about to leave.
+    void settleOneSided(Entry& entry, bool undoing) const;
     /// After an undo or redo moved `list.back()`: the same for the buffers it stepped away from.
     void shareStepped(std::vector<Entry>& list);
     /// A patched slot's buffer: `image` for layer pixels, `gray` for the others.
