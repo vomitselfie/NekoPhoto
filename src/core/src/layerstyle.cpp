@@ -748,6 +748,13 @@ double catmullRom(double p0, double p1, double p2, double p3, double t) {
     const double t2 = t * t, t3 = t2 * t;
     return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
 }
+/// The Classic smoothness spline as Photoshop draws it: the Catmull-Rom through the neighbours, kept between the run's
+/// own two stops. Where a neighbour pulls the curve past a stop (a run between two close values after a far one: red
+/// 230, 30, 20 in Patchy's photoshop-shape-gradient), Photoshop's ramp does not overshoot; unclamped, the red dipped to
+/// 12 there, 8 levels off its flatten. Runs that stay within their stops are untouched.
+double smoothRun(double p0, double p1, double p2, double p3, double t) {
+    return std::clamp(catmullRom(p0, p1, p2, p3, t), std::min(p1, p2), std::max(p1, p2));
+}
 double toLinear(double v) { v = std::clamp(v, 0.0, 1.0); return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); }
 double toSrgb(double v) { v = std::clamp(v, 0.0, 1.0); return v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1 / 2.4) - 0.055; }
 
@@ -872,7 +879,7 @@ float gradientOpacity(const StyleGradient& g, float t) {
             // Fill layers ease the opacity ramp as they ease the colours.
             const double p = i > 1 ? s[i - 2].opacity : s[i - 1].opacity, n = i + 1 < s.size() ? s[i + 1].opacity : s[i].opacity;
             const double lin = s[i - 1].opacity + (s[i].opacity - s[i - 1].opacity) * u;
-            return unit(float(lin + (catmullRom(p, s[i - 1].opacity, s[i].opacity, n, u) - lin) * g.smoothness));
+            return unit(float(lin + (smoothRun(p, s[i - 1].opacity, s[i].opacity, n, u) - lin) * g.smoothness));
         }
         return s[i - 1].opacity + (s[i].opacity - s[i - 1].opacity) * u;
     }
@@ -910,7 +917,7 @@ void gradientColorExact(const StyleGradient& g, float t, double out[3]) {
         // (the end stops stand in for the missing neighbours): Photoshop's merged image of a two-stop overlay
         // (Patchy's photoshop-overlay-zorder.psd) follows the eased ramp, as fill layers do.
         const double smooth = g.smoothness;
-        auto c = [&](uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) { const double lin = p1 + (p2 - p1) * u; return lin + (catmullRom(p0, p1, p2, p3, u) - lin) * smooth; };
+        auto c = [&](uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) { const double lin = p1 + (p2 - p1) * u; return lin + (smoothRun(p0, p1, p2, p3, u) - lin) * smooth; };
         put(c(p.r, l.color.r, r.color.r, n.r), c(p.g, l.color.g, r.color.g, n.g), c(p.b, l.color.b, r.color.b, n.b));
         return;
     }

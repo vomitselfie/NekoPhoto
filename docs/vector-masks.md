@@ -32,7 +32,7 @@ record layout and combine rules follow Patchy (MIT, `src/third_party/patchy_psd/
 
 Against Photoshop's renders of Patchy's fixtures (mean difference per pixel, 0-255): shape booleans 0.00, first
 combine ops 0.00, both masks 0.05 (and with parameters 0.05), vector mask on a pixel layer 0.05, live rectangle
-0.09, pattern shape 0.11, solid shape 0.14, vector mask feather 0.38, gradient shape 1.27, strokes 0.25, pixel mask
+0.09, pattern shape 0.11, solid shape 0.14, vector mask feather 0.38, gradient shape 0.94, strokes 0.25, pixel mask
 parameters 0.27, shape feather 0.38 (the last three were 0.52, 5.29 and 4.60 before the feather model above). Before,
 these ran from 17 to 156.
 
