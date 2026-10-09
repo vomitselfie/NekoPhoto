@@ -1,12 +1,19 @@
 // Vector masks ('vmsk'): parsing Photoshop's path records, antialiased coverage, the combine rules, mask
 // parameters, strokes, and the path following its layer on export. Photoshop's own renders are checked over
-// Patchy's fixtures (docs/vector-masks.md).
+// Patchy's fixtures (docs/vector-masks.md), as are the feathers of pixel masks, vector masks and stroked shapes.
 #include "check.h"
 #include "compositor/psd.h"
 #include "compositor/psd_carry.h"
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
+#include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iterator>
+#include <string>
 
 using namespace compositor;
 
@@ -163,6 +170,114 @@ TEST_CASE(corners_join_as_asked_and_dashes_break_the_line) {
     CHECK_EQ(int(dashed->row(6)[6]), 255);   // on
     CHECK_EQ(int(dashed->row(6)[8]), 0);     // off
     CHECK_EQ(int(dashed->row(6)[10]), 255);  // on again
+}
+
+namespace {
+
+/// A parameters-only mask section with a vector feather (and density).
+std::vector<uint8_t> vectorParameters(double feather, std::optional<int> density = std::nullopt) {
+    std::vector<uint8_t> s(18, 0);
+    s[17] = 0x10;
+    s.push_back(uint8_t(0x08 | (density ? 0x04 : 0)));
+    if (density) s.push_back(uint8_t(*density));
+    uint64_t u;
+    std::memcpy(&u, &feather, 8);
+    for (int i = 7; i >= 0; i--) s.push_back(uint8_t(u >> (8 * i)));
+    return s;
+}
+
+/// A shape layer of a 20 x 20 square (red fill, a 4-pixel dark stroke inside when `stroked`) feathered by 3.
+Document featheredSquare(bool stroked) {
+    Document doc(40, 40);
+    VectorShape shape;
+    shape.path = rectanglePath(Rect(10, 10, 20, 20), 0);
+    shape.r = 200;
+    shape.stroke.enabled = stroked;
+    shape.stroke.width = 4;
+    shape.stroke.align = VectorStroke::Align::Inside;
+    shape.stroke.r = shape.stroke.g = shape.stroke.b = 20;
+    Layer layer("Shape", Size(1, 1));
+    setVectorShape(layer, doc, shape);
+    auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
+    carry->maskData = vectorParameters(3);
+    layer.psdCarry = carry;
+    doc.layers.push_back(layer);
+    return doc;
+}
+
+std::string fixture(const char* name) {
+    const char* dir = std::getenv("PATCHY_FIXTURES");
+    return std::string(dir ? dir : PATCHY_FIXTURES) + "/" + name;
+}
+
+/// A 24-bit BMP as straight RGB rows; empty when it cannot be read.
+std::vector<uint8_t> readBmp24(const std::string& path, int& w, int& h) {
+    std::ifstream in(path, std::ios::binary);
+    std::vector<uint8_t> f((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (f.size() < 54 || f[0] != 'B' || f[1] != 'M') return {};
+    auto u32 = [&](size_t at) { return uint32_t(f[at]) | uint32_t(f[at + 1]) << 8 | uint32_t(f[at + 2]) << 16 | uint32_t(f[at + 3]) << 24; };
+    const uint32_t offset = u32(10);
+    w = int(int32_t(u32(18)));
+    const int rawH = int(int32_t(u32(22)));
+    h = std::abs(rawH);
+    if (f[28] != 24 || w <= 0 || h <= 0) return {};
+    const size_t stride = (size_t(w) * 3 + 3) / 4 * 4;
+    if (f.size() < offset + stride * size_t(h)) return {};
+    std::vector<uint8_t> rgb(size_t(w) * size_t(h) * 3);
+    for (int y = 0; y < h; y++) {
+        const uint8_t* row = f.data() + offset + stride * size_t(rawH > 0 ? h - 1 - y : y);
+        for (int x = 0; x < w; x++) for (int k = 0; k < 3; k++) rgb[(size_t(y) * size_t(w) + size_t(x)) * 3 + size_t(k)] = row[x * 3 + 2 - k];
+    }
+    return rgb;
+}
+
+} // namespace
+
+TEST_CASE(a_stroked_shape_feathers_as_one_drawing) {
+    // Photoshop feathers the drawn shape, fill and stroke together: past the edge only one silhouette fades, so the
+    // stroked square's fringe is exactly as opaque as the plain one's (it was about twice as opaque when the stroke
+    // and the fill were feathered apart and laid one over the other).
+    const auto plain = renderFlattened(featheredSquare(false));
+    const auto stroked = renderFlattened(featheredSquare(true));
+    for (int x : {5, 7, 9, 11}) CHECK_NEAR(int(stroked->pixel(x, 20)[3]), int(plain->pixel(x, 20)[3]), 1);
+    CHECK(stroked->pixel(7, 20)[3] > 0 && stroked->pixel(7, 20)[3] < 128);
+    // Inside, the stroke is dark and the middle red, softened.
+    CHECK(stroked->pixel(13, 20)[0] < 120);
+    CHECK(stroked->pixel(20, 20)[0] > 150);
+    // At 16 bits, the same shape within a level.
+    Document deep = featheredSquare(true);
+    REQUIRE(convertSampleType(deep, SampleType::U16));
+    const auto deep8 = renderFlattened(deep);
+    for (int x = 0; x < 40; x++) for (int k = 0; k < 4; k++) CHECK_NEAR(int(deep8->pixel(x, 20)[k]), int(stroked->pixel(x, 20)[k]), 1);
+}
+
+TEST_CASE(feathered_masks_match_photoshops_renders) {
+    // Patchy's fixtures, against Photoshop's flatten: a pixel mask larger than its layer feathered (Photoshop blurs the
+    // mask's own plane, so the layer's sides stay unfaded) with density, vector masks feathered by 4 and 8, and shapes
+    // feathered with a stroke (one drawing feathered) and with density.
+    struct Case { const char* name; int maxError; double maxMean; };
+    for (const Case& c : {Case{"photoshop-user-mask-params", 2, 0.35}, Case{"photoshop-vector-mask-feather", 3, 0.45}, Case{"photoshop-shape-feather", 3, 0.45}}) {
+        std::string error;
+        auto imported = importPsd(fixture((std::string(c.name) + ".psd").c_str()), &error);
+        int w = 0, h = 0;
+        const auto ps = readBmp24(fixture((std::string(c.name) + ".bmp").c_str()), w, h);
+        if (!imported || ps.empty()) { std::printf("  skipped: Patchy's fixtures are not beside this checkout\n"); return; }
+        const auto ours = renderFlattened(imported->document);
+        REQUIRE(ours->width() == w && ours->height() == h);
+        double sum = 0;
+        int worst = 0;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                for (int k = 0; k < 3; k++) {
+                    const int mine = int(ours->row(y)[x * 4 + k]) + 255 - int(ours->row(y)[x * 4 + 3]);
+                    const int d = std::abs(mine - int(ps[(size_t(y) * size_t(w) + size_t(x)) * 3 + size_t(k)]));
+                    sum += d;
+                    worst = std::max(worst, d);
+                }
+        std::printf("  %s against Photoshop's render: mean %.3f, max %d levels\n", c.name, sum / (w * h * 3.0), worst);
+        CHECK(worst <= c.maxError);
+        CHECK(sum / (w * h * 3.0) < c.maxMean);
+    }
 }
 
 TEST_MAIN()

@@ -14,11 +14,11 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 <!-- BEGIN GENERATED at-a-glance: tools/compat_table.py --write; do not edit by hand -->
 | Check | Result | How to rerun |
 |---|---|---|
-| Photoshop as the oracle | **53 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
-| Render hashes | **704 scenes**: 157 at 8-bit RGB, 156 at 16-bit RGB, 121 at 32-bit RGB, 72 at 8-bit CMYK, 72 at 16-bit CMYK, 63 at 8-bit Lab, 63 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
+| Photoshop as the oracle | **56 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
+| Render hashes | **711 scenes**: 158 at 8-bit RGB, 157 at 16-bit RGB, 122 at 32-bit RGB, 73 at 8-bit CMYK, 73 at 16-bit CMYK, 64 at 8-bit Lab, 64 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
-| Test suites | **88 CTest tests** registered (728 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
+| Test suites | **88 CTest tests** registered (730 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
 | Automation | **183 methods**, 182 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
@@ -131,8 +131,7 @@ some G'MIC filters) are listed in [legal-boundaries.md](legal-boundaries.md).
   size changes; a live shape's origination once it moves.
 - **Layer styles not drawn yet**: contours on shadows and glows (drawn linear), noise and jitter, Dissolve (drawn
   as Normal), "Layer Mask Hides Effects". An Outer Bevel's texture is 5.2 levels off on average.
-- **Vector masks**: shape feather is 5.4 levels off (Photoshop feathers the shape as one render); gradient and
-  pattern strokes are not drawn.
+- **Vector masks**: gradient and pattern strokes are not drawn.
 - **Smart objects**: no dragging a Smart Filter between smart objects, no editing a stack that holds a filter not
   drawn here, no linked filter mask, no relinking of linked files.
 
@@ -192,8 +191,8 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
 <!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
-- **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **53 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
-- **描画のハッシュ**: 704 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 88 個(728 `TEST_CASE`)。
+- **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **56 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
+- **描画のハッシュ**: 711 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 88 個(730 `TEST_CASE`)。
 - **自動操作**: メソッド 183 個、うち 182 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、

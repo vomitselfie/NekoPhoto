@@ -10,6 +10,7 @@
 #include "render_deep_ops.h"
 #include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
+#include "compositor/vectorlayer.h"
 #include "compositor/parallel.h"
 #include "compositor/workcounters.h"
 #include <algorithm>
@@ -418,14 +419,13 @@ struct RenderExecDeep {
             params.maskImage = nullptr;
         }
         const std::optional<VectorStroke> stroke = vector ? layerVectorStroke(layer) : std::nullopt;
-        auto drawStroke = [&] {
+        // The stroke into `into`, in `mode` at `opacity` through `cover`; `feathered`: softened by the shape's Feather.
+        auto strokeInto = [&](Img& into, BlendMode mode, float opacity, const Gray* cover, bool feathered) {
             if (!stroke || !stroke->enabled || stroke->opacity <= 0) return;
             VectorPath path = *vector;
             path.inverted = false;
             auto band = O::vectorStroke(path, *stroke, region, scale, outWidth, outHeight);
-            if (maskParameters && maskParameters->vectorFeather) O::maskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
-            const float opacity = float(clamp(layer.opacity, 0.0, 1.0)) * stroke->opacity;
-            const BlendMode mode = blendOf(layer);
+            if (feathered && maskParameters && maskParameters->vectorFeather) O::maskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
             ImagePtr paint;
             if (stroke->paint.kind != VectorPaint::Kind::Solid) {
                 double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
@@ -440,9 +440,9 @@ struct RenderExecDeep {
             parallelRows(0, outHeight, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
                     const Sample* b = band->row(y);
-                    const Sample* c = coverageWithoutVector ? coverageWithoutVector->row(y) : nullptr;
+                    const Sample* c = cover ? cover->row(y) : nullptr;
                     const Sample* p = paint ? paint->row(y) : nullptr;
-                    Sample* d = target.row(y);
+                    Sample* d = into.row(y);
                     for (int x = 0; x < outWidth; x++) {
                         if (!b[x]) continue;
                         Sample colour[N];
@@ -459,6 +459,26 @@ struct RenderExecDeep {
                 }
             });
         };
+        auto drawStroke = [&] { strokeInto(target, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)) * (stroke ? stroke->opacity : 1.0f), coverageWithoutVector, true); };
+        // A shape layer with a Feather: Photoshop draws the shape, fill and stroke, then feathers the drawing as a whole
+        // (the 8-bit executor's rule, render_plan.h's featherDrawnShape).
+        const bool stroked = stroke && stroke->enabled;
+        if (vector && maskParameters && maskParameters->vectorFeather && *maskParameters->vectorFeather > 0 && (stroked || isVectorShapeLayer(layer))
+            && !(layer.mask && layer.mask->enabled) && (plainOnly || !O::styles || !layerStyleOf(layer, document))) {
+            Img shape = blank(outWidth, outHeight);
+            if (!stroked || stroke->fillEnabled) {
+                Cover sharp = O::vectorMask(*vector, region, scale, outWidth, outHeight);
+                if (maskParameters->vectorDensity) O::maskParameters(*sharp, maskParameters->vectorDensity, std::nullopt, scale);
+                Params plain = params;
+                plain.opacity = 1;
+                plain.mode = BlendMode::Normal;
+                O::drawLayer(plain, region, scale, sharp.get(), shape);
+            }
+            if (stroked) strokeInto(shape, BlendMode::Normal, stroke->opacity, nullptr, false);
+            featherDrawnShape(shape, N, vectorFeatherSigma(*maskParameters->vectorFeather) * scale);
+            compositeRows(shape, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)), coverageWithoutVector, target);
+            return;
+        }
         if (stroke && stroke->enabled && !stroke->fillEnabled) { drawStroke(); return; }
         if constexpr (O::styles) if (!plainOnly) if (auto style = layerStyleOf(layer, document)) {
             // Layer styles at the document's depth (layerstyle_render.h).

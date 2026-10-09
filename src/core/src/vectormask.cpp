@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <type_traits>
 
 namespace compositor {
 
@@ -279,22 +280,33 @@ std::optional<MaskParameters> parseMaskParameters(const std::vector<uint8_t>& se
     return p;
 }
 
-void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges) {
-    if (feather && *feather > 0) {
-        if (!clampEdges) gaussianBlur(coverage, *feather * scale);
-        else {
-            // The pixel mask's feather repeats the edge pixels past the canvas (Photoshop's clamp).
-            const int pad = int(std::ceil(*feather * scale * 3)) + 1, w = coverage.width(), h = coverage.height();
-            GrayImage padded(w + 2 * pad, h + 2 * pad, 0);
-            for (int y = 0; y < h + 2 * pad; y++) {
-                const uint8_t* src = coverage.row(std::clamp(y - pad, 0, h - 1));
-                uint8_t* dst = padded.row(y);
-                for (int x = 0; x < w + 2 * pad; x++) dst[x] = src[std::clamp(x - pad, 0, w - 1)];
-            }
-            gaussianBlur(padded, *feather * scale);
-            for (int y = 0; y < h; y++) std::memcpy(coverage.row(y), padded.row(y + pad) + pad, size_t(w));
-        }
+namespace {
+
+/// The feather over `coverage` (samples 0..`one`), a gaussian of `sigma` output pixels blurred in float and rounded
+/// once: past its edges the edge samples repeat (`clampEdges`: the pixel mask at the canvas) or nothing is covered (a
+/// vector mask's shape fades at the canvas edge).
+template <class G>
+void featherCoverage(G& coverage, double sigma, bool clampEdges, uint32_t one) {
+    if (coverage.isEmpty() || !(sigma > 0)) return;
+    const int pad = int(std::ceil(sigma * 4)) + 1, w = coverage.width(), h = coverage.height(), pw = w + 2 * pad, ph = h + 2 * pad;
+    GrayF plane(pw, ph, 0.0f);
+    for (int y = 0; y < ph; y++) {
+        if (!clampEdges && (y < pad || y >= h + pad)) continue;
+        const auto* src = coverage.row(std::clamp(y - pad, 0, h - 1));
+        float* dst = plane.row(y);
+        for (int x = 0; x < pw; x++)
+            if (clampEdges || (x >= pad && x < w + pad)) dst[x] = float(src[std::clamp(x - pad, 0, w - 1)]) / float(one);
     }
+    gaussianBlur(plane, sigma);
+    using T = std::remove_cvref_t<decltype(coverage.row(0)[0])>;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) coverage.row(y)[x] = T(std::clamp(std::lround(plane.row(y + pad)[x + pad] * float(one)), 0L, long(one)));
+}
+
+} // namespace
+
+void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges) {
+    if (feather && *feather > 0) featherCoverage(coverage, (clampEdges ? *feather : vectorFeatherSigma(*feather)) * scale, clampEdges, 255);
     if (density && *density < 255) {
         // Density: what the mask hides shows at (255 - density) / 255.
         const int floor = 255 - std::clamp(*density, 0, 255);
@@ -303,20 +315,7 @@ void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::o
 }
 
 void applyMaskParameters(Gray16& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges) {
-    if (feather && *feather > 0) {
-        if (!clampEdges) gaussianBlur(coverage, *feather * scale);
-        else {
-            const int pad = int(std::ceil(*feather * scale * 3)) + 1, w = coverage.width(), h = coverage.height();
-            Gray16 padded(w + 2 * pad, h + 2 * pad, 0);
-            for (int y = 0; y < h + 2 * pad; y++) {
-                const uint16_t* src = coverage.row(std::clamp(y - pad, 0, h - 1));
-                uint16_t* dst = padded.row(y);
-                for (int x = 0; x < w + 2 * pad; x++) dst[x] = src[std::clamp(x - pad, 0, w - 1)];
-            }
-            gaussianBlur(padded, *feather * scale);
-            for (int y = 0; y < h; y++) std::memcpy(coverage.row(y), padded.row(y + pad) + pad, size_t(w) * sizeof(uint16_t));
-        }
-    }
+    if (feather && *feather > 0) featherCoverage(coverage, (clampEdges ? *feather : vectorFeatherSigma(*feather)) * scale, clampEdges, 32768);
     if (density && *density < 255) {
         // The density's floor, (255 - density) / 255, at 15 bits.
         const uint32_t floor = uint32_t(((255 - std::clamp(*density, 0, 255)) * 32768 + 127) / 255);

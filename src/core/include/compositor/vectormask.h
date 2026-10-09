@@ -48,7 +48,13 @@ std::optional<VectorPath> layerVectorMask(const Layer& layer, const Document& do
 /// the pixel mask and of the vector mask.
 struct MaskParameters { std::optional<int> userDensity, vectorDensity; std::optional<double> userFeather, vectorFeather; };
 std::optional<MaskParameters> parseMaskParameters(const std::vector<uint8_t>& section);
-/// Density and feather applied to coverage drawn at `scale` (feather is a gaussian of sigma = feather pixels).
+/// The gaussian a vector mask's Feather (a shape's too) blurs with, in document pixels. Photoshop's spreads a little wider
+/// than sigma = feather: 1.02 x feather fits its renders of Patchy's photoshop-vector-mask-feather and
+/// photoshop-shape-feather (feather 4 and 8: mean 0.38 and 0.37 levels, against 0.52 and 0.56 at 1.00), while a pixel
+/// mask's Feather is sigma = feather exactly (photoshop-user-mask-params, feather 3 and 6.5: best at 1.00).
+constexpr double vectorFeatherSigma(double feather) { return feather * 1.02; }
+/// Density and feather applied to coverage drawn at `scale`: a pixel mask's (`clampEdges`: its edge pixels repeat past
+/// the canvas; sigma = feather) or a vector mask's (nothing past the edges; vectorFeatherSigma).
 void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges = false);
 void applyMaskParameters(Gray16& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges = false);
 

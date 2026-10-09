@@ -315,6 +315,7 @@ add_test(NAME smartfilter_tests COMMAND smartfilter_tests)
 
 add_executable(vectormask_tests vectormask_tests.cpp)
 target_link_libraries(vectormask_tests PRIVATE compositor::core compositor_warnings)
+target_compile_definitions(vectormask_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
 add_test(NAME vectormask_tests COMMAND vectormask_tests)
 
 add_executable(cameraraw_tests cameraraw_tests.cpp)

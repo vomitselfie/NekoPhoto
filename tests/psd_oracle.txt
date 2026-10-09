@@ -4,7 +4,7 @@
 # Raise it after an improvement: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle
 compared 72
 flatten 48
-floor 53
+floor 56
 pass patchy-open-path-strokes.psd [merged]
 pass photoshop-bevel-default.psd [merged]
 pass photoshop-bevel-gloss.psd [merged]
@@ -42,6 +42,7 @@ pass photoshop-saved-channels.psd [merged]
 pass photoshop-saved-paths.psd [bmp]
 pass photoshop-shadow-conceals.psd [bmp]
 pass photoshop-shape-boolean.psd [bmp]
+pass photoshop-shape-feather.psd [bmp]
 pass photoshop-shape-first-ops.psd [bmp]
 pass photoshop-smart-filter-add-noise-gaussian.psd [merged]
 pass photoshop-smart-filter-add-noise.psd [merged]
@@ -57,4 +58,6 @@ pass photoshop-text-rtl-hebrew.psd [merged]
 pass photoshop-text-vertical-box.psd [merged]
 pass photoshop-text-vertical-point.psd [merged]
 pass photoshop-threshold.psd [merged]
+pass photoshop-user-mask-params.psd [bmp]
+pass photoshop-vector-mask-feather.psd [bmp]
 pass photoshop-vector-mask-on-pixel.psd [bmp]
