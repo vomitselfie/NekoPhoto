@@ -481,6 +481,7 @@ command registry's (`CONTRIBUTING.md`, "Commands"); the tools are `tool.<name>` 
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
 | Ctrl Alt Shift C | Content-Aware Scale |
 | Q, Shift F6 | Quick Mask, Feather |
+| Ctrl 2…9, Ctrl Alt 2…9 | The composite, each colour channel, then the alpha channels ([channels.md](channels.md)); with Alt, load that channel as a selection |
 | Shift Ctrl A, Ctrl Shift G | Camera Raw Filter, G'MIC |
 | Ctrl H | Show or hide the transform controls |
 | Ctrl Z, Ctrl Shift Z, Ctrl Alt Z | Undo (again for earlier steps), redo, toggle last state (Photoshop CC's defaults) |

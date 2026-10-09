@@ -3,8 +3,8 @@
 **English** · [日本語](#日本語)
 
 What NekoPhoto checks, how often, and where it still falls short. The first table is counted from the repository on
-every build; the other numbers were gathered by running the tools on 2026-09-27 against NekoPhoto 1.6.1, not copied
-from other pages. The commands are beside each one so you can run them again.
+every build; the other numbers were gathered by running the tools (the date is beside each), not copied from other
+pages. The commands are beside each one so you can run them again.
 
 ## At a glance
 
@@ -35,11 +35,11 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 | Lab16 | 83 | 17 | 11 | 4 |
 <!-- END GENERATED at-a-glance -->
 
-Measured by hand over the corpus (2026-09-27, NekoPhoto 1.6.1):
+Measured by hand over the corpus (2026-10-09, NekoPhoto 1.8.10):
 
 | Check | Result | How to rerun |
 |---|---|---|
-| PSD round trip over Patchy's fixtures | **117 of 117 files pass**, 3,675 carried blocks back byte for byte, 20 type layers opened as editable text | `build/tests/psd_roundtrip ../Patchy/test-fixtures/psd` |
+| PSD round trip over Patchy's fixtures | **117 of 117 files pass**, 3,675 carried blocks back byte for byte, 21 type layers opened as editable text | `build/tests/psd_roundtrip ../Patchy/test-fixtures/psd` |
 | The same converted to 16 bits | **118 of 118 files pass** (Patchy's and K.psd): every carried block comes back from a 16-bit export too (3,975 with K.psd) | `PSD_ROUNDTRIP_16=1 build/tests/psd_roundtrip ../Patchy/test-fixtures/psd ../K.psd` |
 | Fill layers against Photoshop's pixels | every gradient or pattern fill layer that stores Photoshop's own pixels is drawn by NekoPhoto and compared (Linear, Radial and Reflected gradients and pattern fills within a level; Angle and Diamond have no Photoshop-saved file yet) | `PSD_ROUNDTRIP_FILLS=1 build/tests/psd_roundtrip file.psd` |
 | Styled folders, stage by stage | `NEKOPHOTO_DUMP_FOLDERS=<dir>` writes each styled folder's stages while rendering (backdrop, exterior effects, children, after opacity and Fill, interior effects, the effects' shape) as PNGs, to find where a render first differs from Photoshop's | any render, e.g. `document.export` |
@@ -194,11 +194,11 @@ Application-level timings on the same laptop:
 
 NekoPhoto が何をどのくらいの頻度で検証しているか、そしてまだ足りない点をまとめたページです。意図的に Photoshop と異なる
 動作をする機能(クイック選択、コンテンツに応じた塗りつぶし、修復、ブラシのテクスチャ、指先ツール、一部の G'MIC フィルター)は
-[legal-boundaries.md](legal-boundaries.md#日本語) にまとめています。数値は 2026-09-27 に
-NekoPhoto 1.6.1 でツールを実行して集計したものです。
+[legal-boundaries.md](legal-boundaries.md#日本語) にまとめています。PSD の往復の数値は 2026-10-09 に
+NekoPhoto 1.8.10 でツールを実行して集計したものです。
 
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
-  Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
+  Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 21 個は編集可能なテキストとして開きます。
 <!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
 - **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **58 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
 - **描画のハッシュ**: 711 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 90 個(741 `TEST_CASE`)。
