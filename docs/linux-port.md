@@ -421,6 +421,23 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 
 ## Keyboard shortcuts
 
+These are the defaults, Photoshop's. **Edit ▸ Keyboard Shortcuts…** (Alt Shift Ctrl K) changes them, as Photoshop's
+dialog does: every menu command (grouped by menu), every tool, the Shift + letter tool switches and the keys without a
+menu item (X, D, the channel keys), with a search field that finds a command by its name or its key. Choose a command,
+click its shortcut and press the new keys; **Add Shortcut** gives it a second one, **Remove** takes one away, **Use
+Default** gives the command its own back and **Use Default for All** all of them. A key another command has is named,
+and moves to the new command only with **Take It** (the other command loses it; no key ever runs two things). Esc,
+Enter, Tab, Space, a modifier alone, and the keys the canvas uses itself (the digits for opacity, `[` `]` for the
+brush, the arrows for nudging, Ctrl Shift > / < for type) are refused with the reason. Typing on the canvas still takes
+plain letters whatever they are assigned to.
+
+OK applies the keys at once, to the menus, Edit ▸ Search and the tool rail's tooltips. Only the changes are kept, in
+the settings file (`~/.config/nekophoto/nekophoto.conf`, `[shortcuts]`: each changed command's id with its keys, an
+empty list for one whose key was removed), so a later version's new defaults still arrive. **Export…** writes them to a
+`.nekokeys` file (JSON: `{"format": "nekophoto-keys", "version": 1, "shortcuts": {"layer.new": ["Ctrl+Alt+Shift+N"]}}`)
+and **Import…** reads one back; Photoshop's `.kys` files are a closed format and are not read. The command ids are the
+command registry's (`CONTRIBUTING.md`, "Commands"); the tools are `tool.<name>` and their switches `tool.next.<group>`.
+
 | Keys | Action |
 |---|---|
 | V M L W C B E J S R G U T I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Smudge, Gradient, Shape, Text, Eyedropper, Hand, Zoom |
@@ -460,6 +477,7 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl Shift ', Ctrl Alt Shift ' | Layer ▸ Quick Export, Layer ▸ Export As (the active layer alone) |
 | Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |
 | Ctrl K (also Ctrl ,) | Preferences |
+| Alt Shift Ctrl K | Edit ▸ Keyboard Shortcuts (change any of these keys) |
 | Ctrl F | Edit ▸ Search: find any command, tool or G'MIC filter by name and run it (arrows, Enter, Esc) |
 | Type tool: Ctrl Enter or keypad Enter, Esc | Commit or cancel the text being typed on the canvas (Enter alone starts a new line) |
 | Type tool: Ctrl Shift > / <, Ctrl Alt Shift > / < | The selected letters 2 / 10 pixels larger or smaller, each keeping its own size (with only a caret, the letters typed next); not typing, with the Move or Type tool, every selected type layer, one undo step per press |

@@ -28,7 +28,8 @@ struct Command {
     QString id;
     /// As the menu shows it, translated, with its accelerator ("&Undo").
     QString label;
-    /// The default keys, the first one shown in the menu.
+    /// The default keys (Photoshop's), the first one shown in the menu. The action has them unless the person changed
+    /// them in Edit > Keyboard Shortcuts (KeyboardShortcuts.h), so what a key runs now is the action's shortcuts().
     QList<QKeySequence> shortcuts;
     /// The automation method the command runs. With `params` the command is that request (nullopt from `params`: there
     /// is nothing to do now); otherwise `run` does it (a dialog, or a choice the menu makes first) and `method` names
@@ -60,8 +61,9 @@ public:
     /// Adds `command` and makes its action: at the end of `menu`, or with no menu on the window alone (a key with no
     /// menu item, such as Ctrl+3). The id must be new.
     QAction* add(QMenu* menu, Command command);
-    /// Registers an action made elsewhere (a panel's show/hide, a view switch, a submenu) as `command`, adding it to
-    /// `menu` when given. Its own signals do the work; `run` and `params` are not used.
+    /// Registers an action made elsewhere (a panel's show/hide, a view switch, a submenu, a tool) as `command`, adding
+    /// it to `menu` when given. Its own signals do the work; `run` and `params` are not used. The command's keys are
+    /// given to the action; without any, the action's own keys are the command's defaults.
     QAction* adopt(QMenu* menu, QAction* action, Command command);
 
     const Command* find(const QString& id) const;

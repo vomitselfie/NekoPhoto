@@ -12,6 +12,7 @@
 #include <QHash>
 #include <QStringList>
 #include <QTabBar>
+#include <map>
 #include <vector>
 
 class QComboBox;
@@ -133,6 +134,13 @@ public:
     std::vector<PaletteEntry> paletteEntries();
     /// The menus' commands (CommandRegistry.h): ids, labels, keys, what each runs and why one is greyed.
     const CommandRegistry& commandRegistry() const { return *commands_; }
+    /// Edit > Keyboard Shortcuts… (KeyboardShortcuts.h); its OK saves the changes and applies them.
+    void showKeyboardShortcuts();
+    /// Gives the commands the keys saved in the settings (`shortcuts/<id>`), the defaults where none is saved.
+    void applyShortcuts();
+    /// Saves `overrides` (each command's keys where they differ from its defaults) as the settings' shortcuts and
+    /// applies them.
+    void setShortcuts(const std::map<QString, QList<QKeySequence>>& overrides);
     /// Filter > G'MIC…, on the filter named `filter` when given.
     void openGmic(const QString& filter = {});
     /// Plays an action on the current tab; returns why it stopped, empty when it completed.
@@ -345,6 +353,8 @@ private:
         }
     }
     QAction* eraserAction_;
+    /// The tool rail's tooltips with the tools' keys as they are now.
+    void refreshToolTips();
 };
 
 } // namespace app

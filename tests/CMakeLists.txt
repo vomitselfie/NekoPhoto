@@ -434,6 +434,11 @@ if(TARGET nekophoto)
     add_test(NAME preferences_selftest COMMAND nekophoto --lang en --self-test preferences)
     set_tests_properties(preferences_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/preferences-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/preferences-home/data")
+    # Edit > Keyboard Shortcuts: keys changed, refused, moved on a conflict, reset, kept in the settings and applied
+    # again, exported and imported, with no key on two actions (English: it names Group Layers).
+    add_test(NAME keyboard_shortcuts_selftest COMMAND nekophoto --lang en --self-test shortcuts)
+    set_tests_properties(keyboard_shortcuts_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/shortcuts-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/shortcuts-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)

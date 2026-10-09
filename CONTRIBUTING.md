@@ -142,7 +142,11 @@ items. A command is one row, written with `Spec`:
 - **`.when(reason)`**: why it cannot run now, or an empty string when it can (`tr("Nothing to undo")`). The registry
   greys the item while there is a reason, and Edit > Search shows it beside the greyed command.
 
-An action made elsewhere (a panel's show/hide, a submenu, a view switch) joins with `CommandRegistry::adopt`. A
+An action made elsewhere (a panel's show/hide, a submenu, a view switch, a tool on the rail and its Shift + letter
+switch) joins with `CommandRegistry::adopt`. The keys in a `Spec` are the defaults: Edit > Keyboard Shortcuts
+(`KeyboardShortcuts.{h,cpp}`) lets the person change any command's, kept as `shortcuts/<id>` in the settings, so a
+command's id is also its name in a person's settings and `.nekokeys` file (renaming one drops their key for it), and
+what a key runs now is the action's `shortcuts()`, not the `Spec`'s. A
 submenu that lists files or presets as it opens (Open Recent, Apply Style) is marked `commandsDynamic`; its entries
 are not commands. Edit > Search's entries carry the registry id (`PaletteEntry::commandId`), and Recently Used keeps it.
 

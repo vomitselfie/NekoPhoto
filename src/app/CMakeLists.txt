@@ -178,6 +178,8 @@ qt_add_executable(nekophoto
     ModelStore.cpp
     PreferencesDialog.h
     PreferencesDialog.cpp
+    KeyboardShortcuts.h
+    KeyboardShortcuts.cpp
     ToolOptionsBar.h
     ToolOptionsBar.cpp
     Scrub.h

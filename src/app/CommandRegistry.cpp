@@ -25,6 +25,9 @@ QAction* CommandRegistry::adopt(QMenu* menu, QAction* action, Command command) {
     const std::string key = command.id.toStdString();
     if (command.id.isEmpty() || byId_.count(key)) throw std::logic_error("command id missing or used twice: " + key);
     if (menu) menu->addAction(action);
+    // The command's keys are its defaults: given, they are the action's; not given, the action's own are.
+    if (command.shortcuts.isEmpty()) command.shortcuts = action->shortcuts();
+    else action->setShortcuts(command.shortcuts);
     command.action = action;
     command.menuPath = menuPathOf(menu);
     action->setProperty("commandId", command.id);

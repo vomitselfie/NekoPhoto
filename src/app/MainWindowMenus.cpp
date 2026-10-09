@@ -149,47 +149,51 @@ void MainWindow::buildToolRail() {
     rail->setToolButtonStyle(Qt::ToolButtonIconOnly);
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
-    auto tool = [&](Tool t, const QString& label, const QString& iconName, const QKeySequence& key) {
+    // Each tool is a command (tool.<name>) with its letter as its default key, which Edit > Keyboard Shortcuts can
+    // change; a tool whose letter steps its group (Quick Select: Shift+W) has none of its own and names the switch,
+    // whose key its tooltip shows (refreshToolTips).
+    auto tool = [&](Tool t, const char* id, const QString& label, const QString& iconName, const char* key, const char* switchId = nullptr) {
         QAction* a = rail->addAction(toolIcon(iconName), label);
-        a->setToolTip(label + " (" + key.toString() + ")");
         a->setCheckable(true);
-        a->setShortcut(key);
         a->setShortcutContext(Qt::WindowShortcut);
+        a->setProperty("toolLabel", label);
+        if (switchId) a->setProperty("toolSwitch", QString::fromLatin1(switchId));
         group->addAction(a);
+        commands_->adopt(nullptr, a, Spec(id, plainText(label).section(QStringLiteral(" ("), 0, 0), key ? QList<QKeySequence>{QKeySequence(QString::fromLatin1(key))} : QList<QKeySequence>{}).command);
         connect(a, &QAction::triggered, this, [this, t] { session_->selectTool(t); if (t == Tool::Brush) { session_->brushErase = false; emit session_->toolChanged(); } canvas_->setFocus(); groupLast_[toolGroupKey(t)] = t; });
         toolActions_[t] = a;
         return a;
     };
-    tool(Tool::Move, tr("Move / Transform"), "move", QKeySequence("V"))->setChecked(true);
-    tool(Tool::Marquee, tr("Marquee"), "square-dashed", QKeySequence("M"));
-    tool(Tool::Lasso, tr("Lasso"), "lasso", QKeySequence("L"));
-    tool(Tool::Wand, tr("Magic Wand"), "wand-sparkles", QKeySequence("W"));
-    tool(Tool::Scribble, tr("Quick Select"), "scribble", QKeySequence("Shift+W"));   // Photoshop's W group (Shift+W steps through it)
-    tool(Tool::Crop, tr("Crop"), "crop", QKeySequence("C"));
-    tool(Tool::Slice, tr("Slice (drag a slice; drag inside to move it, an edge to resize)"), "slice", QKeySequence("Shift+C"));   // Photoshop's C group
-    tool(Tool::Artboard, tr("Artboard (drag a new artboard; drag inside to move it with its contents, an edge to resize)"), "frame", QKeySequence("Shift+V"));   // Photoshop's V group
+    tool(Tool::Move, "tool.move", tr("Move / Transform"), "move", "V")->setChecked(true);
+    tool(Tool::Marquee, "tool.marquee", tr("Marquee"), "square-dashed", "M");
+    tool(Tool::Lasso, "tool.lasso", tr("Lasso"), "lasso", "L");
+    tool(Tool::Wand, "tool.magicWand", tr("Magic Wand"), "wand-sparkles", "W");
+    tool(Tool::Scribble, "tool.quickSelect", tr("Quick Select"), "scribble", nullptr, "tool.next.wand");   // Photoshop's W group (Shift+W steps through it)
+    tool(Tool::Crop, "tool.crop", tr("Crop"), "crop", "C");
+    tool(Tool::Slice, "tool.slice", tr("Slice (drag a slice; drag inside to move it, an edge to resize)"), "slice", nullptr, "tool.next.crop");   // Photoshop's C group
+    tool(Tool::Artboard, "tool.artboard", tr("Artboard (drag a new artboard; drag inside to move it with its contents, an edge to resize)"), "frame", nullptr, "tool.next.move");   // Photoshop's V group
     rail->addSeparator();
-    tool(Tool::Brush, tr("Brush"), "paintbrush", QKeySequence("B"));
+    tool(Tool::Brush, "tool.brush", tr("Brush"), "paintbrush", "B");
     eraserAction_ = rail->addAction(toolIcon("eraser"), tr("Eraser"));
-    eraserAction_->setToolTip(tr("Eraser (E)"));
+    eraserAction_->setProperty("toolLabel", tr("Eraser"));
     eraserAction_->setCheckable(true);
-    eraserAction_->setShortcut(QKeySequence("E"));
     group->addAction(eraserAction_);
+    commands_->adopt(nullptr, eraserAction_, Spec("tool.eraser", tr("Eraser"), {QKeySequence("E")}).command);
     connect(eraserAction_, &QAction::triggered, this, [this] { session_->brushErase = true; session_->selectTool(Tool::Brush); emit session_->toolChanged(); canvas_->setFocus(); });
-    tool(Tool::SpotHealing, tr("Spot Healing Brush"), "bandage", QKeySequence("J"));
-    tool(Tool::CloneStamp, tr("Clone Stamp (Alt-click sets the source)"), "stamp", QKeySequence("S"));
-    tool(Tool::Smudge, tr("Liquify / Blur / Smudge"), "droplet", QKeySequence("R"));
-    tool(Tool::Dodge, tr("Dodge / Burn / Sponge"), "lollipop", QKeySequence("O"));
-    tool(Tool::Gradient, tr("Gradient"), "blend", QKeySequence("G"));
-    tool(Tool::PaintBucket, tr("Paint Bucket"), "paint-bucket", QKeySequence("Shift+G"));   // Photoshop's G group
-    tool(Tool::Pen, tr("Pen (click corners, drag curves; click the first point or Enter to finish)"), "pen-tool", QKeySequence("P"));
-    tool(Tool::DirectSelect, tr("Direct Selection (drag points, handles or a whole path; Alt-click converts a point)"), "mouse-pointer-2", QKeySequence("A"));
-    tool(Tool::Shape, tr("Shape (Shift-U steps through Rectangle, Ellipse, Polygon, Line, Custom)"), "shapes", QKeySequence("U"));
-    tool(Tool::Text, tr("Text"), "type", QKeySequence("T"));
-    tool(Tool::Eyedropper, tr("Eyedropper"), "pipette", QKeySequence("I"));
+    tool(Tool::SpotHealing, "tool.spotHealing", tr("Spot Healing Brush"), "bandage", "J");
+    tool(Tool::CloneStamp, "tool.cloneStamp", tr("Clone Stamp (Alt-click sets the source)"), "stamp", "S");
+    tool(Tool::Smudge, "tool.blur", tr("Liquify / Blur / Smudge"), "droplet", "R");
+    tool(Tool::Dodge, "tool.dodge", tr("Dodge / Burn / Sponge"), "lollipop", "O");
+    tool(Tool::Gradient, "tool.gradient", tr("Gradient"), "blend", "G");
+    tool(Tool::PaintBucket, "tool.paintBucket", tr("Paint Bucket"), "paint-bucket", nullptr, "tool.next.gradient");   // Photoshop's G group
+    tool(Tool::Pen, "tool.pen", tr("Pen (click corners, drag curves; click the first point or Enter to finish)"), "pen-tool", "P");
+    tool(Tool::DirectSelect, "tool.directSelection", tr("Direct Selection (drag points, handles or a whole path; Alt-click converts a point)"), "mouse-pointer-2", "A");
+    tool(Tool::Shape, "tool.shape", tr("Shape (Shift-U steps through Rectangle, Ellipse, Polygon, Line, Custom)"), "shapes", "U");
+    tool(Tool::Text, "tool.type", tr("Text"), "type", "T");
+    tool(Tool::Eyedropper, "tool.eyedropper", tr("Eyedropper"), "pipette", "I");
     rail->addSeparator();
-    tool(Tool::Hand, tr("Hand"), "hand", QKeySequence("H"));
-    tool(Tool::Zoom, tr("Zoom"), "zoom-in", QKeySequence("Z"));
+    tool(Tool::Hand, "tool.hand", tr("Hand"), "hand", "H");
+    tool(Tool::Zoom, "tool.zoom", tr("Zoom"), "zoom-in", "Z");
     rail->addSeparator();
     swatches_ = new ColorSwatches;
     // Photoshop's spring-loaded tool keys: a tool's letter held a moment (or held while the tool is used) goes back
@@ -247,21 +251,21 @@ void MainWindow::buildToolRail() {
     addToolBar(Qt::LeftToolBarArea, rail);
     // Shift-letter switches a tool's kind without leaving it.
     // Each springs back when held, as the plain letters do, and does not repeat while held.
-    auto kindKey = [this, springs](const QString& key, auto slot) {
-        auto* a = new QAction(this);
-        a->setShortcut(QKeySequence(key));
+    // Each is a command (tool.next.<group>) whose key Edit > Keyboard Shortcuts can change.
+    auto kindKey = [this, springs](const char* id, const QString& label, const char* key, auto slot) {
+        auto* a = new QAction(label, this);
         a->setAutoRepeat(false);
         a->installEventFilter(springs);
         connect(a, &QAction::triggered, this, slot);
         addAction(a);
+        commands_->adopt(nullptr, a, Spec(id, label, {QKeySequence(QString::fromLatin1(key))}).command);
     };
-    kindKey("Shift+M", [this] { session_->marqueeKind = session_->marqueeKind == MarqueeKind::Rectangle ? MarqueeKind::Ellipse : MarqueeKind::Rectangle; session_->selectTool(Tool::Marquee); emit session_->toolChanged(); });
-    kindKey("Shift+L", [this] { session_->lassoKind = session_->lassoKind == LassoKind::Freehand ? LassoKind::Polygonal : LassoKind::Freehand; canvas_->cancelLasso(); session_->selectTool(Tool::Lasso); emit session_->toolChanged(); });
-    kindKey("Shift+U", [this] { session_->selectTool(Tool::Shape); session_->toggleShapeKind(); });
+    kindKey("tool.next.marquee", tr("Next in the Marquee group (Rectangle, Ellipse)"), "Shift+M", [this] { session_->marqueeKind = session_->marqueeKind == MarqueeKind::Rectangle ? MarqueeKind::Ellipse : MarqueeKind::Rectangle; session_->selectTool(Tool::Marquee); emit session_->toolChanged(); });
+    kindKey("tool.next.lasso", tr("Next in the Lasso group (Freehand, Polygonal)"), "Shift+L", [this] { session_->lassoKind = session_->lassoKind == LassoKind::Freehand ? LassoKind::Polygonal : LassoKind::Freehand; canvas_->cancelLasso(); session_->selectTool(Tool::Lasso); emit session_->toolChanged(); });
+    kindKey("tool.next.shape", tr("Next in the Shape group (Rectangle, Ellipse, Polygon, Line, Custom)"), "Shift+U", [this] { session_->selectTool(Tool::Shape); session_->toggleShapeKind(); });
     // Photoshop's Shift+letter tool switch: the next tool of the letter's group (from another tool, the one after
     // the group's last used). Groups of one tool select it; tools that hold a group as kinds step the kind, as
     // Shift+M, Shift+L and Shift+U above do.
-    for (Tool t : {Tool::Scribble, Tool::Slice, Tool::Artboard, Tool::PaintBucket}) toolActions_[t]->setShortcut(QKeySequence());
     auto cycleTools = [this](std::vector<Tool> tools) {
         const Tool current = session_->tool();
         auto at = std::find(tools.begin(), tools.end(), current);
@@ -269,14 +273,14 @@ void MainWindow::buildToolRail() {
         const Tool next = at == tools.end() ? tools.front() : *(++at == tools.end() ? tools.begin() : at);
         toolActions_[next]->trigger();
     };
-    kindKey("Shift+V", [cycleTools] { cycleTools({Tool::Move, Tool::Artboard}); });
-    kindKey("Shift+W", [cycleTools] { cycleTools({Tool::Wand, Tool::Scribble}); });
-    kindKey("Shift+C", [cycleTools] { cycleTools({Tool::Crop, Tool::Slice}); });
-    kindKey("Shift+G", [cycleTools] { cycleTools({Tool::Gradient, Tool::PaintBucket}); });
-    kindKey("Shift+P", [this] { toolActions_[Tool::Pen]->trigger(); });
-    kindKey("Shift+T", [this] { toolActions_[Tool::Text]->trigger(); });
+    kindKey("tool.next.move", tr("Next in the Move group (Move, Artboard)"), "Shift+V", [cycleTools] { cycleTools({Tool::Move, Tool::Artboard}); });
+    kindKey("tool.next.wand", tr("Next in the Magic Wand group (Magic Wand, Quick Select)"), "Shift+W", [cycleTools] { cycleTools({Tool::Wand, Tool::Scribble}); });
+    kindKey("tool.next.crop", tr("Next in the Crop group (Crop, Slice)"), "Shift+C", [cycleTools] { cycleTools({Tool::Crop, Tool::Slice}); });
+    kindKey("tool.next.gradient", tr("Next in the Gradient group (Gradient, Paint Bucket)"), "Shift+G", [cycleTools] { cycleTools({Tool::Gradient, Tool::PaintBucket}); });
+    kindKey("tool.next.pen", tr("Next in the Pen group"), "Shift+P", [this] { toolActions_[Tool::Pen]->trigger(); });
+    kindKey("tool.next.type", tr("Next in the Type group"), "Shift+T", [this] { toolActions_[Tool::Text]->trigger(); });
     // The J group: Spot Healing (its three types), Healing Brush, Patch, Content-Aware Move.
-    kindKey("Shift+J", [this] {
+    kindKey("tool.next.healing", tr("Next in the Healing group (Spot Healing, Healing Brush, Patch, Content-Aware Move)"), "Shift+J", [this] {
         int& mode = session_->spotHealingMode;
         if (mode <= 2) { spotHealingType_ = mode; mode = 3; }
         else mode = mode >= 5 ? spotHealingType_ : mode + 1;
@@ -284,13 +288,13 @@ void MainWindow::buildToolRail() {
         emit session_->toolChanged();
     });
     // The O group: Dodge, Burn, Sponge.
-    kindKey("Shift+O", [this] {
+    kindKey("tool.next.toning", tr("Next in the Dodge group (Dodge, Burn, Sponge)"), "Shift+O", [this] {
         session_->toning.kind = compositor::ToningKind((int(session_->toning.kind) + 1) % 3);
         toolActions_[Tool::Dodge]->trigger();
         emit session_->toolChanged();
     });
     // The R tool's modes in the order of Photoshop's Blur, Sharpen, Smudge group, then Liquify.
-    kindKey("Shift+R", [this] {
+    kindKey("tool.next.blur", tr("Next in the Blur group (Blur, Sharpen, Smudge, Liquify)"), "Shift+R", [this] {
         static const BlurToolMode order[] = {BlurToolMode::Blur, BlurToolMode::Sharpen, BlurToolMode::Smudge, BlurToolMode::Liquify};
         const auto at = std::find(std::begin(order), std::end(order), session_->blurMode);
         session_->blurMode = at == std::end(order) || at + 1 == std::end(order) ? order[0] : *(at + 1);
@@ -506,6 +510,9 @@ void MainWindow::buildMenus() {
     // Photoshop's Edit > Search (Ctrl+F): every command, tool and G'MIC filter by name.
     searchAction_ = add(edit, Spec("edit.search", tr("&Search…"), {QKeySequence("Ctrl+F")}).runs([this] { showCommandPalette(); }));
     searchAction_->setObjectName("edit.search");
+    // Photoshop's Edit > Keyboard Shortcuts… (Alt+Shift+Ctrl+K): every command's, tool's and panel's keys.
+    add(edit, Spec("edit.keyboardShortcuts", tr("&Keyboard Shortcuts…"), {QKeySequence("Ctrl+Alt+Shift+K")}).runs([this] { showKeyboardShortcuts(); }))
+        ->setObjectName("edit.keyboardShortcuts");
     // Photoshop's Ctrl+K, and the platform's own Preferences key where it has one.
     QList<QKeySequence> preferenceKeys{QKeySequence("Ctrl+K")};
     for (const QKeySequence& key : QKeySequence::keyBindings(QKeySequence::Preferences)) if (!preferenceKeys.contains(key)) preferenceKeys << key;

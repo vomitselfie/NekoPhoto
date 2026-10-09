@@ -17,6 +17,7 @@
 #include "HistogramPanel.h"
 #include "TextDialog.h"
 #include "PreferencesDialog.h"
+#include "KeyboardShortcuts.h"
 #include "ToolOptionsBar.h"
 #include "WelcomeDialog.h"
 #include <QApplication>
@@ -249,6 +250,7 @@ MainWindow::MainWindow() {
     });
     buildToolRail();
     buildMenus();
+    applyShortcuts();   // the person's keys over the defaults (Edit > Keyboard Shortcuts)
     addTab(false);
     switchTo(0);
     // Size to the screen: the default 1400x900, or less on small or scaled displays, and never off-screen.
@@ -660,6 +662,43 @@ void MainWindow::showPreferences() {
     connect(dialog, &PreferencesDialog::backgroundRemovalChanged, this, &MainWindow::refreshBackgroundAction);
     connect(dialog, &PreferencesDialog::autosaveIntervalChanged, this, [this](int minutes) { if (autosave_) autosave_->setInterval(minutes); });
     dialog->show();
+}
+
+void MainWindow::showKeyboardShortcuts() {
+    auto* dialog = new KeyboardShortcutsDialog(*commands_, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &QDialog::accepted, this, [this, dialog] { setShortcuts(dialog->overrides()); });
+    dialog->open();
+}
+
+void MainWindow::applyShortcuts() {
+    QSettings settings;
+    shortcuts::apply(*commands_, shortcuts::resolve(*commands_, shortcuts::load(settings)));
+    refreshToolTips();
+}
+
+void MainWindow::setShortcuts(const std::map<QString, QList<QKeySequence>>& overrides) {
+    {
+        QSettings settings;
+        shortcuts::save(settings, overrides);
+    }
+    applyShortcuts();
+}
+
+void MainWindow::refreshToolTips() {
+    // "Brush (B)": the tool's key, or for a tool that has none the key of the switch that steps its group to it.
+    QList<QAction*> tools = toolActions_.values();
+    if (eraserAction_) tools << eraserAction_;
+    for (QAction* a : tools) {
+        QKeySequence key = a->shortcut();
+        if (key.isEmpty())
+            if (const Command* c = commands_->find(a->property("toolSwitch").toString()); c && c->action) key = c->action->shortcut();
+        const QString label = a->property("toolLabel").toString();
+        const QString tip = key.isEmpty() ? label : label + QStringLiteral(" (") + key.toString(QKeySequence::NativeText) + QStringLiteral(")");
+        // A tool greyed for the document's depth shows why until it is not, when its own tooltip (depthTip) comes back.
+        if (a->property("depthTip").isValid()) a->setProperty("depthTip", tip);
+        else a->setToolTip(tip);
+    }
 }
 
 void MainWindow::selectSubject() {

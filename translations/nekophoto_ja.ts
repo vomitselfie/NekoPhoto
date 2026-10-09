@@ -5910,6 +5910,202 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::KeyCaptureEdit</name>
+    <message>
+        <source>Press a key</source>
+        <translation>キーを押してください</translation>
+    </message>
+</context>
+<context>
+    <name>app::KeyboardShortcutsDialog</name>
+    <message>
+        <source>Press a key with its modifiers.</source>
+        <translation>修飾キーと一緒にキーを押してください。</translation>
+    </message>
+    <message>
+        <source>A shortcut is one key with its modifiers, not a sequence of keys.</source>
+        <translation>ショートカットは修飾キーと 1 つのキーの組み合わせです。複数のキーを続けて押すものは使えません。</translation>
+    </message>
+    <message>
+        <source>A modifier alone cannot be a shortcut: hold it with another key.</source>
+        <translation>修飾キーだけではショートカットにできません。ほかのキーと一緒に押してください。</translation>
+    </message>
+    <message>
+        <source>Esc cancels what is in progress (a transform, a crop, typing) and closes dialogs, so it cannot be a shortcut.</source>
+        <translation>Esc は実行中の操作(変形、切り抜き、テキスト入力)を取り消し、ダイアログを閉じるため、ショートカットにはできません。</translation>
+    </message>
+    <message>
+        <source>Enter commits what is in progress (a transform, a crop, a path, typing), so it cannot be a shortcut.</source>
+        <translation>Enter は実行中の操作(変形、切り抜き、パス、テキスト入力)を確定するため、ショートカットにはできません。</translation>
+    </message>
+    <message>
+        <source>Tab moves between fields; use it with Ctrl.</source>
+        <translation>Tab は入力欄の移動に使います。Ctrl と一緒に使ってください。</translation>
+    </message>
+    <message>
+        <source>Space held pans the view (with Ctrl or Alt, zooms), so it cannot be a shortcut.</source>
+        <translation>Space を押している間は表示をスクロールする(Ctrl または Alt と一緒ならズーム)ため、ショートカットにはできません。</translation>
+    </message>
+    <message>
+        <source>The arrow keys nudge the selection, the layer or the selected pixels (with Shift, Ctrl or both); use them with Alt.</source>
+        <translation>矢印キーは選択範囲、レイヤー、選択したピクセルを少しずつ移動します(Shift、Ctrl、またはその両方と一緒でも)。Alt と一緒に使ってください。</translation>
+    </message>
+    <message>
+        <source>[ and ] change the brush&apos;s size (with Shift, its hardness); use them with Ctrl or Alt.</source>
+        <translation>[ と ] はブラシの直径を変えます(Shift と一緒なら硬さ)。Ctrl または Alt と一緒に使ってください。</translation>
+    </message>
+    <message>
+        <source>The digits set the tool&apos;s opacity; use them with Ctrl or Alt.</source>
+        <translation>数字キーはツールの不透明度を設定します。Ctrl または Alt と一緒に使ってください。</translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+&lt; and &gt; step the type size.</source>
+        <translation>Ctrl+Shift+&lt; と &gt; は文字サイズを変更します。</translation>
+    </message>
+    <message>
+        <source>This is not a NekoPhoto keyboard shortcuts file.</source>
+        <translation>NekoPhoto のキーボードショートカットのファイルではありません。</translation>
+    </message>
+    <message>
+        <source>This keyboard shortcuts file is from a newer version of NekoPhoto.</source>
+        <translation>このキーボードショートカットのファイルは新しいバージョンの NekoPhoto で作成されています。</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>キーボードショートカット</translation>
+    </message>
+    <message>
+        <source>Click a command, then click its shortcut and press the keys. Shortcuts for the tools are single letters; menu commands usually use Ctrl.</source>
+        <translation>コマンドをクリックし、そのショートカットをクリックしてキーを押してください。ツールのショートカットは 1 文字、メニューコマンドは通常 Ctrl を使います。</translation>
+    </message>
+    <message>
+        <source>Search commands and keys</source>
+        <translation>コマンドとキーを検索</translation>
+    </message>
+    <message>
+        <source>Command</source>
+        <translation>コマンド</translation>
+    </message>
+    <message>
+        <source>Shortcut</source>
+        <translation>ショートカット</translation>
+    </message>
+    <message>
+        <source>Add Shortcut</source>
+        <translation>ショートカットを追加</translation>
+    </message>
+    <message>
+        <source>Use Default</source>
+        <translation>初期設定を使用</translation>
+    </message>
+    <message>
+        <source>This command&apos;s default keys, taken from the commands that have them now</source>
+        <translation>このコマンドの初期設定のキー(現在ほかのコマンドにあれば、そこから取り戻します)</translation>
+    </message>
+    <message>
+        <source>Take It</source>
+        <translation>取得</translation>
+    </message>
+    <message>
+        <source>Move the key to this command; the other command loses it</source>
+        <translation>キーをこのコマンドに移します。もう一方のコマンドからは外れます</translation>
+    </message>
+    <message>
+        <source>Cancel Change</source>
+        <translation>変更をキャンセル</translation>
+    </message>
+    <message>
+        <source>Use Default for All</source>
+        <translation>すべて初期設定を使用</translation>
+    </message>
+    <message>
+        <source>Import…</source>
+        <translation>読み込み...</translation>
+    </message>
+    <message>
+        <source>Import Keyboard Shortcuts</source>
+        <translation>キーボードショートカットを読み込み</translation>
+    </message>
+    <message>
+        <source>Keyboard shortcuts (*.nekokeys)</source>
+        <translation>キーボードショートカット (*.nekokeys)</translation>
+    </message>
+    <message>
+        <source>Export…</source>
+        <translation>書き出し...</translation>
+    </message>
+    <message>
+        <source>Export Keyboard Shortcuts</source>
+        <translation>キーボードショートカットを書き出し</translation>
+    </message>
+    <message>
+        <source>Exported the changed shortcuts to %1.</source>
+        <translation>変更したショートカットを %1 に書き出しました。</translation>
+    </message>
+    <message>
+        <source>Tools</source>
+        <translation>ツール</translation>
+    </message>
+    <message>
+        <source>Other Keys</source>
+        <translation>その他のキー</translation>
+    </message>
+    <message>
+        <source>Choose a command to change its shortcuts.</source>
+        <translation>ショートカットを変更するコマンドを選んでください。</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>削除</translation>
+    </message>
+    <message>
+        <source>Remove this shortcut</source>
+        <translation>このショートカットを削除</translation>
+    </message>
+    <message>
+        <source>No shortcut. Add Shortcut gives it one.</source>
+        <translation>ショートカットはありません。「ショートカットを追加」で設定できます。</translation>
+    </message>
+    <message>
+        <source>%1 is already a shortcut of this command.</source>
+        <translation>%1 はすでにこのコマンドのショートカットです。</translation>
+    </message>
+    <message>
+        <source>%1 is already the shortcut of %2. Take it from that command, or cancel the change?</source>
+        <translation>%1 はすでに %2 のショートカットです。そのコマンドから取得しますか、それとも変更をキャンセルしますか?</translation>
+    </message>
+    <message>
+        <source>%1 moved from %2.</source>
+        <translation>%1 を %2 から移しました。</translation>
+    </message>
+    <message>
+        <source>%1 from %2</source>
+        <translation>%2 から %1</translation>
+    </message>
+    <message>
+        <source>Taken back: %1.</source>
+        <translation>取り戻しました:%1。</translation>
+    </message>
+    <message>
+        <source>Couldn’t read %1.</source>
+        <translation>%1 を読み込めませんでした。</translation>
+    </message>
+    <message numerus="yes">
+        <source>Imported the shortcuts; %n command(s) in the file are not in this version.</source>
+        <translation>
+            <numerusform>ショートカットを読み込みました。ファイル内の %n 個のコマンドはこのバージョンにありません。</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Imported the shortcuts.</source>
+        <translation>ショートカットを読み込みました。</translation>
+    </message>
+    <message>
+        <source>Couldn’t write %1.</source>
+        <translation>%1 を書き込めませんでした。</translation>
+    </message>
+</context>
+<context>
     <name>app::LayerStyleDialog</name>
     <message>
         <source>Bevel &amp; Emboss</source>
@@ -7559,10 +7755,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>消しゴム</translation>
     </message>
     <message>
-        <source>Eraser (E)</source>
-        <translation>消しゴム (E)</translation>
-    </message>
-    <message>
         <source>Spot Healing Brush</source>
         <translation>スポット修復ブラシ</translation>
     </message>
@@ -7709,6 +7901,54 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>E&amp;xport Animated GIF…</source>
         <translation>アニメーション GIF を書き出し(&amp;X)...</translation>
+    </message>
+    <message>
+        <source>Next in the Marquee group (Rectangle, Ellipse)</source>
+        <translation>選択範囲ツールグループの次(長方形、楕円形)</translation>
+    </message>
+    <message>
+        <source>Next in the Lasso group (Freehand, Polygonal)</source>
+        <translation>なげなわツールグループの次(フリーハンド、多角形)</translation>
+    </message>
+    <message>
+        <source>Next in the Shape group (Rectangle, Ellipse, Polygon, Line, Custom)</source>
+        <translation>シェイプツールグループの次(長方形、楕円形、多角形、ライン、カスタム)</translation>
+    </message>
+    <message>
+        <source>Next in the Move group (Move, Artboard)</source>
+        <translation>移動ツールグループの次(移動、アートボード)</translation>
+    </message>
+    <message>
+        <source>Next in the Magic Wand group (Magic Wand, Quick Select)</source>
+        <translation>自動選択ツールグループの次(自動選択、クイック選択)</translation>
+    </message>
+    <message>
+        <source>Next in the Crop group (Crop, Slice)</source>
+        <translation>切り抜きツールグループの次(切り抜き、スライス)</translation>
+    </message>
+    <message>
+        <source>Next in the Gradient group (Gradient, Paint Bucket)</source>
+        <translation>グラデーションツールグループの次(グラデーション、塗りつぶし)</translation>
+    </message>
+    <message>
+        <source>Next in the Pen group</source>
+        <translation>ペンツールグループの次</translation>
+    </message>
+    <message>
+        <source>Next in the Type group</source>
+        <translation>文字ツールグループの次</translation>
+    </message>
+    <message>
+        <source>Next in the Healing group (Spot Healing, Healing Brush, Patch, Content-Aware Move)</source>
+        <translation>修復ツールグループの次(スポット修復ブラシ、修復ブラシ、パッチ、コンテンツに応じた移動)</translation>
+    </message>
+    <message>
+        <source>Next in the Dodge group (Dodge, Burn, Sponge)</source>
+        <translation>覆い焼きツールグループの次(覆い焼き、焼き込み、スポンジ)</translation>
+    </message>
+    <message>
+        <source>Next in the Blur group (Blur, Sharpen, Smudge, Liquify)</source>
+        <translation>ぼかしツールグループの次(ぼかし、シャープ、指先、ゆがみ)</translation>
     </message>
     <message>
         <source>Colours</source>
@@ -7893,6 +8133,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Search…</source>
         <translation>検索(&amp;S)...</translation>
+    </message>
+    <message>
+        <source>&amp;Keyboard Shortcuts…</source>
+        <translation>キーボードショートカット(&amp;K)...</translation>
     </message>
     <message>
         <source>Prefere&amp;nces…</source>

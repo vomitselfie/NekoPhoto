@@ -26,6 +26,8 @@
 #include "ChannelsPanel.h"
 #include "CommandPalette.h"
 #include "CommandRegistry.h"
+#include "KeyboardShortcuts.h"
+#include <QTreeWidget>
 #include "ContentAwareScaleDialog.h"
 #include "Gmic.h"
 #include "GmicDialog.h"
@@ -1868,6 +1870,193 @@ int preferences(MainWindow& w) {
     return failures;
 }
 
+/// Edit > Keyboard Shortcuts: a command and a tool given other keys (which then run them, and Edit > Search and the
+/// tool's tooltip show), keys refused, a key another command has taken from it only when asked, Use Default for one
+/// command and for all, the changes kept in the settings and applied again from them as at a restart, an export
+/// imported back, a hand-edited clash resolved, and the registry's one-action-per-key check passing throughout.
+int keyboardShortcuts(MainWindow& w) {
+    int failures = 0;
+    auto expect = [&](bool ok, const QString& what) { if (!ok) { std::fprintf(stderr, "shortcuts: %s\n", qPrintable(what)); failures++; } };
+    const CommandRegistry& reg = w.commandRegistry();
+    auto keysOf = [&](const char* id) {
+        const Command* c = reg.find(QString::fromLatin1(id));
+        QStringList out;
+        if (c && c->action) for (const QKeySequence& k : c->action->shortcuts()) out << shortcuts::portable(k);
+        return out.join(QStringLiteral(" | "));
+    };
+    auto dialogKeys = [](const KeyboardShortcutsDialog& d, const char* id) {
+        QStringList out;
+        for (const QKeySequence& k : d.keys().at(QString::fromLatin1(id))) out << shortcuts::portable(k);
+        return out.join(QStringLiteral(" | "));
+    };
+    // Held open for the whole test: the settings stay in memory even where the file cannot be written.
+    QSettings held;
+    held.remove(QStringLiteral("shortcuts"));
+    w.applyShortcuts();
+    EditorSession& s = *w.session();
+    buildDemoDocument(s);
+    w.show();
+    w.activateWindow();
+    QApplication::processEvents();
+    expect(registry(w) == 0, "the defaults fail the registry's check");
+
+    // The menu item opens the dialog.
+    QAction* item = menuItem(w, {"Edit", "Keyboard Shortcuts…"});
+    expect(item && shortcuts::portable(item->shortcut()) == QLatin1String("Ctrl+Alt+Shift+K"), "Edit > Keyboard Shortcuts… is not there with Alt+Shift+Ctrl+K");
+    if (item) item->trigger();
+    QApplication::processEvents();
+    auto* dialog = w.findChild<KeyboardShortcutsDialog*>();
+    if (!dialog) { std::fprintf(stderr, "shortcuts: the dialog did not open\n"); return 1; }
+
+    // A command's key changed, a tool's letter changed, a second key added.
+    dialog->select(QStringLiteral("layer.new"));
+    expect(dialog->assign("layer.new", 0, QKeySequence("Ctrl+Alt+Shift+F2")), "Ctrl+Alt+Shift+F2 was not given to New Layer: " + dialog->message());
+    expect(dialogKeys(*dialog, "layer.new") == QLatin1String("Ctrl+Alt+Shift+F2"), "New Layer has " + dialogKeys(*dialog, "layer.new"));
+    expect(dialog->assign("tool.brush", 0, QKeySequence("Y")), "Y was not given to the Brush");
+    expect(dialog->assign("layer.duplicate", 5, QKeySequence("Ctrl+Alt+Shift+F3")), "a key was not added to Duplicate Layer");
+    // Refused, saying why, and nothing changed.
+    for (const QKeySequence& refused : {QKeySequence(Qt::Key_Escape), QKeySequence(Qt::Key_Control), QKeySequence(Qt::Key_Return), QKeySequence(Qt::Key_Tab),
+                                        QKeySequence(Qt::Key_Space), QKeySequence(Qt::Key_5), QKeySequence(Qt::Key_BracketLeft), QKeySequence(Qt::Key_Left),
+                                        QKeySequence(Qt::CTRL | Qt::Key_Space), QKeySequence("Ctrl+K, Ctrl+L")}) {
+        expect(!dialog->assign("layer.new", 0, refused) && !dialog->message().isEmpty(), refused.toString() + " was not refused with a message");
+        expect(dialogKeys(*dialog, "layer.new") == QLatin1String("Ctrl+Alt+Shift+F2"), "a refused key changed New Layer's keys");
+    }
+    // A key Group Layers has: named, and moved only when taken; cancelled, nothing changes.
+    expect(!dialog->assign("layer.viaCopy", 1, QKeySequence("Ctrl+G")) && dialog->conflict() == QLatin1String("layer.group"), "Ctrl+G did not say Group Layers has it");
+    expect(dialog->message().contains(QStringLiteral("Group Layers")), "the conflict does not name Group Layers: " + dialog->message());
+    dialog->cancelConflict();
+    expect(dialogKeys(*dialog, "layer.group") == QLatin1String("Ctrl+G") && dialogKeys(*dialog, "layer.viaCopy") == QLatin1String("Ctrl+J"), "a cancelled conflict changed the keys");
+    dialog->assign("layer.viaCopy", 1, QKeySequence("Ctrl+G"));
+    dialog->takeConflicting();
+    expect(dialogKeys(*dialog, "layer.viaCopy") == QLatin1String("Ctrl+J | Ctrl+G") && dialogKeys(*dialog, "layer.group").isEmpty(),
+           "taking Ctrl+G gave Layer via Copy " + dialogKeys(*dialog, "layer.viaCopy") + " and Group Layers " + dialogKeys(*dialog, "layer.group"));
+    // Use Default for Group Layers takes Ctrl+G back; then it is moved again, and a key removed.
+    dialog->resetCommand(QStringLiteral("layer.group"));
+    expect(dialogKeys(*dialog, "layer.group") == QLatin1String("Ctrl+G") && dialogKeys(*dialog, "layer.viaCopy") == QLatin1String("Ctrl+J"), "Use Default did not take Ctrl+G back");
+    dialog->assign("layer.viaCopy", 1, QKeySequence("Ctrl+G"));
+    dialog->takeConflicting();
+    dialog->removeKey(QStringLiteral("edit.colorSettings"), 0);
+    expect(dialogKeys(*dialog, "edit.colorSettings").isEmpty(), "Color Settings' key was not removed");
+    // The search finds a command by its new key.
+    dialog->setFilter(QStringLiteral("F2"));
+    int shown = 0;
+    if (auto* tree = dialog->findChild<QTreeWidget*>(QStringLiteral("shortcutTree")))
+        for (QTreeWidgetItemIterator it(tree); *it; ++it) if (!(*it)->isHidden() && !(*it)->data(0, Qt::UserRole).toString().isEmpty()) shown++;
+    expect(shown == 1, QStringLiteral("searching F2 shows %1 commands").arg(shown));
+    dialog->setFilter(QString());
+    const shortcuts::KeyMap wanted = dialog->overrides();
+    expect(wanted.size() == 6, QStringLiteral("%1 commands changed, expected 6").arg(wanted.size()));
+    dialog->accept();
+    QApplication::processEvents();
+
+    // Applied: the keys run them, the old ones do not; Search and the tooltip show the new keys; no key is two actions'.
+    expect(keysOf("layer.new") == QLatin1String("Ctrl+Alt+Shift+F2") && keysOf("tool.brush") == QLatin1String("Y") && keysOf("layer.group").isEmpty()
+               && keysOf("layer.viaCopy") == QLatin1String("Ctrl+J | Ctrl+G") && keysOf("layer.duplicate") == QLatin1String("Ctrl+Alt+Shift+F3") && keysOf("edit.colorSettings").isEmpty(),
+           "OK did not apply the keys");
+    expect(registry(w) == 0, "the person's keys fail the registry's check");
+    CanvasWidget* canvas = w.canvasAt(w.currentTabIndex());
+    auto press = [](QWidget* target, int key, Qt::KeyboardModifiers modifiers, const QString& text = QString()) {
+        if (qt_sendShortcutOverrideEvent(target, 0, key, modifiers, text, false, 1)) return true;
+        QKeyEvent e(QEvent::KeyPress, key, modifiers, text);
+        QApplication::sendEvent(target, &e);
+        return false;
+    };
+    if (canvas) {
+        w.activateWindow();   // back from the dialog
+        canvas->setFocus();
+        QApplication::processEvents();
+        const size_t layers = s.document()->layers.size();
+        expect(press(canvas, Qt::Key_F2, Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier) && s.document()->layers.size() == layers + 1, "Ctrl+Alt+Shift+F2 did not make a layer");
+        expect(!press(canvas, Qt::Key_N, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral("N")) && s.document()->layers.size() == layers + 1, "Ctrl+Shift+N still made a layer");
+        s.selectTool(Tool::Move);
+        expect(press(canvas, Qt::Key_Y, Qt::NoModifier, QStringLiteral("y")) && s.tool() == Tool::Brush && !s.brushErase, "Y did not choose the Brush");
+        QKeyEvent up(QEvent::KeyRelease, Qt::Key_Y, Qt::NoModifier, QStringLiteral("y"));
+        QApplication::sendEvent(canvas, &up);
+        s.selectTool(Tool::Move);
+        press(canvas, Qt::Key_B, Qt::NoModifier, QStringLiteral("b"));
+        expect(s.tool() == Tool::Move, "B still chose the Brush");
+        // Typing on the canvas still takes the letter the Brush now has.
+        s.selectTool(Tool::Text);
+        if (canvas->startNewType(QPointF(100, 100), std::nullopt)) {
+            expect(!press(canvas, Qt::Key_Y, Qt::NoModifier, QStringLiteral("y")) && s.tool() == Tool::Text, "a shortcut took Y while typing");
+            canvas->cancelType();
+        } else expect(false, "could not start typing");
+        s.selectTool(Tool::Move);
+    }
+    {
+        bool searched = false, tool = false;
+        for (const PaletteEntry& e : w.paletteEntries()) {
+            if (e.commandId == QLatin1String("layer.new")) searched = e.shortcut == QKeySequence("Ctrl+Alt+Shift+F2").toString(QKeySequence::NativeText);
+            if (e.id == QLatin1String("tool:Brush")) tool = e.shortcut == QLatin1String("Y");
+        }
+        expect(searched, "Edit > Search does not show New Layer's new key");
+        expect(tool, "Edit > Search does not show the Brush's new key");
+        for (QToolBar* bar : w.findChildren<QToolBar*>())
+            for (QAction* a : bar->actions())
+                if (a == reg.find(QStringLiteral("tool.brush"))->action) expect(a->toolTip() == QLatin1String("Brush (Y)"), "the Brush's tooltip is " + a->toolTip());
+    }
+
+    // Kept: the settings hold the changes (Group Layers' and Color Settings' as no key), read back by another
+    // QSettings, and applied again from them after the keys went back to the defaults (as at the next start).
+    {
+        QSettings settings;
+        settings.sync();
+        if (settings.status() != QSettings::NoError) std::printf("shortcuts: the settings file could not be written here; checked in memory\n");
+        expect(settings.contains(QStringLiteral("shortcuts/layer.group")) && settings.contains(QStringLiteral("shortcuts/edit.colorSettings")), "a removed key is not kept as an empty list");
+    }
+    {
+        QSettings again;
+        const shortcuts::KeyMap read = shortcuts::load(again);
+        expect(shortcuts::toJson(read) == shortcuts::toJson(wanted), "the settings read back other keys:\n" + QString::fromUtf8(shortcuts::toJson(read)));
+    }
+    shortcuts::apply(reg, shortcuts::resolve(reg, {}));
+    expect(keysOf("layer.new") == QLatin1String("Ctrl+Shift+N") && keysOf("layer.group") == QLatin1String("Ctrl+G"), "the defaults did not come back");
+    w.applyShortcuts();
+    expect(keysOf("layer.new") == QLatin1String("Ctrl+Alt+Shift+F2") && keysOf("layer.group").isEmpty() && keysOf("tool.brush") == QLatin1String("Y"), "the saved keys were not applied again");
+
+    // Exported, then imported into a dialog reset to the defaults: the same changes.
+    QTemporaryDir dir;
+    const QString file = dir.filePath(QStringLiteral("mine.nekokeys"));
+    {
+        KeyboardShortcutsDialog d(reg, &w);
+        QString error;
+        expect(d.exportFile(file, &error), "export failed: " + error);
+        d.resetAll();
+        expect(d.overrides().empty(), "Use Default for All left changes");
+        expect(d.importFile(file, &error), "import failed: " + error);
+        expect(shortcuts::toJson(d.overrides()) == shortcuts::toJson(wanted), "the import gave other keys");
+        expect(!d.importFile(QStringLiteral(":/nothing-there.nekokeys"), &error) && !error.isEmpty(), "importing a missing file did not fail");
+    }
+
+    // A hand-edited clash (New Layer given Ctrl+J, Layer via Copy's): one action keeps it, the check still passes.
+    {
+        QSettings settings;
+        settings.setValue(QStringLiteral("shortcuts/layer.new"), QStringList{QStringLiteral("Ctrl+J")});
+    }
+    w.applyShortcuts();
+    expect(keysOf("layer.new") == QLatin1String("Ctrl+J") && !keysOf("layer.viaCopy").contains(QStringLiteral("Ctrl+J")), "the clash left Ctrl+J on " + keysOf("layer.viaCopy"));
+    expect(registry(w) == 0, "a hand-edited clash fails the registry's check");
+
+    // Use Default for All, then OK: no changes saved, every default back.
+    w.showKeyboardShortcuts();
+    QApplication::processEvents();
+    if (auto* d = w.findChild<KeyboardShortcutsDialog*>()) {
+        d->resetAll();
+        d->accept();
+        QApplication::processEvents();
+    } else expect(false, "the dialog did not open again");
+    {
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("shortcuts"));
+        expect(settings.childKeys().isEmpty(), "Use Default for All left saved shortcuts");
+    }
+    expect(keysOf("layer.new") == QLatin1String("Ctrl+Shift+N") && keysOf("layer.group") == QLatin1String("Ctrl+G") && keysOf("layer.viaCopy") == QLatin1String("Ctrl+J")
+               && keysOf("tool.brush") == QLatin1String("B") && keysOf("edit.colorSettings") == QLatin1String("Ctrl+Shift+K"), "Use Default for All did not bring the defaults back");
+    expect(registry(w) == 0, "the defaults fail the registry's check after a reset");
+    std::printf("keyboard shortcuts: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
 int workCounters(MainWindow& window);   // SelfTestWork.cpp
 
 int runSelfTest(MainWindow& window, const QString& name) {
@@ -1884,7 +2073,8 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("export-as")) return exportAs(window);
     if (name == QLatin1String("preferences")) return preferences(window);
     if (name == QLatin1String("work-counters")) return workCounters(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters)\n", qPrintable(name));
+    if (name == QLatin1String("shortcuts")) return keyboardShortcuts(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts)\n", qPrintable(name));
     return 2;
 }
 
