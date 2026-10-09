@@ -50,7 +50,8 @@ display scale, on a 4000 × 3000 document of five layers:
   press and per move (the dab's box and the canvas's 2-pixel margin), the release renders nothing
   (`documentChangedAsShown`), the stroke's history bytes, undo and redo render only the stroke's region;
 - twenty ticks of a Levels layer's slider at fit zoom: one render of the view a tick (no panel renders the document
-  again), each layer drawn once, one adjustment pass, no reduction built;
+  again), each layer drawn once, one adjustment pass, no reduction built (renders and passes allow a quarter more than
+  the ticks, for repaints the window system asks for on its own on CI machines);
 - zoom to 40 %, ten 16-pixel pans down and ten right, zoom to 20 % and back: one render per zoom, a pan renders exactly
   the strip that came into view, no reduction built by a pan or by returning to a zoom.
 
