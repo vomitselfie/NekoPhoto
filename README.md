@@ -2,150 +2,280 @@
   <img src="docs/images/nekophoto.png" alt="NekoPhoto: みんなのためのエディタ (an editor for everyone)" width="240">
 </p>
 
+<a name="english"></a>
+<h1 align="center">NekoPhoto</h1>
+
 <p align="center">
-  <img src="docs/images/hero.jpg" alt="NekoPhoto with K.psd, a Photoshop file by Nathan Lincoln, open: its folders, masked layers, adjustment layers and a smart object with Smart Filters in the Layers panel" width="100%">
+  <b>Bring your work with you.</b><br>
+  A photo editor and painting app for Linux and Windows that opens your Photoshop and Clip Studio files<br>
+  with their layers, masks and text intact, paints with your own brushes, and saves back to layered PSD.
 </p>
 
-<p align="center"><sub>Artwork: <em>K</em> by <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>, used with permission.</sub></p>
+<p align="center">
+  <a href="https://github.com/vomitselfie/nekophoto/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/vomitselfie/nekophoto?style=flat-square&color=e8833a"></a>
+  <img alt="Linux · Windows" src="https://img.shields.io/badge/Linux%20%C2%B7%20Windows-native-2f7bf5?style=flat-square">
+  <img alt="Qt 6 · C++20" src="https://img.shields.io/badge/Qt%206%20%C2%B7%20C%2B%2B20-41cd52?style=flat-square">
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-3a3a3a?style=flat-square"></a>
+  <img alt="English · 日本語" src="https://img.shields.io/badge/UI-English%20%C2%B7%20%E6%97%A5%E6%9C%AC%E8%AA%9E-c2185b?style=flat-square">
+</p>
 
-# NekoPhoto
+<p align="center">
+  <a href="https://github.com/vomitselfie/nekophoto/releases/latest"><b>Download for Linux (AppImage)</b></a> ·
+  <a href="https://github.com/vomitselfie/nekophoto/releases/latest"><b>Download for Windows (portable zip)</b></a><br>
+  <sub>Linux: any x86_64 distribution from 2022 on, Wayland or X11. Windows: 10 version 1903 or later, x86_64.</sub>
+</p>
 
-**English** · [日本語](#日本語)
+<p align="center">
+  <img src="docs/images/hero.jpg" alt="NekoPhoto with K.psd, a Photoshop file by Nathan Lincoln, open: its folders, masked layers, adjustment layers and a smart object with a Gaussian Blur Smart Filter in the Layers panel, and the Exposure adjustment layer's settings below" width="100%">
+  <br>
+  <sub>A Photoshop file opened as Photoshop saved it: folders, masks, adjustment layers and a smart object with its Smart Filters.<br>
+  <i>K</i> by <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>, used with permission.</sub>
+</p>
 
-**Bring your work with you.** NekoPhoto is a photo editor and painting app for Linux and Windows that opens
-your Photoshop and Clip Studio files with their layers, masks and text intact, paints with your Photoshop,
-Clip Studio and Procreate brushes, and saves back to layered PSD.
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#everything-in-the-box">Everything in the box</a> ·
+  <a href="#psd-that-comes-back">PSD</a> ·
+  <a href="#built-for-scripts-and-agents">Agents</a> ·
+  <a href="#get-started">Get started</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="#license-and-credits">License</a> ·
+  <a href="#日本語">日本語</a>
+</p>
 
-**[Download for Linux (AppImage)](https://github.com/vomitselfie/nekophoto/releases/latest)** ·
-**[Download for Windows (portable zip)](https://github.com/vomitselfie/nekophoto/releases/latest)**<br>
-Linux: any x86_64 distribution from 2022 on, Wayland or X11. Windows: 10 version 1903 or later, x86_64.
+<br>
 
-**Your PSDs come back as you sent them.** All 117 PSD and PSB test files in our round-trip corpus (nearly all saved
-by Photoshop 2026, covering text, smart objects and Smart Filters, layer styles, shapes, masks and PSB) open, export and
-reopen with nothing lost: 3,675 blocks NekoPhoto does not edit go back byte for byte. What PSD cannot carry is
-listed before you export. The counts, the known gaps and how to rerun the checks are in
-[Compatibility & correctness](docs/compatibility.md).
+<table>
+  <tr>
+    <td width="25%" valign="top">
+      <h3>📂 Your files, your brushes</h3>
+      Photoshop PSD and PSB, Clip Studio <code>.clip</code>, Affinity and camera RAW open with their layers. Photoshop <code>.abr</code>, Procreate and Clip Studio brushes import with their dynamics. Your work goes back out as layered PSD.
+    </td>
+    <td width="25%" valign="top">
+      <h3>⌨️ Photoshop habits work</h3>
+      The tools, menus and shortcuts are Photoshop's, held keys and spring-loaded tools included. Lost? Edit › Search (Ctrl+F) finds any command, tool or filter by name.
+    </td>
+    <td width="25%" valign="top">
+      <h3>🎨 Colour, done properly</h3>
+      8, 16 and 32 bits per channel. RGB, CMYK and Lab documents edited in their own colours, managed with ICC profiles, with the blend modes Photoshop offers in each mode.
+    </td>
+    <td width="25%" valign="top">
+      <h3>🐾 Yours, on your machine</h3>
+      A native Qt app with no account and no cloud. Remove Background and Select Subject run locally: nothing is uploaded. Open source under the GPL, in English and Japanese.
+    </td>
+  </tr>
+</table>
 
-| Open a PSD, edit, save it as PSD, reopen | Import a Photoshop brush set and paint |
-|:---:|:---:|
-| <img src="docs/images/demo-psd-roundtrip.webp" alt="Opening K.psd by Nathan Lincoln, saved by Photoshop, with its folders, masks, Smart Filters and adjustment layers intact; fading its Exposure adjustment layer to 50%; exporting it as layered PSD; reopening it with the same 33 layers" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Importing a Photoshop .abr brush set of 148 brushes and stamping trees, a church, a windmill, a town and a ship with them" width="440"> |
+<br>
 
-<sub>Recorded headless from NekoPhoto 1.6.1 over its automation socket. PSD demo artwork: <em>K</em> by <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>,
-used with permission (also in the screenshot above). Brush demo: the CC0 “Myer Settlement Brushes” by K. M. Alexander, from Patchy's test fixtures.</sub>
+## Features
 
-NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
-for macOS. Projects save as a single `.nekophoto` file; `.comp` project folders, from older
-versions and the Mac app, still open and save as they are. Until version 1.0 it was
-called compositor-linux; your settings, brushes and downloaded model move over
-by themselves the first time you start it.
+Every screenshot here is the real app, rendered offscreen and set up through its automation socket. The artworks are
+public-domain prints and paintings from Wikimedia Commons unless a credit says otherwise.
 
-## Bring your work with you
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/type-layer-style.jpg" alt="Hokusai's Red Fuji with two type layers, 赤富士 in white with a dark red stroke and a drop shadow, and FINE WIND, CLEAR MORNING; the Layer Style dialog is open on Stroke, with Drop Shadow also ticked" width="100%">
+      <br>
+      <sub>Live type with a Stroke and a Drop Shadow, edited in the Layer Style dialog.<br><a href="https://commons.wikimedia.org/wiki/File:Katsushika_Hokusai_-_Fine_Wind,_Clear_Morning_(Gaif%C5%AB_kaisei)_-_Google_Art_Project.jpg"><i>Fine Wind, Clear Morning</i></a>, Katsushika Hokusai, c. 1830–32</sub>
+      <h3>Type that stays type</h3>
+      Click and type on the canvas, in any installed font, with Japanese input composing right in the line. Style single letters, set paragraphs in a box, and keep every word editable.
+      <br><br>
+      Drop and inner shadows, glows, bevel and emboss, satin, overlays and stroke go on any layer from Photoshop's Layer Style dialog, drawn as Photoshop draws them and written back to PSD as its own. Import <code>.asl</code> styles, <code>.pat</code> patterns and <code>.grd</code> gradients.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/adjustments-histogram.jpg" alt="Hiroshige's Sudden Shower over Shin-Ōhashi Bridge under Curves, Hue/Saturation and Color Balance adjustment layers, with the Histogram panel showing the RGB histogram, its mean and standard deviation" width="100%">
+      <br>
+      <sub>Curves, Hue/Saturation and Color Balance adjustment layers over a print, with the Histogram panel.<br><a href="https://commons.wikimedia.org/wiki/File:Hiroshige,_Sudden_shower_over_Shin-%C5%8Chashi_bridge_and_Atake,_1857.jpg"><i>Sudden Shower over Shin-Ōhashi Bridge and Atake</i></a>, Utagawa Hiroshige, 1857</sub>
+      <h3>Edit without regret</h3>
+      Seventeen adjustment layers, from Levels and Curves to Black &amp; White, Selective Color and Color Lookup, keep every change live: mask them, stack them, switch them off. Your pixels never change, and the layers go out to PSD as Photoshop's own.
+      <br><br>
+      Hold Alt on Levels or Curves to see exactly what clips, and read the Histogram panel's channels and statistics as you go.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/remove-background.jpg" alt="Remove Background previewing a cut-out Pembroke Welsh Corgi on a transparent canvas, its settings dialog open at the Advanced quality" width="100%">
+      <br>
+      <sub>Remove Background previews the cut-out before you commit; the background goes into a layer mask.<br>Photo: <a href="https://commons.wikimedia.org/wiki/File:Welchcorgipembroke.JPG">Welchcorgipembroke.JPG</a> by pmuths1956 (2008), CC BY-SA 3.0</sub>
+      <h3>Cut-outs that never leave your machine</h3>
+      Remove Background, Select Subject and Quick Select run on your own computer, with models you download once. Nothing is uploaded and there is no account.
+      <br><br>
+      Advanced settings refine edges, solve hair and fur, clean up the edge colours and run a detail pass on large photos. The background is hidden by a mask, never erased, so you can paint it back.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/brushes.jpg" alt="A hand-drawn map painted with an imported Photoshop brush set of trees, a town, a windmill, a church, a deer and ships, above a watercolour coastline; the brush picker lists the MyPaint groups and the imported myer-settlement-brushes set" width="100%">
+      <br>
+      <sub>A map stamped with an imported Photoshop <code>.abr</code> set and a MyPaint watercolour coast.<br>Brushes: <a href="https://kmalexander.com/">“Myer Settlement Brushes”</a> by K. M. Alexander, CC0</sub>
+      <h3>Paint with the brushes you already own</h3>
+      Import Photoshop <code>.abr</code>, Procreate <code>.brushset</code> and <code>.brush</code>, and Clip Studio <code>.sut</code> brushes with their pressure curves, tapers and jitter, or turn any image into a tip.
+      <br><br>
+      196 MyPaint brushes come built in: pencils, inks, charcoal, oils and watercolours that follow pen pressure and tilt, with Photoshop's Smoothing and Pulled String Mode.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/cmyk-channels.jpg" alt="Steinlen's Tournée du Chat Noir poster as a CMYK document, the Channels panel listing CMYK, Cyan, Magenta, Yellow and Black, and a Curves adjustment layer on the CMYK channel" width="100%">
+      <br>
+      <sub>A poster converted to CMYK: its own channels in the Channels panel and CMYK Curves.<br><a href="https://commons.wikimedia.org/wiki/File:Th%C3%A9ophile-Alexandre_Steinlen_-_Tourn%C3%A9e_du_Chat_Noir_de_Rodolphe_Salis_(Tour_of_Rodolphe_Salis%27_Chat_Noir)_-_Google_Art_Project.jpg"><i>Tournée du Chat Noir de Rodolphe Salis</i></a>, Théophile-Alexandre Steinlen, 1896</sub>
+      <h3>Print-ready, natively</h3>
+      Open CMYK and Lab PSDs in their own mode, or convert with Image › Mode through your working CMYK profile. Paint, retouch, adjust, filter, type and use layer styles right in CMYK and Lab, with the blend modes Photoshop offers there.
+      <br><br>
+      Color Settings, Assign and Convert to Profile, a CMYK proof, and 16-bit and 32-bit HDR documents with HDR Toning.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/filters.jpg" alt="Kuniyoshi's print of cats in different poses with the Mosh Halftone filter previewing live on the canvas, its dialog open" width="100%">
+      <br>
+      <sub>Filter › Mosh › Halftone previewing live on the canvas.<br><a href="https://commons.wikimedia.org/wiki/File:Kuniyoshi_Utagawa,_For_cats_in_different_poses.jpg"><i>Cats in different poses</i></a>, from <i>Tatoe-zukushi no uchi</i>, Utagawa Kuniyoshi, 1852</sub>
+      <h3>A Filter menu to get lost in</h3>
+      Photoshop's Filter menu in its own submenus: blurs, distortions, noise, pixelate, render, sharpen and stylize, previewing on the canvas inside your selection. Many go on a smart object as Smart Filters you can reorder, mask and edit later.
+      <br><br>
+      Plus the Camera Raw Filter (Shift+Ctrl+A), more than 850 G'MIC filters when <code>gmic</code> is installed, and 54 glitch and retro effects under Filter › Mosh.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/search.jpg" alt="Van Gogh's The Starry Night with Edit › Search open, listing commands that match mask: Mosh's Mask filter, Layer Mask, Unsharp Mask, Quick Mask Mode, G'MIC's Sharpen (Unsharp Mask), clipping and vector mask commands, each with its menu path" width="100%">
+      <br>
+      <sub>Edit › Search finds menu commands, tools and G'MIC filters by a few letters.<br><a href="https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg"><i>The Starry Night</i></a>, Vincent van Gogh, 1889</sub>
+      <h3>Works the way your hands expect</h3>
+      Photoshop's tools and shortcuts, Shift+letter to step through a tool group, and its held keys: Ctrl for the Move tool, Alt for the Eyedropper while painting, a tool's letter held for a spring-loaded tool. Edit › Keyboard Shortcuts changes any key, with clashes caught as you type.
+      <br><br>
+      Right-click menus that fit the tool and what is under the pointer, rulers, guides and smart guides, labels you drag to change a number, and File › Revert (F12).
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/export-as.jpg" alt="Hiroshige's Asakusa Ricefields and Torinomachi Festival, with a white cat at the window, in the Export As dialog: WebP at quality 90, the image size, colour space options, a preview and the file's size" width="100%">
+      <br>
+      <sub>Export As with a preview of the encoded file and its size.<br><a href="https://commons.wikimedia.org/wiki/File:Hiroshige,_Asakusa_ricefields_and_torinomachi_festival,_1857.jpg"><i>Asakusa Ricefields and Torinomachi Festival</i></a>, Utagawa Hiroshige, 1857</sub>
+      <h3>Ship it anywhere</h3>
+      Export As writes PNG, JPEG, GIF, WebP, TIFF or TGA with a live preview, the file's size, a new size, a matte and sRGB conversion, remembered per format. Quick Export in one click, Layer › Export As, artboards and slices to files in one go.
+      <br><br>
+      Record Actions as you work and run them over a folder with File › Automate › Batch.
+    </td>
+  </tr>
+</table>
 
-NekoPhoto fits into a workflow shared with Photoshop, Krita and Photopea. Layers, masks, selections, brushes,
-adjustments and filters work with the tools and shortcuts you know.
+<br>
 
-| Coming from | Your files | Your brushes and habits |
-|---|---|---|
-| **Photoshop** | `.psd` and `.psb` open with their layers, folders, masks, clipping masks and blend modes, layer styles, vector shapes, smart objects and editable text, and export back to layered `.psd` with all of it still Photoshop's | `.abr` brushes; the tools and shortcuts you know (V, M, L, W, B, E, `[` `]`, Ctrl+T, Ctrl+J, Ctrl+G) |
-| **Clip Studio Paint** | `.clip` projects open with their layers, folders, masks, clipping and blend modes | `.sut` brushes |
-| **Procreate** | Your exported images | `.brushset` and `.brush` files |
-| **Krita and GIMP** | Photoshop files from collaborators, and your images | The MyPaint brush engine you know, and G'MIC's filters |
+## Everything in the box
 
-PSD export is round-trip tested: every layered PSD we have, from Photoshop and Clip Studio (up to 54
-layers in 16 folders at 4096 × 4096), exports and reopens with the same pixels, and the files open in other
-PSD readers with their structure intact. What NekoPhoto does not edit yet goes back byte for byte (all 117
-files of the round-trip corpus come back unchanged), and layer styles, vector shapes and folders are drawn as
-Photoshop draws them, most within a level of its own renders. What PSD cannot carry is listed before you export
-([docs/psd-roundtrip.md](docs/psd-roundtrip.md), [docs/psd-export.md](docs/psd-export.md), [docs/compatibility.md](docs/compatibility.md)).
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <h4>🗂️ Layers</h4>
+      Folders, all 27 of Photoshop's blend modes plus Pass Through, layer and vector masks, clipping masks, fill and adjustment layers, Blend If, smart objects you can place, convert, edit and replace, and whole layers copied between documents.
+    </td>
+    <td width="33%" valign="top">
+      <h4>✂️ Selections and retouching</h4>
+      Marquees, lassos, an edge-aware Magic Wand, Quick Select, Select Subject, Quick Mask and alpha channels. Spot Healing, Healing Brush, Patch, Clone Stamp, Content-Aware Fill, Move and Scale, Liquify, Dodge, Burn and Sponge.
+    </td>
+    <td width="33%" valign="top">
+      <h4>✒️ Vectors and transforms</h4>
+      The Pen, live shapes with path operations, gradient and pattern fills and strokes, the Paths panel, text to path. Free Transform without losing resolution, distort, Warp Cage, and the Crop tool's ratio presets.
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <h4>📁 Files</h4>
+      PSD and PSB, Clip Studio <code>.clip</code>, Affinity, camera RAW through Camera Raw, SVG, PDF, GIF and Aseprite with their frames, PNG, JPEG, WebP, TIFF, TGA and ICO. Projects save as one <code>.nekophoto</code> file, up to a gigapixel of layers.
+    </td>
+    <td width="33%" valign="top">
+      <h4>🎞️ Animation and automation</h4>
+      A frame Timeline with animated GIF export, Actions and Batch, and an automation socket with an MCP bridge for scripts and agents.
+    </td>
+    <td width="33%" valign="top">
+      <h4>🛟 Peace of mind</h4>
+      Crash recovery that autosaves unsaved work in the background, several documents in tabs, an open project that reloads when its file changes on disk, and a CPU setting that leaves room for the other programs you run.
+    </td>
+  </tr>
+</table>
 
-Coming next:
+The full list, with every option, is in [docs/features.md](docs/features.md).
 
-- **Smart objects, artboards and slices in CMYK and Lab documents** (text, shapes, layer styles and everything else already work there)
-- **Colour jitter for imported brushes**: imported Procreate, Clip Studio and Photoshop brushes already keep their pressure curves, tapers, jitter and angle behaviour
+## PSD that comes back
 
-## What it does
+<p align="center">
+  <img src="docs/images/demo-psd-roundtrip.webp" alt="Opening K.psd by Nathan Lincoln, saved by Photoshop, with its folders, masks, Smart Filters and adjustment layers intact; fading its Exposure adjustment layer to 50%; exporting it as layered PSD; reopening it with the same 33 layers" width="560">
+  <br>
+  <sub>Open a PSD, edit, save it as PSD, reopen: recorded headless from NekoPhoto 1.6.1 over its automation socket.<br><i>K</i> by <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>, used with permission.</sub>
+</p>
 
-- **Layers:** folders, blend modes, opacity, layer masks, clipping masks, adjustment layers, and Blend If (Layer Style ▸ Blending Options: show or hide a layer by the brightness of its own pixels or of what's beneath, with Alt-split sliders for soft edges)
-- **Colour and depth:** 8, 16 and 32 bits per channel. 32-bit HDR documents have HDR Toning, an exposure view, and adjustments, filters, selections and pixel edits that keep light above white. RGB, CMYK and Lab Color documents open from PSD and convert through Image > Mode, colour-managed with ICC profiles. Each mode offers Photoshop's own blend modes and matches its renders. You paint, retouch, adjust, filter, select, crop, transform, type, draw shapes and use layer styles in CMYK and Lab documents in their own colours, never through RGB, and export them to PNG, JPEG, WebP or TIFF. There is a Channels panel, a Histogram panel and a CMYK proof ([docs/bit-depth.md](docs/bit-depth.md), [docs/color-modes.md](docs/color-modes.md))
-- **Transform:** move, scale, rotate and distort without losing resolution; Content-Aware Scale and Content-Aware Move
-- **Selections:** marquee, lasso, Quick Select by scribble or by click, Content-Aware Fill, and an edge-aware magic wand: shading and texture stay in, edges hold, the tolerance can be changed right after a click, Shift/Alt-clicks add what belongs and what doesn't, and with Contiguous off one click takes a background in many pockets (a baked checkerboard around a character) and Delete leaves the line art without a rim of the background ([docs/smart-wand.md](docs/smart-wand.md))
-- **Painting:** brush, eraser, spot healing, clone stamp, smudge, liquify, gradients (Photoshop's Classic, Perceptual and Linear methods), shapes, and text typed straight on the canvas, Japanese input included
-- **Brushes:** 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt, and your own brushes imported from Photoshop (`.abr`), Procreate (`.brushset`, `.brush`) and Clip Studio (`.sut`) with their pressure curves, tapers and jitter, or any image as a brush tip
-- **Vectors:** Pen and shape tools with path operations, gradient and pattern fills, live rectangles and ellipses, vector masks on any layer, and text to path ([docs/vector-tools.md](docs/vector-tools.md))
-- **Artboards and slices,** exported to files in one go ([docs/artboards-slices.md](docs/artboards-slices.md))
-- **Actions and Batch:** record steps, play them back, and run them over a folder of files; almost every menu command and the Layers panel's controls are recorded ([docs/actions.md](docs/actions.md))
-- **Animation:** a frame Timeline with animated GIF export; GIF and Aseprite files open with their frames ([docs/animation.md](docs/animation.md))
-- **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, and the Filter menu's blurs, distortions (Twirl, Wave, Spherize, Polar Coordinates and more), noise, Mosaic, Clouds, Unsharp Mask, Emboss, Find Edges, High Pass, Maximum, Minimum, Offset and lens correction, in Photoshop's submenus; hold Alt while dragging Levels or Curves to see exactly what clips
-- **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
-- **G'MIC:** over 850 more filters with a live preview, when `gmic` is installed
-- **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; Photoshop's layer styles, vector shapes and masks drawn as it draws them ([docs/layer-styles.md](docs/layer-styles.md), [docs/vector-masks.md](docs/vector-masks.md)); smart objects you can place, convert, edit and replace without losing resolution ([docs/smart-objects.md](docs/smart-objects.md)); text that stays editable both ways; layered PSD export; projects of up to a gigapixel of layers; camera RAW (opens in Camera Raw first, white balance in Kelvin and Tint, and Open Object keeps the RAW file inside a smart object you can re-develop), Affinity, SVG, PDF, GIF, TGA and ICO; a Photoshop file too big to open can open as its flattened image instead; PNG, JPEG, WebP, TIFF, SVG, GIF, TGA and ICO export, with Photoshop's Export As (a live preview, the file's size, a new size, a matte, sRGB conversion, settings remembered per format), Quick Export and Layer > Export As; several projects in tabs; File ▸ Revert (F12) back to the file as opened or last saved, whatever its format, as one undo step; crash recovery
-- **Works the way Photoshop does:** its tools and shortcuts (Shift+letter steps through a tool group; held keys as Photoshop's: Ctrl for the Move tool, Alt for the Eyedropper while painting, Ctrl+Space to zoom, a tool's letter held for a spring-loaded tool), Edit ▸ Search (Ctrl+F) to find and run any command, tool or filter by name, Edit ▸ Keyboard Shortcuts to change any key, right-click menus on the canvas that fit the tool and what's under the pointer, rulers and guides with smart guides while you move things, labels you drag to change a number, the Crop tool's ratio presets, and whole layers copied and pasted between documents
-- **AI agents:** Claude Code or any MCP client can drive the editor
+NekoPhoto is tested against real Photoshop files, and the numbers are published with the commands to check them yourself:
 
-The full list is in [docs/features.md](docs/features.md).
+- **Round trip:** all 117 PSD and PSB files of the test corpus, nearly all saved by Photoshop 2026 (text, smart objects
+  and Smart Filters, layer styles, shapes, masks, PSB), open, export and reopen with nothing lost; 3,675 blocks
+  NekoPhoto does not edit go back byte for byte. Converted to 16 bits, they come back too.
+- **Against Photoshop's own render:** 52 of 72 files render within 2 levels of what Photoshop shows on 99% of their
+  pixels, compared with Photoshop's own flatten or the merged image it stored.
+- **Colour:** the ICC profile of all 64 tagged RGB PSDs in the corpus is written back byte for byte.
+- **No surprises:** what PSD cannot carry is listed before you export, and an unedited 16-bit layer goes back byte for byte.
 
-| Remove Background | G'MIC filters |
-|:---:|:---:|
-| <img src="docs/images/remove-background.jpg" alt="Remove Background cutting out a Pembroke Welsh Corgi, its settings dialog open" width="420"> | <img src="docs/images/filters.jpg" alt="The G'MIC filter browser open over K by Nathan Lincoln, previewing Old Photo on it" width="420"> |
+The counts, the known gaps and how to rerun every check are in [Compatibility & correctness](docs/compatibility.md);
+how export works is in [docs/psd-export.md](docs/psd-export.md) and [docs/psd-roundtrip.md](docs/psd-roundtrip.md).
 
-<sub>Corgi photo: <a href="https://commons.wikimedia.org/wiki/File:Welchcorgipembroke.JPG">Welchcorgipembroke.JPG</a> by pmuths1956 (2008), Wikimedia Commons, CC BY-SA 3.0.</sub>
+## Built for scripts and agents
 
-## Performance
+Everything an agent or a script does goes through the same editor session you see, lands in the undo history, and
+shows on screen. 183 automation methods cover documents, layers, pixels, selections, painting and export.
 
-The heavy work runs on every core. Times on a 12-core laptop (AMD Ryzen AI 9 HX 370):
+Let Claude Code, or any MCP client, drive the editor:
 
-| Task | Time |
-|---|---|
-| Open a 70 MB Photoshop file (17 layers at 4096 × 4096) | 0.7 s |
-| Save it as a project | 1.3 s |
-| Save a project with five 4096 × 4096 layers | 0.7 s (7.2 s in 0.6.0) |
-| Open that project | 0.4 s (2.5 s in 0.6.0) |
-| Export a 4096 × 4096 PNG | 0.24 s (1.8 s in 0.6.0) |
-| Quick Select, per stroke | 0.16 s on average (0.65 s in 0.6.0) |
-| Remove Background on a 10-megapixel photo | 1.7 s (8.3 s with every refinement on) |
-| Gaussian blur on a 12-megapixel layer | under 0.1 s |
+```bash
+claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
+```
 
-## Get it
+Then ask for something like “open photo.jpg, remove the background, put a dark gradient behind it and export
+result.png”.
 
-Download the AppImage from the [Releases](../../releases) page, make it
-executable, and run it. It works on any x86_64 Linux from 2022 on, under
-Wayland or X11.
+From a shell, send one request to the running editor, or run a file of requests in a windowless instance:
+
+```bash
+nekophoto --call layers.list
+nekophoto --call render --params '{"path": "/tmp/check.png", "maxSize": 800}'
+nekophoto --headless --batch grade.jsonl
+```
+
+```json
+{"method": "document.open", "params": {"path": "/path/to/photo.jpg"}}
+{"method": "layers.add", "params": {"kind": "adjustment", "adjustmentKind": "Vibrance", "settings": {"vibranceSettings": {"vibrance": 35}}}}
+{"method": "document.export", "params": {"path": "/path/to/photo-graded.png"}}
+```
+
+The protocol, every method and the MCP tools are in [docs/automation.md](docs/automation.md).
+
+## Get started
+
+**Linux:** download the AppImage from the [Releases](https://github.com/vomitselfie/nekophoto/releases/latest) page,
+make it executable and run it. It works on any x86_64 Linux from 2022 on, under Wayland or X11.
 
 ```bash
 chmod +x NekoPhoto-*.AppImage
 ./NekoPhoto-*.AppImage
 ```
 
-To add it to your app launcher, open `.nekophoto` and `.comp` projects by double-click and
-offer it for `.psd` files, run the integration script once (no root needed;
-`--remove` undoes it):
+To add it to your app launcher, open `.nekophoto` and `.comp` projects by double-click and offer it for `.psd` files,
+run the integration script once (no root needed; `--remove` undoes it):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/integrate-appimage.sh | bash -s -- NekoPhoto-*.AppImage
 ```
 
-**Windows** (10 version 1903 or later, x86_64): download
-`NekoPhoto-<version>-windows-x86_64.zip` from the same page, unzip it anywhere
-and run `nekophoto.exe`. It is portable: nothing is installed, and settings
-live in your user profile. The G'MIC filters need `gmic.exe` on `PATH`.
+**Windows** (10 version 1903 or later, x86_64): download `NekoPhoto-<version>-windows-x86_64.zip` from the same page,
+unzip it anywhere and run `nekophoto.exe`. It is portable: nothing is installed, and settings live in your user
+profile. The G'MIC filters need `gmic.exe` on `PATH`.
 
-**Remove Background** is off until you turn it on in Edit > Preferences,
-which downloads the model once.
+**Good to know**
 
-The interface is in English and Japanese: it follows the desktop's language,
-and Edit > Preferences > Language picks one (at the next launch).
+- **Remove Background** is off until you turn it on in Edit › Preferences, which downloads the model once. Quick Select's
+  click mode downloads its own model from the options bar.
+- The interface is in **English and Japanese**: it follows the desktop's language, and Edit › Preferences › Language
+  picks one (at the next launch).
+- NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor) for macOS and was called
+  compositor-linux until 1.0; your settings, brushes and downloaded model move over by themselves. `.comp` project
+  folders from older versions and the Mac app still open and save as they are.
 
-## Use it with an AI agent
-
-```bash
-claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
-```
-
-Then ask for something like "open photo.jpg, remove the background, put a
-dark gradient behind it and export result.png". See
-[docs/automation.md](docs/automation.md).
-
-## Build from source
+### Build from source
 
 ```bash
 # Arch / Manjaro
@@ -158,130 +288,273 @@ cmake --build build -j
 ./build/src/app/nekophoto
 ```
 
-Windows builds with MinGW-w64 in MSYS2 (UCRT64); the packages and steps are
-in [docs/linux-port.md](docs/linux-port.md#windows), as are build options,
-command-line flags and keyboard shortcuts.
+Windows builds with MinGW-w64 in MSYS2 (UCRT64); the packages and steps are in
+[docs/linux-port.md](docs/linux-port.md#windows), as are build options, command-line flags and
+[keyboard shortcuts](docs/linux-port.md#keyboard-shortcuts).
+
+## Documentation
+
+| | |
+|---|---|
+| [What NekoPhoto can do](docs/features.md) | every feature, menu by menu |
+| [Compatibility & correctness](docs/compatibility.md) | what is tested against Photoshop, and what still differs |
+| [Colour modes](docs/color-modes.md) · [Bit depth](docs/bit-depth.md) · [Colour management](docs/color-management.md) | CMYK, Lab, 16 and 32 bits, ICC profiles |
+| [Layer styles](docs/layer-styles.md) · [Smart objects](docs/smart-objects.md) · [Vector tools](docs/vector-tools.md) | how they are drawn and kept in PSD |
+| [Brush engine](docs/brush-engine.md) · [Camera Raw](docs/camera-raw.md) · [Remove Background](docs/remove-background.md) | painting, RAW development, cut-outs |
+| [Actions](docs/actions.md) · [Automation and MCP](docs/automation.md) | recording, batches, scripts and agents |
+| [Legal boundaries](docs/legal-boundaries.md) | the few features that deliberately work differently from Photoshop |
 
 ## Contributing
 
 Building, the code's layout, the rules a change has to follow and how CI checks a pull request are in
 [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately as [SECURITY.md](SECURITY.md) describes.
-What is tested and what still differs from Photoshop: [docs/compatibility.md](docs/compatibility.md).
+Adding a language is explained in [docs/translating.md](docs/translating.md).
 
-## License
+## License and credits
 
-GPL-3.0-or-later; see [LICENSE](LICENSE). Based on Compositor by Wonder
-Assembly LLC, whose code keeps its MIT licence
-([LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt)). Third-party
-components and their licences are listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+NekoPhoto is GPL-3.0-or-later; see [LICENSE](LICENSE). It is based on Compositor by Wonder Assembly LLC, whose code
+keeps its MIT licence ([LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt)). Third-party components and their
+licences are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-### Trademarks
+Artwork in this README: *K* by [Nathan Lincoln](https://www.nathanlincoln.com/), used with permission; the corgi photo
+[Welchcorgipembroke.JPG](https://commons.wikimedia.org/wiki/File:Welchcorgipembroke.JPG) by pmuths1956 (2008),
+Wikimedia Commons, CC BY-SA 3.0; the CC0 “Myer Settlement Brushes” by K. M. Alexander; and public-domain prints and
+paintings by Katsushika Hokusai, Utagawa Hiroshige, Utagawa Kuniyoshi, Théophile-Alexandre Steinlen and Vincent van
+Gogh from Wikimedia Commons, each linked under its screenshot.
 
-Adobe and Photoshop are trademarks of Adobe Inc. NekoPhoto is not affiliated with or endorsed by Adobe; Photoshop is
+<sub>Adobe and Photoshop are trademarks of Adobe Inc. NekoPhoto is not affiliated with or endorsed by Adobe; Photoshop is
 named only to describe compatibility. Clip Studio Paint is a trademark of CELSYS, Inc. and Procreate of Savage
 Interactive Pty Ltd. A few features deliberately work differently from Photoshop: see
-[docs/legal-boundaries.md](docs/legal-boundaries.md).
+[docs/legal-boundaries.md](docs/legal-boundaries.md).</sub>
 
 ---
 
 ## 日本語
 
-[English](#nekophoto) · **日本語**
+<p align="center"><a href="#english">English</a> · <b>日本語</b></p>
 
-**作品をそのまま持ってこられます。** NekoPhoto は Linux・Windows 向けの写真編集・お絵描きソフトです。
-Photoshop とクリップスタジオのファイルをレイヤー・マスク・テキストを保ったまま開け、Photoshop・クリップスタジオ・Procreate
-のブラシで描け、レイヤー付きの PSD に保存し直せます。
+<p align="center">
+  <b>作品をそのまま持ってこられます。</b><br>
+  Linux・Windows 向けの写真編集・お絵描きソフトです。Photoshop とクリップスタジオのファイルを<br>
+  レイヤー・マスク・テキストを保ったまま開き、手持ちのブラシで描き、レイヤー付きの PSD に保存し直せます。
+</p>
 
-**[Linux 版をダウンロード(AppImage)](https://github.com/vomitselfie/nekophoto/releases/latest)** ·
-**[Windows 版をダウンロード(ポータブル zip)](https://github.com/vomitselfie/nekophoto/releases/latest)**<br>
-Linux: 2022 年以降の x86_64 ディストリビューション(Wayland・X11)。Windows: 10 バージョン 1903 以降(x86_64)。
+<p align="center">
+  <a href="https://github.com/vomitselfie/nekophoto/releases/latest"><b>Linux 版をダウンロード(AppImage)</b></a> ·
+  <a href="https://github.com/vomitselfie/nekophoto/releases/latest"><b>Windows 版をダウンロード(ポータブル zip)</b></a><br>
+  <sub>Linux: 2022 年以降の x86_64 ディストリビューション(Wayland・X11)。Windows: 10 バージョン 1903 以降(x86_64)。</sub>
+</p>
 
-**PSD は送ったときのまま戻ってきます。** 往復テスト用の PSD・PSB ファイル 117 個(ほぼすべて Photoshop 2026 で保存。
-テキスト、スマートオブジェクトとスマートフィルター、レイヤースタイル、シェイプ、マスク、PSB を網羅)は、開いて書き出し、
-開き直しても何も失われません。NekoPhoto が編集しない 3,675 個のブロックはバイト単位でそのまま戻ります。PSD で表現できない
-要素は書き出す前に一覧表示されます。集計値・既知の差異・検証の再実行方法は
-[互換性と正確さ](docs/compatibility.md#日本語)にまとめています。
+<p align="center">
+  <img src="docs/images/hero-ja.jpg" alt="日本語表示の NekoPhoto で Nathan Lincoln の Photoshop ファイル K.psd を開いたところ。レイヤーパネルにグループ、マスク付きのレイヤー、調整レイヤー、スマートフィルター付きのスマートオブジェクトが並んでいる" width="100%">
+  <br>
+  <sub>日本語表示で、Photoshop で保存されたファイルをそのまま開いたところ(グループ・マスク・調整レイヤー・スマートフィルター付きのスマートオブジェクト)。<br>
+  作品: <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>『K』(許可を得て使用)</sub>
+</p>
 
-| PSD を開いて編集し、PSD に保存して開き直す | Photoshop のブラシセットを読み込んで描く |
-|:---:|:---:|
-| <img src="docs/images/demo-psd-roundtrip.webp" alt="Nathan Lincoln の Photoshop で保存された K.psd を開き、グループ・マスク・スマートフィルター・調整レイヤーがそのまま残っていることを確認し、露光量の調整レイヤーの不透明度を 50% に下げ、レイヤー付き PSD に書き出して開き直し、同じ 33 レイヤーを確認するところ" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Photoshop の .abr ブラシセット(148 種類)を読み込み、木・教会・風車・町・船を描くところ" width="440"> |
+<p align="center">
+  <a href="#機能">機能</a> ·
+  <a href="#ほかにもいろいろ">ほかにもいろいろ</a> ·
+  <a href="#psd-はそのまま戻ってくる">PSD</a> ·
+  <a href="#スクリプトと-ai-エージェントから使う">エージェント</a> ·
+  <a href="#はじめかた">はじめかた</a> ·
+  <a href="#ドキュメント">ドキュメント</a> ·
+  <a href="#ライセンスとクレジット">ライセンス</a>
+</p>
 
-<sub>NekoPhoto 1.6.1 を画面なしで起動し、自動操作ソケット経由で記録しました。冒頭の画像と PSD のデモの作品: <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>
-『K』(許可を得て使用)。ブラシのデモ: K. M. Alexander による CC0 の「Myer Settlement Brushes」(Patchy のテスト用ファイルより)。</sub>
+<table>
+  <tr>
+    <td width="25%" valign="top">
+      <h3>📂 手持ちのファイルとブラシ</h3>
+      Photoshop の PSD・PSB、クリップスタジオの <code>.clip</code>、Affinity、カメラ RAW をレイヤーごと開けます。Photoshop の <code>.abr</code>、Procreate・クリップスタジオのブラシはダイナミクスごと読み込めます。保存はレイヤー付きの PSD で。
+    </td>
+    <td width="25%" valign="top">
+      <h3>⌨️ Photoshop の手癖のままで</h3>
+      ツール・メニュー・ショートカットは Photoshop と同じ。押している間だけの一時切り替えにも対応しています。迷ったら 編集 › 検索(Ctrl+F)で、コマンド・ツール・フィルターを名前で探せます。
+    </td>
+    <td width="25%" valign="top">
+      <h3>🎨 本物の色</h3>
+      8・16・32 ビット/チャンネル。RGB・CMYK・Lab のドキュメントをそのままの色で編集し、ICC プロファイルでカラーマネジメント。描画モードは各モードで Photoshop と同じものが使えます。
+    </td>
+    <td width="25%" valign="top">
+      <h3>🐾 あなたのマシンの中で</h3>
+      アカウントもクラウドも不要なネイティブ Qt アプリです。背景を削除・被写体を選択は手元で動作し、画像はどこにも送信されません。GPL のオープンソースで、英語と日本語に対応。
+    </td>
+  </tr>
+</table>
 
-NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
-Linux 移植として始まりました。プロジェクトは 1 つの `.nekophoto` ファイルとして保存します。以前のバージョンや Mac 版の
-`.comp` プロジェクトフォルダーも、そのまま開いて保存できます。バージョン 1.0 までは
-compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは、初回起動時に自動で引き継がれます。
+### 機能
 
-### 作品をそのまま持ってくる
+スクリーンショットはすべて実際のアプリを画面なしで起動し、自動操作ソケットで準備して撮影したものです。作品は、クレジットに
+別記がない限り Wikimedia Commons のパブリックドメインの版画・絵画です。
 
-Photoshop・Krita・Photopea を使う人とのやり取りにもそのまま組み込めます。レイヤー、マスク、選択範囲、ブラシ、
-色調補正、フィルターを、おなじみのツールとショートカットで操作できます。
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/type-layer-style.jpg" alt="北斎の赤富士に 2 つのテキストレイヤー(白地に濃い赤の境界線とドロップシャドウの「赤富士」と FINE WIND, CLEAR MORNING)。レイヤースタイルのダイアログで境界線を表示し、ドロップシャドウもオン" width="100%">
+      <br>
+      <sub>境界線とドロップシャドウを付けたテキストを、レイヤースタイルのダイアログで編集。<br><a href="https://commons.wikimedia.org/wiki/File:Katsushika_Hokusai_-_Fine_Wind,_Clear_Morning_(Gaif%C5%AB_kaisei)_-_Google_Art_Project.jpg">葛飾北斎『冨嶽三十六景 凱風快晴』</a>(1830〜32 年頃)</sub>
+      <h3>文字はずっと文字のまま</h3>
+      カンバスをクリックしてそのまま入力。インストール済みのどのフォントでも使え、日本語入力も行の中で変換できます。1 文字ずつのスタイル、ボックスでの段落組みも可能で、文字はいつでも編集し直せます。
+      <br><br>
+      シャドウ、光彩、ベベルとエンボス、サテン、オーバーレイ、境界線を Photoshop と同じレイヤースタイルのダイアログで付けられ、Photoshop と同じように描画して PSD に書き戻します。<code>.asl</code> スタイル・<code>.pat</code> パターン・<code>.grd</code> グラデーションも読み込めます。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/adjustments-histogram.jpg" alt="広重『大はしあたけの夕立』にトーンカーブ・色相・彩度・カラーバランスの調整レイヤーを重ね、ヒストグラムパネルに RGB のヒストグラムと平均値・標準偏差を表示" width="100%">
+      <br>
+      <sub>トーンカーブ・色相・彩度・カラーバランスの調整レイヤーとヒストグラムパネル。<br><a href="https://commons.wikimedia.org/wiki/File:Hiroshige,_Sudden_shower_over_Shin-%C5%8Chashi_bridge_and_Atake,_1857.jpg">歌川広重『名所江戸百景 大はしあたけの夕立』</a>(1857 年)</sub>
+      <h3>やり直しのきく補正</h3>
+      レベル補正・トーンカーブから白黒・特定色域の選択・カラールックアップまで、17 種類の調整レイヤーで補正をいつでも変更できます。マスクを付けても、重ねても、オフにしても元のピクセルは変わらず、PSD には Photoshop の調整レイヤーとして書き出されます。
+      <br><br>
+      レベル補正やトーンカーブで Alt を押しながらドラッグすると白飛び・黒つぶれする部分が見え、ヒストグラムパネルでチャンネルごとの分布と統計値を確認できます。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/remove-background.jpg" alt="ウェルシュ・コーギー・ペンブロークの背景を削除したプレビュー。設定ダイアログは品質「詳細」" width="100%">
+      <br>
+      <sub>背景を削除は確定前に切り抜きをプレビューし、背景はレイヤーマスクで隠します。<br>写真: pmuths1956 による <a href="https://commons.wikimedia.org/wiki/File:Welchcorgipembroke.JPG">Welchcorgipembroke.JPG</a>(2008 年、CC BY-SA 3.0)</sub>
+      <h3>切り抜きは手元のマシンで</h3>
+      背景を削除・被写体を選択・クイック選択は、一度ダウンロードしたモデルを使ってあなたのコンピューターの中で動きます。画像はどこにも送信されず、アカウントも要りません。
+      <br><br>
+      詳細設定では境界の調整、髪や毛並みの処理、境界の色の除去、大きな写真のための精細パスが使えます。背景は消すのではなくマスクで隠すので、描き戻すこともできます。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/brushes.jpg" alt="読み込んだ Photoshop ブラシセットの木・町・風車・教会・鹿・船で描いた地図と水彩の海岸線。ブラシピッカーに MyPaint のグループと読み込んだ myer-settlement-brushes が並ぶ" width="100%">
+      <br>
+      <sub>読み込んだ Photoshop の <code>.abr</code> ブラシセットと MyPaint の水彩で描いた地図。<br>ブラシ: K. M. Alexander による <a href="https://kmalexander.com/">「Myer Settlement Brushes」</a>(CC0)</sub>
+      <h3>いつものブラシで描く</h3>
+      Photoshop の <code>.abr</code>、Procreate の <code>.brushset</code>・<code>.brush</code>、クリップスタジオの <code>.sut</code> を、筆圧カーブ・入り抜き・ジッターごと読み込めます。任意の画像をブラシ先端にすることもできます。
+      <br><br>
+      筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、油彩、水彩)を内蔵。Photoshop と同じ滑らかさとストリングを引くモードも使えます。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/cmyk-channels.jpg" alt="スタンラン『黒猫』のポスターを CMYK ドキュメントに変換し、チャンネルパネルに CMYK・シアン・マゼンタ・イエロー・ブラックを表示。CMYK チャンネルのトーンカーブ調整レイヤー" width="100%">
+      <br>
+      <sub>CMYK に変換したポスター。チャンネルパネルに各版が並び、トーンカーブも CMYK で。<br><a href="https://commons.wikimedia.org/wiki/File:Th%C3%A9ophile-Alexandre_Steinlen_-_Tourn%C3%A9e_du_Chat_Noir_de_Rodolphe_Salis_(Tour_of_Rodolphe_Salis%27_Chat_Noir)_-_Google_Art_Project.jpg">テオフィル＝アレクサンドル・スタンラン『Tournée du Chat Noir de Rodolphe Salis』</a>(1896 年)</sub>
+      <h3>印刷用データもそのまま</h3>
+      CMYK・Lab の PSD はそのモードのまま開け、イメージ › モードで作業用 CMYK プロファイルを使って変換できます。描画・修正・色調補正・フィルター・文字・レイヤースタイルを CMYK・Lab のまま使え、描画モードも Photoshop がそのモードで用意しているものが使えます。
+      <br><br>
+      カラー設定、プロファイルの指定・変換、CMYK の校正表示、16 ビット、HDR トーン付きの 32 ビット HDR ドキュメントにも対応しています。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/filters.jpg" alt="国芳の猫の版画に Mosh のハーフトーンをカンバス上でライブプレビューし、そのダイアログを表示" width="100%">
+      <br>
+      <sub>フィルター › Mosh › ハーフトーンをカンバス上でプレビュー。<br><a href="https://commons.wikimedia.org/wiki/File:Kuniyoshi_Utagawa,_For_cats_in_different_poses.jpg">歌川国芳『たとえ尽の内』より、さまざまな姿の猫</a>(1852 年)</sub>
+      <h3>試しきれないほどのフィルター</h3>
+      Photoshop と同じサブメニューに並ぶフィルター(ぼかし、変形、ノイズ、ピクセレート、描画、シャープ、表現手法)は、選択範囲の中でカンバス上にプレビューされます。多くはスマートオブジェクトにスマートフィルターとして適用でき、あとから並べ替え・マスク・編集ができます。
+      <br><br>
+      さらに Camera Raw フィルター(Shift+Ctrl+A)、<code>gmic</code> をインストールすれば 850 種類以上の G'MIC フィルター、フィルター › Mosh の 54 種類のグリッチ・レトロ効果も使えます。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/search.jpg" alt="ゴッホ『星月夜』の上で 編集 › 検索 を開き、mask に一致するコマンドをメニューの位置とともに一覧表示" width="100%">
+      <br>
+      <sub>編集 › 検索 で、メニューのコマンド・ツール・G'MIC フィルターを数文字で探せます(画面は英語表示)。<br><a href="https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg">フィンセント・ファン・ゴッホ『星月夜』</a>(1889 年)</sub>
+      <h3>手が覚えている操作のままで</h3>
+      Photoshop と同じツールとショートカット、Shift+キーでのツールグループの切り替え、押している間だけのキー(Ctrl で移動ツール、描画中の Alt でスポイト、ツールのキーを押し続けて一時的に切り替え)。編集 › キーボードショートカット でどのキーも変更でき、重複はその場で知らせます。
+      <br><br>
+      ツールとポインター下の対象に合わせた右クリックメニュー、定規・ガイド・スマートガイド、ドラッグで数値を変えられるラベル、ファイル › 復帰(F12)。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/export-as.jpg" alt="広重『浅草田甫酉の町詣』(窓辺に白い猫)を 書き出し形式 のダイアログで WebP・品質 90 に設定し、画像サイズ、カラースペース、プレビューとファイルサイズを表示" width="100%">
+      <br>
+      <sub>書き出し形式。書き出したファイルのプレビューとサイズを確認できます。<br><a href="https://commons.wikimedia.org/wiki/File:Hiroshige,_Asakusa_ricefields_and_torinomachi_festival,_1857.jpg">歌川広重『名所江戸百景 浅草田甫酉の町詣』</a>(1857 年)</sub>
+      <h3>どこへでも書き出せる</h3>
+      書き出し形式で PNG・JPEG・GIF・WebP・TIFF・TGA を、プレビュー・ファイルサイズ・画像サイズ・マット・sRGB 変換を確認しながら書き出せ、設定は形式ごとに記憶されます。クイック書き出し、レイヤー › 書き出し形式、アートボードとスライスの一括書き出しも。
+      <br><br>
+      作業をアクションとして記録し、ファイル › 自動処理 › バッチでフォルダーごと処理できます。
+    </td>
+  </tr>
+</table>
 
-| 移行元 | ファイル | ブラシと操作 |
-|---|---|---|
-| **Photoshop** | `.psd`・`.psb` をレイヤー・グループ・マスク・クリッピングマスク・描画モード・レイヤースタイル・ベクターシェイプ・スマートオブジェクト・編集可能なテキストを保ったまま開け、それらを Photoshop のまま保ってレイヤー付きの `.psd` に書き出せます | `.abr` ブラシ、おなじみのツールとショートカット(V、M、L、W、B、E、`[` `]`、Ctrl+T、Ctrl+J、Ctrl+G) |
-| **クリップスタジオ** | `.clip` をレイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま開けます | `.sut` ブラシ |
-| **Procreate** | 書き出した画像 | `.brushset`・`.brush` |
-| **Krita・GIMP** | 共同作業者から届いた Photoshop ファイルや画像 | おなじみの MyPaint ブラシエンジンと G'MIC フィルター |
+### ほかにもいろいろ
 
-PSD の書き出しは往復テスト済みです。手元にあるレイヤー付き PSD(Photoshop とクリップスタジオ製、4096 × 4096 で最大 54 レイヤー・16 グループ)は、
-書き出して開き直してもピクセル単位で同じになり、ほかの PSD リーダーでも構造を保ったまま開けます。NekoPhoto がまだ編集できない要素はバイト単位でそのまま戻り(往復テスト用のファイル 117 個すべてが変化なく戻ります)、レイヤースタイル・ベクターシェイプ・グループは Photoshop と同じように描画されます。PSD で表現できない要素は書き出す前に一覧表示されます
-([docs/psd-export.md](docs/psd-export.md)、英語)。
-
-今後の予定:
-
-- **CMYK・Lab ドキュメントでのスマートオブジェクト・アートボード・スライス**(テキスト・シェイプ・レイヤースタイルなど、それ以外はすでに使えます)
-- **読み込んだブラシのカラージッター**: Procreate・クリップスタジオ・Photoshop のブラシは、筆圧カーブ・入り抜き・ジッター・角度の挙動をすでに引き継ぎます
-
-### できること
-
-- **レイヤー:** グループ、描画モード、不透明度、レイヤーマスク、クリッピングマスク、調整レイヤー、ブレンド条件(レイヤースタイル ▸ レイヤー効果の詳細:自分や下のレイヤーの明るさでピクセルを表示・非表示。Alt で分割したスライダーで境界をなめらかに)
-- **色とビット数:** 8・16・32 ビット/チャンネル。32 ビットの HDR ドキュメントでは HDR トーン、露光量を変えられる表示、白より明るい光を保ったままの色調補正・フィルター・選択範囲・ピクセル編集が使えます。RGB・CMYK・Lab カラーのドキュメントを PSD から開き、イメージ > モードで変換でき、ICC プロファイルでカラーマネジメントされます。どのモードでも Photoshop と同じ描画モードが使え、Photoshop の描画結果と一致します。CMYK・Lab のドキュメントは RGB を経由せずそのままの色で描画・修正・色調補正・フィルター・選択・切り抜き・変形・文字入力・シェイプ・レイヤースタイルが使え、PNG・JPEG・WebP・TIFF に書き出せます。チャンネルパネル、ヒストグラムパネル、CMYK の校正表示もあります
-- **変形:** 解像度を落とさずに移動・拡大縮小・回転・自由変形。コンテンツに応じて拡大・縮小、コンテンツに応じた移動
-- **選択範囲:** 長方形・楕円選択、なげなわ、なぞる/クリックするだけのクイック選択、コンテンツに応じた塗りつぶし、そして輪郭を読み取る自動選択(陰影やテクスチャは含め、境界では止まります。クリック直後に許容値を変えて調整でき、Shift/Alt クリックで含めるもの・除くものを指示できます。「隣接」をオフにすれば、キャラクターの周りに分かれた背景も 1 クリックで選択でき、削除しても線画に背景の色が残りません)
-- **描画:** ブラシ、消しゴム、スポット修復ブラシ、コピースタンプ、指先ツール、ゆがみ、グラデーション(Photoshop と同じクラシック・知覚的・リニアの方式)、シェイプ、キャンバスに直接入力できるテキスト(日本語入力にも対応)
-- **ブラシ:** 筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、絵の具、ぼかし)。Photoshop(`.abr`)、Procreate(`.brushset`・`.brush`)、クリップスタジオ(`.sut`)のブラシを筆圧カーブ・入り抜き・ジッターごと読み込んだり、任意の画像をブラシ先端として読み込めます
-- **ベクター:** パスの結合・型抜きができるペンとシェイプ、グラデーション・パターンの塗り、ライブシェイプ、あらゆるレイヤーのベクターマスク、テキストのパス化
-- **アートボードとスライス:** まとめてファイルに書き出せます
-- **アクションとバッチ:** 操作を記録・再生し、フォルダー内のファイルに一括適用できます。ほとんどのメニューコマンドとレイヤーパネルの操作が記録されます
-- **アニメーション:** フレームタイムラインとアニメーション GIF の書き出し。GIF・Aseprite ファイルはフレームごと開けます
-- **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、そして Photoshop と同じサブメニューに並ぶフィルター(ぼかし、ツイスト・波形・球面・極座標などの変形、ノイズ、モザイク、雲模様、アンシャープマスク、エンボス、輪郭検出、ハイパス、明るさの最大値・最小値、オフセット、レンズ補正)。レベル補正やトーンカーブで Alt を押しながらドラッグすると、白飛び・黒つぶれする部分が表示されます
-- **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
-- **G'MIC:** `gmic` をインストールすると、850 種類以上のフィルターをライブプレビュー付きで使えます
-- **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開け、レイヤー付き PSD に書き出せます。1 ギガピクセルまでのプロジェクト、カメラ RAW(まず Camera Raw で開き、ホワイトバランスは色温度と色かぶり補正。「オブジェクトとして開く」なら RAW を含むスマートオブジェクトとして後から現像し直せます)・Affinity・SVG・PDF・GIF・TGA・ICO の読み込み、大きすぎて開けない Photoshop ファイルは統合画像として開くこともできます、PNG・JPEG・WebP・TIFF・SVG・GIF・TGA・ICO 書き出し(Photoshop と同じ「書き出し形式」でプレビュー・ファイルサイズ・画像サイズ・マット・sRGB 変換を設定でき、設定は形式ごとに記憶されます。「クイック書き出し」と「レイヤー > 書き出し形式」も使えます)、タブで複数のプロジェクト、ファイル ▸ 復帰(F12)で開いたとき・最後に保存したときのファイルに戻す(形式を問わず、1 回の取り消しで元に戻せます)、クラッシュからの復元
-- **Photoshop と同じ操作感:** おなじみのツールとショートカット(Shift+キーでツールグループを切り替え。Photoshop と同じ押している間だけのキー:Ctrl で移動ツール、描画中の Alt でスポイト、Ctrl+Space でズーム、ツールのキーを押し続けて一時的に切り替え)、コマンド・ツール・フィルターを名前で探して実行できる 編集 ▸ 検索(Ctrl+F)、ツールとポインター下の対象に合わせたカンバスの右クリックメニュー、定規・ガイドと移動中のスマートガイド、ラベルをドラッグして数値を変更、切り抜きツールの比率プリセット、ドキュメント間でのレイヤーのコピー&ペースト
-- **AI エージェント:** Claude Code などの MCP クライアントから操作できます
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <h4>🗂️ レイヤー</h4>
+      グループ、Photoshop の 27 種類の描画モードと通過、レイヤーマスクとベクトルマスク、クリッピングマスク、塗りつぶしレイヤーと調整レイヤー、ブレンド条件、配置・変換・編集・置き換えのできるスマートオブジェクト、ドキュメント間でのレイヤーのコピー。
+    </td>
+    <td width="33%" valign="top">
+      <h4>✂️ 選択と修正</h4>
+      長方形・楕円選択、なげなわ、輪郭を読み取る自動選択、クイック選択、被写体を選択、クイックマスク、アルファチャンネル。スポット修復ブラシ、修復ブラシ、パッチ、コピースタンプ、コンテンツに応じた塗りつぶし・移動・拡大・縮小、ゆがみ、覆い焼き・焼き込み・スポンジ。
+    </td>
+    <td width="33%" valign="top">
+      <h4>✒️ ベクターと変形</h4>
+      ペン、パスの結合ができるライブシェイプ、グラデーション・パターンの塗りと線、パスパネル、テキストのパス化。解像度を落とさない自由変形、ワープケージ、比率プリセット付きの切り抜きツール。
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <h4>📁 ファイル</h4>
+      PSD・PSB、クリップスタジオの <code>.clip</code>、Affinity、Camera Raw で開くカメラ RAW、SVG、PDF、フレームごとの GIF・Aseprite、PNG・JPEG・WebP・TIFF・TGA・ICO。プロジェクトは 1 つの <code>.nekophoto</code> ファイルに保存し、1 ギガピクセルまでのレイヤーを扱えます。
+    </td>
+    <td width="33%" valign="top">
+      <h4>🎞️ アニメーションと自動化</h4>
+      フレームタイムラインとアニメーション GIF の書き出し、アクションとバッチ、スクリプトや AI エージェントのための自動操作ソケットと MCP ブリッジ。
+    </td>
+    <td width="33%" valign="top">
+      <h4>🛟 安心して使える</h4>
+      未保存の作業をバックグラウンドで自動保存するクラッシュからの復元、タブで複数のドキュメント、ファイルが外部で変更されると開いているプロジェクトを再読み込み、ほかのプログラムに CPU を譲る設定。
+    </td>
+  </tr>
+</table>
 
 機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。
 
-| 背景を削除 | G'MIC フィルター |
-|:---:|:---:|
-| <img src="docs/images/remove-background.jpg" alt="ウェルシュ・コーギー・ペンブロークの背景を削除しているところ(設定画面を表示)" width="420"> | <img src="docs/images/filters.jpg" alt="Nathan Lincoln の『K』の上に G'MIC フィルターブラウザーを開き、オールドフォトをプレビューしているところ" width="420"> |
+### PSD はそのまま戻ってくる
 
-<sub>コーギーの写真: pmuths1956 による <a href="https://commons.wikimedia.org/wiki/File:Welchcorgipembroke.JPG">Welchcorgipembroke.JPG</a>(2008 年、Wikimedia Commons、CC BY-SA 3.0)。</sub>
+<p align="center">
+  <img src="docs/images/demo-psd-roundtrip.webp" alt="Nathan Lincoln の Photoshop で保存された K.psd を開き、グループ・マスク・スマートフィルター・調整レイヤーがそのまま残っていることを確認し、露光量の調整レイヤーの不透明度を 50% に下げ、レイヤー付き PSD に書き出して開き直し、同じ 33 レイヤーを確認するところ" width="560">
+  <br>
+  <sub>PSD を開いて編集し、PSD に保存して開き直す: NekoPhoto 1.6.1 を画面なしで起動し、自動操作ソケット経由で記録。<br>作品: <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>『K』(許可を得て使用)</sub>
+</p>
 
-### パフォーマンス
+NekoPhoto は実際の Photoshop ファイルで検証しており、その数値を確認用のコマンドとともに公開しています。
 
-重い処理はすべての CPU コアで並列に実行します。12 コアのノート PC(AMD Ryzen AI 9 HX 370)での計測値:
+- **往復:** テスト用の PSD・PSB ファイル 117 個(ほぼすべて Photoshop 2026 で保存。テキスト、スマートオブジェクトとスマートフィルター、
+  レイヤースタイル、シェイプ、マスク、PSB を網羅)は、開いて書き出し、開き直しても何も失われません。NekoPhoto が編集しない
+  3,675 個のブロックはバイト単位でそのまま戻ります。16 ビットに変換しても同様です。
+- **Photoshop 自身の描画と比較:** 72 個中 52 個のファイルが、ピクセルの 99% で Photoshop の表示と 2 レベル以内に収まります
+  (Photoshop で統合した画像、またはファイルに保存された統合画像と比較)。
+- **色:** テスト用ファイルのうちプロファイル付きの RGB PSD 64 個すべてで、ICC プロファイルがバイト単位でそのまま書き戻されます。
+- **想定外なし:** PSD で表現できない要素は書き出す前に一覧表示され、編集していない 16 ビットのレイヤーはバイト単位でそのまま戻ります。
 
-| 処理 | 時間 |
-|---|---|
-| 70 MB の Photoshop ファイルを開く(4096 × 4096 のレイヤー 17 枚) | 0.7 秒 |
-| それをプロジェクトとして保存 | 1.3 秒 |
-| 4096 × 4096 のレイヤー 5 枚のプロジェクトを保存 | 0.7 秒(0.6.0 では 7.2 秒) |
-| そのプロジェクトを開く | 0.4 秒(0.6.0 では 2.5 秒) |
-| 4096 × 4096 の PNG を書き出し | 0.24 秒(0.6.0 では 1.8 秒) |
-| クイック選択(1 ストロークあたり) | 平均 0.16 秒(0.6.0 では 0.65 秒) |
-| 1000 万画素の写真の背景を削除 | 1.7 秒(すべての補正をオンにして 8.3 秒) |
-| 1200 万画素のレイヤーにぼかし(ガウス) | 0.1 秒未満 |
+集計値・既知の差異・検証の再実行方法は [互換性と正確さ](docs/compatibility.md#日本語) に、書き出しのしくみは
+[docs/psd-export.md](docs/psd-export.md) と [docs/psd-roundtrip.md](docs/psd-roundtrip.md)(英語)にまとめています。
 
-### 入手方法
+### スクリプトと AI エージェントから使う
 
-[Releases](../../releases) ページから AppImage をダウンロードし、実行権限を付けて起動します。
-2022 年以降の x86_64 Linux であれば、Wayland と X11 のどちらでも動作します。
+エージェントやスクリプトの操作は、画面に見えているのと同じ編集セッションを通り、取り消し履歴に残り、画面にも表示されます。
+183 個の自動操作メソッドで、ドキュメント・レイヤー・ピクセル・選択範囲・描画・書き出しを扱えます。
+
+Claude Code などの MCP クライアントから操作するには:
+
+```bash
+claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
+```
+
+あとは「photo.jpg を開いて背景を削除し、後ろに暗いグラデーションを敷いて result.png に書き出して」のように頼むだけです。
+
+シェルからは、起動中のエディターにリクエストを 1 つ送ったり、リクエストを並べたファイルを画面なしのインスタンスで実行したりできます
+(ファイルの例は英語版の [Built for scripts and agents](#built-for-scripts-and-agents) にあります)。
+
+```bash
+nekophoto --call layers.list
+nekophoto --call render --params '{"path": "/tmp/check.png", "maxSize": 800}'
+nekophoto --headless --batch grade.jsonl
+```
+
+プロトコル、全メソッド、MCP のツールは [docs/automation.md](docs/automation.md)(英語)をご覧ください。
+
+### はじめかた
+
+**Linux:** [Releases](https://github.com/vomitselfie/nekophoto/releases/latest) ページから AppImage をダウンロードし、
+実行権限を付けて起動します。2022 年以降の x86_64 Linux であれば、Wayland と X11 のどちらでも動作します。
 
 ```bash
 chmod +x NekoPhoto-*.AppImage
@@ -299,40 +572,49 @@ curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/in
 をダウンロードし、好きな場所に展開して `nekophoto.exe` を起動します。インストール不要のポータブル版で、
 設定はユーザープロファイルに保存されます。G'MIC フィルターを使うには `gmic.exe` に PATH を通してください。
 
-**背景を削除** は、編集 > 環境設定 でオンにすると使えるようになります(モデルを一度だけダウンロードします)。
+**知っておくと便利なこと**
 
-画面表示は日本語と英語に対応しています。デスクトップの言語に合わせて切り替わり、編集 > 環境設定 > 言語 で
-選ぶこともできます(次回の起動から反映されます)。
+- **背景を削除** は、編集 › 環境設定 でオンにすると使えるようになります(モデルを一度だけダウンロードします)。クイック選択の
+  クリックで選ぶモードは、オプションバーから専用のモデルをダウンロードします。
+- 画面表示は **日本語と英語** に対応しています。デスクトップの言語に合わせて切り替わり、編集 › 環境設定 › 言語 で
+  選ぶこともできます(次回の起動から反映されます)。
+- NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の Linux 移植として始まり、バージョン 1.0
+  までは compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは自動で引き継がれます。以前のバージョンや
+  Mac 版の `.comp` プロジェクトフォルダーも、そのまま開いて保存できます。
 
-### AI エージェントから使う
-
-```bash
-claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
-```
-
-あとは「photo.jpg を開いて背景を削除し、後ろに暗いグラデーションを敷いて result.png に書き出して」
-のように頼むだけです。詳しくは [docs/automation.md](docs/automation.md)(英語)をご覧ください。
-
-### ソースからビルド
+#### ソースからビルド
 
 必要なパッケージとビルド手順は、英語版の [Build from source](#build-from-source) と同じです。
 Windows では MSYS2(UCRT64)の MinGW-w64 でビルドします。手順とビルドオプション、キーボードショートカットは
 [docs/linux-port.md](docs/linux-port.md)(英語)にあります。
 
+### ドキュメント
+
+| | |
+|---|---|
+| [機能の一覧](docs/features.md#日本語) | すべての機能をメニューごとに |
+| [互換性と正確さ](docs/compatibility.md#日本語) | Photoshop と比べて検証している内容と、まだ異なる点 |
+| [カラーモード](docs/color-modes.md#日本語) · [ビット数](docs/bit-depth.md#日本語) · [カラーマネジメント](docs/color-management.md#日本語) | CMYK・Lab、16・32 ビット、ICC プロファイル |
+| [Automation and MCP](docs/automation.md) · [Actions](docs/actions.md)(英語) | 記録、バッチ、スクリプトとエージェント |
+| [法的な制約](docs/legal-boundaries.md#日本語) | 意図的に Photoshop と異なる動作をするいくつかの機能 |
+
 ### 開発に参加する
 
 ビルド方法、コードの構成、変更が守るべきルール、プルリクエストで CI が確認する内容は [CONTRIBUTING.md](CONTRIBUTING.md)(英語)に、
-セキュリティ上の問題の非公開での報告方法は [SECURITY.md](SECURITY.md)(英語)にあります。テストの内容と Photoshop との既知の差異は
-[docs/compatibility.md](docs/compatibility.md#日本語) をご覧ください。
+セキュリティ上の問題の非公開での報告方法は [SECURITY.md](SECURITY.md)(英語)にあります。言語の追加方法は
+[docs/translating.md](docs/translating.md)(英語)をご覧ください。
 
-### ライセンス
+### ライセンスとクレジット
 
 GPL-3.0-or-later です([LICENSE](LICENSE))。Wonder Assembly LLC の Compositor を元にしており、
 その部分のコードは MIT ライセンスのままです([LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt))。
 サードパーティー製コンポーネントとそのライセンスは [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) にまとめています。
 
-### 商標
+この README の作品: [Nathan Lincoln](https://www.nathanlincoln.com/)『K』(許可を得て使用)、pmuths1956 によるコーギーの写真
+[Welchcorgipembroke.JPG](https://commons.wikimedia.org/wiki/File:Welchcorgipembroke.JPG)(2008 年、Wikimedia Commons、CC BY-SA 3.0)、
+K. M. Alexander による CC0 の「Myer Settlement Brushes」、そして Wikimedia Commons のパブリックドメインの作品(葛飾北斎、歌川広重、
+歌川国芳、テオフィル＝アレクサンドル・スタンラン、フィンセント・ファン・ゴッホ。出典は各スクリーンショットの下にリンクしています)。
 
-Adobe と Photoshop は Adobe Inc. の商標です。NekoPhoto は Adobe とは関係がなく、Adobe の承認も受けていません。Photoshop の
+<sub>Adobe と Photoshop は Adobe Inc. の商標です。NekoPhoto は Adobe とは関係がなく、Adobe の承認も受けていません。Photoshop の
 名前は互換性を説明するためだけに使っています。CLIP STUDIO PAINT は株式会社セルシスの、Procreate は Savage Interactive Pty Ltd
-の商標です。いくつかの機能は意図的に Photoshop と異なる動作をします:[docs/legal-boundaries.md](docs/legal-boundaries.md#日本語)
+の商標です。いくつかの機能は意図的に Photoshop と異なる動作をします:[docs/legal-boundaries.md](docs/legal-boundaries.md#日本語)</sub>
