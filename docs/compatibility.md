@@ -83,8 +83,10 @@ Read, drawn and written back:
   all Photoshop blend modes' keys, nested folders (pass-through and isolated), closed state, colour labels, locks.
 - **Masks**: layer and folder masks (also disabled), both masks on one layer, mask density and feather,
   vector masks on any layer, clipping masks ([vector-masks.md](vector-masks.md)).
-- **Adjustment layers**: Levels, Curves, Exposure and Hue/Saturation as Photoshop adjustment layers; the rest
-  (Brightness/Contrast, Color Balance, Selective Color ...) carried unchanged.
+- **Adjustment layers**: every kind Photoshop and NekoPhoto share (Levels, Curves, Exposure, Hue/Saturation,
+  Brightness/Contrast, Color Balance, Selective Color, Black & White, Channel Mixer, Color Lookup and the rest) read,
+  drawn and written as Photoshop adjustment layers: the file's own block while unchanged, written anew once edited
+  ([psd-export.md](psd-export.md#what-is-carried)).
 - **Layer styles**: drop and inner shadow, outer and inner glow, bevel and emboss (with texture and contour),
   satin, colour, gradient and pattern overlays, strokes (several per layer), knockout, blend-interior options,
   drawn as Photoshop draws them and written back as its bytes; gradients in Photoshop's Perceptual, Linear and
@@ -101,7 +103,8 @@ Read, drawn and written back:
   replaced and edited; thirteen Smart Filters drawn and editable; linked files carried
   ([smart-objects.md](smart-objects.md)).
 - **Document**: colour profile, XMP and EXIF, captions, print settings, layer comps, guides, slices, paths,
-  plug-in resources, patterns and linked-file data carried; CMYK files converted through their own ICC profile.
+  plug-in resources, patterns and linked-file data carried; CMYK and Lab files open in their own mode with their ICC
+  profile.
 - **PSB** (large documents) read and written.
 
 ## Known fidelity gaps
@@ -113,28 +116,25 @@ some G'MIC filters) are listed in [legal-boundaries.md](legal-boundaries.md).
 - **Not verified in Photoshop.** The files match what Photoshop wrote, structure for structure, but they have
   not been opened in Photoshop itself, so a warning on open or a re-layout of our type layers there is not ruled
   out.
-- **Export is RGB, at 8 or 16 bits per channel.** A 16-bit RGB or grayscale file opens and exports at 16 bits
-  ([bit-depth.md](bit-depth.md)); an unedited layer keeps its channel data byte for byte, an edited one (or a PSB) is
-  written from NekoPhoto's 0..32768, dropping the file's lowest bit. A 32-bit, CMYK or Lab file opens converted to
-  8-bit RGB and exports as that, without its original colour profile. 16-bit and PSB Smart Filter caches are left for
+- **Export is RGB, CMYK or Lab, at 8, 16 or 32 bits per channel** ([bit-depth.md](bit-depth.md),
+  [color-modes.md](color-modes.md)); bitmap, indexed, grayscale, duotone and multichannel files open as RGB and export
+  as that. At 16 bits an unedited layer keeps its channel data byte for byte, an edited one (or a PSB) is written from
+  NekoPhoto's 0..32768, dropping the file's lowest bit. 16-bit, 32-bit and PSB Smart Filter caches are left for
   Photoshop to rebuild. No Photoshop-saved 16-bit file is in the corpus: the 16-bit round trip is checked on a file
   built the way Photoshop lays one out, and on the corpus converted to 16 bits.
-- **Written as pixels**: scaled, rotated or flipped layers are resampled into place; shape layers made in
-  NekoPhoto; flipped text; adjustments Photoshop has no equivalent for (Grain, a Gradient Map made or edited here, Hue/Saturation on
+- **Written as pixels**: scaled, rotated or flipped layers are resampled into place; the older rectangle and ellipse
+  layers of `.comp` projects (shape layers drawn with the Shape tool are written as Photoshop's own); flipped text; adjustments Photoshop has no equivalent for (Grain, a Gradient Map made or edited here, Hue/Saturation on
   the plain scale) become a pixel layer of their result; a layer clipped to one not directly beneath it is
   written unclipped.
-- **Folder opacity and blend modes** set in NekoPhoto are written as set but shown differently than in Photoshop.
 - **Not carried**: resolution (ours is written), thumbnails, the ID seed; guides, slices and paths once the canvas
-  size changes; a live shape's origination once it moves.
+  size changes.
 - **Layer styles not drawn yet**: contours on shadows and glows (drawn linear), noise and jitter, Dissolve (drawn
   as Normal), "Layer Mask Hides Effects". An Outer Bevel's texture is 5.2 levels off on average.
-- **Vector masks**: shape feather is 5.4 levels off (Photoshop feathers the shape as one render); gradient and
-  pattern strokes are not drawn.
 - **Smart objects**: no dragging a Smart Filter between smart objects, no editing a stack that holds a filter not
   drawn here, no linked filter mask, no relinking of linked files.
 
 How close the drawing is, as a mean difference per pixel on a 0-255 scale against Photoshop's own renders of the
-fixtures: most layer styles 0.00-0.9, vector masks and shapes 0.00-1.3, styled folders 0.00-2.6, Blend If 0.52
+fixtures: most layer styles 0.00-0.9, vector masks and shapes 0.00-0.94, styled folders 0.00-2.6, Blend If 0.52
 (within 2 levels), Perceptual and Linear gradients 0.57 and 0.08 (against ag-psd's Photoshop-saved files)
 ([layer-styles.md](layer-styles.md#how-close), [vector-masks.md](vector-masks.md#how-close)).
 Blend If in CMYK and Lab, and Perceptual and Linear gradients between CMYK inks, have no Photoshop-saved file to
@@ -173,7 +173,18 @@ AMD Ryzen AI 9 HX 370 (12 cores, 24 worker threads), Manjaro, GCC 16, Release bu
 | Levels / Curves / Hue/Saturation | 1.7 ms / 1.7 ms / 18.6 ms |
 | The 4000 × 3000 document at 16 bits / reduced for the screen | 230 ms / 262 ms |
 
-Application-level timings (opening a 70 MB PSD in 0.7 s and so on) are in the [README](../README.md#performance).
+Application-level timings on the same laptop:
+
+| Task | Time |
+|---|---|
+| Open a 70 MB Photoshop file (17 layers at 4096 × 4096) | 0.7 s |
+| Save it as a project | 1.3 s |
+| Save a project with five 4096 × 4096 layers | 0.7 s (7.2 s in 0.6.0) |
+| Open that project | 0.4 s (2.5 s in 0.6.0) |
+| Export a 4096 × 4096 PNG | 0.24 s (1.8 s in 0.6.0) |
+| Quick Select, per stroke | 0.16 s on average (0.65 s in 0.6.0) |
+| Remove Background on a 10-megapixel photo | 1.7 s (8.3 s with every refinement on) |
+| Gaussian blur on a 12-megapixel layer | under 0.1 s |
 
 ---
 
@@ -201,8 +212,8 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
   上のテストファイルを 16 bit に変換して書き出しても、118 個すべてで引き継いだブロックが戻ります([bit-depth.md](bit-depth.md))。
 - **カラープロファイル**: テストファイルのうちプロファイル付きの RGB の PSD 64 個すべてで、ICC プロファイル(リソース 1039)が
   バイト単位でそのまま戻ります。変換は Little CMS と sRGB・Adobe RGB の公開された行列に一致します([color-management.md](color-management.md))。
-- **既知の差異**: Photoshop 本体で開いての確認はまだです。書き出しは RGB(8 bit/チャンネルまたは 16 bit/チャンネル)。変形したレイヤーや Photoshop に
-  相当するもののない調整はピクセルとして書き出されます。一部のレイヤースタイル(シャドウ・光彩の輪郭、ノイズ、ディザ合成)は
+- **既知の差異**: Photoshop 本体で開いての確認はまだです。書き出しは RGB・CMYK・Lab(8・16・32 bit/チャンネル)。変形したレイヤーや Photoshop に
+  相当するもののない調整(粒子、ここで作成・編集したグラデーションマップ)はピクセルとして書き出されます。一部のレイヤースタイル(シャドウ・光彩の輪郭、ノイズ、ディザ合成)は
   まだ描画されません。
 - **CI**: GCC と Clang(Ubuntu 24.04、`-Werror`)、Windows(MSYS2 の MinGW-w64)でビルドとテスト、画面なしのスモークテスト、
   自動操作ソケットと MCP のテストを実行します。リリースでは Ubuntu 22.04 で AppImage を作って起動を確認します。

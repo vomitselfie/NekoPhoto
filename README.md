@@ -97,7 +97,7 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
       <br>
       <sub>Curves, Hue/Saturation and Color Balance adjustment layers over a print, with the Histogram panel.<br><a href="https://commons.wikimedia.org/wiki/File:Hiroshige,_Sudden_shower_over_Shin-%C5%8Chashi_bridge_and_Atake,_1857.jpg"><i>Sudden Shower over Shin-Ōhashi Bridge and Atake</i></a>, Utagawa Hiroshige, 1857</sub>
       <h3>Edit without regret</h3>
-      Seventeen adjustment layers, from Levels and Curves to Black &amp; White, Selective Color and Color Lookup, keep every change live: mask them, stack them, switch them off. Your pixels never change, and the layers go out to PSD as Photoshop's own.
+      Seventeen adjustment layers, from Levels and Curves to Black &amp; White, Selective Color and Color Lookup, keep every change live: mask them, stack them, switch them off. Your pixels never change, and the layers go out to PSD as Photoshop's own (Grain, which Photoshop lacks, and a Gradient Map made here, as their result).
       <br><br>
       Hold Alt on Levels or Curves to see exactly what clips, and read the Histogram panel's channels and statistics as you go.
     </td>
@@ -428,7 +428,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
       <br>
       <sub>トーンカーブ・色相・彩度・カラーバランスの調整レイヤーとヒストグラムパネル。<br><a href="https://commons.wikimedia.org/wiki/File:Hiroshige,_Sudden_shower_over_Shin-%C5%8Chashi_bridge_and_Atake,_1857.jpg">歌川広重『名所江戸百景 大はしあたけの夕立』</a>(1857 年)</sub>
       <h3>やり直しのきく補正</h3>
-      レベル補正・トーンカーブから白黒・特定色域の選択・カラールックアップまで、17 種類の調整レイヤーで補正をいつでも変更できます。マスクを付けても、重ねても、オフにしても元のピクセルは変わらず、PSD には Photoshop の調整レイヤーとして書き出されます。
+      レベル補正・トーンカーブから白黒・特定色域の選択・カラールックアップまで、17 種類の調整レイヤーで補正をいつでも変更できます。マスクを付けても、重ねても、オフにしても元のピクセルは変わらず、PSD には Photoshop の調整レイヤーとして書き出されます(Photoshop にない粒子と、ここで作ったグラデーションマップは結果の画像として)。
       <br><br>
       レベル補正やトーンカーブで Alt を押しながらドラッグすると白飛び・黒つぶれする部分が見え、ヒストグラムパネルでチャンネルごとの分布と統計値を確認できます。
     </td>
@@ -625,6 +625,8 @@ Windows では MSYS2(UCRT64)の MinGW-w64 でビルドします。手順とビ�
 | [機能の一覧](docs/features.md#日本語) | すべての機能をメニューごとに |
 | [互換性と正確さ](docs/compatibility.md#日本語) | Photoshop と比べて検証している内容と、まだ異なる点 |
 | [カラーモード](docs/color-modes.md#日本語) · [ビット数](docs/bit-depth.md#日本語) · [カラーマネジメント](docs/color-management.md#日本語) | CMYK・Lab、16・32 ビット、ICC プロファイル |
+| [Layer styles](docs/layer-styles.md) · [Smart objects](docs/smart-objects.md) · [Vector tools](docs/vector-tools.md)(英語) | PSD での描画と保存のしくみ |
+| [Brush engine](docs/brush-engine.md) · [Camera Raw](docs/camera-raw.md) · [Remove Background](docs/remove-background.md)(英語) | ペイント、RAW 現像、切り抜き |
 | [Automation and MCP](docs/automation.md) · [Actions](docs/actions.md)(英語) | 記録、バッチ、スクリプトとエージェント |
 | [法的な制約](docs/legal-boundaries.md#日本語) | 意図的に Photoshop と異なる動作をするいくつかの機能 |
 

@@ -13,7 +13,7 @@ interface language, and runs it; the last eight used come first.
 - Layers and folders with opacity and all 27 of Photoshop's blend modes plus Pass Through, drawn with its calibrated byte arithmetic (Vivid Light, Linear Light, Hard Mix, Darker/Lighter Color and the rest match Photoshop captures; Dissolve dithers by document position)
 - Layer masks: paint, fill, invert, blur and feather; link or unlink them from the layer
 - Clipping masks and folder masks
-- Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map, Grain
+- Adjustment layers: all seventeen kinds listed under [Adjustments and filters](#adjustments-and-filters), with masks, clipping and Blend If
 - Merge Down, Merge Layers and Merge Group (Ctrl+E); Merge Visible (Ctrl+Shift+E) merges every visible layer into one and leaves the hidden ones
 - Duplicate, rename, reorder and nest by drag and drop; drag layers between open projects
 - Copy and paste whole layers between documents, as Photoshop: Edit ▸ Copy with layers selected and no selection copies them and the folders' contents with their masks, vector masks, styles, text, shapes, smart objects (and their sources), adjustments, blending and clipping; Paste in any open document puts them above the active layer as one undo step, converted to its colour profile and depth (other apps get the layers flattened)
@@ -29,6 +29,7 @@ interface language, and runs it; the last eight used come first.
 ## Selections
 - Rectangle and ellipse marquee, freehand and polygonal lasso, and an edge-aware magic wand: shading and texture stay in, edges between similar colours hold, and the tolerance can be changed right after a click
 - Quick Select (Shift+W): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges and updates when you release the mouse ([legal-boundaries.md](legal-boundaries.md))
+- Select ▸ Subject, as Photoshop's: selects the main subject in one step with Quick Select's click model (greyed, saying why, until that model is downloaded)
 - Add (Shift), subtract (Alt) and intersect (Shift+Alt)
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
 - Channels (Window ▸ Channels, [details](channels.md)): alpha channels as saved selections (Select ▸ Save Selection and Load Selection in every combine mode, Ctrl-click a thumbnail with Shift, Alt or both), painted like Quick Mask, with Channel Options; one colour channel in gray (Ctrl+3, 4, 5) that the brush, fills, adjustments, filters and paste then change alone; spot channels kept from PSD files; channels in PSD files and projects, at 8 and 16 bits
@@ -61,7 +62,7 @@ interface language, and runs it; the last eight used come first.
 - Seventeen adjustment layers, also as destructive adjustments: Levels, Curves, Hue/Saturation, Exposure, Gradient Map, Grain, and Photoshop's Invert, Brightness/Contrast, Posterize, Threshold, Color Balance, Black & White, Vibrance, Photo Filter, Channel Mixer, Selective Color and Color Lookup (.cube, .3dl and ICC LUTs), read from and written to PSD as Photoshop's own ([adjustment-layers.md](adjustment-layers.md))
 - Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain, Invert
 - The Filter menu in Photoshop's submenus: Blur (Box Blur, Gaussian Blur, Motion Blur, Radial Blur, Surface Blur; the blurs spread past a layer's edges), Distort (Pinch, Polar Coordinates, Ripple, Shear, Spherize, Twirl, Wave, ZigZag, inside the selection's bounds; Rectangular to Polar repeats the edge pixels into the corners, as Photoshop does), Noise (Add Noise, Dust & Scratches, Median), Pixelate (Mosaic), Render (Clouds, Difference Clouds between the foreground and background colours), Sharpen (Unsharp Mask), Stylize (Emboss, Find Edges), Other (High Pass, Maximum, Minimum, Offset), and Lens Correction, each with a preview dialog and Photoshop's settings (Clouds, Difference Clouds and Find Edges run at once, as in Photoshop)
-- Box Blur, Radial Blur (Spin or Zoom, Draft, Good or Best), Surface Blur, Dust & Scratches, Median, Unsharp Mask, High Pass, Emboss and Mosaic draw exactly as the same Smart Filters do, at 8 and 16 bits and in CMYK and Lab; on a smart object they go on as Smart Filters. The distortions, Maximum, Minimum and Offset also work at 32 bits; Clouds is RGB only for now ([mode-matrix.md](mode-matrix.md))
+- Box Blur, Radial Blur (Spin or Zoom, Draft, Good or Best), Surface Blur, Dust & Scratches, Median, Unsharp Mask, High Pass, Emboss and Mosaic draw exactly as the same Smart Filters do, at 8 and 16 bits and in CMYK and Lab; on a smart object they go on as Smart Filters. The distortions, Maximum, Minimum and Offset also work at 32 bits; Clouds and Difference Clouds are RGB only for now ([mode-matrix.md](mode-matrix.md))
 - Filter > Camera Raw Filter (Shift+Ctrl+A): white balance, tone, presence, curve, colour mixer, colour grading, detail, optics, geometry, effects and calibration on a layer's pixels ([camera-raw.md](camera-raw.md))
 - Filter > G'MIC: over 850 filters with their own controls, when `gmic` is installed (Update Filters fetches the catalogue; the few that cannot work here, such as those that resize the image or make layers, are hidden unless Show all filters is on)
 - Filter > Mosh: OpenMosh's 54 glitch, distortion, retro, stylize, colour and composite effects (Pixel Sort, Data-Mosh, Hard Glitch, VHS, CRT, Halftone, Kaleidoscope, Glow, Light Streak, Feedback, Optical-Flow, Ascii, ChromaKey and more), with a live preview and a reroll for the random ones, at 8 and 16 bits; Overlay and Mask read another layer where it lies over this one, and Caption stamps text ([mosh.md](mosh.md))
@@ -76,11 +77,11 @@ interface language, and runs it; the last eight used come first.
 - Advanced options: refine the edges, solve hair and fur, remove speckles, clean the edge colours, and a detail pass at full resolution for large photos; Quality > Best turns on everything for hair and fur in one step
 
 ## Files and canvas
-- Open Photoshop PSD and PSB files with their layers, folders, masks, blend modes, most adjustment layers, layer styles drawn as Photoshop draws them (docs/layer-styles.md), folders isolated and faded as in Photoshop, smart objects that keep their source (docs/smart-objects.md), vector masks and shape layers drawn from their paths (docs/vector-masks.md) and simple text as editable text; what cannot be kept is listed after opening
+- Open Photoshop PSD and PSB files with their layers, folders, masks, blend modes, most adjustment layers, layer styles drawn as Photoshop draws them (docs/layer-styles.md), folders isolated and faded as in Photoshop, smart objects that keep their source (docs/smart-objects.md), vector masks and shape layers drawn from their paths (docs/vector-masks.md) and text as editable text (point and box text, style runs, Warp Text); what cannot be kept is listed after opening
 - Layer ▸ Layer Style: Photoshop's Layer Style dialog for drop and inner shadows, outer and inner glows, bevel and emboss, satin, colour, gradient and pattern overlays and stroke, with Copy, Paste and Clear Layer Style; styles export to PSD as Photoshop's own (docs/layer-styles.md)
 - Blend If (Layer Style ▸ Blending Options): This Layer and Underlying Layer sliders for Gray and each colour channel, split with Alt-drag for a soft fade, on layers, folders and adjustment layers, drawn at every depth and kept in PSD files and projects; Advanced Blending's Channels (the R, G, B boxes: a channel left out keeps what is beneath), the same way; gradients draw in Photoshop's Perceptual, Linear or Classic method (docs/layer-styles.md)
 - Photoshop presets (File ▸ Import Presets…): layer styles from `.asl` files, applied from Layer ▸ Layer Style ▸ Apply Style with the patterns they use; patterns from `.pat` files for pattern overlays and bevel textures; gradients from `.grd` files for the Gradient tool and the Layer Style dialog's gradients. They stay in the library across sessions (docs/presets.md)
-- Export layered Photoshop PSD files (File > Export > Export as Photoshop Document): layers, folders, masks, clipping, blend modes and Levels, Curves, Exposure and Hue/Saturation adjustment layers, with a merged image; text layers as editable Photoshop text; a PSD you opened keeps its layer styles, editable text, smart objects and vector masks on the way back out while they still match their layers (docs/psd-roundtrip.md); anything Photoshop cannot carry is listed before you export (docs/psd-export.md)
+- Export layered Photoshop PSD files (File > Export > Export as Photoshop Document): layers, folders, masks, clipping, blend modes and adjustment layers as Photoshop's own (Grain, and a Gradient Map made or edited here, are written as their result), with a merged image; text layers as editable Photoshop text; a PSD you opened keeps its layer styles, editable text, smart objects and vector masks on the way back out while they still match their layers (docs/psd-roundtrip.md); anything Photoshop cannot carry is listed before you export (docs/psd-export.md)
 - Open Clip Studio `.clip` projects with their layers, folders, masks, clipping, opacity and blend modes (vector and text layers come in as their pixels)
 - Open SVG files (`.svg`, `.svgz`) as layers: paths and basic shapes with solid fills and strokes become editable vector shape layers, groups become folders with their opacity; gradients, patterns, text, images, filters, clip paths and masks come in as pixel layers drawn by Qt SVG (docs/svg-pdf.md)
 - Export SVG (File > Export > Export SVG): vector shape layers as paths with their fill and stroke, folders as groups, every other layer as an embedded PNG, so the file looks like the document (docs/svg-pdf.md)
@@ -136,12 +137,12 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 最近使った 8 件が先頭に並びます。
 
 ### レイヤー
-- 描画モードと不透明度を持つレイヤーとグループ
+- 不透明度と、Photoshop の 27 種類の描画モードと通過を持つレイヤーとグループ。Photoshop の計算どおりのバイト演算で合成します(ビビッドライト、リニアライト、ハードミックス、カラー比較(暗)・(明)なども Photoshop の画面と一致。ディザ合成はドキュメント上の位置でディザリング)
 - レイヤーマスク:描画、塗りつぶし、反転、ぼかし、境界のぼかし。レイヤーとのリンクの切り替え
 - クリッピングマスクとグループのマスク
-- 調整レイヤー:色相・彩度、レベル補正、トーンカーブ、露光量、グラデーションマップ、粒子
+- 調整レイヤー:[色調補正とフィルター](#色調補正とフィルター)にある 17 種類すべて。マスク、クリッピング、ブレンド条件も使えます
 - 下のレイヤーと結合、レイヤーを結合、グループを結合(Ctrl+E)。表示レイヤーを結合(Ctrl+Shift+E)は表示中のレイヤーをすべて 1 枚にまとめ、非表示のレイヤーは残します
-- ブレンド条件(レイヤースタイル ▸ 描画オプション):グレーと各カラーチャンネルの「このレイヤー」「下になっているレイヤー」のスライダー。Alt キーを押しながらドラッグして分割すると、その間でなめらかにフェードします。レイヤー・グループ・調整レイヤーに使え、すべてのビット数で描画し、PSD とプロジェクトに保存されます。グラデーションは Photoshop の方法(知覚的・リニア・クラシック)で描画します([layer-styles.md](layer-styles.md)、英語)
+- ブレンド条件(レイヤースタイル ▸ 描画オプション):グレーと各カラーチャンネルの「このレイヤー」「下になっているレイヤー」のスライダー。Alt キーを押しながらドラッグして分割すると、その間でなめらかにフェードします。レイヤー・グループ・調整レイヤーに使え、すべてのビット数で描画し、PSD とプロジェクトに保存されます。高度な合成のチャンネル(R・G・B のチェックボックス。外したチャンネルは下の内容を残します)も同様です。グラデーションは Photoshop の方法(知覚的・リニア・クラシック)で描画します([layer-styles.md](layer-styles.md)、英語)
 - ドラッグ&ドロップで複製・名前変更・並べ替え・入れ子。開いているプロジェクト間でもレイヤーを移動可能
 - ドキュメント間でレイヤーごとコピー&ペースト(Photoshop と同じ):選択範囲がなくレイヤーを選択しているときの 編集 ▸ コピー で、レイヤーとグループの中身をマスク・ベクトルマスク・スタイル・テキスト・シェイプ・スマートオブジェクト(ソースごと)・調整レイヤー・描画モード・クリッピングを保ったままコピーし、開いているどのドキュメントでもペーストで作業中のレイヤーの上に 1 回の取り消し単位で追加します。カラープロファイルとビット数はペースト先に合わせて変換します(他のアプリには統合した画像を渡します)
 
@@ -154,12 +155,14 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - オプションバーで位置・サイズ・角度を数値指定
 
 ### 選択範囲
-- 長方形選択・楕円選択、なげなわ・多角形選択、自動選択
+- 長方形選択・楕円選択、なげなわ・多角形選択、そして輪郭を読み取る自動選択(陰影やテクスチャは含め、似た色どうしの境界でも止まり、クリック直後に許容値を変えられます)
 - クイック選択(Shift+W):被写体をなぞるか、クリックするだけ(クリック用の 48 MB のモデルはオプションバーからダウンロード)。選択範囲は画像の輪郭に合わせて調整され、マウスを離したときに更新されます([legal-boundaries.md](legal-boundaries.md#日本語))
+- 選択範囲 ▸ 被写体を選択(Photoshop と同じ):クイック選択のクリック用モデルで、主な被写体を 1 回で選択します(モデルをダウンロードするまでは理由を示してグレー表示)
 - 追加(Shift)、削除(Alt)、共通範囲(Shift+Alt)
 - 拡張、縮小、境界をぼかす、滑らかに、境界線、選択範囲を反転。レイヤーやマスクから選択範囲を作成
 - チャンネル(ウィンドウ ▸ チャンネル、[詳細](channels.md)):選択範囲を保存したアルファチャンネル(選択範囲 ▸ 選択範囲を保存・選択範囲を読み込むは追加・一部削除・共通範囲にも対応、サムネールの Ctrl+クリックと Shift・Alt)。クイックマスクと同じように描画でき、チャンネルオプションでマスク範囲・選択範囲、カラー、不透明度を設定。カラーチャンネルを 1 つだけグレーで表示(Ctrl+3、4、5)すると、ブラシ、塗りつぶし、色調補正、フィルター、ペーストがそのチャンネルだけに適用されます。PSD のスポットカラーチャンネルは保持。チャンネルは PSD とプロジェクトに保存され、8 ビットと 16 ビットの両方で使えます
-- コンテンツに応じた塗りつぶし:輪郭や模様をつなげ、画像の外側への拡張にも使えます(探す範囲は「自動」と「広い範囲」。手で塗るサンプリング範囲はありません)
+- コンテンツに応じた塗りつぶし:輪郭や模様をつなげ、画像の外側への拡張にも使えます。ダイアログ(編集 > コンテンツに応じた塗りつぶし...)で探す範囲(「自動」と「広い範囲」。手で塗るサンプリング範囲はありません。[legal-boundaries.md](legal-boundaries.md#日本語))を選び、カンバス上でプレビューし、新しいレイヤーに出力することもできます([content-aware.md](content-aware.md)、英語)
+- コンテンツに応じて拡大・縮小(編集メニュー):シームカービングで、細部のある部分の縦横比を保ったままレイヤーの幅や高さを変えます。「保護」で選択範囲を守り、ライブプレビュー付きです([詳細](content-aware-scale.md)、英語)
 
 ### 描画とレタッチ
 - サイズ・硬さ・不透明度を指定できるブラシと消しゴム。Shift で直線
@@ -168,18 +171,26 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 先端ブラシのダイナミクス(ブラシツールのオプションバーの「ダイナミクス...」):サイズと流量それぞれの筆圧カーブと最小値、「間隔に合わせて濃度を保つ」(どの間隔でも同じ濃さ)、マウス用の擬似筆圧「マウスの速度を筆圧として使う」(初期設定はオフ)。読み込んだブラシは自身のダイナミクスも持ち込みます:サイズ、流量、不透明度、角度、真円率、散布への筆圧・ペンの傾き・フェード・ジッター。タブレットの傾き、ペンの回転、速度もすべて読み取ります。Procreate のブラシは、速度によるサイズ・不透明度・間隔、傾きによるサイズ・不透明度・にじみ・真円率、傾きの方向とペンの回転による先端の回転(回転を検出しないペンではストロークの向きに従います)、ストロークとともに動くグレイン、ブラシ自身の筆圧カーブ、入り抜き(ペンにはペンシルの設定、マウスにはタッチの設定)、真円率と間隔のジッター、ストロークごとのランダムな回転を持ち込みます。クリップスタジオのブラシは筆圧カーブと入り抜きを、Photoshop のブラシは進行方向・初期方向・ペンの回転・スタイラスホイールによる角度を持ち込みます。ストロークの向きに回る先端は、描き始めからストロークの向きを向きます。「ペンの傾きで先端の形を変える」で、どの先端ブラシも寝かせた鉛筆のように、傾けると平たくなり傾けた向きに回ります([brush-engine.md](brush-engine.md))
 - ブラシと消しゴムのスムージング(Photoshop と同じく):オプションバーの「スムージング」(%)で線がペンの後を追って安定します。「ダイナミクス...」には「ひもを引くモード」「ストロークのキャッチアップ」「ストローク終点のキャッチアップ」「ズームの調整」と、別々の軽いフィルターとして「入力のスムージング」(タブレットのぶれをほとんど遅れなしに抑えます)と「筆圧のスムージング」があります。初期設定はすべてオフです([brush-engine.md](brush-engine.md#smoothing))
 - スポット修復ブラシとコピースタンプ(どちらもレイヤーマスクで隠れた部分は使いません)
-- 指先ツール、ゆがみ、ぼかしツール(ピクセルにもマスクにも使えます)
-- グラデーションとシェイプ(長方形、角丸長方形、楕円)
+- 指先ツール(1 つの色をストロークに沿って運びます)、ゆがみ、ぼかしツール(ピクセルにもマスクにも使えます)、シャープツール
+- ワープケージ(編集 ▸ ワープケージ、Photoshop のカスタムワープ):レイヤー上の 4 × 4 メッシュの 16 個の点をライブプレビュー付きでドラッグします。ピクセルはそのまま変形し、スマートオブジェクトは編集可能なカスタムワープとして保持し(PSD には Photoshop 形式で書き出し)、シェイプレイヤーはパスとして曲がります
+- ベクターシェイプレイヤー(Photoshop のシェイプレイヤー。編集でき、PSD にもシェイプレイヤーとして書き出し):シェイプツールの長方形・楕円・多角形・星・ライン・カスタムシェイプ。塗りと線(カラー、幅、位置、破線)はオプションバーから編集。グラデーション・パターンの塗りと線、パスの操作(シェイプを結合、前面シェイプを削除、シェイプが重なる領域を交差、重なり合うシェイプ領域を中マド、シェイプコンポーネントを結合)、ライブ長方形(角ごとの半径)と楕円(プロパティはシェイプバーに)、ペン(P)と直接選択(A)、あらゆるレイヤーのベクトルマスク(レイヤー ▸ ベクトルマスク)、テキスト ▸ 作業用パスを作成・シェイプに変換、パスパネル(作業用パスと保存したパス:塗りつぶし、境界線、選択範囲として読み込む、選択範囲から作成、シェイプレイヤーを作成)([vector-tools.md](vector-tools.md)、英語)
+- 覆い焼き・焼き込み(シャドウ・中間調・ハイライト、トーンを保護)とスポンジ(彩度を下げる・上げる)。ブラシを通して描き、露光量または流量を不透明度として使います。カーブは Photoshop の動作に倣った形で、Photoshop と比べて測ったものではありません
+- 塗りつぶしツール(Shift+G):許容値、隣接、アンチエイリアス、全レイヤーを対象。選択範囲の中に塗ります
+- 修復ブラシ(修復ツールの「サンプル」:Alt クリックでソースを指定し、コピーしたテクスチャがストロークの周りの色調になじみます)とパッチ(修正したい部分を選択し、コピー元の場所へドラッグ)
+- コンテンツに応じた移動(修復ツールの最後の種類):オブジェクトを選択するか、ツールのなげなわで囲んでドラッグします。元の場所の穴は周囲から埋められ、パッチは新しい場所になじみます。「拡張」モードでは元の部分を残します。「適応」(非常に厳密〜非常にゆるい)で、パッチの色調が新しい場所にどこまで合わせるか、境界をどの幅でなじませるかを決めます
+- クイックマスク(Q、または 選択範囲 ▸ クイックマスクモードで編集):選択範囲を赤いオーバーレイで表示し、マスク用のすべてのツールで描けます(白が選択範囲)。保存や書き出しの前に自動で終了します
+- グラデーションとシェイプ(長方形、角丸長方形、楕円)。グラデーションツールは描画色から背景色、描画色から透明、Photoshop の `.grd` ファイルから読み込んだ多数の分岐点を持つグラデーションを、Photoshop のクラシック・知覚的・リニアの方式で描きます([presets.md](presets.md)、[layer-styles.md](layer-styles.md)、英語)
 - インストール済みの任意のフォントでテキスト。レイヤーに描画するまでは再編集可能
 - カンバス上で直接入力(Photoshop の文字ツールと同じ):クリックしてポイントテキストを入力(テキストをクリックすると編集)、ドラッグで段落テキストのボックスを作り、ハンドルでサイズを変更。矢印キー、Home と End、Shift またはドラッグで選択、ダブルクリックで単語を選択、Ctrl+A、コピー・カット・ペースト、Enter で改行、編集中の Ctrl+Z。日本語などの入力メソッドは、変換中の文字をレイヤーと同じスタイルでその場に下線付きで表示し(変換中の文節は太い下線)、候補ウィンドウはキャレットの横に出ます。確定した文字は Ctrl+Z の 1 単位です。オプションバーのフォント・サイズ・太字・斜体・カラー・行揃えは選択した文字(選択がなければ次に入力する文字)に適用されます。Ctrl+Enter・テンキーの Enter・ボックスの外のクリックで確定、Esc で取り消し。編集全体が 1 つの取り消し単位です。レイヤー ▸ テキストを編集… からは従来のテキストダイアログも開けます
+- 文字ごとのスタイル(Photoshop の文字ツールと同じ):テキストエディターで文字を選び、フォント・サイズ・ウェイト・太字と斜体・カラー・トラッキング・ベースラインシフト・行送り・大文字・下線・取り消し線を変更できます。文字の設定にはカーソル位置または選択範囲のスタイルを表示し(混在している項目は空欄)、何も選択していなければテキスト全体に適用されます。スタイルは Photoshop 自身のスタイルランとして PSD に書き出されます
 - スポイトとカラーピッカー
 - カメラ RAW ファイル(CR2、CR3、NEF、ARW、RAF、ORF、RW2、DNG など)を Photoshop と同じく開けます:ファイルは Camera Raw ダイアログで開き、半分のサイズで素早く読み込んだプレビューに、Camera Raw と同じホワイトバランス(撮影時の設定・自動・ファイルに記録されたプリセット・カスタム。色温度はケルビン、色かぶり補正付き)とすべての Camera Raw パネルを使えます。「開く」で現像して(LibRaw で sRGB に。初期設定は 16 bit/チャンネル)新しいドキュメントに、「オブジェクトを開く」で RAW ファイルと設定を保持するスマートオブジェクトにします(コンテンツを編集で Camera Raw が開き直し、現像し直します)。「キャンセル」では何も開きません([camera-raw.md](camera-raw.md#opening-camera-raw-files))
 
 ### 色調補正とフィルター
 - 調整レイヤー 17 種(破壊的な色調補正としても):レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子に加え、Photoshop の階調の反転、明るさ・コントラスト、ポスタリゼーション、2 階調化、カラーバランス、白黒、自然な彩度、レンズフィルター、チャンネルミキサー、特定色域の選択、カラールックアップ(.cube・.3dl・ICC)。PSD では Photoshop 自身の調整レイヤーとして読み書きします
 - レベル補正(自動補正付き)、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、階調の反転
-- ぼかし(ガウス)とぼかし(移動):レイヤーの端の外まで広がります
-- ノイズを加える、レンズ補正
+- Photoshop と同じサブメニューに並ぶフィルターメニュー:ぼかし(ぼかし(ボックス)、ぼかし(ガウス)、ぼかし(移動)、ぼかし(放射状)、ぼかし(表面)。レイヤーの端の外まで広がります)、変形(つまむ、極座標、波紋、シアー、球面、ツイスト、波形、ジグザグ。選択範囲の外接矩形の中で。直交座標を極座標に では Photoshop と同じく端のピクセルを角まで繰り返します)、ノイズ(ノイズを加える、ダスト&スクラッチ、中間値)、ピクセレート(モザイク)、描画(雲模様 1、雲模様 2。描画色と背景色の間で)、シャープ(アンシャープマスク)、表現手法(エンボス、輪郭検出)、その他(ハイパス、明るさの最大値、明るさの最小値、オフセット)、レンズ補正。それぞれプレビュー付きのダイアログと Photoshop の設定を持ちます(雲模様 1・2 と輪郭検出は Photoshop と同じくすぐに実行されます)
+- ぼかし(ボックス)、ぼかし(放射状)(回転またはズーム、画質はドラフト・標準・最高)、ぼかし(表面)、ダスト&スクラッチ、中間値、アンシャープマスク、ハイパス、エンボス、モザイクは、同じスマートフィルターとまったく同じに描画され、8・16 bit、CMYK・Lab でも使えます。スマートオブジェクトにはスマートフィルターとして適用されます。変形フィルター、明るさの最大値・最小値、オフセットは 32 bit でも使えます。雲模様 1・2 は今のところ RGB のみです([機能表](mode-matrix.md))
 - フィルター > Camera Raw フィルター(Shift+Ctrl+A):ホワイトバランス、階調、外観、トーンカーブ、カラーミキサー、カラーグレーディング、ディテール、光学、ジオメトリ、効果、キャリブレーションをレイヤーのピクセルに適用
 - フィルター > G'MIC:`gmic` をインストールすると、850 種類以上のフィルターを専用の設定画面で使えます(画像サイズを変えるものやレイヤーを作るものなど、ここで使えないものは「Show all filters」をオンにしない限り非表示)
 - フィルター > Mosh:OpenMosh のグリッチ・変形・レトロ・表現手法・カラー・合成のエフェクト 54 種(ピクセルソート、データモッシュ、ハードグリッチ、VHS、CRT、ハーフトーン、万華鏡、グロー、ライトストリーク、フィードバック、オプティカルフロー、アスキー、クロマキーなど)。ライブプレビュー付きで、ランダムなものはシードを振り直せます。8 ビットと 16 ビットに対応。オーバーレイとマスクはほかのレイヤーを重なる位置で読み込み、キャプションはテキストを描き込みます
@@ -194,9 +205,15 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 詳細オプション:輪郭の調整、髪や毛並みの抽出、細かなノイズの除去、輪郭の色の補正、大きな写真向けの高解像度ディテール処理。Quality の「Best」で、髪や毛並み向けの設定をまとめて有効にできます
 
 ### ファイルとカンバス
-- Photoshop の PSD/PSB を、レイヤー・グループ・マスク・描画モード・主な調整レイヤーを保ったまま開けます。引き継げなかった要素は開いた後に一覧表示されます
-- レイヤー付きの Photoshop PSD に書き出せます(ファイル > Photoshop ドキュメントとして書き出し):レイヤー、グループ、マスク、クリッピング、描画モード、レベル補正・トーンカーブ・露光量・色相/彩度の調整レイヤーと統合画像。Photoshop で再現できない要素は書き出す前に一覧表示されます
+- Photoshop の PSD/PSB を、レイヤー・グループ・マスク・描画モード・主な調整レイヤー、Photoshop と同じように描画するレイヤースタイル、Photoshop と同じく分離して不透明度を適用するグループ、ソースを保持するスマートオブジェクト([smart-objects.md](smart-objects.md))、パスから描画するベクトルマスクとシェイプレイヤー([vector-masks.md](vector-masks.md))、編集可能なテキスト(ポイントテキストと段落テキスト、スタイルラン、ワープテキスト)を保ったまま開けます。引き継げなかった要素は開いた後に一覧表示されます
+- レイヤー ▸ レイヤースタイル:Photoshop と同じレイヤースタイルのダイアログで、ドロップシャドウとシャドウ(内側)、光彩(外側)と光彩(内側)、ベベルとエンボス、サテン、カラー・グラデーション・パターンオーバーレイ、境界線を付けられ、レイヤースタイルのコピー・ペースト・消去もできます。PSD には Photoshop 自身のスタイルとして書き出します([layer-styles.md](layer-styles.md)、英語)
+- Photoshop のプリセット(ファイル ▸ プリセットを読み込み...):`.asl` のレイヤースタイル(使っているパターンごと。レイヤー ▸ レイヤースタイル ▸ スタイルを適用 から適用)、パターンオーバーレイとベベルのテクスチャ用の `.pat` パターン、グラデーションツールとレイヤースタイルのダイアログ用の `.grd` グラデーション。読み込んだものは次回の起動後も残ります([presets.md](presets.md)、英語)
+- レイヤー付きの Photoshop PSD に書き出せます(ファイル > 書き出し > Photoshop ドキュメントとして書き出し):レイヤー、グループ、マスク、クリッピング、描画モード、Photoshop 自身の形式の調整レイヤー(粒子と、ここで作成・編集したグラデーションマップは結果として書き出し)と統合画像。テキストレイヤーは編集可能な Photoshop のテキストとして書き出し、開いた PSD のレイヤースタイル・編集可能なテキスト・スマートオブジェクト・ベクトルマスクは、レイヤーと一致している限り書き出しても保たれます([psd-roundtrip.md](psd-roundtrip.md)、英語)。Photoshop で再現できない要素は書き出す前に一覧表示されます([psd-export.md](psd-export.md)、英語)
 - クリップスタジオの `.clip` を、レイヤー・フォルダー・マスク・クリッピング・不透明度・描画モードを保ったまま開けます(ベクターやテキストのレイヤーは画像として読み込みます)
+- SVG ファイル(`.svg`、`.svgz`)をレイヤーとして開けます:単色の塗りと線を持つパスと基本図形は編集できるベクターシェイプレイヤーに、グループは不透明度を持つグループになります。グラデーション、パターン、テキスト、画像、フィルター、クリップパス、マスクは Qt SVG で描画したピクセルレイヤーとして読み込みます([svg-pdf.md](svg-pdf.md)、英語)
+- SVG の書き出し(ファイル > 書き出し > SVG を書き出し):ベクターシェイプレイヤーは塗りと線を持つパス、グループはグループ、それ以外のレイヤーは埋め込み PNG として書き出すので、ドキュメントと同じ見た目になります
+- PDF のページを、指定した解像度のピクセルレイヤーとして開けます(Qt PDF。複数ページのファイルはページを選択)
+- Affinity のドキュメント(`.afphoto`、`.afdesign`、`.afpub`、Affinity 3 の `.af`)を、ピクセルレイヤー・グループ・マスク・クリッピング・不透明度・表示・描画モードを保ったまま開けます。アーティスティックテキストとフレームテキストは編集可能なテキストレイヤーになり、ベクターシェイプとアートボードはピクセルとして読み込み、調整と効果は読み込めなかったものとして一覧表示します([affinity-import.md](affinity-import.md)、英語)
 - Aseprite の `.ase`/`.aseprite` を、レイヤー・グループ・不透明度・描画モードを保ったまま開けます。複数フレームのスプライトはセルごとのレイヤーとタイムラインのフレーム(表示時間つき)として開きます
 - アニメーション GIF は各フレームをレイヤーとして(「Frame N (D ms)」、フレーム 1 のみ表示)、フレーム・表示時間・ループ回数はタイムラインに、アイコン(`.ico`、`.cur`)は各サイズをレイヤーとして開けます
 - フレームアニメーション(ウィンドウ > タイムライン):Photoshop のフレームモードのタイムラインと同じく、各フレームがレイヤーの表示・位置・不透明度と表示時間を持ちます。フレームの追加・削除・並べ替え、レイヤーからフレームを作成、カンバス上での再生、ループ回数の指定。フレームはプロジェクトに保存され、ファイル > アニメーション GIF を書き出し で書き出せます
@@ -209,9 +226,9 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - プロジェクトは 1 つの `.nekophoto` ファイルとして保存します(ファイル ▸ 別名で保存 で最初に選ばれます)。以前のバージョンや Mac 版の `.comp` プロジェクトフォルダーも、ファイル ▸ 開く またはプロジェクトフォルダーを開く で開け、そのまま上書き保存でき、別名で保存でフォルダーとして保存することもできます([project-format.md](project-format.md)、英語)
 - レイヤー合計 1 ギガピクセルまでのプロジェクト(Mac 版で開けるのは 1 億画素まで)
 - 大きすぎる Photoshop ファイルは、読み込む前にサイズを確認します。レイヤーが上限を超える場合や空きメモリーが足りない場合は、Photoshop がファイルに保存した統合画像を 1 枚のレイヤーとして開けます(保存してもレイヤー付きの元のファイルを置き換えないよう、新しい無題のドキュメントとして開きます)
-- PNG・TIFF・TGA・複数サイズの Windows アイコン(16/32/48/256 px)書き出し、プレビュー付きの JPEG・WebP 書き出し(WebP は透明部分を保持し、品質 100 で可逆圧縮)
-- アートボード:アートボードツール(Shift+V)で名前と背景色(白・黒・透明・任意の色)を持つ矩形を作り、中のレイヤーはその範囲で切り抜かれます。ファイル > アートボードを書き出しで PNG/JPEG/WebP/TIFF に書き出し、PSD のアートボードは Photoshop 形式のまま読み書きします
-- スライス:スライスツール(Shift+C)で名前付きの矩形を作り、ファイル > スライスを書き出しで PNG/JPEG/WebP/TIFF に書き出します。PSD のスライス(リソース 1050)も編集できる形で読み書きします
+- ファイル > 書き出し > 書き出し形式(Ctrl+Alt+Shift+W、Photoshop と同じ):PNG・JPEG・GIF・WebP・TIFF・TGA を 1 つのダイアログで書き出します。書き出すファイルのライブプレビューとサイズ(400 万画素までは正確、それを超えると推定)、JPEG と WebP の品質(WebP は品質 100 で可逆)、透明またはマットカラー、ピクセルかパーセントでの画像サイズ(バイキュービック・バイリニア・ニアレストネイバー・Lanczos)、sRGB に変換とカラープロファイルの埋め込みを設定でき、設定は形式ごとに記憶されます。ファイル > 書き出し > クイック書き出し は PNG(または環境設定で選んだ形式)でダイアログなしにドキュメントの横に書き出します(一度も保存していないドキュメントはフォルダーを尋ねます)。レイヤー > 書き出し形式(Ctrl+Alt+Shift+')とクイック書き出し(Ctrl+Shift+')は作業中のレイヤーだけを、表示されている部分で切り抜いて書き出します。複数サイズの Windows アイコン(16・32・48・256 px)、PSD、SVG、アニメーション GIF は ファイル > 書き出し に専用の項目があります
+- アートボード:アートボードツール(Shift+V)で名前と背景色(白・黒・透明・任意の色)を持つ矩形を作り、中のレイヤーはその範囲で切り抜かれます。内側をドラッグすると中身ごと移動し、辺や角をドラッグするとサイズが変わります。ファイル > 書き出し > アートボードからファイルを書き出し で PNG/JPEG/WebP/TIFF に書き出し、PSD のアートボードは Photoshop 形式のまま読み書きし、プロジェクトにも保存されます([artboards-slices.md](artboards-slices.md)、英語)
+- スライス:スライスツール(Shift+C)で名前付きの矩形を作り、ファイル > 書き出し > スライスを書き出し で PNG/JPEG/WebP/TIFF に書き出します。PSD のスライス(リソース 1050)も編集できる形で読み書きします
 - クラッシュからの復元:未保存の変更を数分ごとにバックグラウンドで自動保存し、異常終了の後に復元を提案します(間隔の変更やオフは環境設定で)。元のファイルには触れません
 - タブで複数のプロジェクト。ファイルマネージャーから開いたファイルは起動中のウィンドウにタブとして追加
 - ファイル ▸ 復帰(F12、Photoshop と同じ):開いたとき、または最後に保存したときのファイルに戻します。形式は問いません(プロジェクト、PSD/PSB、クリップスタジオ、Affinity、SVG、PDF、画像、カメラ RAW は開いたときの Camera Raw の設定で現像し直し)。開いたときと同じ読み方(PSD の統合画像、PDF のページ、プロファイルの選択)で読み直します。ヒストリーの 1 ステップなので確認はなく、取り消しで編集が戻ります。別名で保存すると新しいファイルが復帰先になり、書き出しでは変わりません。復元したドキュメントは元のファイルに戻ります
