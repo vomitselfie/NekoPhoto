@@ -32,8 +32,13 @@ are the same at any worker count (the core tests give the same counts with one w
   it (the dirty rectangle, the stroke as an override, a `RenderCache`): dabs, recomposed pixels and rendered pixels
   per step and for the stroke, no reduction built at 1:1;
 - the same stroke seen at 25 %: the layer's reductions are refreshed over the dirty area only, never rebuilt;
-- thirty ticks of a Levels layer's white input over five 2400 × 1600 layers at 25 %: each tick draws each pixel layer
-  once, makes one adjustment pass, renders one frame, and builds no reduction;
+- thirty ticks of a Levels layer's white input among five 2400 × 1600 layers at 25 % (three below it, two above),
+  rendered as the canvas renders a drag (the layer marked `adjusting`, a `RenderCache`): the first tick draws every
+  layer and keeps the frame below the Levels layer; each later tick draws only the two layers above, makes one
+  adjustment pass, renders one frame and builds no reduction; a change below (its version moved on) draws the layers
+  below once more; the frames equal uncached ones;
+- ten ticks of a clipped Levels layer: a tick goes on from inside the clipping stack and draws only the clipped layer
+  over it, neither the base nor anything below;
 - a second frame at the same zoom builds no reduction;
 - a short stroke and a 16 × 16 edit on a 4000 × 3000 layer: the history keeps their regions' crops (and a
   thumbnail), not the 48 MB layer;
@@ -49,9 +54,12 @@ display scale, on a 4000 × 3000 document of five layers:
 - a brush press and twenty moves at 100 % through `EditorSession` and the canvas's repaint: rendered pixels per
   press and per move (the dab's box and the canvas's 2-pixel margin), the release renders nothing
   (`documentChangedAsShown`), the stroke's history bytes, undo and redo render only the stroke's region;
-- twenty ticks of a Levels layer's slider at fit zoom: one render of the view a tick (no panel renders the document
-  again), each layer drawn once, one adjustment pass, no reduction built (renders and passes allow a quarter more than
-  the ticks, for repaints the window system asks for on its own on CI machines);
+- twenty ticks of a Levels layer's slider at fit zoom, the layer on top of the five: one render of the view a tick (no
+  panel renders the document again), each layer drawn once for the whole drag (the first tick keeps the frame below
+  the layer, and nothing is above it), one adjustment pass a tick, no reduction built (renders and passes allow a
+  quarter more than the ticks, for repaints the window system asks for on its own on CI machines; those draw from the
+  kept frame too); the ticks leave the document revision as it was, and an eye swiped off and on during the drag moves
+  it on and draws the layers below again;
 - zoom to 40 %, ten 16-pixel pans down and ten right, zoom to 20 % and back: one render per zoom, a pan renders exactly
   the strip that came into view, no reduction built by a pan or by returning to a zoom.
 
@@ -81,7 +89,7 @@ Never raise a bound to make an unexplained failure pass: a counter that moved is
 
 ## Found
 
-What the counters showed when they were added (NekoPhoto 1.8.10):
+What the counters showed when they were added (NekoPhoto 1.8.10), and what has been fixed since:
 
 - **A layer made inside the history keeps its first raster in the history once it is painted on.** The self-test's
   stroke on a 4000 × 3000 layer kept 206 KB when the document came from a file, but 48.2 MB when the layer had been
@@ -91,12 +99,21 @@ What the counters showed when they were added (NekoPhoto 1.8.10):
   one side only, through `materialize`, undo, redo, `squash` and `trim`: not a small change, so it is left for its own
   piece of work. The self-test starts its history after building the document (`markOpened`), as opening a file
   does, and bounds that case.
-- **An adjustment slider tick redraws every layer below the adjustment layer.** A `RenderCache` keeps the composite
-  below a pixel layer being painted, but nothing is kept around an adjustment layer being dragged, so each tick
-  composites every layer again (five draws over the view for one changed table). The mip cache makes each draw cheap,
-  and the counters bound it at one draw per layer per tick; caching the backdrop below the dragged adjustment would
-  make a tick one adjustment pass plus the layers above. A design change in `RenderPlan::editedIndex` and
-  `runCached`, not made here.
+- **An adjustment slider tick redrew every layer below the adjustment layer** (fixed). A `RenderCache` kept the
+  composite below a pixel layer being painted, but nothing was kept around an adjustment layer being dragged, so each
+  tick composited every layer again (five draws over the view for one changed table). Now the session marks the
+  layer being dragged (`LayerOverride::adjusting`) and keeps `documentRevision` for its ticks alone, and the cache
+  keeps the frame just below the layer, with the folders open around it (`RenderCache::resume`, `render_resume.h`):
+  a tick is one adjustment pass plus the layers above. In the core test a tick went from 5 draws to 2 (the layers
+  above), in the window's from 4 a tick to 4 for the whole drag. Where the frame resumes: the layer itself; the base of
+  the clipping stack it is in, and inside the stack, at the layer; the opening of a folder around it with a layer style
+  (its exterior effects are drawn from its contents as it opens); at 8 bits, the start of a fused run of table
+  adjustments it is in or would join. It is drawn again when the version, region, scale, output size or resume point
+  changes; while an adjustment edit is open, any change to the document other than the dragged layer's settings
+  moves the revision on (`EditorSession`'s constructor). `adjustment_drag_tests` compares every frame of drags in
+  ten scenes (folders Pass Through, faded, isolated and nested, a styled folder, clipped to plain and styled bases,
+  masks, Blend If, blend modes above) at 8, 16 and 32 bits, RGB, CMYK and Lab, at 1:1, reduced and zoomed, with
+  uncached frames: all equal, byte for byte.
 - Nothing else: the dab, move, release, undo and redo renders follow the dirty rectangles; pans render only the
   strip; no panel renders the document on a slider tick; reductions are built once per level and refreshed, not
   rebuilt, under a stroke; Smart Filters run only when their stack or contents change.

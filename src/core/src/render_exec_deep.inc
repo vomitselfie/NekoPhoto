@@ -8,6 +8,7 @@
 // masks, clipping stacks, folders (Pass Through, faded and isolated), artboards, shape fills and strokes, gradient
 // and pattern fill layers, adjustment layers, and layer styles on layers and folders.
 #include "render_deep_ops.h"
+#include "render_resume.h"
 #include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
 #include "compositor/parallel.h"
@@ -556,6 +557,23 @@ struct RenderExecDeep {
         else rows(std::false_type{});
     }
 
+    /// A clipped adjustment layer being dragged (render_resume.h): its stack's state just before it, as the 8-bit
+    /// executor keeps it.
+    struct StackState { Uuid child; bool reached = false; std::unique_ptr<Img> group; std::vector<Sample> alpha; Cover clip; };
+    StackState* stackKeep = nullptr;
+    const StackState* stackResume = nullptr;
+
+    size_t stackChild(const std::vector<Uuid>& children, const StackState*& resume, StackState*& keep) {
+        resume = nullptr; keep = nullptr;
+        const Uuid* child = stackResume ? &stackResume->child : stackKeep ? &stackKeep->child : nullptr;
+        if (!child) return children.size();
+        const size_t at = size_t(std::find(children.begin(), children.end(), *child) - children.begin());
+        if (at == children.size()) return at;
+        if (stackResume) { resume = stackResume; stackResume = nullptr; }
+        else { keep = stackKeep; stackKeep = nullptr; }
+        return at;
+    }
+
     void drawComposite(const Layer& layer, Img& out) {
         if (layer.isGroup) { if (layer.artboard) drawArtboardBackground(layer, out); return; }
         if (stacked.count(layer.id)) return;
@@ -566,10 +584,23 @@ struct RenderExecDeep {
         }
         auto stack = stacks.find(layer.id);
         if (stack == stacks.end()) { drawClipped(layer, out, folders); return; }
+        const StackState* resume = nullptr;
+        StackState* keep = nullptr;
+        const size_t dragged = plainOnly ? stack->second.size() : stackChild(stack->second, resume, keep);
         if (O::styles && !plainOnly && layerStyleOf(layer, document)) {
-            drawOwn(layer, out, folders.get());
-            auto clip = multipliedDeep<O>(folders, coverageOf(layer.id));
-            for (auto& childId : stack->second) {
+            Cover clip;
+            size_t first = 0;
+            if (resume) {
+                std::memcpy(out.data(), resume->group->data(), out.byteCount());
+                clip = resume->clip;
+                first = dragged;
+            } else {
+                drawOwn(layer, out, folders.get());
+                clip = multipliedDeep<O>(folders, coverageOf(layer.id));
+            }
+            for (size_t c = first; c < stack->second.size(); c++) {
+                const Uuid& childId = stack->second[c];
+                if (keep && c == dragged) { keep->group = std::make_unique<Img>(out); keep->clip = clip; keep->reached = true; }
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
                 if (it->second->adjustment) adjust(*it->second, out, clip);
@@ -582,20 +613,30 @@ struct RenderExecDeep {
         // A base with Blend If: its gate applies to the clipped result against the backdrop, so it does not shrink
         // the shape the clipped layers take.
         const std::optional<BlendIf> blendIf = plainOnly ? std::nullopt : layerBlendIf(layer, document.colorMode);
-        const bool wasUngated = ungated;
-        if (blendIf) ungated = true;
-        drawOwn(layer, group, nullptr);
-        ungated = wasUngated;
         const size_t n = size_t(outWidth) * size_t(outHeight);
-        std::vector<Sample> alpha(n);
-        for (size_t i = 0; i < n; i++) {
-            Sample* p = group.data() + i * N;
-            alpha[i] = p[C];
-            const Sample a = p[C];
-            for (int c = 0; c < C; c++) p[c] = a ? O::unpremultiply(p[c], a) : Sample(0);
-            p[C] = O::one;
+        std::vector<Sample> alpha;
+        size_t first = 0;
+        if (resume) {
+            std::memcpy(group.data(), resume->group->data(), group.byteCount());
+            alpha = resume->alpha;
+            first = dragged;
+        } else {
+            const bool wasUngated = ungated;
+            if (blendIf) ungated = true;
+            drawOwn(layer, group, nullptr);
+            ungated = wasUngated;
+            alpha.resize(n);
+            for (size_t i = 0; i < n; i++) {
+                Sample* p = group.data() + i * N;
+                alpha[i] = p[C];
+                const Sample a = p[C];
+                for (int c = 0; c < C; c++) p[c] = a ? O::unpremultiply(p[c], a) : Sample(0);
+                p[C] = O::one;
+            }
         }
-        for (auto& childId : stack->second) {
+        for (size_t c = first; c < stack->second.size(); c++) {
+            const Uuid& childId = stack->second[c];
+            if (keep && c == dragged) { keep->group = std::make_unique<Img>(group); keep->alpha = alpha; keep->reached = true; }
             auto it = byId.find(childId);
             if (it == byId.end()) continue;
             if (it->second->adjustment) adjust(*it->second, group, nullptr);
@@ -615,6 +656,11 @@ struct RenderExecDeep {
 
     void drawRange(Img& out, size_t from, size_t to) {
         Img* cur = &out;
+        drawSpan(cur, from, to);
+    }
+
+    /// Draws order[from, to) into `cur`, going on from the folders open in `frames`.
+    void drawSpan(Img*& cur, size_t from, size_t to) {
         for (size_t index = from; index < to; index++) {
             if (auto open = groupsOpen.find(index); open != groupsOpen.end())
                 for (const Layer* g : open->second) openGroup(*g, cur);
@@ -633,6 +679,7 @@ struct RenderExecDeep {
         if (!valid) {
             cache.version = version; cache.layer = layer.id; cache.width = outWidth; cache.height = outHeight; cache.region = region; cache.scale = scale;
             O::resetOtherDepths(cache);
+            cache.resume.reset();
             backdrop = std::make_shared<Img>(blank(outWidth, outHeight));
             drawRange(*backdrop, 0, edited);
             above.reset();
@@ -651,7 +698,10 @@ struct RenderExecDeep {
 
     void run(Img& out, RenderCache* cache, uint64_t version) {
         const size_t edited = cache ? plan.editedIndex() : SIZE_MAX;
-        if (edited != SIZE_MAX) runCached(out, *cache, version, edited);
+        if (edited != SIZE_MAX) { runCached(out, *cache, version, edited); return; }
+        const size_t adjusting = cache ? plan.adjustingIndex() : SIZE_MAX;
+        static const char kind = 0;
+        if (adjusting != SIZE_MAX) drawResumed(*this, out, *cache, version, adjusting, plan.resumeIndex(adjusting), &kind);
         else drawRange(out, 0, order.size());
     }
 };

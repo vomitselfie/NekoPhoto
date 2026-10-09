@@ -210,38 +210,47 @@ TEST_CASE(a_stroke_seen_zoomed_out_refreshes_only_its_area_of_the_reductions) {
 
 // ---- Adjustment layers: a slider drag -------------------------------------------------------------------------------
 
-TEST_CASE(an_adjustment_slider_tick_redraws_each_layer_once_from_cached_reductions) {
-    // The adjust bench's document (a photo and four soft paint layers) under a Levels adjustment layer, shown at 25%
-    // as a fitted view would; then thirty ticks of the white input, each one a full render of the view.
-    const int W = 2400, H = 1600, layers = 5;
+TEST_CASE(an_adjustment_slider_tick_draws_only_the_layers_above_it) {
+    // The adjust bench's document (a photo and four soft paint layers) with a Levels adjustment layer among them (three
+    // layers below, two above), shown at 25% as a fitted view would; then thirty ticks of the white input, each one a
+    // full render of the view with the Levels layer marked as being dragged, as the canvas renders a drag.
+    const int W = 2400, H = 1600, layers = 5, below = 3, above = layers - below;
     Document doc(W, H);
     doc.layers.push_back(imageLayer("photo", photo(W, H), {0, 0}));
     for (int l = 1; l < layers; l++) doc.layers.push_back(imageLayer("paint " + std::to_string(l), softPaint(W, H, l), {0, 0}));
     AdjustmentSettings levels = AdjustmentSettings::defaults(AdjustmentKind::Levels);
     Layer adjustment("Levels", doc.size());
     adjustment.adjustment = levels.toLayerAdjustment();
-    doc.layers.push_back(adjustment);
+    const Uuid levelsId = adjustment.id;
+    doc.layers.insert(doc.layers.begin() + below, adjustment);
+    Overrides dragging;
+    dragging[levelsId].adjusting = true;
     RenderOptions o;
     o.scale = 0.25;
+    o.version = 1;   // the document's version: a tick changes only the dragged layer's settings, so it stays
     RenderCache cache;
     Image out;
     const uint64_t frame = uint64_t(W / 4) * uint64_t(H / 4);
-    render(doc, o, out, nullptr, &cache);   // the first frame builds the reductions
-    const work::Snapshot start = work::snapshot();
+    render(doc, o, out);   // a frame before the drag builds the reductions
+    // The first tick draws every layer and keeps the frame below the Levels layer.
+    work::Snapshot start = work::snapshot();
+    render(doc, o, out, &dragging, &cache);
+    work::Snapshot d = work::snapshot() - start;
+    WORK_AT_MOST("first tick", d, Counter::LayerDraws, layers);
+    WORK_AT_MOST("first tick", d, Counter::LayerDrawPixels, frame * layers);
+    start = work::snapshot();
     const int ticks = 30;
     for (int i = 0; i < ticks; i++) {
         levels.levels.ranges[0].white = 255 - i * 3;
-        doc.layers.back().adjustment = levels.toLayerAdjustment();
-        o.version = uint64_t(i + 2);
-        render(doc, o, out, nullptr, &cache);
+        doc.layers[size_t(below)].adjustment = levels.toLayerAdjustment();
+        render(doc, o, out, &dragging, &cache);
     }
-    const work::Snapshot d = work::snapshot() - start;
-    // Each tick draws the five pixel layers once over the frame (600 x 400): measured 5 draws and 1.2 million pixels a
-    // tick, exactly. Nothing is cached around an adjustment layer, so this is the whole cost; a cache of the layers below
-    // would bring it to one pass (docs/work-counters.md, "Found"). The counts follow from the geometry alone, so the
-    // bounds are the measured counts: any extra draw fails.
-    WORK_AT_MOST("slider ticks", d, Counter::LayerDraws, layers * ticks);
-    WORK_AT_MOST("slider ticks", d, Counter::LayerDrawPixels, frame * layers * ticks);
+    d = work::snapshot() - start;
+    // Each tick goes on from the kept frame: the Levels pass and the two layers above, none of the three below. Measured
+    // 2 draws and 480 000 pixels a tick, exactly (before the frame was kept: 5 draws and 1.2 million pixels a tick). The
+    // counts follow from the geometry alone, so the bounds are the measured counts: any draw of a layer below fails.
+    WORK_AT_MOST("slider ticks", d, Counter::LayerDraws, above * ticks);
+    WORK_AT_MOST("slider ticks", d, Counter::LayerDrawPixels, frame * above * ticks);
     // The Levels layer itself: one pass over the frame a tick.
     WORK_AT_MOST("slider ticks", d, Counter::Adjustments, ticks);
     WORK_AT_MOST("slider ticks", d, Counter::AdjustmentPixels, frame * ticks);
@@ -250,7 +259,62 @@ TEST_CASE(an_adjustment_slider_tick_redraws_each_layer_once_from_cached_reductio
     // "Adjustment drags" rebuilt them from the full-size pixels every frame).
     WORK_AT_MOST("slider ticks", d, Counter::MipMisses, 0);
     WORK_AT_MOST("slider ticks", d, Counter::MipBuiltPixels, 0);
-    CHECK_EQ(d[Counter::MipHits], uint64_t(layers * ticks));
+    CHECK_EQ(d[Counter::MipHits], uint64_t(above * ticks));
+    // The last tick equals a frame drawn without the cache.
+    Image plain;
+    render(doc, o, plain);
+    CHECK(std::memcmp(plain.data(), out.data(), out.byteCount()) == 0);
+    // A layer below changes (its version moves on): the next tick draws the layers below again, once, then goes on
+    // from the new frame.
+    doc.layers[1].opacity = 0.5;
+    o.version = 2;
+    start = work::snapshot();
+    render(doc, o, out, &dragging, &cache);
+    render(doc, o, out, &dragging, &cache);
+    d = work::snapshot() - start;
+    WORK_AT_MOST("a layer below changed", d, Counter::LayerDraws, layers + above);
+    render(doc, o, plain);
+    CHECK(std::memcmp(plain.data(), out.data(), out.byteCount()) == 0);
+}
+
+TEST_CASE(a_clipped_adjustment_slider_tick_draws_neither_the_base_nor_the_layers_below) {
+    // A clipping stack (a base, a layer clipped to it, a clipped Levels layer, another clipped layer) over a photo: a
+    // tick goes on from inside the stack, so it draws only the clipped layer over the Levels layer.
+    const int W = 1200, H = 800;
+    Document doc(W, H);
+    doc.layers.push_back(imageLayer("photo", photo(W, H), {0, 0}));
+    Layer base = imageLayer("base", softPaint(W, H, 1), {0, 0});
+    Layer under = imageLayer("clipped under", softPaint(W, H, 2), {0, 0});
+    under.maskSourceId = base.id;
+    AdjustmentSettings levels = AdjustmentSettings::defaults(AdjustmentKind::Levels);
+    Layer adjustment("Levels", doc.size());
+    adjustment.adjustment = levels.toLayerAdjustment();
+    adjustment.maskSourceId = base.id;
+    Layer over = imageLayer("clipped over", softPaint(W, H, 3), {0, 0});
+    over.maskSourceId = base.id;
+    for (Layer* l : {&base, &under, &adjustment, &over}) doc.layers.push_back(*l);
+    Overrides dragging;
+    dragging[adjustment.id].adjusting = true;
+    RenderOptions o;
+    o.scale = 0.5;
+    o.version = 1;
+    RenderCache cache;
+    Image out, plain;
+    render(doc, o, out, &dragging, &cache);   // keeps the frame below and the stack's state
+    const work::Snapshot start = work::snapshot();
+    const int ticks = 10;
+    for (int i = 0; i < ticks; i++) {
+        levels.levels.ranges[0].gamma = 1 + 0.1 * i;
+        doc.layers[3].adjustment = levels.toLayerAdjustment();
+        render(doc, o, out, &dragging, &cache);
+    }
+    const work::Snapshot d = work::snapshot() - start;
+    // Measured one draw a tick, the clipped layer over the Levels layer (an uncached frame draws four: the photo, the
+    // base and both clipped pixel layers). Bound: the measured count.
+    WORK_AT_MOST("clipped slider ticks", d, Counter::LayerDraws, ticks);
+    WORK_AT_MOST("clipped slider ticks", d, Counter::Adjustments, ticks);
+    render(doc, o, plain);
+    CHECK(std::memcmp(plain.data(), out.data(), out.byteCount()) == 0);
 }
 
 // ---- Mip cache: the first frame at a zoom builds, the next ones only hit --------------------------------------------

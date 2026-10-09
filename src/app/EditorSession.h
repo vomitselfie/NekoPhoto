@@ -1230,6 +1230,8 @@ private:
     void applyWandSession(int tolerance, bool retune);
     bool wandRetuning_ = false;   // the internal undo of a retune is not a user's undo of a wand click
     bool adjustmentEditing_ = false;
+    std::optional<compositor::Uuid> adjustmentEditLayer_;   // the adjustment layer the open edit has changed
+    bool adjustmentTick_ = false;                           // its documentChanged, which keeps documentRevision
     std::optional<compositor::Uuid> styleEditLayer_;
     void giveLayerStyle(compositor::Layer& layer, const compositor::LayerStyle& style);
     std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;

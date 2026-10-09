@@ -19,7 +19,8 @@ struct RenderOptions {
     double scale = 1;
     /// Blank the output first (false lets a caller draw over an existing backdrop).
     bool clear = true;
-    /// The caller's document version, for a RenderCache: bump it whenever the document changes.
+    /// The caller's document version, for a RenderCache: bump it whenever the document changes (but for the settings
+    /// of an adjustment layer whose override is `adjusting`, which the cache reads afresh every frame).
     uint64_t version = 0;
     /// The canvas's colour transform to the screen (colormgmt.h): RGBA8 to RGBA8 for an 8-bit document, RGBA16 to
     /// RGBA8 for a 16-bit one, fused with its reduction to 8 bits. Null: none, the pixels as they are.
@@ -30,10 +31,16 @@ struct RenderOptions {
     float peak = 0;
 };
 
+struct RenderResume;
+
 /// What a caller keeps between frames while one layer is being edited (the one layer with an override):
 /// the layers below it composited, and, when every layer above is a plain Normal pixel layer, those
 /// flattened, so a frame is backdrop + the edited layer + one blend. Rebuilt when the version, region,
 /// scale or edited layer changes.
+///
+/// For an adjustment layer whose settings are being dragged (its override is `adjusting`), `resume` keeps the frame
+/// as it stood just before the layer is drawn (with any folders open around it), so a frame is that state, the
+/// adjustment pass and the layers above, exactly as an uncached frame draws them (render_resume.h).
 struct RenderCache {
     uint64_t version = 0;
     Rect region;
@@ -48,6 +55,8 @@ struct RenderCache {
     std::shared_ptr<ImageF> backdropF, aboveF;
     /// The same for an 8-bit CMYK document (a Lab one uses `backdrop`, and 16-bit CMYK and Lab `backdrop16`).
     std::shared_ptr<ImageC8> backdropC8, aboveC8;
+    /// The frame below an adjustment layer being dragged, at whichever depth and mode it was drawn.
+    std::shared_ptr<RenderResume> resume;
 };
 
 /// Per-layer overrides while an edit is in progress (a transform being dragged, a brush stroke).
@@ -65,6 +74,9 @@ struct LayerOverride {
     std::optional<GrayFPtr> maskImageF;
     /// The pixels in an 8-bit CMYK document (a Lab one uses `image`, 16-bit CMYK and Lab `image16`).
     std::optional<ImageC8Ptr> imageC8;
+    /// An adjustment layer whose settings are being changed (a slider dragged): the document holds the settings as
+    /// they change, and the caller's version stays put while only they do, so a RenderCache keeps what is below it.
+    bool adjusting = false;
 };
 using Overrides = std::map<Uuid, LayerOverride>;
 
