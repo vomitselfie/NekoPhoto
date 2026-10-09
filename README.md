@@ -26,10 +26,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/hero.jpg" alt="NekoPhoto with K.psd, a Photoshop file by Nathan Lincoln, open: its folders, masked layers, adjustment layers and a smart object with a Gaussian Blur Smart Filter in the Layers panel, and the Exposure adjustment layer's settings below" width="100%">
+  <img src="docs/images/hero.jpg" alt="NekoPhoto with Hokusai's The Great Wave off Kanagawa open as a layered document: two styled type layers, 神奈川沖浪裏 and THE GREAT WAVE, a Curves adjustment layer with its curve in the Adjustments panel, and Dusk, a Multiply layer whose mask keeps it to the sky" width="100%">
   <br>
-  <sub>A Photoshop file opened as Photoshop saved it: folders, masks, adjustment layers and a smart object with its Smart Filters.<br>
-  <i>K</i> by <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>, used with permission.</sub>
+  <sub>A layered document: styled type, a Curves adjustment layer and a masked Multiply layer warming the sky.<br><a href="https://commons.wikimedia.org/wiki/File:Tsunami_by_hokusai_19th_century.jpg"><i>The Great Wave off Kanagawa</i></a>, Katsushika Hokusai, c. 1830–32</sub>
 </p>
 
 <p align="center">
@@ -105,7 +104,7 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
       Advanced settings refine edges, solve hair and fur, clean up the edge colours and run a detail pass on large photos. The background is hidden by a mask, never erased, so you can paint it back.
     </td>
     <td width="50%" valign="top">
-      <img src="docs/images/brushes.jpg" alt="A hand-drawn map painted with an imported Photoshop brush set of trees, a town, a windmill, a church, a deer and ships, above a watercolour coastline; the brush picker lists the MyPaint groups and the imported myer-settlement-brushes set" width="100%">
+      <img src="docs/images/brushes.jpg" alt="A hand-drawn map painted with an imported Photoshop brush set of trees, a town, a windmill, a deer and ships, above a watercolour coastline; the brush picker lists the MyPaint groups and the imported myer-settlement-brushes set" width="100%">
       <br>
       <sub>A map stamped with an imported Photoshop <code>.abr</code> set and a MyPaint watercolour coast.<br>Brushes: <a href="https://kmalexander.com/">“Myer Settlement Brushes”</a> by K. M. Alexander, CC0</sub>
       <h3>Paint with the brushes you already own</h3>
@@ -194,6 +193,12 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
 The full list, with every option, is in [docs/features.md](docs/features.md).
 
 ## PSD that comes back
+
+<p align="center">
+  <img src="docs/images/k-psd.jpg" alt="K.psd, a Photoshop file by Nathan Lincoln, open in NekoPhoto: the Layers panel lists its masked layers, Exposure and Hue/Saturation adjustment layers, and a smart object with a Gaussian Blur Smart Filter; the Exposure settings are below" width="100%">
+  <br>
+  <sub>K.psd as Photoshop saved it: masks, adjustment layers and a smart object with its Smart Filters, all editable.<br><i>K</i> by <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>, used with permission.</sub>
+</p>
 
 <p align="center">
   <img src="docs/images/demo-psd-roundtrip.webp" alt="Opening K.psd by Nathan Lincoln, saved by Photoshop, with its folders, masks, Smart Filters and adjustment layers intact; fading its Exposure adjustment layer to 50%; exporting it as layered PSD; reopening it with the same 33 layers" width="560">
@@ -346,10 +351,9 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
 </p>
 
 <p align="center">
-  <img src="docs/images/hero-ja.jpg" alt="日本語表示の NekoPhoto で Nathan Lincoln の Photoshop ファイル K.psd を開いたところ。レイヤーパネルにグループ、マスク付きのレイヤー、調整レイヤー、スマートフィルター付きのスマートオブジェクトが並んでいる" width="100%">
+  <img src="docs/images/hero-ja.jpg" alt="日本語表示の NekoPhoto で北斎『神奈川沖浪裏』をレイヤー付きのドキュメントとして開いたところ。レイヤースタイル付きのテキスト「神奈川沖浪裏」と THE GREAT WAVE、トーンカーブの調整レイヤー、マスクで空だけにかかる乗算のレイヤー Dusk、右下にヒストグラムパネル" width="100%">
   <br>
-  <sub>日本語表示で、Photoshop で保存されたファイルをそのまま開いたところ(グループ・マスク・調整レイヤー・スマートフィルター付きのスマートオブジェクト)。<br>
-  作品: <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>『K』(許可を得て使用)</sub>
+  <sub>日本語表示で編集中のドキュメント: スタイル付きのテキスト、トーンカーブの調整レイヤー、マスクで空だけを温める乗算のレイヤー。<br><a href="https://commons.wikimedia.org/wiki/File:Tsunami_by_hokusai_19th_century.jpg">葛飾北斎『冨嶽三十六景 神奈川沖浪裏』</a>(1830〜32 年頃)</sub>
 </p>
 
 <p align="center">
@@ -420,7 +424,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
       詳細設定では境界の調整、髪や毛並みの処理、境界の色の除去、大きな写真のための精細パスが使えます。背景は消すのではなくマスクで隠すので、描き戻すこともできます。
     </td>
     <td width="50%" valign="top">
-      <img src="docs/images/brushes.jpg" alt="読み込んだ Photoshop ブラシセットの木・町・風車・教会・鹿・船で描いた地図と水彩の海岸線。ブラシピッカーに MyPaint のグループと読み込んだ myer-settlement-brushes が並ぶ" width="100%">
+      <img src="docs/images/brushes.jpg" alt="読み込んだ Photoshop ブラシセットの木・町・風車・鹿・船で描いた地図と水彩の海岸線。ブラシピッカーに MyPaint のグループと読み込んだ myer-settlement-brushes が並ぶ" width="100%">
       <br>
       <sub>読み込んだ Photoshop の <code>.abr</code> ブラシセットと MyPaint の水彩で描いた地図。<br>ブラシ: K. M. Alexander による <a href="https://kmalexander.com/">「Myer Settlement Brushes」</a>(CC0)</sub>
       <h3>いつものブラシで描く</h3>
@@ -507,6 +511,12 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
 機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。
 
 ### PSD はそのまま戻ってくる
+
+<p align="center">
+  <img src="docs/images/k-psd.jpg" alt="Nathan Lincoln の Photoshop ファイル K.psd を NekoPhoto で開いたところ。レイヤーパネルにマスク付きのレイヤー、露光量と色相・彩度の調整レイヤー、ぼかし(ガウス)のスマートフィルター付きのスマートオブジェクトが並び、下に露光量の設定" width="100%">
+  <br>
+  <sub>Photoshop で保存されたままの K.psd: マスク、調整レイヤー、スマートフィルター付きのスマートオブジェクトをすべて編集できます(画面は英語表示)。<br>作品: <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>『K』(許可を得て使用)</sub>
+</p>
 
 <p align="center">
   <img src="docs/images/demo-psd-roundtrip.webp" alt="Nathan Lincoln の Photoshop で保存された K.psd を開き、グループ・マスク・スマートフィルター・調整レイヤーがそのまま残っていることを確認し、露光量の調整レイヤーの不透明度を 50% に下げ、レイヤー付き PSD に書き出して開き直し、同じ 33 レイヤーを確認するところ" width="560">
