@@ -55,7 +55,7 @@ void DocumentHistory::end(const std::optional<Document>& document, const std::op
     {
         std::vector<std::pair<const RegionPatch*, const void*>> changed;
         for (const RegionPatch& p : past_.back().patches) if (!p.inherited) changed.emplace_back(&p, p.source);
-        if (!changed.empty()) inheritPatched(past_, changed);
+        if (!changed.empty()) inheritPatched(past_, changed, true);
     }
     setTip(document ? &*document : nullptr);
     trim(document);
@@ -72,6 +72,7 @@ std::optional<DocumentHistory::Snapshot> DocumentHistory::undo() {
     past_.pop_back();
     Snapshot result = entry.patches.empty() ? entry.before
         : materialize(entry.before, entry.patches, [&](const RegionPatch& p) { return tipSlot(p); }, true);
+    settleOneSided(entry, true);
     revision_ = entry.before.revision;
     stepRegion_ = entry.region;
     future_.push_back(std::move(entry));
@@ -87,6 +88,7 @@ std::optional<DocumentHistory::Snapshot> DocumentHistory::redo() {
     future_.pop_back();
     Snapshot result = entry.patches.empty() ? entry.after
         : materialize(entry.after, entry.patches, [&](const RegionPatch& p) { return tipSlot(p); }, false);
+    settleOneSided(entry, false);
     revision_ = entry.after.revision;
     stepRegion_ = entry.region;
     past_.push_back(std::move(entry));
@@ -139,7 +141,7 @@ int DocumentHistory::squash(uint64_t since, const std::string& name) {
     {
         std::vector<std::pair<const RegionPatch*, const void*>> changed;
         for (const RegionPatch& p : past_.back().patches) if (!p.inherited) changed.emplace_back(&p, p.source);
-        if (!changed.empty()) inheritPatched(past_, changed);
+        if (!changed.empty()) inheritPatched(past_, changed, true);
     }
     setTip(tipDocument ? &*tipDocument : nullptr);
     return count;
@@ -358,6 +360,7 @@ DocumentHistory::Snapshot DocumentHistory::materialize(const Snapshot& snapshot,
     Snapshot out = snapshot;
     if (!out.document) return out;
     for (const RegionPatch& patch : patches) {
+        if (patch.inherited && !patch.takes(before)) continue;   // this side keeps its own buffer, or has no slot
         const std::optional<SlotBuffer> from = base(patch);
         if (!from) continue;
         withSlot(*out.document, patch.slot, patch.id, [&](auto& dst) {
@@ -422,34 +425,60 @@ DocumentHistory::Entry DocumentHistory::makeEntry(std::string name, Snapshot bef
     return entry;
 }
 
-void DocumentHistory::inheritPatched(std::vector<Entry>& list, const std::vector<std::pair<const RegionPatch*, const void*>>& changed) {
+void DocumentHistory::inheritPatched(std::vector<Entry>& list, const std::vector<std::pair<const RegionPatch*, const void*>>& changed, bool nearAfter) {
     // `list.back()` is the step that changed each buffer; the entries below it, walking away from it, share it.
     for (const auto& [patch, identity] : changed) {
         if (!identity) continue;
         for (size_t j = list.size() - 1; j-- > 0;) {
             Entry& entry = list[j];
-            if (!entry.before.document || !entry.after.document) break;
-            // An entry already leaving the slot to the chain is passed over; one that changed it ends the walk.
+            std::optional<Document>& near = nearAfter ? entry.after.document : entry.before.document;
+            std::optional<Document>& far = nearAfter ? entry.before.document : entry.after.document;
+            if (!near) break;
+            // An entry already leaving the slot to the chain on both sides is passed over; one that changed it, or
+            // leaves only its near side to the chain, ends the walk.
             const RegionPatch* own = nullptr;
             for (const RegionPatch& p : entry.patches) if (p.slot == patch->slot && p.id == patch->id) own = &p;
-            if (own && own->inherited) continue;
+            if (own && own->inherited && own->sides == RegionPatch::Sides::Both) continue;
             if (own) break;
             auto holds = [&](const Document& doc) {
                 bool same = false;
                 withSlot(doc, patch->slot, patch->id, [&](const auto& any) { same = any.identity() == identity; });
                 return same;
             };
-            if (!holds(*entry.before.document) || !holds(*entry.after.document)) break;
-            for (Document* doc : {&*entry.before.document, &*entry.after.document})
-                withSlot(*doc, patch->slot, patch->id, [](auto& any) { any.reset(); });
+            if (!holds(*near)) break;
+            // The far side holds the buffer too (the step did not touch the slot), or holds its own or none (the step
+            // made or replaced it, or made the document): then only the near side can wait on the chain.
+            const bool both = far && holds(*far);
+            withSlot(*near, patch->slot, patch->id, [](auto& any) { any.reset(); });
+            if (both) withSlot(*far, patch->slot, patch->id, [](auto& any) { any.reset(); });
             RegionPatch link;
             link.inherited = true;
+            link.sides = both ? RegionPatch::Sides::Both : nearAfter ? RegionPatch::Sides::After : RegionPatch::Sides::Before;
             link.slot = patch->slot;
             link.id = patch->id;
             entry.patches.push_back(std::move(link));
             countBuffers(entry);
+            if (!both) break;
         }
     }
+}
+
+void DocumentHistory::settleOneSided(Entry& entry, bool undoing) const {
+    const RegionPatch::Sides near = undoing ? RegionPatch::Sides::After : RegionPatch::Sides::Before;
+    Snapshot& side = undoing ? entry.after : entry.before;
+    bool settled = false;
+    for (size_t i = 0; i < entry.patches.size();) {
+        const RegionPatch& link = entry.patches[i];
+        if (!link.inherited || link.sides != near) { i++; continue; }
+        // The document stands at the near side, so the tip holds the buffer; the side keeps it from now on.
+        if (const SlotBuffer* tip = tipBuffer(link); tip && side.document)
+            withSlot(*side.document, link.slot, link.id, [&](auto& dst) {
+                if constexpr (std::is_same_v<std::decay_t<decltype(dst)>, AnyImage>) dst = tip->image; else dst = tip->gray;
+            });
+        entry.patches.erase(entry.patches.begin() + std::ptrdiff_t(i));
+        settled = true;
+    }
+    if (settled) countBuffers(entry);
 }
 
 void DocumentHistory::shareStepped(std::vector<Entry>& list) {
@@ -457,7 +486,7 @@ void DocumentHistory::shareStepped(std::vector<Entry>& list) {
     std::vector<std::pair<const RegionPatch*, const void*>> changed;
     for (const RegionPatch& p : list.back().patches)
         if (!p.inherited) if (const SlotBuffer* tip = tipBuffer(p)) changed.emplace_back(&p, tip->identity());
-    if (!changed.empty()) inheritPatched(list, changed);
+    if (!changed.empty()) inheritPatched(list, changed, &list == &past_);
 }
 
 int DocumentHistory::patchCount() const {
