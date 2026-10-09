@@ -49,13 +49,20 @@ void EditorSession::setAdjustment(const Uuid& id, const AdjustmentSettings& sett
     bool standalone = !adjustmentEditing_;
     if (standalone) beginEdit(QT_TRANSLATE_NOOP("History", "Adjustment"));
     layer->adjustment = settings.toLayerAdjustment();
-    if (standalone) { endEdit(); notifyDocument(); }
-    else emit documentChanged({});
+    if (standalone) { endEdit(); notifyDocument(); return; }
+    // A tick of the drag: the revision stays, so the canvas draws on from the frame it keeps below this layer. A
+    // second layer changed in the same edit is a change like any other.
+    if (adjustmentEditLayer_ && *adjustmentEditLayer_ != id) documentRevision_++;
+    adjustmentEditLayer_ = id;
+    adjustmentTick_ = true;
+    emit documentChanged({});
+    adjustmentTick_ = false;
 }
 
 void EditorSession::endAdjustmentEdit() {
     if (!adjustmentEditing_) return;
     adjustmentEditing_ = false;
+    adjustmentEditLayer_.reset();
     endEdit();
     notifyDocument();
 }

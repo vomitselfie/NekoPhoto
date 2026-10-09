@@ -70,6 +70,14 @@ struct RenderPlan {
     /// The one layer with an override, when a cache can be kept around it: a plain pixel layer that no other
     /// layer clips to or takes its mask from. SIZE_MAX otherwise.
     size_t editedIndex() const;
+    /// The adjustment layer being dragged (the one override, marked `adjusting`), when the frame below it can be kept:
+    /// a drawn adjustment layer that no layer takes coverage from. SIZE_MAX otherwise.
+    size_t adjustingIndex() const;
+    /// Where a frame drawn for the adjustment layer at `adjusting` can resume: the first index of `order` whose drawing
+    /// depends on that layer's settings. The layer itself; the base of the clipping stack it is in; the opening of a
+    /// folder around it with a layer style (its exterior effects are drawn from the folder's contents as it opens).
+    /// The 8-bit executor moves it down to the start of a fused run of adjustments the layer is or could be part of.
+    size_t resumeIndex(size_t adjusting) const;
     /// A layer above the edited one that composites as plain source-over, so a group of them can be
     /// flattened once and laid over the frame.
     bool plainAbove(const Layer& l) const;

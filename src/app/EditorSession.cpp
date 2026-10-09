@@ -20,6 +20,10 @@ EditorSession::~EditorSession() {
 }
 
 EditorSession::EditorSession(QObject* parent) : QObject(parent) {
+    // While an adjustment layer's settings are dragged, the canvas keeps the frame below it against documentRevision:
+    // any other change to the document in that time (a layer shown or hidden, another layer's opacity previewed) moves
+    // the revision on, as its own notifyDocument would, so the kept frame is drawn again.
+    connect(this, &EditorSession::documentChanged, this, [this] { if (adjustmentEditing_ && !adjustmentTick_) documentRevision_++; });
     // Healing strokes heal once, when the pointer is released: no healed result is shown while the stroke is
     // being painted (docs/legal-boundaries.md, "Healing": no live healing preview, US 8050498).
     // Presets with slow position tracking trail the pointer and only move on input; a mouse held still sends
@@ -817,6 +821,10 @@ Overrides EditorSession::renderOverrides() const {
             if (proxy->mask && proxy->mask->placement) o.transform = *proxy->mask->placement;
         }
     }
+    // An adjustment layer's slider being dragged: the canvas's RenderCache keeps the frame below the layer while only
+    // its settings change (documentRevision stays put for those ticks alone; see the constructor).
+    if (adjustmentEditing_ && adjustmentEditLayer_ && document_ && document_->find(*adjustmentEditLayer_))
+        overrides[*adjustmentEditLayer_].adjusting = true;
     return overrides;
 }
 

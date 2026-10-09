@@ -4,6 +4,7 @@
 #include <cctype>
 #include "compositor/png.h"
 #include "render_plan.h"
+#include "render_resume.h"
 #include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
 #include "layerstyle_render.h"
@@ -551,6 +552,26 @@ struct RenderExec<SampleType::U8> {
         return adjustmentTransfer(settings);
     }
 
+    /// A clipped adjustment layer being dragged (render_resume.h): its stack's state just before it, kept by the first
+    /// frame (`stackKeep`) and started from by the next ones (`stackResume`). A plain base's stack keeps its buffer and
+    /// the base's alpha; a styled base's, the frame it draws into and the clip.
+    struct StackState { Uuid child; bool reached = false; std::unique_ptr<Image> group; std::vector<uint8_t> alpha; std::shared_ptr<GrayImage> clip; };
+    StackState* stackKeep = nullptr;
+    const StackState* stackResume = nullptr;
+
+    /// Where the stack's dragged layer is among its children: the stack resumes there (`resume`) or keeps its state
+    /// there (`keep`); children.size() for neither.
+    size_t stackChild(const std::vector<Uuid>& children, const StackState*& resume, StackState*& keep) {
+        resume = nullptr; keep = nullptr;
+        const Uuid* child = stackResume ? &stackResume->child : stackKeep ? &stackKeep->child : nullptr;
+        if (!child) return children.size();
+        const size_t at = size_t(std::find(children.begin(), children.end(), *child) - children.begin());
+        if (at == children.size()) return at;
+        if (stackResume) { resume = stackResume; stackResume = nullptr; }
+        else { keep = stackKeep; stackKeep = nullptr; }
+        return at;
+    }
+
     void drawComposite(const Layer& layer, Image& out) {
         if (layer.isGroup) { if (layer.artboard) drawArtboardBackground(layer, out); return; }
         if (stacked.count(layer.id)) return;
@@ -561,12 +582,25 @@ struct RenderExec<SampleType::U8> {
         }
         auto stack = stacks.find(layer.id);
         if (stack == stacks.end()) { drawClipped(layer, out, folders); return; }
+        const StackState* resume = nullptr;
+        StackState* keep = nullptr;
+        const size_t dragged = plainOnly ? stack->second.size() : stackChild(stack->second, resume, keep);
         if (!plainOnly && layerStyleOf(layer, document)) {
             // A styled base: the base with its effects, then the clipped layers over it, masked by the base's own
             // transparency (never by its effects, as in Photoshop).
-            drawOwn(layer, out, folders.get());
-            auto clip = multiply(folders, coverageOf(layer.id));
-            for (auto& childId : stack->second) {
+            std::shared_ptr<GrayImage> clip;
+            size_t first = 0;
+            if (resume) {
+                std::memcpy(out.data(), resume->group->data(), out.byteCount());
+                clip = resume->clip;
+                first = dragged;
+            } else {
+                drawOwn(layer, out, folders.get());
+                clip = multiply(folders, coverageOf(layer.id));
+            }
+            for (size_t c = first; c < stack->second.size(); c++) {
+                const Uuid& childId = stack->second[c];
+                if (keep && c == dragged) { keep->group = std::make_unique<Image>(out); keep->clip = clip; keep->reached = true; }
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
                 if (it->second->adjustment) adjust(*it->second, out, clip);
@@ -579,14 +613,24 @@ struct RenderExec<SampleType::U8> {
         // A base with Blend If: its gate applies to the clipped result against the backdrop, so it does not shrink
         // the shape the clipped layers take.
         const std::optional<BlendIf> blendIf = plainOnly ? std::nullopt : layerBlendIf(layer, document.colorMode);
-        const bool wasUngated = ungated;
-        if (blendIf) ungated = true;
-        drawOwn(layer, group, nullptr);
-        ungated = wasUngated;
-        std::vector<uint8_t> alpha(size_t(outWidth) * outHeight);
-        layer_extract_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
-        layer_unpremultiply_opaque(group.data(), size_t(group.stride()), size_t(outWidth), size_t(outHeight));
-        for (auto& childId : stack->second) {
+        std::vector<uint8_t> alpha;
+        size_t first = 0;
+        if (resume) {
+            std::memcpy(group.data(), resume->group->data(), group.byteCount());
+            alpha = resume->alpha;
+            first = dragged;
+        } else {
+            const bool wasUngated = ungated;
+            if (blendIf) ungated = true;
+            drawOwn(layer, group, nullptr);
+            ungated = wasUngated;
+            alpha.resize(size_t(outWidth) * outHeight);
+            layer_extract_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
+            layer_unpremultiply_opaque(group.data(), size_t(group.stride()), size_t(outWidth), size_t(outHeight));
+        }
+        for (size_t c = first; c < stack->second.size(); c++) {
+            const Uuid& childId = stack->second[c];
+            if (keep && c == dragged) { keep->group = std::make_unique<Image>(group); keep->alpha = alpha; keep->reached = true; }
             auto it = byId.find(childId);
             if (it == byId.end()) continue;
             if (it->second->adjustment) adjust(*it->second, group, nullptr);
@@ -613,19 +657,30 @@ struct RenderExec<SampleType::U8> {
     /// Draws the layers order[from, to) over `out`.
     void drawRange(Image& out, size_t from, size_t to) {
         Image* cur = &out;
+        drawSpan(cur, from, to);
+    }
+
+    /// The fused run of adjustments that starts at `index`: its transfer, and its end (`index` when there is none).
+    std::optional<Transfer> fusedRun(size_t index, size_t to, size_t& end) {
+        std::optional<Transfer> fused;
+        for (end = index; end < to; end++) {
+            if (end > index && (groupsOpen.count(end) || groupsClose.count(end - 1))) break;
+            std::optional<Transfer> next = fusibleTransfer(*order[end]);
+            if (!next) break;
+            fused = fused ? composeTransfer(*fused, *next) : std::move(next);
+        }
+        return fused;
+    }
+
+    /// Draws order[from, to) into `cur`, going on from the folders open in `frames`.
+    void drawSpan(Image*& cur, size_t from, size_t to) {
         for (size_t index = from; index < to;) {
             // A run of table-driven adjustment layers (Levels, Curves, Exposure) at full opacity in Normal mode
             // with no masks composes into one transfer: one pass over the canvas, quantised once.
             if (auto open = groupsOpen.find(index); open != groupsOpen.end())
                 for (const Layer* g : open->second) openGroup(*g, cur);
-            std::optional<Transfer> fused;
             size_t end = index;
-            for (; end < to; end++) {
-                if (end > index && (groupsOpen.count(end) || groupsClose.count(end - 1))) break;
-                std::optional<Transfer> next = fusibleTransfer(*order[end]);
-                if (!next) break;
-                fused = fused ? composeTransfer(*fused, *next) : std::move(next);
-            }
+            std::optional<Transfer> fused = fusedRun(index, to, end);
             if (fused) {
                 work::add(work::Counter::Adjustments, uint64_t(end - index));
                 work::add(work::Counter::AdjustmentPixels, uint64_t(cur->width()) * uint64_t(cur->height()));   // one pass for the run
@@ -650,6 +705,7 @@ struct RenderExec<SampleType::U8> {
             && cache.region == region && cache.scale == scale;
         if (!valid) {
             cache.version = version; cache.layer = layer.id; cache.width = outWidth; cache.height = outHeight; cache.region = region; cache.scale = scale;
+            cache.resume.reset();
             cache.backdrop = std::make_shared<Image>(outWidth, outHeight);
             drawRange(*cache.backdrop, 0, edited);
             cache.above.reset();
@@ -671,9 +727,28 @@ struct RenderExec<SampleType::U8> {
         });
     }
 
+    /// Where a frame for the adjustment layer at `adjusting` resumes (RenderPlan::resumeIndex), moved down to the start
+    /// of the fused run it is in, or that it would join with other settings: a run is one pass, quantised once, so
+    /// it is drawn whole as an uncached frame draws it.
+    size_t resumeIndex(size_t adjusting) {
+        const size_t at = plan.resumeIndex(adjusting);
+        for (size_t index = 0; index < at;) {
+            size_t end = index;
+            const bool run = bool(fusedRun(index, order.size(), end));
+            if (!run) { index++; continue; }
+            if (at < end) return index;
+            if (end == at && at == adjusting && !groupsOpen.count(at) && !groupsClose.count(at - 1)) return index;
+            index = end;
+        }
+        return at;
+    }
+
     void run(Image& out, RenderCache* cache, uint64_t version) {
         const size_t edited = cache ? plan.editedIndex() : SIZE_MAX;
-        if (edited != SIZE_MAX) runCached(out, *cache, version, edited);
+        if (edited != SIZE_MAX) { runCached(out, *cache, version, edited); return; }
+        const size_t adjusting = cache ? plan.adjustingIndex() : SIZE_MAX;
+        static const char kind = 0;
+        if (adjusting != SIZE_MAX) drawResumed(*this, out, *cache, version, adjusting, resumeIndex(adjusting), &kind);
         else drawRange(out, 0, order.size());
     }
 };

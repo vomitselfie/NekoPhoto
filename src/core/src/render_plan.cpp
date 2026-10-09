@@ -83,6 +83,37 @@ size_t RenderPlan::editedIndex() const {
     return index;
 }
 
+size_t RenderPlan::adjustingIndex() const {
+    if (!overrides || overrides->size() != 1 || !overrides->begin()->second.adjusting) return SIZE_MAX;
+    const Uuid& id = overrides->begin()->first;
+    size_t index = SIZE_MAX;
+    for (size_t i = 0; i < order.size(); i++) if (order[i]->id == id) index = i;
+    if (index == SIZE_MAX || !order[index]->adjustment || order[index]->isGroup) return SIZE_MAX;
+    // A layer clipped to it, or taking its mask from it, would read its coverage wherever it is drawn.
+    for (auto& other : document.layers) if (other.maskSourceId && *other.maskSourceId == id) return SIZE_MAX;
+    return index;
+}
+
+size_t RenderPlan::resumeIndex(size_t adjusting) const {
+    const Layer& layer = *order[adjusting];
+    size_t at = adjusting;
+    // Clipped: the stack is drawn as one, from its base.
+    if (stacked.count(layer.id))
+        for (size_t i = adjusting; i-- > 0;) {
+            auto stack = stacks.find(order[i]->id);
+            if (stack == stacks.end()) continue;
+            if (std::find(stack->second.begin(), stack->second.end(), layer.id) != stack->second.end()) at = i;
+            break;
+        }
+    // A styled folder around it draws its exterior effects from its contents (the layer among them) as it opens. Those
+    // effects follow the contents' shape, which an adjustment does not change; the folder is drawn whole all the same.
+    for (auto& [i, list] : groupsOpen) {
+        if (i >= at) break;
+        for (const Layer* g : list) if (layerStyleOf(*g, document) && within(layer, g->id)) { at = i; break; }
+    }
+    return at;
+}
+
 bool RenderPlan::plainAbove(const Layer& l) const {
     return !l.adjustment && !l.maskSourceId && !stacks.count(l.id) && !stacked.count(l.id) && blendOf(l) == BlendMode::Normal
         && !layerStyleOf(l, document)   // effects blend in their own modes

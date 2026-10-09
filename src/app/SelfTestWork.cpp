@@ -98,6 +98,7 @@ int workCounters(MainWindow& window) {
     const auto photoId = s.activeLayerId();
     for (int l = 1; l <= 3; l++) s.insertImage(ImagePtr(softPaint(W, H, l)), QString("Paint %1").arg(l));
     s.addBlankLayer();
+    const auto topId = s.activeLayerId();
     // As if opened from a file: the history starts here. (A layer made by a step still in the history keeps its first
     // buffer in that step once a later edit replaces it; docs/work-counters.md, "Found".)
     s.markOpened();
@@ -159,7 +160,9 @@ int workCounters(MainWindow& window) {
     settle();
 
     // ---- An adjustment layer's slider drag at fit zoom --------------------------------------------------------------
+    // A Levels layer on top of the five; the canvas keeps the frame below it while its settings are dragged.
     s.fitView();
+    s.selectLayer(topId);
     settle();
     s.addAdjustmentLayer(AdjustmentKind::Levels);
     settle();
@@ -168,6 +171,7 @@ int workCounters(MainWindow& window) {
     b.expect(bool(settings), "no Levels layer");
     if (settings) {
         s.beginAdjustmentEdit();
+        const uint64_t revision = s.documentRevision();
         work::Snapshot drag;
         const int ticks = 20;
         for (int i = 0; i < ticks; i++) {
@@ -175,21 +179,35 @@ int workCounters(MainWindow& window) {
             d = step([&] { s.setAdjustment(*id, *settings); });
             for (size_t k = 0; k < work::counterCount; k++) drag.values[k] += d.values[k];
         }
-        s.endAdjustmentEdit();
-        // Each tick renders the view once (no panel renders the document again): the pixel layers drawn once each over
-        // at most the view, and the Levels pass. Measured a tick: 1 render of the document's 303 372 visible pixels, 4
-        // draws (the blank layer draws nothing), 1 adjustment. Bounds: one render of the view, each layer once.
+        // Each tick renders the view once (no panel renders the document again) and makes the Levels pass over it. The
+        // first tick draws the pixel layers below once each and keeps that frame (RenderCache::resume); the next ones
+        // draw no layer at all: nothing is above the Levels layer. Measured over the twenty ticks: 20 renders of the
+        // document's 303 372 visible pixels, 4 draws (the blank layer draws nothing), 20 adjustment passes; before the
+        // frame was kept, 80 draws (4 a tick). Bounds: one render of the view a tick, each layer once for the drag.
         // A quarter more renders than ticks: the platform may repaint the window on its own during the drag (21 on
         // GitHub's Windows runner, 22 on its Linux one, 20 here), while a regression that renders twice a tick is 40.
+        // Such a repaint draws from the kept frame too, so it adds no draw.
         const int slack = ticks / 4;
         b.at("slider ticks", drag, Counter::Renders, ticks + slack);
         b.at("slider ticks", drag, Counter::RenderPixels, view * ticks);
-        b.at("slider ticks", drag, Counter::LayerDraws, pixelLayers * ticks);
-        b.at("slider ticks", drag, Counter::LayerDrawPixels, pixelLayers * view * ticks);
+        b.at("slider ticks", drag, Counter::LayerDraws, pixelLayers);
+        b.at("slider ticks", drag, Counter::LayerDrawPixels, pixelLayers * view);
         b.at("slider ticks", drag, Counter::Adjustments, ticks + slack);   // those renders' Levels passes
         // Every layer from its cached reduction: none built during the drag.
         b.at("slider ticks", drag, Counter::MipMisses, 0);
         b.at("slider ticks", drag, Counter::MipBuiltPixels, 0);
+        b.expect(s.documentRevision() == revision, "a slider tick moved the document revision on: the canvas cannot keep the frame below the layer");
+        // Anything else changing during the drag moves the revision on and the frame below is drawn again: the photo's
+        // eye swiped off and back on (the three paint layers, then all four), then a tick draws nothing again.
+        d = step([&] { s.beginVisibilitySwipe(*photoId); });
+        b.expect(s.documentRevision() != revision, "hiding a layer during an adjustment drag left the document revision");
+        b.expect(d[Counter::LayerDraws] >= 3, "the frame after hiding a layer below the dragged adjustment did not draw the layers below again");
+        d = step([&] { s.setVisibilityInSwipe(*photoId, true); s.endVisibilitySwipe(); });
+        b.expect(d[Counter::LayerDraws] >= 4, "the frame after showing a layer below the dragged adjustment did not draw the layers below again");
+        settings->levels.ranges[0].white = 200;
+        d = step([&] { s.setAdjustment(*id, *settings); });
+        b.at("a tick after the swipe", d, Counter::LayerDraws, 0);
+        s.endAdjustmentEdit();
         settle();
     }
 

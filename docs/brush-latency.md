@@ -212,3 +212,15 @@ roughly 1000 instructions a pixel. A per-thread memo keyed on the pixel's sample
 content and was dropped. Closing the gap would need a design change, such as a precalculated 16-bit display grid,
 which changes the displayed bytes, or splitting the pipeline so the final 8-bit tone curve becomes a threshold lookup.
 Either one changes what the screen shows, so it was left alone. 32-bit was not changed.
+
+### The frame below the dragged layer is kept
+
+The tick times above were measured when every tick drew every layer again. A drag now marks the adjustment layer as
+being dragged (`LayerOverride::adjusting`, set by `EditorSession` while an adjustment edit is open), and the canvas's
+`RenderCache` keeps the frame as it stands just below that layer, with any folders open around it (`render_resume.h`):
+the first tick draws everything and keeps that state, and each later tick copies it back and draws on from there, the
+adjustment pass and the layers above it. A clipped adjustment layer goes on from inside its clipping stack, so the
+base and the layers clipped under it are not drawn again either. Frames are the same bytes as uncached ones at every
+depth and mode (`adjustment_drag_tests`), and `work_counter_tests` and the window's `work_counters_selftest` bound the
+draws a tick at the layers above the dragged one. What a tick still costs is the view render itself: copying the kept
+frame, the adjustment pass, the layers above, and for a deep, CMYK or Lab document the conversion to the screen.

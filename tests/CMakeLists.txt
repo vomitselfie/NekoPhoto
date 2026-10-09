@@ -14,6 +14,10 @@ add_test(NAME history_tests COMMAND history_tests)
 add_executable(work_counter_tests work_counter_tests.cpp)
 target_link_libraries(work_counter_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME work_counter_tests COMMAND work_counter_tests)
+# An adjustment layer's drag through a RenderCache: every frame equals an uncached render (render_resume.h).
+add_executable(adjustment_drag_tests adjustment_drag_tests.cpp)
+target_link_libraries(adjustment_drag_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME adjustment_drag_tests COMMAND adjustment_drag_tests)
 
 add_executable(imaget_tests imaget_tests.cpp)
 target_link_libraries(imaget_tests PRIVATE compositor::core compositor_warnings)
