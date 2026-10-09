@@ -19,6 +19,10 @@
 // rewrites tests/psd_oracle.txt and tests/patchy-manifest.txt (the Patchy commit and the SHA-256 of every fixture
 // and flatten used). A checkout that differs from the manifest is reported, not failed: the numbers are then for other files.
 // Without the fixtures the test is skipped.
+//
+// PSD_ORACLE_DUMP=<dir> writes, for every compared file, NekoPhoto's render, the reference and a difference map
+// (each pixel's largest channel difference, times 8) as PNGs: <name>-ours.png, -ps.png and -diff.png.
+#include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/psd_carry.h"
 #include "compositor/render.h"
@@ -254,6 +258,36 @@ void measure(Result& r, const Image& ours, const uint8_t* ps, int channels) {
     r.pass = r.shareOver2 <= kMaxShareOver2 && r.mean < kMaxMean;
 }
 
+/// PSD_ORACLE_DUMP: the render, the reference (`channels` 3: RGB, matted on white; 4: premultiplied RGBA) and the map.
+void dump(const std::string& name, const Image& ours, const uint8_t* ps, int channels) {
+    const char* dir = std::getenv("PSD_ORACLE_DUMP");
+    if (!dir || !*dir) return;
+    const int w = ours.width(), h = ours.height();
+    Image mine(w, h), theirs(w, h), diff(w, h);
+    for (int y = 0; y < h; y++) {
+        const uint8_t* b = ours.row(y);
+        const uint8_t* a = ps + size_t(y) * size_t(w) * size_t(channels);
+        for (int x = 0; x < w; x++, a += channels, b += 4) {
+            int worst = 0;
+            for (int c = 0; c < 4; c++) {
+                const int m = channels == 3 ? (c < 3 ? int(b[c]) + 255 - int(b[3]) : 255) : int(b[c]);
+                const int t = c < channels ? int(a[c]) : 255;
+                mine.row(y)[x * 4 + c] = uint8_t(m);
+                theirs.row(y)[x * 4 + c] = uint8_t(t);
+                if (c < channels) worst = std::max(worst, std::abs(m - t));
+            }
+            const uint8_t v = uint8_t(std::min(255, worst * 8));
+            uint8_t* d = diff.row(y) + x * 4;
+            d[0] = d[1] = d[2] = v;
+            d[3] = 255;
+        }
+    }
+    const std::string stem = std::string(dir) + "/" + fs::path(name).stem().string();
+    writePngImage(stem + "-ours.png", mine);
+    writePngImage(stem + "-ps.png", theirs);
+    writePngImage(stem + "-diff.png", diff);
+}
+
 Result compare(const fs::path& path) {
     Result r;
     r.name = path.filename().string();
@@ -273,6 +307,7 @@ Result compare(const fs::path& path) {
                 return r;
             }
             measure(r, *ours, ps.rgb.data(), 3);
+            dump(r.name, *ours, ps.rgb.data(), 3);
             return r;
         }
     }
@@ -300,6 +335,7 @@ Result compare(const fs::path& path) {
     std::vector<uint8_t> rows(size_t(ps.width()) * size_t(ps.height()) * 4);
     for (int y = 0; y < ps.height(); y++) std::memcpy(rows.data() + size_t(y) * size_t(ps.width()) * 4, ps.row(y), size_t(ps.width()) * 4);
     measure(r, *ours, rows.data(), 4);
+    dump(r.name, *ours, rows.data(), 4);
     return r;
 }
 
