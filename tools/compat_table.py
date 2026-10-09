@@ -4,9 +4,14 @@ golden PNGs, brush-parity baseline rows, CTest suites, the capability matrix per
 registered and named in tools/rpc_smoke.py, the methods tools/rpc_panic_hunt.py leaves out, the fuzz targets and the
 merged-composite oracle's floor. Everything outside the generated blocks stays hand-written.
 
+It also writes the measured-results badges at the top of README.md (the compat-badges blocks, in English and
+Japanese) from the same counts, and keeps the README's prose figures for the oracle and the automation methods in
+step with them. The round-trip badge reads the hand-measured row of docs/compatibility.md and fails when the corpus
+pinned in tests/patchy-manifest.txt has a different number of files than it says (rerun psd_roundtrip).
+
     python3 tools/compat_table.py            print the blocks
-    python3 tools/compat_table.py --check    exit 1 when docs/compatibility.md is stale (a ctest test)
-    python3 tools/compat_table.py --write    rewrite the blocks in docs/compatibility.md
+    python3 tools/compat_table.py --check    exit 1 when docs/compatibility.md or README.md is stale (a ctest test)
+    python3 tools/compat_table.py --write    rewrite the blocks in docs/compatibility.md and README.md
 
 COMPAT_TABLE_WRITE=1 with --check rewrites instead of failing.
 """
@@ -18,6 +23,7 @@ import sys
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 DOC = os.path.join(ROOT, "docs", "compatibility.md")
+README = os.path.join(ROOT, "README.md")
 
 
 def read(rel):
@@ -184,6 +190,88 @@ def tables():
     return "\n".join(en), "\n".join(ja)
 
 
+def patchy_corpus():
+    """PSD and PSB files pinned in tests/patchy-manifest.txt: the round-trip corpus."""
+    return sum(1 for l in lines("tests/patchy-manifest.txt") if re.search(r"\.ps[bd]$", l.split()[-1], re.I))
+
+
+def round_trip(doc):
+    """The hand-measured round trip of docs/compatibility.md: (passed, files)."""
+    m = re.search(r"\| PSD round trip over Patchy's fixtures \| \*\*(\d+) of (\d+) files pass\*\*", doc)
+    if not m:
+        raise SystemExit(f"{DOC}: no 'PSD round trip over Patchy's fixtures | **N of N files pass**' row")
+    passed, files = int(m.group(1)), int(m.group(2))
+    corpus = patchy_corpus()
+    if files != corpus:
+        raise SystemExit(f"{DOC} reports the round trip over {files} files, but tests/patchy-manifest.txt pins {corpus}: "
+                         "rerun build/tests/psd_roundtrip over Patchy's fixtures and update that row")
+    return passed, files
+
+
+def shields_escape(text):
+    """A static shields.io badge's label or message: '-' and '_' doubled, then percent-encoded (a space as %20)."""
+    from urllib.parse import quote
+    return quote(text.replace("-", "--").replace("_", "__"), safe="")
+
+
+GREEN, YELLOWGREEN, YELLOW, BLUE = "2ea44f", "97ca00", "dfb317", "2f7bf5"
+
+
+def ratio_colour(passed, total):
+    if total and passed == total:
+        return GREEN
+    return YELLOWGREEN if total and passed / total >= 0.75 else YELLOW
+
+
+def badge(label, message, colour, alt, href):
+    src = f"https://img.shields.io/badge/{shields_escape(label)}-{shields_escape(message)}-{colour}?style=flat-square"
+    return f'  <a href="{href}"><img alt="{alt}" src="{src}"></a>'
+
+
+def badges(doc):
+    passed, files = round_trip(doc)
+    suites, _ = ctest_suites()
+    registered, _ = automation()
+    orc = oracle()
+    en = [badge("PSD round trip", f"{passed}/{files}", ratio_colour(passed, files),
+                f"PSD round trip: {passed} of {files} files", "docs/compatibility.md#at-a-glance")]
+    ja = [badge("PSD 往復", f"{passed}/{files}", ratio_colour(passed, files),
+                f"PSD の往復: {files} 個中 {passed} 個", "docs/compatibility.md#日本語")]
+    if orc:
+        en.append(badge("Photoshop match", f"{orc[0]}/{orc[1]}", ratio_colour(orc[0], orc[1]),
+                        f"Matches Photoshop's render: {orc[0]} of {orc[1]} files", "docs/compatibility.md#at-a-glance"))
+        ja.append(badge("Photoshop と一致", f"{orc[0]}/{orc[1]}", ratio_colour(orc[0], orc[1]),
+                        f"Photoshop の描画と一致: {orc[1]} 個中 {orc[0]} 個", "docs/compatibility.md#日本語"))
+    en += [badge("tests", f"{suites} suites", BLUE, f"Tests: {suites} CTest suites", "docs/compatibility.md#at-a-glance"),
+           badge("automation", f"{registered} methods", BLUE, f"Automation: {registered} methods", "docs/automation.md")]
+    ja += [badge("テスト", f"CTest {suites} 個", BLUE, f"テスト: CTest {suites} 個", "docs/compatibility.md#日本語"),
+           badge("自動操作", f"メソッド {registered} 個", BLUE, f"自動操作: メソッド {registered} 個", "docs/automation.md")]
+    return "\n".join(en), "\n".join(ja)
+
+
+def readme_prose(text):
+    """The README's own figures for the oracle and the automation methods, kept in step with the counts."""
+    registered, _ = automation()
+    orc = oracle()
+    if orc:
+        text = re.sub(r"\d+ of \d+ files render within", f"{orc[0]} of {orc[1]} files render within", text)
+        text = re.sub(r"\d+ 個中 \d+ 個のファイルが", f"{orc[1]} 個中 {orc[0]} 個のファイルが", text)
+    text = re.sub(r"\d+ automation methods", f"{registered} automation methods", text)
+    text = re.sub(r"\d+ 個の自動操作メソッド", f"{registered} 個の自動操作メソッド", text)
+    return text
+
+
+README_BLOCKS = ("compat-badges", "compat-badges-ja")
+
+
+def splice_readme(text, name, body):
+    begin, end = f"<!-- {name}:start (tools/compat_table.py --write) -->", f"<!-- {name}:end -->"
+    pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end), re.S)
+    if not pattern.search(text):
+        raise SystemExit(f"{README}: no generated block '{name}' (markers {begin!r} ... {end!r})")
+    return pattern.sub(lambda _: begin + "\n" + body + "\n  " + end, text)
+
+
 BLOCKS = ("at-a-glance", "at-a-glance-ja")
 
 
@@ -201,21 +289,27 @@ def main():
     with open(DOC, encoding="utf-8") as f:
         current = f.read()
     wanted = splice(splice(current, BLOCKS[0], en), BLOCKS[1], ja)
+    with open(README, encoding="utf-8") as f:
+        readme = f.read()
+    badges_en, badges_ja = badges(current)
+    readme_wanted = readme_prose(splice_readme(splice_readme(readme, README_BLOCKS[0], badges_en), README_BLOCKS[1], badges_ja))
+    pending = [(path, have, want) for path, have, want in ((DOC, current, wanted), (README, readme, readme_wanted)) if have != want]
     args = sys.argv[1:]
     write = "--write" in args or ("--check" in args and os.environ.get("COMPAT_TABLE_WRITE", "") not in ("", "0"))
     if write:
-        if wanted != current:
-            with open(DOC, "w", encoding="utf-8", newline="\n") as f:
-                f.write(wanted)
-            print(f"rewrote the generated blocks in {DOC}")
+        for path, _, want in pending:
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                f.write(want)
+            print(f"rewrote the generated blocks in {path}")
         return 0
     if "--check" in args:
-        if wanted != current:
-            print(f"{DOC} is stale: run python3 tools/compat_table.py --write (or COMPAT_TABLE_WRITE=1 ctest -R compat_table_check)")
+        if pending:
+            for path, _, _ in pending:
+                print(f"{path} is stale: run python3 tools/compat_table.py --write (or COMPAT_TABLE_WRITE=1 ctest -R compat_table_check)")
             return 1
-        print("docs/compatibility.md is up to date")
+        print("docs/compatibility.md and README.md are up to date")
         return 0
-    print(en + "\n\n" + ja)
+    print(en + "\n\n" + ja + "\n\n" + badges_en + "\n\n" + badges_ja)
     return 0
 
 

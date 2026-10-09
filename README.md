@@ -17,6 +17,15 @@
   <img alt="Qt 6 · C++20" src="https://img.shields.io/badge/Qt%206%20%C2%B7%20C%2B%2B20-41cd52?style=flat-square">
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-3a3a3a?style=flat-square"></a>
   <img alt="English · 日本語" src="https://img.shields.io/badge/UI-English%20%C2%B7%20%E6%97%A5%E6%9C%AC%E8%AA%9E-c2185b?style=flat-square">
+  <br>
+  <a href="https://github.com/vomitselfie/nekophoto/actions/workflows/linux.yml"><img alt="Linux build and tests" src="https://github.com/vomitselfie/nekophoto/actions/workflows/linux.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/vomitselfie/nekophoto/actions/workflows/windows.yml"><img alt="Windows build and tests" src="https://github.com/vomitselfie/nekophoto/actions/workflows/windows.yml/badge.svg?branch=main"></a>
+  <!-- compat-badges:start (tools/compat_table.py --write) -->
+  <a href="docs/compatibility.md#at-a-glance"><img alt="PSD round trip: 117 of 117 files" src="https://img.shields.io/badge/PSD%20round%20trip-117%2F117-2ea44f?style=flat-square"></a>
+  <a href="docs/compatibility.md#at-a-glance"><img alt="Matches Photoshop's render: 58 of 72 files" src="https://img.shields.io/badge/Photoshop%20match-58%2F72-97ca00?style=flat-square"></a>
+  <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 90 CTest suites" src="https://img.shields.io/badge/tests-90%20suites-2f7bf5?style=flat-square"></a>
+  <a href="docs/automation.md"><img alt="Automation: 183 methods" src="https://img.shields.io/badge/automation-183%20methods-2f7bf5?style=flat-square"></a>
+  <!-- compat-badges:end -->
 </p>
 
 <p align="center">
@@ -211,7 +220,7 @@ NekoPhoto is tested against real Photoshop files, and the numbers are published 
 - **Round trip:** all 117 PSD and PSB files of the test corpus, nearly all saved by Photoshop 2026 (text, smart objects
   and Smart Filters, layer styles, shapes, masks, PSB), open, export and reopen with nothing lost; 3,675 blocks
   NekoPhoto does not edit go back byte for byte. Converted to 16 bits, they come back too.
-- **Against Photoshop's own render:** 52 of 72 files render within 2 levels of what Photoshop shows on 99% of their
+- **Against Photoshop's own render:** 58 of 72 files render within 2 levels of what Photoshop shows on 99% of their
   pixels, compared with Photoshop's own flatten or the merged image it stored.
 - **Colour:** the ICC profile of all 64 tagged RGB PSDs in the corpus is written back byte for byte.
 - **No surprises:** what PSD cannot carry is listed before you export, and an unedited 16-bit layer goes back byte for byte.
@@ -337,6 +346,17 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
 ## 日本語
 
 <p align="center"><a href="#english">English</a> · <b>日本語</b></p>
+
+<p align="center">
+  <a href="https://github.com/vomitselfie/nekophoto/actions/workflows/linux.yml"><img alt="Linux のビルドとテスト" src="https://github.com/vomitselfie/nekophoto/actions/workflows/linux.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/vomitselfie/nekophoto/actions/workflows/windows.yml"><img alt="Windows のビルドとテスト" src="https://github.com/vomitselfie/nekophoto/actions/workflows/windows.yml/badge.svg?branch=main"></a>
+  <!-- compat-badges-ja:start (tools/compat_table.py --write) -->
+  <a href="docs/compatibility.md#日本語"><img alt="PSD の往復: 117 個中 117 個" src="https://img.shields.io/badge/PSD%20%E5%BE%80%E5%BE%A9-117%2F117-2ea44f?style=flat-square"></a>
+  <a href="docs/compatibility.md#日本語"><img alt="Photoshop の描画と一致: 72 個中 58 個" src="https://img.shields.io/badge/Photoshop%20%E3%81%A8%E4%B8%80%E8%87%B4-58%2F72-97ca00?style=flat-square"></a>
+  <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 90 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%2090%20%E5%80%8B-2f7bf5?style=flat-square"></a>
+  <a href="docs/automation.md"><img alt="自動操作: メソッド 183 個" src="https://img.shields.io/badge/%E8%87%AA%E5%8B%95%E6%93%8D%E4%BD%9C-%E3%83%A1%E3%82%BD%E3%83%83%E3%83%89%20183%20%E5%80%8B-2f7bf5?style=flat-square"></a>
+  <!-- compat-badges-ja:end -->
+</p>
 
 <p align="center">
   <b>作品をそのまま持ってこられます。</b><br>
@@ -529,7 +549,7 @@ NekoPhoto は実際の Photoshop ファイルで検証しており、その数�
 - **往復:** テスト用の PSD・PSB ファイル 117 個(ほぼすべて Photoshop 2026 で保存。テキスト、スマートオブジェクトとスマートフィルター、
   レイヤースタイル、シェイプ、マスク、PSB を網羅)は、開いて書き出し、開き直しても何も失われません。NekoPhoto が編集しない
   3,675 個のブロックはバイト単位でそのまま戻ります。16 ビットに変換しても同様です。
-- **Photoshop 自身の描画と比較:** 72 個中 52 個のファイルが、ピクセルの 99% で Photoshop の表示と 2 レベル以内に収まります
+- **Photoshop 自身の描画と比較:** 72 個中 58 個のファイルが、ピクセルの 99% で Photoshop の表示と 2 レベル以内に収まります
   (Photoshop で統合した画像、またはファイルに保存された統合画像と比較)。
 - **色:** テスト用ファイルのうちプロファイル付きの RGB PSD 64 個すべてで、ICC プロファイルがバイト単位でそのまま書き戻されます。
 - **想定外なし:** PSD で表現できない要素は書き出す前に一覧表示され、編集していない 16 ビットのレイヤーはバイト単位でそのまま戻ります。
