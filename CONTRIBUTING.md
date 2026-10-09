@@ -184,7 +184,7 @@ reuses the menu bar's `QAction`s (by the keys `nameAction` gives them), so it fo
 
 ### Converted
 
-`command_path_selftest` checks every item below that is marked *checked* (133 of them, 134 where G'MIC is installed):
+`command_path_selftest` checks every item below that is marked *checked* (the test prints how many it checked; G'MIC's and Select ▸ Subject's only run where G'MIC and the click-to-select model are installed):
 the menu path (or dialog, key or panel control), the requests the recording holds, and the session calls the item made
 before, compared as documents, selections, paths, channels, colours, vector masks, layer styles and history names, with
 each recorded once; File > New, Open, Import File, Save As and Edit Contents through their file dialogs. When two paths

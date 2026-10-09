@@ -478,7 +478,7 @@ const std::map<QString, std::pair<const MethodDoc*, std::vector<Param>>>& table(
 
 const QStringList& toolNames() {
     static const QStringList names{"move", "marquee", "lasso", "wand", "quickselect", "crop", "brush", "healing", "clone", "smudge",
-                                   "gradient", "shape", "text", "eyedropper", "hand", "zoom", "artboard", "slice"};
+                                   "dodge", "bucket", "pen", "directselect", "gradient", "shape", "text", "eyedropper", "hand", "zoom", "artboard", "slice"};
     return names;
 }
 

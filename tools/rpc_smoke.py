@@ -769,6 +769,8 @@ def sixteen_bit(rpc):
     assert rpc.call("document.info")["bits"] == 16
     # Text at 16 bits: the tool, rich text ranges, editing, and its outlines as a path and a shape.
     assert rpc.call("tool.select", name="text")["tool"] == "text"
+    for name in ("dodge", "bucket", "pen", "directselect"):   # every tool tool.select knows is accepted by its description
+        assert rpc.call("tool.select", name=name)["tool"] == name, name
     words = rpc.call("layers.add", kind="text", text="Deep", x=10, y=10, size=30, color="#2266cc")
     assert words["kind"] == "text" and words["pixelSize"]["width"] > 20, words
     assert rpc.call("text.set", id=words["id"], text="Deep text", italic=True)["text"]["text"] == "Deep text"

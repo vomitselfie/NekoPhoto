@@ -1357,7 +1357,7 @@ def batch(calls: list[dict], name: Optional[str] = None) -> list:
 
 @edit("Pick a tool")
 def tool_select(name: str) -> str:
-    """Switch the tool the person sees (move, marquee, lasso, wand, quickselect, crop, brush, healing, clone, smudge, gradient, shape, text, eyedropper, hand, zoom, artboard, slice). Tools that paint by coordinates do not need this."""
+    """Switch the tool the person sees (move, marquee, lasso, wand, quickselect, crop, brush, healing, clone, smudge, dodge, bucket, pen, directselect, gradient, shape, text, eyedropper, hand, zoom, artboard, slice). Tools that paint by coordinates do not need this."""
     return text(call("tool.select", name=name))
 
 
