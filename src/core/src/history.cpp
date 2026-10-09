@@ -431,7 +431,9 @@ void DocumentHistory::inheritPatched(std::vector<Entry>& list, const std::vector
         if (!identity) continue;
         for (size_t j = list.size() - 1; j-- > 0;) {
             Entry& entry = list[j];
-            if (!entry.before.document || !entry.after.document) break;
+            std::optional<Document>& near = nearAfter ? entry.after.document : entry.before.document;
+            std::optional<Document>& far = nearAfter ? entry.before.document : entry.after.document;
+            if (!near) break;
             // An entry already leaving the slot to the chain on both sides is passed over; one that changed it, or
             // leaves only its near side to the chain, ends the walk.
             const RegionPatch* own = nullptr;
@@ -443,14 +445,12 @@ void DocumentHistory::inheritPatched(std::vector<Entry>& list, const std::vector
                 withSlot(doc, patch->slot, patch->id, [&](const auto& any) { same = any.identity() == identity; });
                 return same;
             };
-            Document& near = nearAfter ? *entry.after.document : *entry.before.document;
-            Document& far = nearAfter ? *entry.before.document : *entry.after.document;
-            if (!holds(near)) break;
+            if (!holds(*near)) break;
             // The far side holds the buffer too (the step did not touch the slot), or holds its own or none (the step
-            // made or replaced it): then only the near side can wait on the chain.
-            const bool both = holds(far);
-            withSlot(near, patch->slot, patch->id, [](auto& any) { any.reset(); });
-            if (both) withSlot(far, patch->slot, patch->id, [](auto& any) { any.reset(); });
+            // made or replaced it, or made the document): then only the near side can wait on the chain.
+            const bool both = far && holds(*far);
+            withSlot(*near, patch->slot, patch->id, [](auto& any) { any.reset(); });
+            if (both) withSlot(*far, patch->slot, patch->id, [](auto& any) { any.reset(); });
             RegionPatch link;
             link.inherited = true;
             link.sides = both ? RegionPatch::Sides::Both : nearAfter ? RegionPatch::Sides::After : RegionPatch::Sides::Before;

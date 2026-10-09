@@ -320,6 +320,10 @@ struct Ref {
     bool operator==(const Ref&) const = default;
 };
 
+Ref refOf(const Document& doc);
+/// No document: no layers and no buffers.
+Ref refOf(const std::optional<Document>& doc) { return doc ? refOf(*doc) : Ref{{"no document"}, {}}; }
+
 Ref refOf(const Document& doc) {
     Ref r;
     for (const Layer& l : doc.layers) r.layers.push_back(l.id + "/" + l.name + (l.visible ? "+" : "-"));
@@ -349,8 +353,15 @@ struct Bench {
     DocumentHistory history;
     std::optional<Document> doc;
     std::map<uint64_t, Ref> states;
-    explicit Bench(Document d, int entryLimit = 100, size_t byteLimit = size_t(256) * 1024 * 1024)
-        : history(entryLimit, byteLimit), doc(std::move(d)) { states[history.revision()] = refOf(*doc); }
+    explicit Bench(std::optional<Document> d, int entryLimit = 100, size_t byteLimit = size_t(256) * 1024 * 1024)
+        : history(entryLimit, byteLimit), doc(std::move(d)) { states[history.revision()] = refOf(doc); }
+    /// A step that may make the document (`change` takes the optional).
+    template <class F> void stepWhole(const char* name, F&& change) {
+        history.begin(name, doc, std::nullopt);
+        change(doc);
+        history.end(doc, std::nullopt);
+        states[history.revision()] = refOf(doc);
+    }
     template <class F> void step(const char* name, F&& change) {
         history.begin(name, doc, std::nullopt);
         change(*doc);
@@ -359,15 +370,15 @@ struct Bench {
     }
     bool undo() {
         auto s = history.undo();
-        if (!s || !s->document) return false;
+        if (!s) return false;
         doc = s->document;
-        return refOf(*doc) == states.at(history.revision());
+        return refOf(doc) == states.at(history.revision());
     }
     bool redo() {
         auto s = history.redo();
-        if (!s || !s->document) return false;
+        if (!s) return false;
         doc = s->document;
-        return refOf(*doc) == states.at(history.revision());
+        return refOf(doc) == states.at(history.revision());
     }
     size_t retained() const { return history.retainedBytes(doc); }
     /// Undoes everything and redoes everything, every state exact; false at the first that is not. (Under a byte
@@ -462,23 +473,47 @@ void replacedBufferKeepsOneCopy(bool cmyk) {
     CHECK(b.roundTrip());
 }
 
-/// The work-counters self-test's document built as the app builds it, inside the history: a photo, three paint layers
-/// and a blank layer, each its own step, then a short stroke on the photo.
+/// The work-counters self-test's document built as the app builds it, inside the history: the first import makes the
+/// document (the step before it has none), then three paint layers and a blank layer, each its own step, then a short
+/// stroke on the photo.
 template <SampleType S>
 void selfTestScenario(bool cmyk) {
     const int w = 400, h = 300;
-    Document start(w, h);
-    start.sampleType = S;
-    if (cmyk) start.colorMode = ColorMode::CMYK;
-    Bench b(std::move(start));
+    Bench b(std::nullopt);
+    const uint64_t empty = b.history.revision();
     const size_t pixel = (cmyk ? 5 : 4) * bytesPer(S);
-    for (uint32_t l = 0; l < 5; l++)
+    const size_t layerBytes = size_t(w) * size_t(h) * pixel;
+    b.stepWhole("Import Image", [&](std::optional<Document>& d) {
+        d = Document(w, h);
+        d->sampleType = S;
+        if (cmyk) d->colorMode = ColorMode::CMYK;
+        d->layers.push_back(makeLayer<S>(w, h, cmyk, false, 60));
+    });
+    for (uint32_t l = 1; l < 5; l++)
         b.step("Add Layer", [&](Document& d) { d.layers.push_back(makeLayer<S>(w, h, cmyk, false, 60 + l)); });
     CHECK_EQ(b.retained(), size_t(0));
     b.step("Brush", [&](Document& d) { d.layers[0].asset->image = editedAny(d.layers[0].asset->image, 150, 140, 29, 8, 70); });
-    CHECK_EQ(b.retained(), 2 * 29 * 8 * pixel);
+    const size_t crops = 2 * 29 * 8 * pixel;
+    CHECK_EQ(b.retained(), crops);
     CHECK(b.roundTrip());
-    CHECK_EQ(b.retained(), 2 * 29 * 8 * pixel);
+    CHECK_EQ(b.retained(), crops);
+    // All the way back to no document: the first import's step keeps the photo as the stroke's undo left it, the
+    // others their layers.
+    for (int i = 0; i < 6; i++) REQUIRE(b.undo());
+    CHECK(!b.doc);
+    CHECK_EQ(b.retained(), 5 * layerBytes + crops);
+    for (int i = 0; i < 6; i++) REQUIRE(b.redo());
+    CHECK_EQ(b.retained(), crops);
+    // A stroke on another layer, then the whole run merged into one step from no document.
+    b.step("Brush", [&](Document& d) { d.layers[3].asset->image = editedAny(d.layers[3].asset->image, 1, 2, 3, 4, 71); });
+    CHECK_EQ(b.retained(), crops + 2 * 3 * 4 * pixel);
+    CHECK_EQ(b.history.squash(empty, "Everything"), 7);
+    CHECK_EQ(b.retained(), size_t(0));
+    CHECK(b.roundTrip());
+    REQUIRE(b.undo());
+    CHECK_EQ(b.retained(), 5 * layerBytes);
+    REQUIRE(b.redo());
+    CHECK_EQ(b.retained(), size_t(0));
 }
 
 /// Squashing a run that made a layer, and a run after it.

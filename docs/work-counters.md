@@ -44,11 +44,13 @@ are the same at any worker count (the core tests give the same counts with one w
   25 % (drawn from the reductions) is within 64 levels at worst and 0.5 on average of the full render halved.
 
 `work_counters_selftest` (`nekophoto --self-test work-counters`, src/app/SelfTestWork.cpp), the whole window at a 1×
-display scale, on a 4000 × 3000 document of five layers:
+display scale, on a 4000 × 3000 document of five layers, each made by its own step (the history keeps none of
+their pixels while the document holds them):
 
 - a brush press and twenty moves at 100 % through `EditorSession` and the canvas's repaint: rendered pixels per
   press and per move (the dab's box and the canvas's 2-pixel margin), the release renders nothing
-  (`documentChangedAsShown`), the stroke's history bytes, undo and redo render only the stroke's region;
+  (`documentChangedAsShown`), the whole history's bytes after the stroke (its crops, though the layer it paints was
+  made by a step still in the history), undo and redo render only the stroke's region;
 - twenty ticks of a Levels layer's slider at fit zoom: one render of the view a tick (no panel renders the document
   again), each layer drawn once, one adjustment pass, no reduction built (renders and passes allow a quarter more than
   the ticks, for repaints the window system asks for on its own on CI machines);
@@ -83,14 +85,20 @@ Never raise a bound to make an unexplained failure pass: a counter that moved is
 
 What the counters showed when they were added (NekoPhoto 1.8.10):
 
-- **A layer made inside the history keeps its first raster in the history once it is painted on.** The self-test's
-  stroke on a 4000 × 3000 layer kept 206 KB when the document came from a file, but 48.2 MB when the layer had been
-  imported by a step still in the history: the stroke's step keeps only crops (the region patch), and the steps
-  before it that hold the same buffer unchanged hand it to the chain (`inheritPatched`), but the step that created the
-  layer has no "before" for that slot, so its "after" keeps the whole first raster. Fixing it means a slot inherited on
-  one side only, through `materialize`, undo, redo, `squash` and `trim`: not a small change, so it is left for its own
-  piece of work. The self-test starts its history after building the document (`markOpened`), as opening a file
-  does, and bounds that case.
+- **A layer made inside the history kept its first raster in the history once it was painted on** (fixed after
+  1.8.10). The self-test's stroke on a 4000 × 3000 layer kept 206 KB when the document came from a file, but 48.2 MB
+  when the layer had been imported by a step still in the history: the stroke's step keeps only crops (the region
+  patch), and the steps before it that hold the same buffer unchanged hand it to the chain (`inheritPatched`), but the
+  step that created the layer had no "before" for that slot (the first import has no document before it at all), so
+  its "after" kept the whole first raster. An inherited slot can now be one-sided: a step whose near side holds the
+  buffer (its after side in the undo list, its before side in the redo list) while its far side has no such slot, or
+  a buffer of its own, leaves only the near side to the chain. Undoing or redoing that step hands the near side the
+  buffer the document lets go of, so the pixels are kept once, by whoever needs them: the document while the layer is
+  there, the step once it is undone. The same covers a layer removed by a step in the redo list and a buffer a step
+  replaced whole (a filter over the layer, then a stroke). The self-test now builds its document inside the history
+  (no `markOpened`) and bounds the whole history after the stroke: 206208 bytes, as when the history started after
+  the layers were made. `history_tests` checks it over random sequences of made and removed layers, strokes, filters,
+  undos, redos, merges and trims at 8 and 16 bits and in CMYK, against a reference and a bound on each step's bytes.
 - **An adjustment slider tick redraws every layer below the adjustment layer.** A `RenderCache` keeps the composite
   below a pixel layer being painted, but nothing is kept around an adjustment layer being dragged, so each tick
   composites every layer again (five draws over the view for one changed table). The mip cache makes each draw cheap,

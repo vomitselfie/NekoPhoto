@@ -98,10 +98,10 @@ int workCounters(MainWindow& window) {
     const auto photoId = s.activeLayerId();
     for (int l = 1; l <= 3; l++) s.insertImage(ImagePtr(softPaint(W, H, l)), QString("Paint %1").arg(l));
     s.addBlankLayer();
-    // As if opened from a file: the history starts here. (A layer made by a step still in the history keeps its first
-    // buffer in that step once a later edit replaces it; docs/work-counters.md, "Found".)
-    s.markOpened();
+    // The five layers are made by steps still in the history, as when a document is built in the app: while the
+    // document holds their pixels, those steps keep none of them.
     const int pixelLayers = 5;
+    b.value("history bytes for the five layers", s.historyRetainedBytes(), 0);
     s.fitView();
     settle();
     const double dpr = canvas->devicePixelRatioF();
@@ -121,7 +121,6 @@ int workCounters(MainWindow& window) {
     s.brushSettings.hardness = 0.8;
     s.brushSmoothing = {};
     const QPointF start = s.viewport.documentPoint(QPointF(canvas->width() / 2.0 - 150, canvas->height() / 2.0), QSizeF(W, H));
-    const size_t historyBefore = s.historyRetainedBytes();
     work::Snapshot d = step([&] { s.beginBrush(start, false); });
     // One dab: the session reports its box (42 x 42 here), the canvas renders that and 2 device pixels around it
     // (cachePart). Measured 2162 (46 x 47); bound 48 x 48, a 44 px box with that margin. The pixel layers under it at
@@ -146,10 +145,13 @@ int workCounters(MainWindow& window) {
     d = step([&] { s.endBrush(); });
     b.at("release", d, Counter::RenderPixels, 0);
     settle();
-    // The stroke's history: its region's before and after on a 4000 x 3000 layer, not the 48 MB layer: about 290 x 75
-    // pixels at 8 bytes, and the replaced asset's thumbnail. Measured 206208 bytes; bound 270000 (1.3x).
-    b.value("history bytes for the stroke", s.historyRetainedBytes() - historyBefore, 270000);
-    b.expect(s.undoNames().size() == 1, "the stroke is not the history's one step");
+    // The whole history after the stroke: its region's before and after on a 4000 x 3000 layer, not the 48 MB layer
+    // (the step that imported the photo hands its pixels down to the stroke's patch): about 290 x 75 pixels at 8
+    // bytes, and the replaced asset's thumbnail. Measured 206208 bytes, the same as when the history started after the
+    // layers were made; bound 220000, room for the stroke's box to grow by a pixel on each side where its start falls
+    // between pixels on another canvas size (keeping the layer whole would be 48 MB more).
+    b.value("history bytes after the stroke", s.historyRetainedBytes(), 220000);
+    b.expect(s.undoNames().size() == size_t(pixelLayers) + 1, "the history is not the five layers' steps and the stroke's");
     // Undo and redo render only the stroke's region (DocumentHistory::noteRegion): measured 26390 each; bound 34000
     // (1.3x; the whole view would be the canvas's pixels).
     d = step([&] { s.undo(); });
