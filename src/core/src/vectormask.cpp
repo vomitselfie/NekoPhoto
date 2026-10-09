@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <type_traits>
 
 namespace compositor {
 
@@ -89,7 +90,10 @@ namespace {
 
 struct Edge { double x0, y0, x1, y1; };
 
-/// The subpath as line segments in output pixels (cubic segments flattened to about a quarter pixel).
+/// The subpath as line segments in output pixels. Cubic segments are cut into 4 x sqrt(control-polygon length) even
+/// steps: Photoshop flattens its curves too, and this is the density its renders of Patchy's shape fixtures follow
+/// (half as many steps left curves visibly polygonal, up to 22 levels off on photoshop-shape-solid; exact curves, far
+/// more steps, sit further from Photoshop's than this).
 void flatten(const VectorPath::Subpath& s, const Rect& region, double scale, std::vector<Edge>& edges, bool asStroke = false) {
     const size_t n = s.knots.size();
     if (n < 2) return;
@@ -101,7 +105,7 @@ void flatten(const VectorPath::Subpath& s, const Rect& region, double scale, std
         const auto& b = s.knots[(i + 1) % n];
         const Point p0 = out(a.x, a.y), p1 = out(a.outX, a.outY), p2 = out(b.inX, b.inY), p3 = out(b.x, b.y);
         const double length = std::hypot(p1.x - p0.x, p1.y - p0.y) + std::hypot(p2.x - p1.x, p2.y - p1.y) + std::hypot(p3.x - p2.x, p3.y - p2.y);
-        const int steps = std::clamp(int(std::ceil(std::sqrt(length) * 2)), 1, 256);
+        const int steps = std::clamp(int(std::ceil(std::sqrt(length) * 4)), 1, 512);
         Point prev = p0;
         for (int k = 1; k <= steps; k++) {
             const double t = double(k) / steps, u = 1 - t;
@@ -134,8 +138,10 @@ void coverageBox(Coverage& c, double minX, double maxX, double minY, double maxY
     c.v.assign(size_t(c.x1 - c.x0) * size_t(c.y1 - c.y0), 0.0f);
 }
 
-/// Even-odd coverage of `edges` over w x h: 4 sample rows per pixel, exact horizontal coverage of each span.
-/// Only the edges' bounding box is computed (rows in parallel); the rest is zero.
+/// Even-odd coverage of `edges` over w x h: 16 sample rows per pixel, exact horizontal coverage of each span (4 rows
+/// stepped a nearly horizontal edge's coverage by quarters, up to 32 levels off Photoshop's on photoshop-shape-solid).
+/// Each pixel row looks only at the edges crossing it. Only the edges' bounding box is computed (rows in parallel); the
+/// rest is zero.
 Coverage fill(const std::vector<Edge>& edges, int w, int h) {
     Coverage c;
     if (edges.empty()) return c;
@@ -146,17 +152,26 @@ Coverage fill(const std::vector<Edge>& edges, int w, int h) {
     }
     coverageBox(c, minX, maxX, minY, maxY, w, h);
     if (c.empty()) return c;
-    constexpr int sub = 4;
+    constexpr int sub = 16;
     const int bw = c.x1 - c.x0;
+    // The edges by the pixel rows they cross.
+    std::vector<std::vector<uint32_t>> crossing(size_t(c.y1 - c.y0));
+    for (size_t i = 0; i < edges.size(); i++) {
+        const Edge& e = edges[i];
+        const int lo = std::max(c.y0, int(std::floor(std::min(e.y0, e.y1)))), hi = std::min(c.y1 - 1, int(std::floor(std::max(e.y0, e.y1))));
+        for (int y = lo; y <= hi; y++) crossing[size_t(y - c.y0)].push_back(uint32_t(i));
+    }
     parallelRows(c.y0, c.y1, [&](int ya, int yb) {
         std::vector<double> xs;
         std::vector<float> row(size_t(bw) + 2);
         for (int y = ya; y < yb; y++) {
             std::fill(row.begin(), row.end(), 0.0f);
+            const std::vector<uint32_t>& here = crossing[size_t(y - c.y0)];
             for (int s = 0; s < sub; s++) {
                 const double sy = y + (s + 0.5) / sub;
                 xs.clear();
-                for (auto& e : edges) {
+                for (uint32_t i : here) {
+                    const Edge& e = edges[i];
                     if ((e.y0 <= sy) == (e.y1 <= sy)) continue;
                     xs.push_back(e.x0 + (sy - e.y0) / (e.y1 - e.y0) * (e.x1 - e.x0));
                 }
@@ -279,22 +294,33 @@ std::optional<MaskParameters> parseMaskParameters(const std::vector<uint8_t>& se
     return p;
 }
 
-void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges) {
-    if (feather && *feather > 0) {
-        if (!clampEdges) gaussianBlur(coverage, *feather * scale);
-        else {
-            // The pixel mask's feather repeats the edge pixels past the canvas (Photoshop's clamp).
-            const int pad = int(std::ceil(*feather * scale * 3)) + 1, w = coverage.width(), h = coverage.height();
-            GrayImage padded(w + 2 * pad, h + 2 * pad, 0);
-            for (int y = 0; y < h + 2 * pad; y++) {
-                const uint8_t* src = coverage.row(std::clamp(y - pad, 0, h - 1));
-                uint8_t* dst = padded.row(y);
-                for (int x = 0; x < w + 2 * pad; x++) dst[x] = src[std::clamp(x - pad, 0, w - 1)];
-            }
-            gaussianBlur(padded, *feather * scale);
-            for (int y = 0; y < h; y++) std::memcpy(coverage.row(y), padded.row(y + pad) + pad, size_t(w));
-        }
+namespace {
+
+/// The feather over `coverage` (samples 0..`one`), a gaussian of `sigma` output pixels blurred in float and rounded
+/// once: past its edges the edge samples repeat (`clampEdges`: the pixel mask at the canvas) or nothing is covered (a
+/// vector mask's shape fades at the canvas edge).
+template <class G>
+void featherCoverage(G& coverage, double sigma, bool clampEdges, uint32_t one) {
+    if (coverage.isEmpty() || !(sigma > 0)) return;
+    const int pad = int(std::ceil(sigma * 4)) + 1, w = coverage.width(), h = coverage.height(), pw = w + 2 * pad, ph = h + 2 * pad;
+    GrayF plane(pw, ph, 0.0f);
+    for (int y = 0; y < ph; y++) {
+        if (!clampEdges && (y < pad || y >= h + pad)) continue;
+        const auto* src = coverage.row(std::clamp(y - pad, 0, h - 1));
+        float* dst = plane.row(y);
+        for (int x = 0; x < pw; x++)
+            if (clampEdges || (x >= pad && x < w + pad)) dst[x] = float(src[std::clamp(x - pad, 0, w - 1)]) / float(one);
     }
+    gaussianBlur(plane, sigma);
+    using T = std::remove_cvref_t<decltype(coverage.row(0)[0])>;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) coverage.row(y)[x] = T(std::clamp(std::lround(plane.row(y + pad)[x + pad] * float(one)), 0L, long(one)));
+}
+
+} // namespace
+
+void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges) {
+    if (feather && *feather > 0) featherCoverage(coverage, (clampEdges ? *feather : vectorFeatherSigma(*feather)) * scale, clampEdges, 255);
     if (density && *density < 255) {
         // Density: what the mask hides shows at (255 - density) / 255.
         const int floor = 255 - std::clamp(*density, 0, 255);
@@ -303,20 +329,7 @@ void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::o
 }
 
 void applyMaskParameters(Gray16& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges) {
-    if (feather && *feather > 0) {
-        if (!clampEdges) gaussianBlur(coverage, *feather * scale);
-        else {
-            const int pad = int(std::ceil(*feather * scale * 3)) + 1, w = coverage.width(), h = coverage.height();
-            Gray16 padded(w + 2 * pad, h + 2 * pad, 0);
-            for (int y = 0; y < h + 2 * pad; y++) {
-                const uint16_t* src = coverage.row(std::clamp(y - pad, 0, h - 1));
-                uint16_t* dst = padded.row(y);
-                for (int x = 0; x < w + 2 * pad; x++) dst[x] = src[std::clamp(x - pad, 0, w - 1)];
-            }
-            gaussianBlur(padded, *feather * scale);
-            for (int y = 0; y < h; y++) std::memcpy(coverage.row(y), padded.row(y + pad) + pad, size_t(w) * sizeof(uint16_t));
-        }
-    }
+    if (feather && *feather > 0) featherCoverage(coverage, (clampEdges ? *feather : vectorFeatherSigma(*feather)) * scale, clampEdges, 32768);
     if (density && *density < 255) {
         // The density's floor, (255 - density) / 255, at 15 bits.
         const uint32_t floor = uint32_t(((255 - std::clamp(*density, 0, 255)) * 32768 + 127) / 255);

@@ -85,6 +85,31 @@ Lightness, a and b in Lab.
   106 levels off when the ranges were ignored); `build/tests/blendif_tests` checks it when Patchy is beside the
   checkout.
 
+## Channels (Advanced Blending)
+
+Blending Options' Advanced Blending Channels are drawn and editable (`blendif.h`): a channel left unchecked is left out
+of the layer's blending, and there the backdrop shows through. RGB offers R, G and B; CMYK C, M, Y and K; Lab L, a
+and b. The PSD keeps them in the layer record's `brst` block (the excluded channels' indices); a layer never edited
+keeps its bytes.
+
+- Drawing follows Photoshop 2026 as Patchy calibrated it: an excluded channel keeps the backdrop's premultiplied
+  value once the layer is drawn with all its effects, exterior and interior; the other channels and alpha composite
+  as usual, so over transparency an excluded channel reads 0. Every channel excluded removes the layer, its effects
+  and alpha included. Fill, Blend If and the blend mode work as before on the other channels; an adjustment layer
+  leaves the excluded channels unadjusted. A folder's exclusion holds over everything its children and effects draw,
+  Pass Through too (it does not isolate, unlike Blend If). A clipping base's exclusion keeps the backdrop's channel
+  under the whole clipped result; a clipped layer's keeps the base's.
+- Depths and modes: the same rule at 8, 16 and 32 bits; CMYK and Lab keep the stored value (CMYK's is the inverted
+  ink, so over transparency an excluded ink reads as full ink, as the PSD stores it). No Photoshop-saved CMYK or Lab
+  file with excluded channels exists here: unverified there. Converting the colour mode lets every channel take part
+  again (the channels mean something else).
+- Editing: Layer ▸ Layer Style ▸ Blending Options (the Channels boxes), Copy and Paste Layer Style, and automation's
+  `layers.set` `channels` (any layer kind, folders and adjustment layers included; `layers.get` reports them when one
+  is left out). Projects keep them.
+- How close: Patchy's `photoshop-channel-restrictions` (Normal, Multiply, Linear Burn at Fill 50%, a layer with
+  effects, all three left out) matches Photoshop's render exactly (it was 39.5 levels off on average when the block
+  was ignored); `blendif_tests` checks it, with the rule at every depth and mode.
+
 ## Gradient methods
 
 Gradients follow Photoshop's Method (gradient overlays, layer-style strokes, gradient fill layers and shape strokes,
@@ -92,7 +117,15 @@ the Gradient tool and Gradient Map; the Layer Style dialog, the Gradient tool's 
 editor have the menu): Classic interpolates the stored sRGB values, Linear interpolates
 in linear light, and Perceptual in Oklab, each with the gradient's smoothness applied in its own space (between two
 stops too, Classic included: Photoshop's merged image of a two-stop Classic overlay, Patchy's
-photoshop-overlay-zorder, follows the eased ramp). Colour stops, midpoints and opacity stops work as in
+photoshop-overlay-zorder, follows the eased ramp). Classic's spline stays between each run's two stops: where a far
+neighbour would pull the Catmull-Rom past a stop (red 230, 30, 20 in Patchy's photoshop-shape-gradient dipped to 12),
+Photoshop's ramp does not overshoot, and neither do a fill layer's eased opacity stops. That took
+photoshop-shape-gradient from 1.23 to 0.94 levels (max 8 to 5) and a Photoshop-stored radial fill layer with uneven
+stops (FillLayerGradient.psd) from max 3 to max 1. What remains on photoshop-shape-gradient is a uniform offset along
+the ramp, about 0.4 px (t 0.006), the same in every run, which no stop or spline rule explains and which one Linear fill
+fixture cannot pin down (Photoshop's fill-layer centre or pixel sampling; 0.25 levels with it). Unevenly spaced stops
+need no rule of their own: each run eases over its own length (FillLayerGradient's stops at 0, 0.5, 0.52, 0.64 and 1
+match within a level). Colour stops, midpoints and opacity stops work as in
 Classic; opacity interpolates linearly in every method. The model follows PhotoCraft's (THIRD-PARTY-NOTICES.md),
 fitted to Photoshop's composites, and is checked against two Photoshop-saved files of ag-psd's tests (MIT), whose
 merged images it now matches (mean / max level difference): a Perceptual gradient overlay 0.57 / 4 (8.1 / 20 drawn

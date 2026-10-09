@@ -542,6 +542,101 @@ void addBlendIfScenes() {
         }
 }
 
+// ---- Advanced Blending: Channels (blendif.h) ----------------------------------------------------------------------
+//
+// The blend document with channels excluded: green on the clipping base (its whole clipped result), red on the clipped
+// layer (it keeps the base's), blue on a pass-through folder, and red and blue on a Levels adjustment layer; at 8, 16
+// and 32 bits and in CMYK and Lab (each mode's own channels).
+
+Document excludedChannelsDocument(ColorMode mode = ColorMode::RGB) {
+    Document doc = blendDocument(BlendMode::Multiply);
+    Layer adj("Levels", doc.size());
+    AdjustmentSettings levels = AdjustmentSettings::defaults(AdjustmentKind::Levels);
+    levels.levels.ranges[0] = {40, 1.4, 220, 0, 255};
+    adj.adjustment = levels.toLayerAdjustment();
+    doc.layers.push_back(adj);
+    for (Layer& l : doc.layers) if (l.isGroup) l.passThrough = true;
+    return doc;
+}
+
+void excludeChannels(Document& doc) {
+    const ColorMode mode = doc.colorMode;
+    for (Layer& l : doc.layers) {
+        if (l.name == "top") setLayerExcludedChannels(l, 0b010, mode);
+        if (l.name == "clipped") setLayerExcludedChannels(l, 0b001, mode);
+        if (l.isGroup) setLayerExcludedChannels(l, mode == ColorMode::CMYK ? 0b1000 : 0b100, mode);
+        if (l.adjustment) setLayerExcludedChannels(l, 0b101, mode);
+    }
+}
+
+void addExcludedChannelScenes() {
+    auto rgb = [] { Document doc = excludedChannelsDocument(); excludeChannels(doc); return doc; };
+    scene("channels/base_clip_folder_adjustment", [=] { return hashImage(*renderFlattened(rgb())); });
+    scene("u16/channels/base_clip_folder_adjustment", [=] { return hash16(sixteen(rgb())); });
+    scene("f32/channels/base_clip_folder_adjustment", [=] { return hashF(thirtyTwo(rgb())); });
+    for (ColorMode colorMode : {ColorMode::CMYK, ColorMode::Lab})
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            const std::string prefix = std::string(colorMode == ColorMode::CMYK ? "cmyk" : "lab") + (type == SampleType::U16 ? "16" : "") + "/";
+            scene(prefix + "channels/base_clip_folder_adjustment", [=] {
+                Document doc = inColorMode(excludedChannelsDocument(), colorMode, type);
+                excludeChannels(doc);   // after the conversion, which lets every channel take part again
+                return hashNative(renderNative(doc));
+            });
+        }
+}
+
+// ---- Feathers (vectormask.h) ----------------------------------------------------------------------------------------
+//
+// A stroked shape layer with a vector Feather (drawn, then feathered as a whole) and Density, and a pixel layer with a
+// feathered vector mask; at 8, 16 and 32 bits and in CMYK and Lab.
+
+/// A parameters-only mask section: vector feather (and density).
+std::vector<uint8_t> vectorParameters(double feather, int density) {
+    std::vector<uint8_t> s(18, 0);
+    s[17] = 0x10;
+    s.push_back(0x0c);
+    s.push_back(uint8_t(density));
+    uint64_t u;
+    std::memcpy(&u, &feather, 8);
+    for (int i = 7; i >= 0; i--) s.push_back(uint8_t(u >> (8 * i)));
+    return s;
+}
+
+Document featherDocument() {
+    Document doc = goldenBase();
+    VectorShape shape;
+    shape.path = rectanglePath(Rect(14, 10, 70, 46), 6);
+    shape.r = 40; shape.g = 160; shape.b = 200;
+    shape.stroke.enabled = true;
+    shape.stroke.width = 5;
+    shape.stroke.align = VectorStroke::Align::Inside;
+    shape.stroke.r = 30; shape.stroke.g = 20; shape.stroke.b = 10;
+    Layer layer = layerOf("shape", std::make_shared<Image>(1, 1), {0, 0});
+    setVectorShape(layer, doc, shape);
+    auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
+    carry->maskData = vectorParameters(4.5, 200);
+    layer.psdCarry = carry;
+    doc.layers.push_back(layer);
+    Layer masked = layerOf("paint", paint(64, 48), {60, 30});
+    setLayerVectorMask(masked, doc, ellipsePath(Rect(66.5, 34.5, 50, 36)));
+    auto maskedCarry = std::make_shared<PsdLayerCarry>(*masked.psdCarry);
+    maskedCarry->maskData = vectorParameters(3, 255);
+    masked.psdCarry = maskedCarry;
+    doc.layers.push_back(masked);
+    return doc;
+}
+
+void addFeatherScenes() {
+    scene("feather/stroked_shape_and_vector_mask", [] { return hashImage(*renderFlattened(featherDocument())); });
+    scene("u16/feather/stroked_shape_and_vector_mask", [] { return hash16(sixteen(featherDocument())); });
+    scene("f32/feather/stroked_shape_and_vector_mask", [] { return hashF(thirtyTwo(featherDocument())); });
+    for (ColorMode colorMode : {ColorMode::CMYK, ColorMode::Lab})
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            const std::string prefix = std::string(colorMode == ColorMode::CMYK ? "cmyk" : "lab") + (type == SampleType::U16 ? "16" : "") + "/";
+            scene(prefix + "feather/stroked_shape_and_vector_mask", [=] { return hashNative(renderNative(inColorMode(featherDocument(), colorMode, type))); });
+        }
+}
+
 uint64_t hash16(const Document& doc, const RenderOptions& options) {
     Image16 out;
     render16(doc, options, out);
@@ -1791,6 +1886,8 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     addColorModeScenes();
     addAdjustmentScenes();
     addBlendIfScenes();
+    addExcludedChannelScenes();
+    addFeatherScenes();
     addFilterScenes();
     addBrushScenes();
     add16BitScenes();
@@ -1850,6 +1947,8 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
         // So do smart object contents and artboard backgrounds converted into CMYK or Lab.
         if ((name.rfind("cmyk", 0) == 0 || name.rfind("lab", 0) == 0)
             && (name.find("/smart_") != std::string::npos || name.find("/artboard/") != std::string::npos)) { unchecked++; continue; }
+        // So do shape fills converted into CMYK or Lab (the feathered shape scenes).
+        if ((name.rfind("cmyk", 0) == 0 || name.rfind("lab", 0) == 0) && name.find("/feather/") != std::string::npos) { unchecked++; continue; }
 #endif
         auto it = expected.find(name);
         if (it == expected.end()) { std::fprintf(stderr, "  new      %s %s\n", name.c_str(), h.c_str()); added++; }

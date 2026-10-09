@@ -8,6 +8,7 @@
 #include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
 #include "layerstyle_render.h"
+#include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
 #include "compositor/adjustments.h"
 #include "compositor/blend.h"
@@ -90,11 +91,38 @@ struct RenderExec<SampleType::U8> {
         return source;
     }
 
+    /// Advanced Blending's Channels (blendif.h): `target` holds a layer drawn over `before`; the channels it excludes
+    /// keep their premultiplied values from `before`, and with every channel excluded the whole pixel does.
+    void keepChannels(uint8_t excluded, const Image& before, Image& target) {
+        const bool all = excluded == allBlendChannels(document.colorMode);
+        parallelRows(0, outHeight, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                const uint8_t* b = before.row(y);
+                uint8_t* d = target.row(y);
+                if (all) { std::memcpy(d, b, size_t(outWidth) * 4); continue; }
+                for (int x = 0; x < outWidth; x++, b += 4, d += 4)
+                    for (int k = 0; k < 3; k++) if (excluded & (1u << k)) d[k] = std::min(b[k], d[3]);
+            }
+        });
+    }
+
+    /// Runs `draw` over `target` with `layer`'s channel exclusions; a layer that excludes every channel is not drawn.
+    template <class Draw>
+    void excluding(const Layer& layer, Image& target, Draw&& draw) {
+        const uint8_t excluded = plainOnly ? 0 : plan.excluded(layer);
+        if (!excluded) { draw(); return; }
+        if (excluded == allBlendChannels(document.colorMode)) return;
+        const Image before = target;
+        draw();
+        keepChannels(excluded, before, target);
+    }
+
     static bool isolates(const Layer& g) { return RenderPlan::isolates(g); }
     static bool fades(const Layer& g) { return RenderPlan::fades(g); }
 
-    /// The folders being drawn: an isolated one draws into its own buffer, a fading one keeps what was under it.
-    struct Frame { const Layer* group; std::unique_ptr<Image> buffer; std::unique_ptr<Image> before; Image* parent; };
+    /// The folders being drawn: an isolated one draws into its own buffer, a fading one keeps what was under it, one
+    /// that excludes channels keeps what was under it before its effects.
+    struct Frame { const Layer* group; std::unique_ptr<Image> buffer; std::unique_ptr<Image> before; Image* parent; std::unique_ptr<Image> unexcluded; };
     std::vector<Frame> frames;
 
     /// NEKOPHOTO_DUMP_FOLDERS=<dir>: every styled folder's stages as PNGs (a developer's aid for comparing with
@@ -110,9 +138,11 @@ struct RenderExec<SampleType::U8> {
 
     void openGroup(const Layer& g, Image*& cur) {
         dumpStage(g, "1-backdrop", *cur);
+        // Excluded channels hold over the folder's effects and every child, Pass Through or not.
+        std::unique_ptr<Image> unexcluded = plan.excluded(g) ? std::make_unique<Image>(*cur) : nullptr;
         if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
         dumpStage(g, "2-exterior", *cur);
-        Frame f{&g, nullptr, nullptr, cur};
+        Frame f{&g, nullptr, nullptr, cur, std::move(unexcluded)};
         if (isolates(g)) { f.buffer = std::make_unique<Image>(outWidth, outHeight); cur = f.buffer.get(); }
         else if (fades(g) || folderContentFill(g) < 1) f.before = std::make_unique<Image>(*cur);
         frames.push_back(std::move(f));
@@ -157,6 +187,7 @@ struct RenderExec<SampleType::U8> {
         dumpStage(g, "4-opacity", *cur);
         if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, foldsInteriors ? StyledDraw::Phase::InteriorRest : StyledDraw::Phase::Interior);
         dumpStage(g, "5-interior", *cur);
+        if (f.unexcluded) keepChannels(plan.excluded(g), *f.unexcluded, *cur);
     }
 
     /// Blend Interior Effects as Group on a folder with a style: its overlays and satins join its result before its
@@ -356,15 +387,13 @@ struct RenderExec<SampleType::U8> {
         }
         // A shape's stroke goes over its fill, in the layer's mode; with its fill off, the stroke alone.
         const std::optional<VectorStroke> stroke = vector ? layerVectorStroke(layer) : std::nullopt;
-        auto drawStroke = [&] {
+        // The stroke into `into`, in `mode` at `opacity` through `cover`; `feathered`: softened by the shape's Feather.
+        auto strokeInto = [&](Image& into, BlendMode mode, float opacity, const GrayImage* cover, bool feathered) {
             if (!stroke || !stroke->enabled || stroke->opacity <= 0) return;
             VectorPath path = *vector;   // parsed once per draw
             path.inverted = false;
             auto band = rasterizeVectorStroke(path, *stroke, region, scale, outWidth, outHeight);
-            // A shape's feather softens its stroke too (Photoshop feathers the whole rendered shape).
-            if (maskParameters && maskParameters->vectorFeather) applyMaskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
-            const float opacity = float(clamp(layer.opacity, 0.0, 1.0)) * stroke->opacity;
-            const BlendMode mode = blendOf(layer);
+            if (feathered && maskParameters && maskParameters->vectorFeather) applyMaskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
             // A gradient or pattern stroke: its colours over the region (a gradient aligned with the shape's bounds).
             ImagePtr paint;
             if (stroke->paint.kind != VectorPaint::Kind::Solid) {
@@ -377,9 +406,9 @@ struct RenderExec<SampleType::U8> {
             parallelRows(0, outHeight, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
                     const uint8_t* b = band->row(y);
-                    const uint8_t* c = coverageWithoutVector ? coverageWithoutVector->row(y) : nullptr;
+                    const uint8_t* c = cover ? cover->row(y) : nullptr;
                     const uint8_t* p = paint ? paint->row(y) : nullptr;
-                    uint8_t* d = target.row(y);
+                    uint8_t* d = into.row(y);
                     for (int x = 0; x < outWidth; x++) {
                         if (!b[x]) continue;
                         uint8_t colour[4] = {stroke->r, stroke->g, stroke->b, 255};
@@ -395,6 +424,37 @@ struct RenderExec<SampleType::U8> {
                 }
             });
         };
+        auto drawStroke = [&] { strokeInto(target, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)) * (stroke ? stroke->opacity : 1.0f), coverageWithoutVector, true); };
+        // A shape layer with a Feather: Photoshop draws the shape, fill and stroke, then feathers the drawing as a whole
+        // (photoshop-shape-feather), so where the stroke covers the fill the edge fades once, not twice, and the fill
+        // fades past its own pixels.
+        const bool stroked = stroke && stroke->enabled;
+        if (vector && maskParameters && maskParameters->vectorFeather && *maskParameters->vectorFeather > 0 && (stroked || isVectorShapeLayer(layer))
+            && !(layer.mask && layer.mask->enabled) && (plainOnly || !layerStyleOf(layer, document))) {
+            Image shape(outWidth, outHeight);
+            if (!stroked || stroke->fillEnabled) {
+                auto sharp = rasterizeVectorMask(*vector, region, scale, outWidth, outHeight);
+                if (maskParameters->vectorDensity) applyMaskParameters(*sharp, maskParameters->vectorDensity, std::nullopt, scale);
+                DrawParams plain = params;
+                plain.opacity = 1;
+                plain.mode = BlendMode::Normal;
+                drawLayer(plain, region, scale, sharp.get(), shape);
+            }
+            if (stroked) strokeInto(shape, BlendMode::Normal, stroke->opacity, nullptr, false);
+            featherDrawnShape(shape, 4, vectorFeatherSigma(*maskParameters->vectorFeather) * scale);
+            const float opacity = float(clamp(layer.opacity, 0.0, 1.0));
+            const BlendMode mode = blendOf(layer);
+            parallelRows(0, outHeight, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const uint8_t* s = shape.row(y);
+                    const uint8_t* c = coverageWithoutVector ? coverageWithoutVector->row(y) : nullptr;
+                    uint8_t* d = target.row(y);
+                    for (int x = 0; x < outWidth; x++)
+                        if (s[x * 4 + 3]) compositePixelAt(mode, s + x * 4, opacity * (c ? c[x] / 255.0f : 1.0f), d + x * 4, docX(region, scale, x), docY(region, scale, y));
+                }
+            });
+            return;
+        }
         if (stroke && stroke->enabled && !stroke->fillEnabled) { drawStroke(); return; }
         // A Photoshop layer style draws the layer with its effects (never while taking a clipping base's
         // transparency, which effects do not shape).
@@ -546,7 +606,7 @@ struct RenderExec<SampleType::U8> {
         if (blendOf(layer) != BlendMode::Normal || clamp(layer.opacity, 0.0, 1.0) < 1) return std::nullopt;
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image.u8()) return std::nullopt;
         if (foldersCoverage(layer.parentId)) return std::nullopt;
-        if (plan.hasBlendIf(layer)) return std::nullopt;
+        if (plan.hasBlendIf(layer) || plan.excluded(layer)) return std::nullopt;
         AdjustmentSettings settings;
         if (!AdjustmentSettings::parse(layer.adjustment->json, settings)) return std::nullopt;
         return adjustmentTransfer(settings);
@@ -572,9 +632,15 @@ struct RenderExec<SampleType::U8> {
         return at;
     }
 
+    /// One entry of the drawing order: a layer (with the layers clipped to it), an adjustment, or an artboard's
+    /// background; through the layer's channel exclusions (a clipping base's hold over its whole clipped result).
     void drawComposite(const Layer& layer, Image& out) {
         if (layer.isGroup) { if (layer.artboard) drawArtboardBackground(layer, out); return; }
         if (stacked.count(layer.id)) return;
+        excluding(layer, out, [&] { drawUnexcluded(layer, out); });
+    }
+
+    void drawUnexcluded(const Layer& layer, Image& out) {
         std::shared_ptr<GrayImage> folders = foldersCoverage(layer.parentId);
         if (layer.adjustment) {
             if (!layer.maskSourceId) adjust(layer, out, folders);
@@ -603,8 +669,10 @@ struct RenderExec<SampleType::U8> {
                 if (keep && c == dragged) { keep->group = std::make_unique<Image>(out); keep->clip = clip; keep->reached = true; }
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
-                if (it->second->adjustment) adjust(*it->second, out, clip);
-                else drawOwn(*it->second, out, clip.get());
+                excluding(*it->second, out, [&] {
+                    if (it->second->adjustment) adjust(*it->second, out, clip);
+                    else drawOwn(*it->second, out, clip.get());
+                });
             }
             return;
         }
@@ -633,8 +701,11 @@ struct RenderExec<SampleType::U8> {
             if (keep && c == dragged) { keep->group = std::make_unique<Image>(group); keep->alpha = alpha; keep->reached = true; }
             auto it = byId.find(childId);
             if (it == byId.end()) continue;
-            if (it->second->adjustment) adjust(*it->second, group, nullptr);
-            else drawOwn(*it->second, group, nullptr);
+            // A clipped layer's excluded channels keep the base's colours.
+            excluding(*it->second, group, [&] {
+                if (it->second->adjustment) adjust(*it->second, group, nullptr);
+                else drawOwn(*it->second, group, nullptr);
+            });
         }
         layer_restore_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
         BlendMode mode = blendOf(layer);

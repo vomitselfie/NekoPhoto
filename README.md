@@ -163,7 +163,7 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
   <tr>
     <td width="33%" valign="top">
       <h4>🗂️ Layers</h4>
-      Folders, all 27 of Photoshop's blend modes plus Pass Through, layer and vector masks, clipping masks, fill and adjustment layers, Blend If, smart objects you can place, convert, edit and replace, and whole layers copied between documents.
+      Folders, all 27 of Photoshop's blend modes plus Pass Through, layer and vector masks, clipping masks, fill and adjustment layers, Blend If and Advanced Blending's channel boxes, smart objects you can place, convert, edit and replace, and whole layers copied between documents.
     </td>
     <td width="33%" valign="top">
       <h4>✂️ Selections and retouching</h4>
@@ -481,7 +481,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
   <tr>
     <td width="33%" valign="top">
       <h4>🗂️ レイヤー</h4>
-      グループ、Photoshop の 27 種類の描画モードと通過、レイヤーマスクとベクトルマスク、クリッピングマスク、塗りつぶしレイヤーと調整レイヤー、ブレンド条件、配置・変換・編集・置き換えのできるスマートオブジェクト、ドキュメント間でのレイヤーのコピー。
+      グループ、Photoshop の 27 種類の描画モードと通過、レイヤーマスクとベクトルマスク、クリッピングマスク、塗りつぶしレイヤーと調整レイヤー、ブレンド条件と高度な合成のチャンネル指定、配置・変換・編集・置き換えのできるスマートオブジェクト、ドキュメント間でのレイヤーのコピー。
     </td>
     <td width="33%" valign="top">
       <h4>✂️ 選択と修正</h4>

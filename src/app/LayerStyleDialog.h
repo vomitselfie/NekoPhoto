@@ -47,6 +47,8 @@ private:
     void comboRow(QFormLayout* form, const QString& label, const QStringList& items, std::function<int()> get, std::function<void(int)> set);
     void lightRows(QFormLayout* form, float* angle, bool* global, float* altitude = nullptr);
     void gradientRows(QFormLayout* form, compositor::StyleGradient* gradient);
+    /// Blending Options' Advanced Blending Channels: a box per colour channel (R, G, B; C, M, Y, K; L, a, b).
+    void channelRows(QFormLayout* form);
     /// Blending Options' Blend If: the channel and the two sliders, split handles by Alt-drag.
     void blendIfRows(QFormLayout* form);
 

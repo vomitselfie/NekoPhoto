@@ -204,13 +204,14 @@ def menu_requests(rpc, work, layer_id, image):
     Vector Mask items' steps, 16-bit colours, and File > Open's image as a document of its own."""
     rpc.call("layers.select", id=layer_id)
     style = rpc.call("layers.style")
-    assert "blendIf" in style and "referenceX" in style and "referenceY" in style, style
-    pasted = rpc.call("layers.setStyle", style={"dropShadows": [{"distance": 3}], "blendIf": style["blendIf"],
+    assert "blendIf" in style and "channels" in style and "referenceX" in style and "referenceY" in style, style
+    pasted = rpc.call("layers.setStyle", style={"dropShadows": [{"distance": 3}], "blendIf": style["blendIf"], "channels": style["channels"],
                                                 "referenceX": style["referenceX"], "referenceY": style["referenceY"]}, paste=True)
     assert pasted["dropShadows"][0]["distance"] == 3 and rpc.call("history.info")["undo"] == "Paste Layer Style", pasted
     assert "dropShadows" not in rpc.call("layers.setStyle", style={})
     assert rpc.call("history.info")["undo"] == "Clear Layer Style"
     expect_refused(rpc, "blendIf", "layers.setStyle", style={"blendIf": "all"})
+    expect_refused(rpc, "channels", "layers.setStyle", style={"channels": {"red": 1}})
     # Layer > Vector Mask on a layer without one: the menu's steps, and the new mask is the target path.
     masked = rpc.call("vectorMask.set", mode="hideAll")
     assert masked["inverted"] and masked["targeted"] and rpc.call("history.info")["undo"] == "Hide All Vector Mask", masked
@@ -522,6 +523,18 @@ def remaining_methods(rpc):
     assert "blendIf" in rpc.call("layers.get", id=top["id"])
     rpc.call("history.undo")
     assert "blendIf" not in rpc.call("layers.get", id=top["id"])
+    # Advanced Blending's Channels: a channel left out, one undo step, reported by layers.get and layers.style.
+    kept = rpc.call("layers.set", id=top["id"], channels={"green": False})
+    assert kept["channels"] == {"red": True, "green": False, "blue": True}, kept
+    assert rpc.call("history.info")["undo"] == "Blending Options"
+    assert rpc.call("layers.style", id=top["id"])["channels"]["green"] is False
+    expect_refused(rpc, "unknown channel", "layers.set", id=top["id"], channels={"cyan": False})
+    expect_refused(rpc, "true or false", "layers.set", id=top["id"], channels={"red": "no"})
+    assert "channels" not in rpc.call("layers.set", id=top["id"], channels={"green": True})
+    rpc.call("history.undo")
+    assert rpc.call("layers.get", id=top["id"])["channels"]["green"] is False
+    rpc.call("history.undo")
+    assert "channels" not in rpc.call("layers.get", id=top["id"])
     # Without an id, layers.set changes the active layer (Layer > Rename Layer, Resampling and the clipping mask run
     # it so, and record it so in Actions).
     rpc.call("layers.select", id=top["id"])

@@ -255,6 +255,23 @@ TEST_CASE(two_stop_overlays_ease_as_photoshop_draws_them) {
     CHECK_EQ(int(gradientColor(g, 1.0f / 28).g), 9);
 }
 
+TEST_CASE(smooth_runs_do_not_overshoot_their_stops) {
+    // Patchy's photoshop-shape-gradient: red 230, 30, 20 at 0, 0.5, 1 with Smoothness 100%. The Catmull-Rom through
+    // the far first stop dips the last run's red to 12; Photoshop's flatten keeps it between 30 and 20 (it was 8 levels
+    // off there). A run that stays within its stops eases as before.
+    StyleGradient g;
+    g.colors = {{0, {230, 40, 20}, 0.3f, std::nullopt}, {0.5f, {30, 200, 90}, 0.5f, std::nullopt}, {1, {20, 60, 230}, 0.5f, std::nullopt}};
+    for (int i = 0; i <= 100; i++) {
+        const StyleColor c = gradientColor(g, 0.5f + 0.005f * float(i));
+        CHECK(c.r >= 20 && c.r <= 30);
+    }
+    CHECK_EQ(int(gradientColor(g, 0.25f).r), 131);   // the first run stays within its stops: eased as before
+    // Fill layers ease their opacity the same way: 1, 0.2, 0.25 never dips under 0.2.
+    g.fillLayer = true;
+    g.alphas = {{0, 1, 0.5f}, {0.5f, 0.2f, 0.5f}, {1, 0.25f, 0.5f}};
+    for (int i = 0; i <= 100; i++) CHECK(gradientOpacity(g, 0.5f + 0.005f * float(i)) >= 0.2f - 1e-6f);
+}
+
 TEST_CASE(sixteen_bit_patterns_keep_their_samples) {
     // A 'Patt' record as Photoshop writes a 16-bit grayscale pattern (photoshop-pattern-deep.psd): one column, two
     // rows, raw 16-bit samples. Read to 8 bits rounded, and kept at 15 bits for 16- and 32-bit documents.

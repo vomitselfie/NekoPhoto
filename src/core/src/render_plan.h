@@ -10,12 +10,15 @@
 // render() builds the plan and switches on the document's sample type once.
 #pragma once
 #include "compositor/blendif.h"
+#include "compositor/blur.h"
 #include "compositor/render.h"
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <map>
 #include <optional>
 #include <set>
+#include <type_traits>
 #include <vector>
 
 namespace compositor {
@@ -44,6 +47,8 @@ struct RenderPlan {
     static bool isolates(const Layer& g) { return !g.passThrough || hasBlendIf(g); }
     static bool hasBlendIf(const Layer& l) { return l.psdCarry && !l.psdCarry->blendingRanges.empty() && layerBlendIf(l, ColorMode::CMYK); }
     static bool fades(const Layer& g) { return g.passThrough && g.opacity < 1 && !hasBlendIf(g); }
+    /// The colour channels the layer or folder leaves out of its blending (blendif.h), 0 for none.
+    uint8_t excluded(const Layer& l) const { return layerExcludedChannels(l, document.colorMode); }
 
     const LayerOverride* over(const Uuid& id) const {
         if (!overrides) return nullptr;
@@ -87,6 +92,38 @@ struct RenderPlan {
 /// the view pans or renders in tiles.
 inline int docX(const Rect& region, double scale, int x) { return int(std::floor(region.x + (x + 0.5) / scale)); }
 inline int docY(const Rect& region, double scale, int y) { return int(std::floor(region.y + (y + 0.5) / scale)); }
+
+/// A stroked shape's Feather (its vector mask's): Photoshop draws the shape, fill and stroke, then blurs what it drew as
+/// a whole (Patchy's notes on photoshop-shape-feather), a gaussian of `sigma` output pixels (vectorFeatherSigma) over
+/// every sample of the premultiplied pixels (`channels` of them), nothing past the edges (the shape fades at the canvas
+/// edge, as its mask does).
+template <class Img>
+void featherDrawnShape(Img& image, int channels, double sigma) {
+    if (image.isEmpty() || !(sigma > 0)) return;
+    const int pad = int(std::ceil(sigma * 4)) + 1, w = image.width(), h = image.height();
+    using T = std::remove_cvref_t<decltype(image.row(0)[0])>;
+    constexpr float one = std::is_floating_point_v<T> ? 1.0f : std::is_same_v<T, uint8_t> ? 255.0f : 32768.0f;
+    GrayF plane(w + 2 * pad, h + 2 * pad, 0.0f);
+    for (int c = 0; c < channels; c++) {
+        plane.fill(0.0f);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) plane.row(y + pad)[x + pad] = float(image.row(y)[x * channels + c]) / one;
+        gaussianBlur(plane, sigma);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                const float v = std::max(0.0f, plane.row(y + pad)[x + pad]);
+                if constexpr (std::is_floating_point_v<T>) image.row(y)[x * channels + c] = v;
+                else image.row(y)[x * channels + c] = T(std::min(one, std::round(v * one)));
+            }
+    }
+    // Colour stays within alpha (premultiplied; float light may exceed it), as each sample was blurred alone.
+    if constexpr (!std::is_floating_point_v<T>)
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            T* p = image.row(y) + x * channels;
+            for (int c = 0; c < channels - 1; c++) p[c] = std::min(p[c], p[channels - 1]);
+        }
+}
 
 /// Whether the layer is type to Photoshop: a text layer, or Photoshop text NekoPhoto shows as its pixels (vertical
 /// type, say) while those pixels are still the ones Photoshop drew.

@@ -6220,6 +6220,42 @@ File &gt; New creates a blank canvas.</source>
         <translation>内部効果をグループとして描画</translation>
     </message>
     <message>
+        <source>R</source>
+        <translation>R</translation>
+    </message>
+    <message>
+        <source>G</source>
+        <translation>G</translation>
+    </message>
+    <message>
+        <source>B</source>
+        <translation>B</translation>
+    </message>
+    <message>
+        <source>C</source>
+        <translation>C</translation>
+    </message>
+    <message>
+        <source>M</source>
+        <translation>M</translation>
+    </message>
+    <message>
+        <source>Y</source>
+        <translation>Y</translation>
+    </message>
+    <message>
+        <source>K</source>
+        <translation>K</translation>
+    </message>
+    <message>
+        <source>L</source>
+        <translation>L</translation>
+    </message>
+    <message>
+        <source>Channels</source>
+        <translation>チャンネル</translation>
+    </message>
+    <message>
         <source>Blend If</source>
         <translation>ブレンド条件</translation>
     </message>

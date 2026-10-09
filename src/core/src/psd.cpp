@@ -11,6 +11,7 @@
 #include "compositor/render.h"
 #include "compositor/smartfilter.h"
 #include "compositor/modetransform.h"
+#include "compositor/vectormask.h"
 #include "psd/psd_descriptor.hpp"
 #include <cstdio>
 #include <new>
@@ -1119,6 +1120,23 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 const int top = real ? rec.mask.realTop : rec.mask.top, left = real ? rec.mask.realLeft : rec.mask.left;
                 const int mw = real ? rec.mask.realWidth() : rec.mask.width(), mh = real ? rec.mask.realHeight() : rec.mask.height();
                 const uint8_t outside = real ? rec.mask.realDefault : rec.mask.defaultColour;
+                // A feathered mask: Photoshop blurs the mask's own plane (its rectangle, the default colour beyond,
+                // the canvas edge repeated), not the layer's, so what the mask holds past the layer's pixels shades
+                // their edges. The mask then keeps everything within the blur's reach of them, in a placement of its
+                // own (photoshop-user-mask-params: a mask wider than its layer leaves the layer's sides unfaded).
+                bool placed = false;
+                if (const auto parameters = parseMaskParameters(rec.mask.section); parameters && parameters->userFeather && *parameters->userFeather > 0) {
+                    const int reach = int(std::ceil(std::min(*parameters->userFeather, 1000.0) * 3)) + 1;
+                    const int64_t x0 = std::min<int64_t>(std::max<int64_t>(std::min<int64_t>(lx, left) - reach, 0), lx);
+                    const int64_t y0 = std::min<int64_t>(std::max<int64_t>(std::min<int64_t>(ly, top) - reach, 0), ly);
+                    const int64_t x1 = std::max<int64_t>(std::min<int64_t>(std::max<int64_t>(int64_t(lx) + lw, int64_t(left) + mw) + reach, int64_t(width)), int64_t(lx) + lw);
+                    const int64_t y1 = std::max<int64_t>(std::min<int64_t>(std::max<int64_t>(int64_t(ly) + lh, int64_t(top) + mh) + reach, int64_t(height)), int64_t(ly) + lh);
+                    if ((x0 < lx || y0 < ly || x1 > int64_t(lx) + lw || y1 > int64_t(ly) + lh) && x1 - x0 <= maxImageSide && y1 - y0 <= maxImageSide
+                        && uint64_t(x1 - x0) * uint64_t(y1 - y0) <= uint64_t(maxImageSide) * uint64_t(maxImageSide)) {
+                        lx = int(x0); ly = int(y0); lw = int(x1 - x0); lh = int(y1 - y0);
+                        placed = true;
+                    }
+                }
                 // The mask over the layer's grid at the document's depth; the default colour beyond its rectangle.
                 auto place = [&](const auto& maskPlanesAt, auto mask) -> bool {
                     auto userMask = maskPlanesAt.find(real ? -3 : -2);
@@ -1146,6 +1164,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                     lm.asset = MaskAsset::make(mask);
                 }
                 lm.enabled = !((real ? rec.mask.realFlags : rec.mask.flags) & 2);
+                if (placed) lm.placement = LayerTransform(Point(lx, ly), Size(lw, lh));
                 return lm;
             };
             if (rec.section == 3) { open.push_back({layers.size(), {}, &rec}); continue; }   // a folder's end marker: its contents follow

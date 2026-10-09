@@ -13,13 +13,27 @@ LayerStyle EditorSession::layerStyle(const Uuid& id) const {
     if (!layer) return LayerStyle{};
     LayerStyle style = editableLayerStyle(*layer, *document_);
     style.blendIf = editableBlendIf(*layer, document_->colorMode);
+    style.excludedChannels = layerExcludedChannels(*layer, document_->colorMode);
     return style;
 }
 
-/// The style's effects and, when it holds them, its Blend If ranges.
+/// The style's effects and, when it holds them, its Blend If ranges and excluded channels.
 void EditorSession::giveLayerStyle(Layer& layer, const LayerStyle& style) {
     setLayerStyle(layer, style);
     if (style.blendIf) compositor::setLayerBlendIf(layer, *style.blendIf, document_->colorMode);
+    if (style.excludedChannels) compositor::setLayerExcludedChannels(layer, *style.excludedChannels, document_->colorMode);
+}
+
+bool EditorSession::setLayerExcludedChannels(const Uuid& id, uint8_t excluded) {
+    if (!canEditLayers() || styleEditLayer_) return false;
+    const Layer* layer = document_->find(id);
+    if (!layer) return false;
+    if (layerExcludedChannels(*layer, document_->colorMode) == (excluded & allBlendChannels(document_->colorMode))) return true;   // already so
+    beginEdit(QT_TRANSLATE_NOOP("History", "Blending Options"));
+    compositor::setLayerExcludedChannels(*document_->find(id), excluded, document_->colorMode);
+    endEdit();
+    notifyDocument();
+    return true;
 }
 
 bool EditorSession::setLayerBlendIf(const Uuid& id, const BlendIf& blendIf) {

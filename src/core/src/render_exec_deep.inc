@@ -11,6 +11,7 @@
 #include "render_resume.h"
 #include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
+#include "compositor/vectorlayer.h"
 #include "compositor/parallel.h"
 #include "compositor/workcounters.h"
 #include <algorithm>
@@ -117,10 +118,36 @@ struct RenderExecDeep {
         return source;
     }
 
+    /// Advanced Blending's Channels (the 8-bit executor's keepChannels): the excluded channels keep their
+    /// premultiplied values from `before`; with every channel excluded the whole pixel does.
+    void keepChannels(uint8_t excluded, const Img& before, Img& target) {
+        const bool all = excluded == allBlendChannels(document.colorMode);
+        parallelRows(0, outHeight, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                const Sample* b = before.row(y);
+                Sample* d = target.row(y);
+                if (all) { std::memcpy(d, b, sizeof(Sample) * size_t(outWidth) * N); continue; }
+                for (int x = 0; x < outWidth; x++, b += N, d += N)
+                    for (int k = 0; k < C; k++) if (excluded & (1u << k)) d[k] = std::min(b[k], d[C]);
+            }
+        });
+    }
+
+    /// Runs `draw` over `target` with `layer`'s channel exclusions; a layer that excludes every channel is not drawn.
+    template <class Draw>
+    void excluding(const Layer& layer, Img& target, Draw&& draw) {
+        const uint8_t excluded = plainOnly ? 0 : plan.excluded(layer);
+        if (!excluded) { draw(); return; }
+        if (excluded == allBlendChannels(document.colorMode)) return;
+        const Img before = target;
+        draw();
+        keepChannels(excluded, before, target);
+    }
+
     static bool isolates(const Layer& g) { return RenderPlan::isolates(g); }
     static bool fades(const Layer& g) { return RenderPlan::fades(g); }
 
-    struct Frame { const Layer* group; std::unique_ptr<Img> buffer; std::unique_ptr<Img> before; Img* parent; };
+    struct Frame { const Layer* group; std::unique_ptr<Img> buffer; std::unique_ptr<Img> before; Img* parent; std::unique_ptr<Img> unexcluded; };
     std::vector<Frame> frames;
     std::map<Uuid, Cover> folderCoverage;
     std::map<std::optional<Uuid>, Cover> chainCoverage;
@@ -169,8 +196,10 @@ struct RenderExecDeep {
     }
 
     void openGroup(const Layer& g, Img*& cur) {
+        // Excluded channels hold over the folder's effects and every child, Pass Through or not.
+        std::unique_ptr<Img> unexcluded = plan.excluded(g) ? std::make_unique<Img>(*cur) : nullptr;
         if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
-        Frame f{&g, nullptr, nullptr, cur};
+        Frame f{&g, nullptr, nullptr, cur, std::move(unexcluded)};
         if (isolates(g)) { f.buffer = std::make_unique<Img>(blank(outWidth, outHeight)); cur = f.buffer.get(); }
         else if (fades(g) || folderContentFill(g) < 1) f.before = std::make_unique<Img>(*cur);
         frames.push_back(std::move(f));
@@ -208,6 +237,7 @@ struct RenderExecDeep {
             });
         }
         if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, foldsInteriors ? StyledDraw::Phase::InteriorRest : StyledDraw::Phase::Interior);
+        if (f.unexcluded) keepChannels(plan.excluded(g), *f.unexcluded, *cur);
     }
 
     void drawGroupStyle(const Layer& group, Img& out, StyledDraw::Phase phase) {
@@ -390,14 +420,13 @@ struct RenderExecDeep {
             params.maskImage = nullptr;
         }
         const std::optional<VectorStroke> stroke = vector ? layerVectorStroke(layer) : std::nullopt;
-        auto drawStroke = [&] {
+        // The stroke into `into`, in `mode` at `opacity` through `cover`; `feathered`: softened by the shape's Feather.
+        auto strokeInto = [&](Img& into, BlendMode mode, float opacity, const Gray* cover, bool feathered) {
             if (!stroke || !stroke->enabled || stroke->opacity <= 0) return;
             VectorPath path = *vector;
             path.inverted = false;
             auto band = O::vectorStroke(path, *stroke, region, scale, outWidth, outHeight);
-            if (maskParameters && maskParameters->vectorFeather) O::maskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
-            const float opacity = float(clamp(layer.opacity, 0.0, 1.0)) * stroke->opacity;
-            const BlendMode mode = blendOf(layer);
+            if (feathered && maskParameters && maskParameters->vectorFeather) O::maskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
             ImagePtr paint;
             if (stroke->paint.kind != VectorPaint::Kind::Solid) {
                 double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
@@ -412,9 +441,9 @@ struct RenderExecDeep {
             parallelRows(0, outHeight, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
                     const Sample* b = band->row(y);
-                    const Sample* c = coverageWithoutVector ? coverageWithoutVector->row(y) : nullptr;
+                    const Sample* c = cover ? cover->row(y) : nullptr;
                     const Sample* p = paint ? paint->row(y) : nullptr;
-                    Sample* d = target.row(y);
+                    Sample* d = into.row(y);
                     for (int x = 0; x < outWidth; x++) {
                         if (!b[x]) continue;
                         Sample colour[N];
@@ -431,6 +460,26 @@ struct RenderExecDeep {
                 }
             });
         };
+        auto drawStroke = [&] { strokeInto(target, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)) * (stroke ? stroke->opacity : 1.0f), coverageWithoutVector, true); };
+        // A shape layer with a Feather: Photoshop draws the shape, fill and stroke, then feathers the drawing as a whole
+        // (the 8-bit executor's rule, render_plan.h's featherDrawnShape).
+        const bool stroked = stroke && stroke->enabled;
+        if (vector && maskParameters && maskParameters->vectorFeather && *maskParameters->vectorFeather > 0 && (stroked || isVectorShapeLayer(layer))
+            && !(layer.mask && layer.mask->enabled) && (plainOnly || !O::styles || !layerStyleOf(layer, document))) {
+            Img shape = blank(outWidth, outHeight);
+            if (!stroked || stroke->fillEnabled) {
+                Cover sharp = O::vectorMask(*vector, region, scale, outWidth, outHeight);
+                if (maskParameters->vectorDensity) O::maskParameters(*sharp, maskParameters->vectorDensity, std::nullopt, scale);
+                Params plain = params;
+                plain.opacity = 1;
+                plain.mode = BlendMode::Normal;
+                O::drawLayer(plain, region, scale, sharp.get(), shape);
+            }
+            if (stroked) strokeInto(shape, BlendMode::Normal, stroke->opacity, nullptr, false);
+            featherDrawnShape(shape, N, vectorFeatherSigma(*maskParameters->vectorFeather) * scale);
+            compositeRows(shape, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)), coverageWithoutVector, target);
+            return;
+        }
         if (stroke && stroke->enabled && !stroke->fillEnabled) { drawStroke(); return; }
         if constexpr (O::styles) if (!plainOnly) if (auto style = layerStyleOf(layer, document)) {
             // Layer styles at the document's depth (layerstyle_render.h).
@@ -574,9 +623,15 @@ struct RenderExecDeep {
         return at;
     }
 
+    /// One entry of the drawing order, through the layer's channel exclusions (a clipping base's hold over its whole
+    /// clipped result).
     void drawComposite(const Layer& layer, Img& out) {
         if (layer.isGroup) { if (layer.artboard) drawArtboardBackground(layer, out); return; }
         if (stacked.count(layer.id)) return;
+        excluding(layer, out, [&] { drawUnexcluded(layer, out); });
+    }
+
+    void drawUnexcluded(const Layer& layer, Img& out) {
         Cover folders = foldersCoverage(layer.parentId);
         if (layer.adjustment) {
             if (!layer.maskSourceId) adjust(layer, out, folders);
@@ -603,8 +658,10 @@ struct RenderExecDeep {
                 if (keep && c == dragged) { keep->group = std::make_unique<Img>(out); keep->clip = clip; keep->reached = true; }
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
-                if (it->second->adjustment) adjust(*it->second, out, clip);
-                else drawOwn(*it->second, out, clip.get());
+                excluding(*it->second, out, [&] {
+                    if (it->second->adjustment) adjust(*it->second, out, clip);
+                    else drawOwn(*it->second, out, clip.get());
+                });
             }
             return;
         }
@@ -639,8 +696,11 @@ struct RenderExecDeep {
             if (keep && c == dragged) { keep->group = std::make_unique<Img>(group); keep->alpha = alpha; keep->reached = true; }
             auto it = byId.find(childId);
             if (it == byId.end()) continue;
-            if (it->second->adjustment) adjust(*it->second, group, nullptr);
-            else drawOwn(*it->second, group, nullptr);
+            // A clipped layer's excluded channels keep the base's colours.
+            excluding(*it->second, group, [&] {
+                if (it->second->adjustment) adjust(*it->second, group, nullptr);
+                else drawOwn(*it->second, group, nullptr);
+            });
         }
         for (size_t i = 0; i < n; i++) {
             Sample* p = group.data() + i * N;

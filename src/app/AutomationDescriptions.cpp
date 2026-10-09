@@ -140,11 +140,11 @@ const MethodDoc methodDocs[] = {
     // layers
     {"layers.list", "The layer tree, top first: id, name, depth, kind, visibility, opacity, blend, transform, mask, text.",
      "thumbnails:bool=false Add each pixel layer's 96 px thumbnail as base64 PNG"},
-    {"layers.get", "One layer, as layers.list reports it, with its Blend If ranges when it has any.", "id:layer! The layer"},
-    {"layers.style", "A layer's effects (Photoshop's layer style): each kind as a list, the ones switched off too, with the Blending Options' Blend If (blendIf, as layers.get shows it) and the effects' reference point (referenceX, referenceY). Layer > Layer Style > Copy Layer Style.", "id:layer The layer (default the active one)"},
+    {"layers.get", "One layer, as layers.list reports it, with its Blend If ranges when it has any and its Advanced Blending channels (channels) when it leaves one out.", "id:layer! The layer"},
+    {"layers.style", "A layer's effects (Photoshop's layer style): each kind as a list, the ones switched off too, with the Blending Options' Blend If (blendIf, as layers.get shows it), the channels that take part in blending (channels) and the effects' reference point (referenceX, referenceY). Layer > Layer Style > Copy Layer Style.", "id:layer The layer (default the active one)"},
     {"layers.setStyle", "Replace a layer's effects, shaped as layers.style shows (settings left out take Photoshop's defaults; an empty object clears the style, the step Clear Layer Style). The Layer Style dialog's OK and Paste and Clear Layer Style run it.",
      "id:layer The layer (default the active one); style:object! dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays, strokes (lists), visible, maskHidesEffects, blendInteriorAsGroup, "
-     "blendIf (Blend If's channels as layers.get shows them, the layer's ranges staying when it is left out), referenceX and referenceY (the effects' reference point, the layer's own when left out); "
+     "blendIf (Blend If's channels as layers.get shows them, the layer's ranges staying when it is left out), channels (each colour channel true or false, as layers.style shows them; the layer's staying when left out), referenceX and referenceY (the effects' reference point, the layer's own when left out); "
      "paste:bool=false Name the step Paste Layer Style (Layer > Layer Style > Paste Layer Style)"},
     {"layers.applyStyle", "Give a layer an imported style preset (presets.list): its effects replace the layer's, and the document gets the patterns the style uses. Blending options in the preset are not applied.",
      "id:layer The layer (default the active one); style:string! The style preset's name"},
@@ -155,7 +155,8 @@ const MethodDoc methodDocs[] = {
      "id:layer The layer (the primary one with ids); ids:array Several layer ids; mask:bool=false Select the layer's mask for painting and filters"},
     {"layers.set", "Change a layer's properties.",
      "id:layer The layer (the active one when left out); name:string New name; visible:bool Shown; opacity:number 0..1; blend:<blend> Blend mode; sampling:<sampling> How it is resampled when transformed; clipping:bool Clip to the layer beneath; "
-     "blendIf:object Blending Options' Blend If: channels (gray, red, green, blue; gray, cyan, magenta, yellow, black; lightness, a, b) each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255 (split handles when low differs from high); channels left out stay; reset true clears the others first"},
+     "blendIf:object Blending Options' Blend If: channels (gray, red, green, blue; gray, cyan, magenta, yellow, black; lightness, a, b) each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255 (split handles when low differs from high); channels left out stay; reset true clears the others first; "
+     "channels:object Blending Options' Advanced Blending Channels: red, green, blue (cyan, magenta, yellow, black; lightness, a, b) each true to blend it or false to leave it out (the backdrop's value stays); channels left out stay"},
     {"layers.add", "Add a layer above the active one and make it active.",
      "kind:(pixels|group|adjustment|text)=pixels What to add; name:string Its name; below:bool=false Put a pixel layer under the active one instead; "
      "adjustmentKind:<adjustment> For kind adjustment; settings:object For kind adjustment: settings as adjustments.defaults shows them; "
