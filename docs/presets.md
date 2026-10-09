@@ -26,8 +26,8 @@ follows the document's light.
 
 ## Patterns
 
-Records are 8-bit RGB, grayscale, indexed or CMYK patterns up to 4096 px on a side, raw or PackBits; other ones
-(16-bit, larger) are left out with a note. A record without an id gets one, re-encoded as RGB.
+Records are 8- or 16-bit RGB, grayscale, indexed or CMYK patterns up to 4096 px on a side, raw or PackBits; other ones
+(32-bit, larger) are left out with a note. A record without an id gets one, re-encoded as RGB.
 
 ## Gradients
 

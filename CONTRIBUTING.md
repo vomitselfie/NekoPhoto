@@ -61,7 +61,9 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
 
 - **The core is Qt-free.** `src/core` builds and tests without Qt (`-DCOMPOSITOR_BUILD_APP=OFF`). Keep Qt types
   out of it; the app converts at the boundary (`src/app/ImageConvert.h`, `QtGeometry.h`).
-- **Pixels** are premultiplied RGBA8, top-down, with an explicit stride (`compositor::Image`). Masks are 8-bit.
+- **Pixels** are premultiplied, top-down, with an explicit stride, at the document's depth: `AnyImage` / `AnyGray`
+  over 8-bit `Image`, 16-bit `ImageT<U16>` (0..32768) or 32-bit float, in RGB, CMYK or Lab. `.u8()` is null on a
+  deeper buffer, so gate a feature with `supports()` (`compositor/supports.h`; [docs/bit-depth.md](docs/bit-depth.md)).
 - **`EditorSession`** (`src/app/EditorSession*.cpp`) owns the open document and its undo history; the widgets and
   the automation handlers both go through it.
 - **`Compositor/`, `Compositor.xcodeproj` and the other Xcode folders** are the original macOS app's Swift
@@ -84,7 +86,7 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
 - **Every visible string goes through `tr()`** and gets its Japanese translation in the same change; the
   `translations_check` test fails otherwise. How to update and translate: [docs/translating.md](docs/translating.md).
 - **No warnings.** CI builds with `-Werror` on GCC and Clang.
-- **Render hashes don't change by accident.** `render_hash_tests` hashes 133 scenes against
+- **Render hashes don't change by accident.** `render_hash_tests` hashes 711 scenes (at every depth and colour mode) against
   `tests/render_hashes.txt` and `golden_tests` compares against `tests/golden/*.png`. When a pull request changes
   rendering on purpose, regenerate and say why in the description:
   ```bash
@@ -203,7 +205,7 @@ part it names the first step where they do.
 | Edit | Content-Aware Fill's OK, Auto and All sampling | `pixels.contentAwareFill` |
 | Image | Mode: RGB, CMYK, Lab, 8, 16, 32 Bits *(checked: 16, 8, Lab, RGB)*; Canvas Size, Image Size, Trim, Crop to Selection, Flip Canvas Horizontal / Vertical, Adjustments > Invert *(checked)* | `image.mode`, `canvas.resize`, `image.resize`, `image.trim`, `canvas.crop` + `selection.none`, `canvas.flip`, `pixels.invert` |
 | Image | Adjustments: every dialog's OK *(checked: Levels, Curves, Brightness/Contrast, Posterize)* | `pixels.adjust` |
-| Filter | Gaussian Blur, Motion Blur, Add Noise, Lens Correction OK *(checked)* | `pixels.filter` |
+| Filter | Every filter's OK in the Blur, Distort, Noise, Pixelate, Render, Sharpen, Stylize and Other submenus, and Lens Correction *(checked: Gaussian Blur, Motion Blur, Add Noise, Lens Correction)* | `pixels.filter` |
 | Layer | New Layer, New Layer Below, New Folder, New Adjustment Layer, Layer via Copy, Duplicate, Delete, Merge Down, Merge Visible, Rename, Group, Bring Forward, Send Backward, Flip Layer Horizontal / Vertical, Resampling, Create / Release Clipping Mask *(checked)* | `layers.add`, `layers.viaCopy`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.set`, `layers.group`, `layers.reorder`, `layers.flip` |
 | Layer | Layer Mask: Reveal All, Hide All, From Selection (Reveal / Hide), Enable / Disable, Invert, Apply, Delete *(checked but From Selection)* | `layers.mask` |
 | Layer | Delete Layer with several layers selected *(checked)*, Move Out of Folder *(checked)* | `layers.delete` with `ids` and `bakeClipping`, `layers.move` |
@@ -234,7 +236,7 @@ ids (`layers.set` with `id`, `layers.move`), as an agent's requests do.
 |---|---|
 | File: Open… or Import File… of a camera RAW file or a PDF | They open through their own dialogs (Camera Raw's develop, the PDF's page and resolution), which choose what the request would carry; `document.open` takes `settings` and `page` for scripts |
 | File: the PSD, SVG, ICO, animated GIF, artboard and slice exports, Batch, Open Project Folder, tabs, Quit | Export dialogs of their own and the window's tabs; `document.export`, `artboards.export`, `slices.export`, `actions.batch` and `tabs.*` are there for scripts |
-| Edit: Toggle Last State, Color Settings…, Preferences…, Search… | History has no toggle method; the others are application settings and the interface |
+| Edit: Toggle Last State, Color Settings…, Keyboard Shortcuts…, Preferences…, Search… | History has no toggle method; the others are application settings and the interface |
 | Layer: Edit Text… | It opens the text editor; `text.set` is the edit |
 | Channels panel: Duplicate, Delete, Rename, reorder, eyes, Load as selection | The methods name channels by id; the eyes are view state |
 | Filter: Smart Filters | A smart object's filter stack, edited in its own rows |

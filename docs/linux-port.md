@@ -100,8 +100,8 @@ Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses.
 `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4` builds against the OpenCV that
 `tools/build-opencv.sh <prefix>` makes: a pinned 4.x, static, with only the
-three modules the model needs and every optional dependency off. CI, the
-release jobs and the Mac bundle use that build (cached, so it is compiled once
+three modules the model needs and every optional dependency off. CI and the
+release jobs use that build (cached, so it is compiled once
 per runner image), which is how every platform ends up running the model on
 the same OpenCV; a local build takes the system OpenCV unless told otherwise.
 `-DCOMPOSITOR_QT_TOOL_DIR=<dir>` points the build at copies of `moc`, `uic`
@@ -115,8 +115,9 @@ editor, which opens them as tabs and raises its window, and quits (with
 `--rpc` the running editor also starts its automation socket for the caller);
 `--new-window` keeps a separate process, as any of the options below does.
 `--tool brush` (or any tool name from `--help`) selects a tool, and `--dialog new`
-(or canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map,
-grain, blur, motion-blur, noise, lens, gmic, background, text, fonts, brushes) opens that
+(or canvas-size, image-size, export-as, levels, curves, hue, exposure, gradient-map,
+grain, blur, motion-blur, noise, lens, cameraraw, gmic, mosh, background, text, fonts, brushes,
+search, keyboard-shortcuts and the others `--help` lists) opens that
 dialog; with `--screenshot` the dialog is what gets grabbed.
 `NEKOPHOTO_CPU=all|high|medium|low` sets the CPU power for one run, over Edit > Preferences > Performance: the worker
 pool gets all, three quarters, half or a quarter of the machine's threads, and medium and low also lower the process
@@ -250,9 +251,11 @@ src/third_party/nlohmann/       JSON (MIT)
 LICENSE, LICENSES/              GPL-3.0-or-later for the port; upstream MIT and third-party texts
 THIRD-PARTY-NOTICES.md          every bundled or linked component and its licence
 src/app/icons/                  tool icons from Lucide (ISC), tinted to the palette at runtime
-tests/                          pixels_tests, core_tests, golden_tests (+ golden PNGs)
+tests/                          the CTest suites, golden PNGs, render hashes, fuzz targets
 packaging/                      .desktop, icon, MIME type
-.github/workflows/linux.yml     GCC and Clang builds, tests, offscreen smoke test
+.github/workflows/linux.yml     GCC and Clang builds, tests, offscreen and automation smoke tests
+.github/workflows/windows.yml   the MSYS2 MinGW-w64 build, tests and portable zip
+.github/workflows/release.yml   the AppImage, tarball and Windows zip for a v* tag
 ```
 
 ## What works
@@ -294,7 +297,7 @@ packaging/                      .desktop, icon, MIME type
   Compositor for macOS will not open it.
 - Layers: create, delete, duplicate, rename inline or from the menu, reorder
   and nest by drag and drop, move out of a folder, folders, visibility (with
-  the eye-swipe), opacity, all thirteen blend modes with a hover preview,
+  the eye-swipe), opacity, all 27 of Photoshop's blend modes (and Pass Through for folders) with a hover preview,
   Ctrl+E merges down / merges the selected layers / merges a folder with
   blend modes, masks and clipping baked in, group selected layers.
 - Layer masks (reveal all, hide all, from the selection), enable/disable,
@@ -348,7 +351,7 @@ packaging/                      .desktop, icon, MIME type
   for images from other apps) and Layer via Copy, through the system clipboard.
 - Selections: rectangular and elliptical marquee, freehand and polygonal
   lasso, magic wand (tolerance, contiguous, sample all layers), quick select
-  by scribble (GrabCut) or by click (EfficientSAM, a download) on Q, Select > Subject
+  by scribble (GrabCut) or by click (EfficientSAM, a download) on Shift W, Select > Subject
   (the same model given a box 5% inside the canvas; greyed, saying why, until the
   model is downloaded), add/subtract
   with Shift/Alt, move the outline, select all, deselect, inverse, expand,
@@ -361,14 +364,17 @@ packaging/                      .desktop, icon, MIME type
   packages written by the Mac app, open and save in place, keeping unknown fields; PNG export with resolution metadata; JPEG export with
   a live preview.
 - Wayland, X11, HiDPI and fractional scaling; tablet input (as a pointer).
-- Adjustment layers: Levels (with histogram, Auto and black / gray / white
+- Adjustment layers, 17 kinds: Levels (with histogram, Auto and black / gray / white
   point samplers), Curves (draggable
-  points), Hue/Saturation (per-range, colorize, an optional Photoshop-style saturation curve), Exposure, Gradient Map and
-  Grain, edited live in the Adjustments panel, saved in the Mac's format.
-- Image > Adjustments applies the same six to a layer's pixels with a live
+  points), Hue/Saturation (per-range, colorize, an optional Photoshop-style saturation curve), Exposure, Gradient Map,
+  Grain, Invert, Brightness/Contrast, Posterize, Threshold, Black & White, Color Balance, Vibrance, Photo Filter,
+  Channel Mixer, Selective Color and Color Lookup, edited live in the Adjustments panel.
+- Image > Adjustments applies them (all but Color Lookup) to a layer's pixels with a live
   preview, inside the selection; Invert works on pixels and masks.
-- Filter menu: Gaussian Blur and Motion Blur (spreading past the layer's
-  edges, as on the Mac), Add Noise, Lens Correction, all with a live preview.
+- Filter menu, in Photoshop's submenus: Blur (Box, Gaussian, Motion, Radial, Surface), Distort (Pinch, Polar
+  Coordinates, Ripple, Shear, Spherize, Twirl, Wave, ZigZag), Noise (Add Noise, Dust & Scratches, Median),
+  Pixelate > Mosaic, Render (Clouds, Difference Clouds), Sharpen > Unsharp Mask, Stylize (Emboss, Find Edges),
+  Other (High Pass, Maximum, Minimum, Offset), Lens Correction, the Camera Raw Filter and Mosh, all with a live preview.
 
 - Move tool drags selected pixels (Alt duplicates, Ctrl-arrows nudge); Ctrl+T
   with a selection floats the pixels for a transform; Ctrl-drag a handle for
@@ -376,7 +382,7 @@ packaging/                      .desktop, icon, MIME type
   together; Alt-drag duplicates a layer while moving it.
 - Gradient tool (linear / radial, foreground to background or to transparent,
   reverse, opacity; Shift snaps the angle; Enter applies, Esc discards), Shape
-  tool (rectangle, rounded rectangle, ellipse; Shift-U switches), Text tool
+  tool (rectangle, rounded rectangle, ellipse, polygon, line, custom shapes; Shift-U steps through them), Text tool
   (click to add text in the foreground colour, click a text layer to edit it, or
   double-click text with any tool, or its thumbnail in the Layers panel;
   the options bar sets font, size, bold, italic and alignment, the editor also
@@ -440,7 +446,7 @@ command registry's (`CONTRIBUTING.md`, "Commands"); the tools are `tool.<name>` 
 
 | Keys | Action |
 |---|---|
-| V M L W C B E J S R G U T I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Smudge, Gradient, Shape, Text, Eyedropper, Hand, Zoom |
+| V M L W C B E J S R O G P A U T I H Z | Tools: Move, Marquee, Lasso, Magic Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Blur / Smudge / Liquify, Dodge / Burn / Sponge, Gradient, Pen, Direct Selection, Shape, Type, Eyedropper, Hand, Zoom |
 | Shift + tool letter | Next tool of the letter's group, as Photoshop: Shift M rectangle / ellipse marquee, Shift L freehand / polygonal lasso, Shift W Magic Wand / Quick Select, Shift C Crop / Slice, Shift V Move / Artboard, Shift G Gradient / Paint Bucket, Shift J Spot Healing / Healing Brush / Patch / Content-Aware Move, Shift O Dodge / Burn / Sponge, Shift R Blur / Sharpen / Smudge / Liquify, Shift U the shape kinds; Shift P and Shift T pick the Pen and Type tools |
 | 1…9, 0 | Opacity 10%…90%, 100% (two digits quickly for an exact value) |
 | [ ], Shift [ ] | Brush size, hardness |
@@ -462,16 +468,23 @@ command registry's (`CONTRIBUTING.md`, "Commands"); the tools are `tool.<name>` 
 | Ctrl + arrows | Nudge selected pixels |
 | Arrows with a selection tool | Nudge the selection outline |
 | Ctrl Shift [ | Move the layer out of its folder |
-| Ctrl N, Ctrl W, Ctrl Tab | New tab, close tab, next tab |
+| Ctrl N, Ctrl O, Ctrl Shift O | New document (in a new tab unless the current one is empty), open, import as a layer |
+| Ctrl S, Ctrl Shift S | Save, Save As |
+| Ctrl W, Ctrl Tab, Ctrl Shift Tab | Close tab, next tab, previous tab |
 | Ctrl Shift N, Ctrl G, Ctrl J, Ctrl E, Ctrl Shift E | New layer, group, duplicate, merge down, merge visible |
 | Ctrl Alt G | Clipping mask |
 | Ctrl ] / Ctrl [ | Bring forward / send backward |
 | Ctrl A, Ctrl D, Ctrl Shift D, Ctrl Shift I | Select all, deselect, reselect, inverse |
-| Ctrl L, Ctrl M, Ctrl U, Ctrl I | Levels, Curves, Hue/Saturation, Invert |
+| Ctrl L, Ctrl M, Ctrl U, Ctrl B, Alt Shift Ctrl B, Ctrl I | Levels, Curves, Hue/Saturation, Color Balance, Black & White, Invert |
+| Ctrl Alt C, Ctrl Alt I | Canvas Size, Image Size |
 | Ctrl X, Ctrl C, Ctrl Shift C, Ctrl V | Cut, copy, copy merged, paste |
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
+| Ctrl Alt Shift C | Content-Aware Scale |
+| Q, Shift F6 | Quick Mask, Feather |
+| Shift Ctrl A, Ctrl Shift G | Camera Raw Filter, G'MIC |
+| Ctrl H | Show or hide the transform controls |
 | Ctrl Z, Ctrl Shift Z, Ctrl Alt Z | Undo (again for earlier steps), redo, toggle last state (Photoshop CC's defaults) |
-| F7 | Show or hide the Layers panel |
+| F7, Alt F9 | Show or hide the Layers panel, the Actions panel |
 | F12 | File ▸ Revert: the file as opened or last saved, any format, as one undo step (no question; Undo brings the edits back) |
 | Ctrl Alt Shift W (also Ctrl Alt Shift S) | File ▸ Export ▸ Export As |
 | Ctrl Shift ', Ctrl Alt Shift ' | Layer ▸ Quick Export, Layer ▸ Export As (the active layer alone) |

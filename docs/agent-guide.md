@@ -111,7 +111,7 @@ done
   The socket is still the richer way in; writing files suits agents that cannot reach it.
 
 - `layers.set` opacity is 0..1; blend names are the ones `layers.list` reports, in any case or
-  spacing ("color-dodge"). Folders have no blend mode.
+  spacing ("color-dodge"); a folder also takes "Pass Through", its default.
 - A misspelt parameter is refused with the list of the ones the method takes.
 - Filters and pixel adjustments apply to the active layer inside the selection;
   select the layer first (`layers.select`) and clear the selection if you mean

@@ -43,7 +43,7 @@ the same format: `{"format": "nekophoto.actions", "version": 1, "actions": [{"na
 | Image > Mode (RGB, CMYK, Lab; 8, 16, 32 Bits, with HDR Toning's settings) | `image.mode` |
 | Image > Canvas Size, Image Size, Trim, Crop to Selection, Flip Canvas | `canvas.resize`, `image.resize`, `image.trim`, `canvas.crop`, `canvas.flip` |
 | Image > Adjustments (every dialog), Invert | `pixels.adjust` with the dialog's settings, `pixels.invert` |
-| Filter > Gaussian Blur, Motion Blur, Add Noise (with its seed), Lens Correction | `pixels.filter` |
+| Filter > every filter of the Blur, Distort, Noise, Pixelate, Render, Sharpen, Stylize and Other submenus (with the seed of the random ones), Lens Correction | `pixels.filter` |
 | Edit > Fill with Foreground / Background, Clear, Content-Aware Fill | `pixels.fill` with the colour, `pixels.clear` (or `layers.delete` without a selection), `pixels.contentAwareFill` (Auto and Wide Area sampling) |
 | Edit > Assign Profile, Convert to Profile (a built-in profile or none) | `document.profile` |
 | Edit > Warp, Warp Cage (applied with Enter), Content-Aware Scale | `layers.warp`, `layers.setCage` with the cage's points, `pixels.contentAwareScale` |

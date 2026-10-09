@@ -299,7 +299,7 @@ Each call still records its own step while the group is open, so the person's Un
 merge happens at the end, and only when no one else recorded a step in between (the reply says why
 not). A connection that closes with a group open has it closed.
 
-16-bit documents (docs/bit-depth.md): `document.info` reports `bits` (8 or 16). Every method works on a 16-bit
+16-bit documents (docs/bit-depth.md): `document.info` reports `bits` (8, 16 or 32) and `colorMode`. Every method works on a 16-bit
 document, as on an 8-bit one. `document.export` writes a 16-bit PNG (and TIFF, when the Qt TIFF plugin writes
 16 bits) from a 16-bit document; the 8-bit formats (an animated GIF's frames too) get it dithered down, and the reply
 says so in `note`; SVG embeds its images as 16-bit PNGs (`bits` 16).
@@ -358,12 +358,12 @@ and `pressureSmoothing` 0..100 the other two filters; none applies unless given,
 answers the new preset ids and notes on what was approximated), `gradient.draw` (`x0, y0, x1, y1`, `shape` linear or radial, `style`
 foreground-to-transparent or foreground-to-background, `reversed`, `opacity`,
 `foreground`, `background`, `preset`: an imported gradient's name, used instead of `style`; `interpolation` classic (the default),
-perceptual or linear: Photoshop's Method, named as in layer styles' gradients), `shape.draw` (a new shape layer: `kind` rectangle
-or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,
+perceptual or linear: Photoshop's Method, named as in layer styles' gradients), `shape.draw` (a new shape layer: `kind` rectangle,
+ellipse, polygon, star, line or custom, `x, y, width, height`, `cornerRadius`, `color`, and the fill and stroke keys above). The person's tool,
 brush settings and colours are restored afterwards.
 
 View: `tool.select` (`name`: move, marquee, lasso, wand, quickselect, crop, brush, healing, clone,
-smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set` (CSS colours; `#rrrrggggbbbb` gives 16 bits per
+smudge, dodge, bucket, gradient, pen, directselect, shape, text, eyedropper, hand, zoom, artboard or slice), `colors.set` (CSS colours; `#rrrrggggbbbb` gives 16 bits per
 channel, as `pixels.fill` takes it too), `color.sample` (the Eyedropper at `x`, `y`,
 `background` to set the background colour: answers `color` and the document's own `values`, linear R, G, B at 32 bits,
 C, M, Y, K ink percentages in CMYK, L, a, b in Lab, with `model`), `view.zoom`, `view.exposure` (a 32-bit
@@ -392,7 +392,6 @@ well for agents.
 
 ## Not there yet
 
-Text layers (the editor has none) and a remote transport (the socket is local
-only, by design) are the open items. Adding a method is one `add("name", handler)` in
+A remote transport (the socket is local only, by design) is the open item. Adding a method is one `add("name", handler)` in
 the `src/app/Automation*.cpp` file for its area and its entry in `AutomationDescriptions.cpp` (the smoke
 test fails without one); the bridge's generic `rpc` tool reaches it without a Python change.

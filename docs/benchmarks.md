@@ -283,7 +283,8 @@ counter measures, how its bounds were chosen and how to update them: [work-count
 
 ## Render hashes
 
-The matching correctness gate is `render_hash_tests` (in ctest): 235 scenes (133 at 8 bits, 102 at 16 bits) hashed with FNV-1a 64 against
+The matching correctness gate is `render_hash_tests` (in ctest): 711 scenes (8-, 16- and 32-bit RGB, 8- and 16-bit CMYK and Lab; the counts per mode are in
+[compatibility.md](compatibility.md#at-a-glance)) hashed with FNV-1a 64 against
 `tests/render_hashes.txt`, each rendered on the worker pool and serially. After an intentional rendering change:
 
 ```bash
