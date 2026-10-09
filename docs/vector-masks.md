@@ -7,8 +7,12 @@ record layout and combine rules follow Patchy (MIT, `src/third_party/patchy_psd/
 
 - **Paths**: 26-byte records, knots as (in, anchor, out) of y, x in 8.24 fixed point of the canvas. Subpaths of one
   shape group fill even-odd together; groups combine in order (add, subtract, intersect, exclude, with Patchy's
-  coverage formulas; a first subtract starts from a full canvas). Antialiased: four sample rows per pixel, exact
-  horizontal coverage, at any view scale. Inverted and disabled masks are honoured.
+  coverage formulas; a first subtract starts from a full canvas). Antialiased: sixteen sample rows per pixel, exact
+  horizontal coverage, at any view scale; curves cut into 4 x sqrt(control-polygon length) segments (Photoshop
+  flattens its curves too: this density follows its renders more closely than exact curves do). Four rows stepped a
+  nearly horizontal edge by quarters, and half as many curve segments left curves polygonal: the fill fixtures went
+  from 2.17% / 2.01% / 1.10% of pixels more than 2 levels off (solid, live rectangle, pattern; max 22, 15, 23) to
+  1.29% / 0.62% / 0.83% (max 10, 10, 6). Inverted and disabled masks are honoured.
 - **Shapes**: a solid shape is its fill (the layer's full-canvas pixels) cut by the path. Gradient and pattern fill
   layers ('GdFl', 'PtFl'), which store no pixels, draw their fill: the gradient over the shape's bounds with
   Photoshop's fill-layer geometry (the centre chord, unsnapped, Classic easing even on two stops; Patchy's
@@ -32,10 +36,15 @@ record layout and combine rules follow Patchy (MIT, `src/third_party/patchy_psd/
 
 Against Photoshop's renders of Patchy's fixtures (mean difference per pixel, 0-255): shape booleans 0.00, first
 combine ops 0.00, both masks 0.05 (and with parameters 0.05), vector mask on a pixel layer 0.05, live rectangle
-0.09, pattern shape 0.11, solid shape 0.14, vector mask feather 0.38, gradient shape 0.94, strokes 0.25, pixel mask
+0.04, pattern shape 0.05, solid shape 0.07, vector mask feather 0.38, gradient shape 0.94, strokes 0.25, pixel mask
 parameters 0.27, shape feather 0.38 (the last three were 0.52, 5.29 and 4.60 before the feather model above). Before,
 these ran from 17 to 156.
 
 ## Not yet
 
-Editing paths (a pen tool), gradient and pattern strokes, live-shape origination ('vogk', left out once a shape moves).
+What is left on the shape fixtures: photoshop-shape-solid (and its PSB) keeps 1.3% of pixels 3 to 10 levels off on
+its curves, where Photoshop's own curve flattening is not known; photoshop-shape-strokes 3.1%, mostly the dashed open
+curve (dash lengths measured along the curve and round caps placed differently, as Patchy notes) and the stroke's
+edge coverage; photoshop-stroke-aa-matte and photoshop-outer-glow are the Stroke and Outer Glow effects' own edges
+(layer styles over pixel layers, not this rasteriser). Editing paths (a pen tool), gradient and pattern strokes,
+live-shape origination ('vogk', left out once a shape moves).

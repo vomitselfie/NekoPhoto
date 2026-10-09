@@ -90,7 +90,10 @@ namespace {
 
 struct Edge { double x0, y0, x1, y1; };
 
-/// The subpath as line segments in output pixels (cubic segments flattened to about a quarter pixel).
+/// The subpath as line segments in output pixels. Cubic segments are cut into 4 x sqrt(control-polygon length) even
+/// steps: Photoshop flattens its curves too, and this is the density its renders of Patchy's shape fixtures follow
+/// (half as many steps left curves visibly polygonal, up to 22 levels off on photoshop-shape-solid; exact curves, far
+/// more steps, sit further from Photoshop's than this).
 void flatten(const VectorPath::Subpath& s, const Rect& region, double scale, std::vector<Edge>& edges, bool asStroke = false) {
     const size_t n = s.knots.size();
     if (n < 2) return;
@@ -102,7 +105,7 @@ void flatten(const VectorPath::Subpath& s, const Rect& region, double scale, std
         const auto& b = s.knots[(i + 1) % n];
         const Point p0 = out(a.x, a.y), p1 = out(a.outX, a.outY), p2 = out(b.inX, b.inY), p3 = out(b.x, b.y);
         const double length = std::hypot(p1.x - p0.x, p1.y - p0.y) + std::hypot(p2.x - p1.x, p2.y - p1.y) + std::hypot(p3.x - p2.x, p3.y - p2.y);
-        const int steps = std::clamp(int(std::ceil(std::sqrt(length) * 2)), 1, 256);
+        const int steps = std::clamp(int(std::ceil(std::sqrt(length) * 4)), 1, 512);
         Point prev = p0;
         for (int k = 1; k <= steps; k++) {
             const double t = double(k) / steps, u = 1 - t;
@@ -135,8 +138,10 @@ void coverageBox(Coverage& c, double minX, double maxX, double minY, double maxY
     c.v.assign(size_t(c.x1 - c.x0) * size_t(c.y1 - c.y0), 0.0f);
 }
 
-/// Even-odd coverage of `edges` over w x h: 4 sample rows per pixel, exact horizontal coverage of each span.
-/// Only the edges' bounding box is computed (rows in parallel); the rest is zero.
+/// Even-odd coverage of `edges` over w x h: 16 sample rows per pixel, exact horizontal coverage of each span (4 rows
+/// stepped a nearly horizontal edge's coverage by quarters, up to 32 levels off Photoshop's on photoshop-shape-solid).
+/// Each pixel row looks only at the edges crossing it. Only the edges' bounding box is computed (rows in parallel); the
+/// rest is zero.
 Coverage fill(const std::vector<Edge>& edges, int w, int h) {
     Coverage c;
     if (edges.empty()) return c;
@@ -147,17 +152,26 @@ Coverage fill(const std::vector<Edge>& edges, int w, int h) {
     }
     coverageBox(c, minX, maxX, minY, maxY, w, h);
     if (c.empty()) return c;
-    constexpr int sub = 4;
+    constexpr int sub = 16;
     const int bw = c.x1 - c.x0;
+    // The edges by the pixel rows they cross.
+    std::vector<std::vector<uint32_t>> crossing(size_t(c.y1 - c.y0));
+    for (size_t i = 0; i < edges.size(); i++) {
+        const Edge& e = edges[i];
+        const int lo = std::max(c.y0, int(std::floor(std::min(e.y0, e.y1)))), hi = std::min(c.y1 - 1, int(std::floor(std::max(e.y0, e.y1))));
+        for (int y = lo; y <= hi; y++) crossing[size_t(y - c.y0)].push_back(uint32_t(i));
+    }
     parallelRows(c.y0, c.y1, [&](int ya, int yb) {
         std::vector<double> xs;
         std::vector<float> row(size_t(bw) + 2);
         for (int y = ya; y < yb; y++) {
             std::fill(row.begin(), row.end(), 0.0f);
+            const std::vector<uint32_t>& here = crossing[size_t(y - c.y0)];
             for (int s = 0; s < sub; s++) {
                 const double sy = y + (s + 0.5) / sub;
                 xs.clear();
-                for (auto& e : edges) {
+                for (uint32_t i : here) {
+                    const Edge& e = edges[i];
                     if ((e.y0 <= sy) == (e.y1 <= sy)) continue;
                     xs.push_back(e.x0 + (sy - e.y0) / (e.y1 - e.y0) * (e.x1 - e.x0));
                 }

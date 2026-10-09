@@ -14,7 +14,7 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 <!-- BEGIN GENERATED at-a-glance: tools/compat_table.py --write; do not edit by hand -->
 | Check | Result | How to rerun |
 |---|---|---|
-| Photoshop as the oracle | **56 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
+| Photoshop as the oracle | **58 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
 | Render hashes | **711 scenes**: 158 at 8-bit RGB, 157 at 16-bit RGB, 122 at 32-bit RGB, 73 at 8-bit CMYK, 73 at 16-bit CMYK, 64 at 8-bit Lab, 64 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
@@ -191,7 +191,7 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
 <!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
-- **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **56 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
+- **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **58 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
 - **描画のハッシュ**: 711 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 88 個(731 `TEST_CASE`)。
 - **自動操作**: メソッド 183 個、うち 182 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
