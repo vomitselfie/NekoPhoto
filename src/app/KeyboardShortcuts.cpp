@@ -20,6 +20,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -284,7 +285,7 @@ void KeyboardShortcutsDialog::build() {
     tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     tree_->header()->setStretchLastSection(false);
     tree_->setUniformRowHeights(true);
-    tree_->setMinimumHeight(300);
+    tree_->setMinimumHeight(220);
     connect(tree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem* item) {
         const QString id = item ? item->data(0, Qt::UserRole).toString() : QString();
         if (id == selected_) return;
@@ -386,7 +387,7 @@ void KeyboardShortcutsDialog::build() {
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     bottom->addWidget(buttons);
     layout->addLayout(bottom);
-    resize(720, 640);
+    resize(760, 720);
 }
 
 void KeyboardShortcutsDialog::refreshTree() {
@@ -471,7 +472,9 @@ void KeyboardShortcutsDialog::setFilter(const QString& text) { search_->setText(
 void KeyboardShortcutsDialog::select(const QString& id) {
     if (auto it = items_.find(id); it != items_.end()) {
         tree_->setCurrentItem(it->second);
-        tree_->scrollToItem(it->second);
+        tree_->scrollToItem(it->second, QAbstractItemView::PositionAtCenter);
+        // Again once the dialog is laid out (it may not be shown yet).
+        QTimer::singleShot(0, tree_, [this] { if (QTreeWidgetItem* item = tree_->currentItem()) tree_->scrollToItem(item, QAbstractItemView::PositionAtCenter); });
     }
 }
 
