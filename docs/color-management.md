@@ -108,7 +108,7 @@ Image ▸ Mode ▸ CMYK Color and Lab Color, how such documents draw, their chan
 - **The display is never skipped.** A CMYK or Lab frame is not RGB, so the canvas always converts it: the document's
   profile to the monitor profile, or to sRGB when none is known, fused with the reduction to 8 bits. Thumbnails too.
 - **Features by mode.** What does not work in a mode is greyed out with "Not available in CMYK mode" (or Lab mode), as
-  in Photoshop; Camera Raw, G'MIC and the MyPaint brushes stay RGB only.
+  in Photoshop; Camera Raw, G'MIC, Mosh and the MyPaint brushes stay RGB only.
 - **Projects** save and open CMYK and Lab documents ([project-format.md](project-format.md), version 9).
 
 ## 32-bit documents
@@ -216,17 +216,19 @@ NekoPhoto のカラーマネジメントは Photoshop と同じ考え方です�
 
 ### 編集 ▸ カラー設定
 
+Photoshop のダイアログを簡略にしたものです(Ctrl+Shift+K)。
+
 - **作業用スペース(RGB)**:sRGB IEC61966-2.1(既定)、Adobe RGB (1998)、Display P3、ProPhoto RGB。新規ドキュメントに
   指定します(sRGB のときはタグなし)。
 - **作業用 CMYK**:NekoPhoto に同梱の **ISO Coated v2 300% (basICColor)**(FOGRA39、既定)、または任意の CMYK ICC
   ファイル(読み込み…)。既定の色の校正はこのプロファイルをシミュレートし、タグなしの CMYK ドキュメントはこのプロファイル
   として扱います。同梱のプロファイルは zlib ライセンスです(`LICENSES/basICColor-zlib.txt`)。
+- **変換オプション**:イメージ ▸ モードで RGB・CMYK・Lab 間を変換するときのマッチング方法(知覚的、相対的な色域を維持
+  (既定)、彩度、絶対的な色域を維持)と黒点の補正(既定はオン)。
 - **カラーマネジメントポリシー(RGB)**:埋め込まれたプロファイルを保持(既定)、作業用 RGB に変換、オフ。
 - **プロファイルのない画像は sRGB として扱います。**
 - プロファイルがないとき・作業用スペースと異なるときに確認する(どちらも既定はオフ)。
 
-- **変換オプション**:イメージ ▸ モードで RGB・CMYK・Lab 間を変換するときのマッチング方法(知覚的、相対的な色域を維持
-  (既定)、彩度、絶対的な色域を維持)と黒点の補正(既定はオン)。
 ### 編集 ▸ プロファイルの指定、プロファイル変換
 
 - **プロファイルの指定**:値の解釈だけを変えます(ピクセルの値はそのまま)。取り消しは 1 回。

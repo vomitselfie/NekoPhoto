@@ -276,8 +276,8 @@ Smart objects work in CMYK and Lab documents at 8 and 16 bits, as in Photoshop:
 
 ## Not yet, and not here
 
-Remove Background and Content-Aware Fill, Move and Scale stay greyed in CMYK and Lab ("Not available in CMYK mode
-yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Camera Raw, G'MIC and the MyPaint brushes stay
+Remove Background, Content-Aware Fill, Move and Scale, and Clouds and Difference Clouds (which paint sRGB colours)
+stay greyed in CMYK and Lab ("Not available in CMYK mode yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Camera Raw, G'MIC and the MyPaint brushes stay
 RGB only ("Not available in CMYK mode", for good), and so does **Mosh**: it is a glitch effect on RGB colour that
 Photoshop has no counterpart for, and running it through RGB and back is not done here.
 
@@ -394,8 +394,10 @@ Photoshop にないものは今後も使えません(「CMYK モードでは使�
 
 ### チャンネル
 
-チャンネルパネルには **CMYK、シアン、マゼンタ、イエロー、ブラック**(Ctrl+2、Ctrl+3〜6)または **Lab、明度、a、b**
-が並びます。1 つだけ表示するとグレー(CMYK の版はインキを暗く)で表示します。一部のカラーチャンネルを選んでいるとき、
+チャンネルパネルには **CMYK、シアン、マゼンタ、イエロー、ブラック**(Ctrl+2、Ctrl+3〜6。アルファチャンネルは Ctrl+7 から)
+または **Lab、明度、a、b**(Ctrl+2〜5)が並びます。1 つだけ表示するとグレー(CMYK の版はインキを暗く、a と b は中間でグレー)、
+複数の CMYK のインキは白地にインキの色で表示します。Ctrl+クリック(または Alt+Ctrl+数字)で、CMYK のチャンネルはそのインキを、
+Lab のチャンネルはその値を選択範囲として読み込みます。一部のカラーチャンネルを選んでいるとき、
 **塗りつぶし**はそのチャンネルだけに適用されます。
 
 ### ペイント
@@ -474,7 +476,8 @@ RGB で塗ってから変換することはありません。
 CMYK(モード 4)と Lab(モード 9)の PSD は 8/16 bit のまま**そのモードで開き**、CMYK のプロファイル(リソース 1039)も
 読み込みます。保存するとドキュメントのモード・ビット数・プロファイルで書き出し、変更していないレイヤーは**バイト単位で
 そのまま**戻ります。ダブルトーン、マルチチャンネル、インデックスカラー、モノクロ 2 階調、グレースケールは従来どおり
-RGB に変換します。
+RGB に変換します。Photoshop で保存された CMYK ファイル(Patchy の `photoshop-cmyk-style-colors.psd`)はバイト単位で
+そのまま戻り、自作した 8/16 bit の CMYK・Lab ファイル(`tests/psd_modes_tests.cpp`)は別の実装で読み直して確認しています。
 
 ### 変形、クリップボード、読み込み
 
@@ -522,7 +525,7 @@ CMYK・Lab ドキュメントでも、8 bit・16 bit ともに Photoshop と同�
 
 ### 未対応・対象外
 
-背景を削除とコンテンツに応じた塗りつぶし・移動・拡大・縮小は CMYK・Lab では使えないままです(「CMYK モードでは
+背景を削除、コンテンツに応じた塗りつぶし・移動・拡大・縮小、雲模様 1・2(sRGB の色で描くため)は CMYK・Lab では使えないままです(「CMYK モードでは
 まだ使用できません」と表示)。CMYK の JPEG と TIFF(CMYK ドキュメントは sRGB で書き出します)もまだです。Camera Raw、
 G'MIC、MyPaint ブラシは RGB 専用で(「CMYK モードでは使用できません」)、**Mosh** も同じです。Mosh は RGB の色に
 かけるグリッチ効果で Photoshop に対応する機能がなく、RGB を経由して戻すことはしません。

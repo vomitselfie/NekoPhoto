@@ -3,7 +3,7 @@
 Window ▸ Channels is Photoshop's Channels panel: the colour channels of the image (RGB, Red, Green, Blue) as views,
 then the document's alpha and spot channels, then Quick Mask while it is on. Alpha channels are saved selections;
 spot channels hold a spot colour's ink and are kept from PSD files, shown, and written back. Everything here works
-at 8 and 16 bits. The code: `src/core/include/compositor/channels.h` (the model, Save and Load Selection, the canvas
+at 8, 16 and 32 bits ([bit-depth.md](bit-depth.md)) and in CMYK and Lab documents (below). The code: `src/core/include/compositor/channels.h` (the model, Save and Load Selection, the canvas
 view, single-channel editing), `src/core/src/psd_channels.cpp` (PSD), `src/app/EditorSessionChannels.cpp`,
 `ChannelsPanel.cpp`, `ChannelDialogs.cpp`.
 
@@ -86,8 +86,8 @@ the frame at the document's layout (`ChannelView::native`, `renderNative`): one 
 with its ink dark as Photoshop shows it, a and b gray where neutral; several CMYK inks as inks on white paper; several
 Lab channels as their colour with the hidden ones neutral. Loading a CMYK channel as a selection selects its ink (paper
 where the composite is transparent), a Lab channel its value. Single-channel editing (`keepColorChannels`,
-`restrictToColorChannels`) works on 4 or 5 samples a pixel; in these modes Fill is the edit ported so far (P7 step D),
-the brushes and the other tools follow with the editing ports. See [color-modes.md](color-modes.md).
+`restrictToColorChannels`) works on 4 or 5 samples a pixel, so any pixel edit (painting, retouching, Fill,
+adjustments and filters) changes only the target channels, as in RGB. See [color-modes.md](color-modes.md).
 
 ## Files
 
@@ -121,6 +121,4 @@ most 53 alpha and spot channels (Photoshop's 56 with the colour channels).
   their ink's real colour when it is a colour book's.
 - Apply Image and Calculations.
 - Split Channels and Merge Channels, and Multichannel mode.
-- Painting, adjustments and filters in one CMYK or Lab colour channel (Fill works; the rest comes with the editing
-  ports, P7 step E).
 - TIFF extra channels.

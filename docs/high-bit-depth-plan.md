@@ -1,6 +1,6 @@
 # High bit depth and colour management: design plan
 
-Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–E (CMYK and Lab documents, rendering, PSD, Image ▸ Mode, painting, adjustments, filters, retouching and selections) P5a (the 32-bit core) and P5b (32-bit adjustments, filters, selections and pixel edits); the rest of P5 and P7 are planned, and of P8 text, shapes and layer styles in CMYK and Lab have landed. The design sections below are kept as written.
+Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–E (CMYK and Lab documents, rendering, PSD, Image ▸ Mode, painting, adjustments, filters, retouching, selections, transforms, the clipboard and exports), P5a (the 32-bit core), P5b (32-bit adjustments, filters, selections and pixel edits) and P5c (painting and retouching at 32 bits); of P8, text, shapes, layer styles, smart objects, Smart Filters, artboards, slices and SVG export in CMYK and Lab have landed. The rest of P5 (P5d–P5f) and of P7 (pickers per mode, CMYK JPEG) are planned; what each mode and depth offers today is the [capability matrix](mode-matrix.md). The design sections below are kept as written. The design sections below are kept as written.
 
 ## 1. Where we are
 
@@ -430,7 +430,7 @@ U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchange
   0 failed / 3,975 carried blocks at 8 and 16 bits, 3 channels back; GCC and Clang `-Werror`; rpc and MCP smoke;
   translations_check. bench_core A/B (three alternating rounds of 9) was not conclusive: another lane loaded the machine and 8-bit lines moved from -23% to +54% in both directions; no benchmarked kernel (render, blend, brush, blur, adjustments) changed, and the all-channels path adds only a bitset test per edit.
 - Not done: editing spot channels, Apply Image, Calculations, Split and Merge Channels, TIFF extra channels, CMYK and
-  Lab colour channels (P7).
+  Lab colour channels (P7; landed with steps C and D).
 
 **P5.0b landed (2026-09-28): `StrokeRaster<S>`, no behaviour change.**
 
@@ -607,8 +607,8 @@ User-facing summary: [color-modes.md](color-modes.md#adjustments-and-filters) an
   16 bits, render hashes and brush parity unchanged for RGB (new CMYK/Lab adjustment and filter scenes). Perf,
   `instructions:u` on one core, bench_core RGB lines before/after: render 142.997e9/143.004e9, blur 84.723e9/84.725e9,
   levels 15.445e9/15.447e9, curves 15.583e9/15.585e9 (all within 0.01%).
-- Still waiting in CMYK and Lab: Color Lookup, Mosh, transforms and resampling of pixels, clipboard and Place,
-  exports other than PSD, text, shapes, paths and layer styles.
+- Still waiting in CMYK and Lab at the time: Color Lookup, Mosh, transforms and resampling of pixels, clipboard and
+  Place, exports other than PSD, text, shapes, paths and layer styles (all landed since but Mosh, which stays RGB only).
 
 **P5c and P7 E's painting half landed (2026-09-28): painting and retouching at 32 bits and in CMYK and Lab.**
 User-facing summaries: [bit-depth.md](bit-depth.md#painting-at-32-bits), [color-modes.md](color-modes.md#painting), and the
@@ -652,8 +652,8 @@ generated [capability matrix](mode-matrix.md).
   instructions:u`, core 0, base = 1.8.4) in the report of the lane.
 - Not done: CMYK healing (the patch search is RGBA; two passes would choose different patches), CMYK Blur, Sharpen,
   Smudge and Liquify (share `tool.smudge`), Dodge, Burn and Sponge in CMYK and Lab, the Paint Bucket and Patch in CMYK
-  and Lab (their decisions read colour, as the wand's), the wand and Quick Select in CMYK and Lab, an HDR colour picker
-  (P5f).
+  and Lab (their decisions read colour, as the wand's), the wand and Quick Select in CMYK and Lab (all of these landed
+  in P7 E's editing half, above), an HDR colour picker (P5f).
 
 ### Text, shapes and layer styles in CMYK and Lab
 
@@ -667,8 +667,9 @@ generated [capability matrix](mode-matrix.md).
   colours, type FillColor Type 2, SoCo 'CMYC') are kept while their RGB still matches and written back as inks.
 - The layer fingerprint (`psdContentHash`) now covers 8-bit CMYK layers (it was always 0, so an edit to a CMYK layer
   read from a PSD was written back as the planes first read) and all five samples of 16-bit CMYK rows.
-- Still greyed in CMYK and Lab: smart objects, artboards and slices (and their exports), SVG export, Color Lookup and
-  Mosh, deleting a clipping base.
+- Still greyed in CMYK and Lab at the time: smart objects, artboards and slices (and their exports), SVG export, Color
+  Lookup and Mosh, deleting a clipping base. All of them but Mosh (which Photoshop lacks) have landed since (commit
+  cb272e4; the [capability matrix](mode-matrix.md)).
 
 ## Review notes
 

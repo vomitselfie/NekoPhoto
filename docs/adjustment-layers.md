@@ -3,7 +3,8 @@
 NekoPhoto draws seventeen kinds of adjustment layer, as layers (Layer ▸ New Adjustment Layer) and destructively
 (Image ▸ Adjustments): Levels, Curves, Hue/Saturation, Exposure, Gradient Map and Grain from the start, and ten of
 Photoshop's others plus Color Lookup. Opened from a PSD they are drawn and editable; written to a PSD they are Photoshop's own
-adjustment layers. An imported one whose settings have not changed goes back as the file's own block, byte for byte
+adjustment layers (except Grain, which Photoshop lacks, and a Gradient Map made or edited here: those are written as a
+pixel layer of their result, [psd-export.md](psd-export.md)). An imported one whose settings have not changed goes back as the file's own block, byte for byte
 (the carry keeps the settings as read); an edited or new one is written in Photoshop's layout.
 
 Model and maths: `src/core/include/compositor/adjustments.h`, `src/core/src/adjustments_more.cpp`. Invert,

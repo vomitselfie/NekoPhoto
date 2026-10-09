@@ -34,7 +34,10 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
   Mixer, Selective Color, Posterize, Threshold, Color Lookup and Invert. Each works on the exact colour, so a smooth
   16-bit gradient stays smooth through a strong Levels or Curves. Posterize and Threshold choose their steps as the
   8-bit ones do; the Levels histogram has 256 bins at either depth.
-- **Filters**: Gaussian Blur, Motion Blur, Add Noise (the same pattern for the same seed), Lens Correction and Mosh.
+- **Filters**: every filter in the Filter menu: the blurs (Gaussian, Motion, Box, Radial, Surface), Add Noise (the same
+  pattern for the same seed), Dust & Scratches, Median, Unsharp Mask, High Pass, Emboss, Mosaic, Find Edges, Clouds and
+  Difference Clouds, the distortions (Twirl, Pinch, Spherize, Wave, Ripple, Polar Coordinates, ZigZag, Shear), Maximum,
+  Minimum, Offset, Lens Correction and Mosh.
 - **Camera Raw Filter**: every panel. Its kernels run on float colour with no rounding between the steps (the 8-bit
   filter rounds to a byte after each), and the result is rounded to 16 bits once, so a smooth 16-bit gradient keeps its
   steps through Exposure and the curves. Defringe decides which pixels are fringe on their colour rounded to 8 bits, so
@@ -135,7 +138,7 @@ Colour management works at both depths: a 16-bit document keeps its profile, con
 16 bits, and is shown through the monitor profile in the same pass that reduces it to the screen's 8 bits
 ([color-management.md](color-management.md)).
 
-CMYK and Lab follow ([high-bit-depth-plan.md](high-bit-depth-plan.md), section 9).
+CMYK and Lab documents work at 16 bits too ([color-modes.md](color-modes.md)).
 
 ## Memory
 
@@ -212,7 +215,8 @@ with no monitor profile, is encoded with the document's own curve, so at exposur
   Exposure, Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and
   Color Lookup. How they treat light above white is below.
 - **Filters**: Gaussian Blur and Motion Blur (light averaged as it is, nothing rounded), Add Noise (the same pattern for
-  a seed as at 8 and 16 bits) and Lens Correction (exact bilinear or Catmull-Rom weights).
+  a seed as at 8 and 16 bits), Lens Correction (exact bilinear or Catmull-Rom weights), the distortions (Twirl, Pinch,
+  Spherize, Wave, Ripple, Polar Coordinates, ZigZag, Shear), Maximum, Minimum and Offset.
 - **Selections**: the marquee and lasso tools, the Magic Wand and Quick Select, Select All, Deselect, Inverse, Select ▸
   Modify (Expand, Contract, Border, Smooth, Feather), Load as Selection, Quick Mask, Select Subject, Layer Mask ▸ From
   Selection. The selection is float coverage (0 to 1). The Magic Wand, Quick Select and Trim decide on the composite at
@@ -244,7 +248,8 @@ Everything else is greyed in a 32-bit document, and automation refuses it. Two w
   and Sponge, the Paint Bucket, the Patch tool, the content-aware tools, the Brightness/Contrast, Posterize, Threshold, Selective Color
   and Grain adjustments (as adjustment layers they are kept but not drawn; converting says so), Mosh, G'MIC, and the blend
   modes outside the 32-bit set.
-- **"Not available in 32-bit yet"**: not ported yet: the Camera Raw Filter, Remove Background, text, shape and path
+- **"Not available in 32-bit yet"**: not ported yet: the Camera Raw Filter, Box, Radial and Surface Blur, Dust &
+  Scratches, Median, Unsharp Mask, High Pass, Emboss, Mosaic, Find Edges, Clouds and Difference Clouds, Remove Background, text, shape and path
   editing, layer style editing, smart objects and Smart Filters, deleting a clipping base (which bakes its clipped
   layers), artboard, slice and SVG export, the timeline, colour conversion (Assign and Convert to Profile).
 
@@ -318,8 +323,8 @@ carries on by design.
 The **Camera Raw Filter** stays greyed ("yet") although Photoshop offers it at 32 bits: its sliders (Whites,
 Highlights, the tone curve, Clarity's masks) are written for display-referred values from 0 to 1, and porting it means
 a scene-referred pipeline with HDR Toning's Local Adaptation (P5f), not the 16-bit float kernels run on clipped values.
-NekoPhoto has no destructive Unsharp Mask or Offset filter; Unsharp Mask as a Smart Filter waits for smart objects at 32
-bits (the Sharpen tool works).
+Unsharp Mask, destructive or as a Smart Filter, waits for the grid filters and smart objects at 32 bits (the Sharpen
+tool works).
 
 ### Memory at 32 bits
 
@@ -385,7 +390,10 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
   階調の反転。どれも正確な色で計算するので、滑らかな 16 bit のグラデーションは強いレベル補正やトーンカーブでも
   滑らかなままです。ポスタリゼーションと 2 階調化は 8 bit と同じ段階を選びます。レベル補正のヒストグラムは
   どちらのビット数でも 256 段階です。
-- **フィルター**:ぼかし(ガウス)、ぼかし(移動)、ノイズを加える(同じシードで同じパターン)、レンズ補正、Mosh。
+- **フィルター**:フィルターメニューのすべてのフィルター:ぼかし(ガウス・移動・ボックス・放射状・表面)、ノイズを加える
+  (同じシードで同じパターン)、ダスト&スクラッチ、中間値、アンシャープマスク、ハイパス、エンボス、モザイク、輪郭検出、
+  雲模様 1・2、変形(ツイスト、つまむ、球面、波形、波紋、極座標、ジグザグ、シアー)、明るさの最大値・最小値、オフセット、
+  レンズ補正、Mosh。
 - **Camera Raw フィルター**:すべてのパネル。処理は浮動小数点の色で行い、途中で丸めず(8 bit 版は各段階で 8 bit に
   丸めます)、最後に 1 回だけ 16 bit に丸めるので、滑らかな 16 bit のグラデーションは露光量やカーブを通しても滑らかな
   ままです。フリンジ除去はどのピクセルがフリンジかを 8 bit に丸めた色で決めるため、色相の範囲の境目にある色は 8 bit と
@@ -483,7 +491,7 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 カラーマネジメントはどちらのビット数でも使えます。16 bit のドキュメントもプロファイルを持ち、プロファイル変換は 16 bit の
 まま行い、画面の 8 bit への変換と同じ処理でモニタープロファイルを通して表示します([color-management.md](color-management.md))。
 
-この後に CMYK と Lab が続きます。
+CMYK と Lab のドキュメントも 16 bit で使えます([color-modes.md](color-modes.md#日本語))。
 
 ### メモリ
 
@@ -536,7 +544,8 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
   色相・彩度、カラーバランス、白黒、フォトフィルター、チャンネルミキサー、自然な彩度、グラデーションマップ、階調の反転、
   カラールックアップ。白より明るい光の扱いは下の「32 bit での色調補正とフィルター」を参照してください。
 - **フィルター**:ぼかし (ガウス) とぼかし (移動)(光をそのまま平均し、途中で丸めません)、ノイズを加える(シードが同じなら
-  8 bit・16 bit と同じ模様)、レンズ補正(バイリニアまたは Catmull-Rom の正確な重み)。
+  8 bit・16 bit と同じ模様)、レンズ補正(バイリニアまたは Catmull-Rom の正確な重み)、変形(ツイスト、つまむ、球面、波形、
+  波紋、極座標、ジグザグ、シアー)、明るさの最大値・最小値、オフセット。
 - **選択範囲**:長方形・楕円形選択ツールと投げ縄ツール、自動選択ツール、クイック選択ツール、すべてを選択、選択を解除、
   選択範囲を反転、選択範囲を変更(拡張、縮小、境界線、滑らかに、ぼかし)、レイヤーから選択範囲を読み込む、
   クイックマスク、被写体を選択、レイヤーマスク ▸ 選択範囲から。選択範囲は浮動小数点の範囲(0〜1)です。自動選択ツール、
@@ -566,7 +575,8 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
   覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチツール、コンテンツに応じた各機能、明るさ・コントラスト、ポスタリゼーション、
   2 階調化、特定色域の選択、粒子の色調補正(調整レイヤーは保持されますが 32 bit では描画しません。変換のときにお知らせします)、
   Mosh、G'MIC、32 bit で使えない描画モード。
-- 「**32 bit/チャンネルではまだ使用できません**」:まだ移植していないもの。Camera Raw フィルター、背景を削除、テキスト・
+- 「**32 bit/チャンネルではまだ使用できません**」:まだ移植していないもの。Camera Raw フィルター、ぼかし(ボックス・放射状・
+  表面)、ダスト&スクラッチ、中間値、アンシャープマスク、ハイパス、エンボス、モザイク、輪郭検出、雲模様 1・2、背景を削除、テキスト・
   シェイプ・パスの編集、レイヤースタイルの編集、スマートオブジェクトとスマートフィルター、クリッピングの基点の削除
   (クリップされたレイヤーに焼き込む処理)、アートボード・スライス・SVG の書き出し、タイムライン、色の変換(プロファイルの
   指定とプロファイル変換)。
@@ -626,7 +636,7 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 **Camera Raw フィルター**は、Photoshop では 32 bit でも使えますが、ここではグレー表示(「まだ」)のままです。スライダー
 (白レベル、ハイライト、トーンカーブ、明瞭度のマスク)が 0〜1 の表示用の値を前提にしているため、移植には HDR トーンの
 ローカル露光量補正(P5f)と同じシーンを基準にした処理が必要で、16 bit の浮動小数点の処理を切り詰めた値に適用するだけでは
-足りないからです。NekoPhoto には破壊的なアンシャープマスクやスクロールのフィルターはありません。スマートフィルターの
-アンシャープマスクは 32 bit のスマートオブジェクトを待ちます(シャープツールは使えます)。
+足りないからです。アンシャープマスクは、フィルターとしてもスマートフィルターとしても 32 bit ではまだ使えません
+(シャープツールは使えます)。
 
 **メモリ**:32 bit の値は 4 バイトなので、持てるピクセル数は 8 bit の 4 分の 1 です(1 枚 2,500 万画素、レイヤー合計 2 億 5,000 万画素)。
