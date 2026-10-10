@@ -46,6 +46,12 @@ QToolButton:hover { background: #33243d; }
 QToolButton:checked { background: #ff7eb6; color: #1b1320; }
 QToolButton:pressed { background: #ffa3cc; }
 
+/* The options bar's brush preset and font pickers are buttons that look like fields. */
+app--BrushPicker, app--FontPicker {
+    background: #120c16; color: #f6e8f2; border: 1px solid #4a3556; border-radius: 8px; padding: 2px 10px;
+}
+app--BrushPicker:hover, app--FontPicker:hover { border-color: #ff7eb6; }
+
 QStatusBar { background: #150e19; border-top: 1px solid #3d2c47; color: #c9b2d6; }
 QStatusBar::item { border: none; }
 

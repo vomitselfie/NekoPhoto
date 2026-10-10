@@ -643,7 +643,15 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
     }
     if (layer.opacity != 1 || layer.blendMode != BlendMode::Normal || (layer.isGroup && !layer.passThrough)) {
         auto* info = new QLabel(QStringLiteral("%1%").arg(int(std::round(layer.opacity * 100))));
-        info->setStyleSheet(hintStyle(" font-size: 10px;"));
+        // On a selected row the hint colour would vanish into the highlight: there it takes the highlight's text colour.
+        const bool selectedRow = session_->activeLayerId() == layer.id || session_->selectedLayerIds().count(layer.id);
+        if (selectedRow) {
+            QColor c = palette().color(QPalette::HighlightedText);
+            c.setAlphaF(0.75);
+            info->setStyleSheet(QStringLiteral("color: %1; font-size: 10px;").arg(c.name(QColor::HexArgb)));
+        } else {
+            info->setStyleSheet(hintStyle(" font-size: 10px;"));
+        }
         h->addWidget(info);
     }
     return row;
