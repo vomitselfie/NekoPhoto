@@ -38,9 +38,10 @@ QDockWidget::title {
 }
 QDockWidget > QWidget { background: #1f1625; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
 
-QToolBar { background: #150e19; border: none; spacing: 3px; padding: 3px; }
+QToolBar { background: #150e19; border: none; spacing: 1px; padding: 2px; }
 QToolBar::separator { background: #3d2c47; width: 1px; margin: 4px; }
 QToolButton { border-radius: 9px; padding: 3px; }
+QToolBar QToolButton { padding: 1px; margin: 0px; }
 QToolButton:hover { background: #33243d; }
 QToolButton:checked { background: #ff7eb6; color: #1b1320; }
 QToolButton:pressed { background: #ffa3cc; }

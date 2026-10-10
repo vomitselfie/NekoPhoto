@@ -1,4 +1,5 @@
 // The main window's menus, tool rail and colour swatches.
+#include "Theme.h"
 #include "ExportAs.h"
 #include "Automation.h"
 #include "CommandPalette.h"
@@ -493,7 +494,7 @@ void MainWindow::buildMenus() {
         auto choice = color::askConvertProfile(this, session_->document()->profile);
         if (!choice) return;
         const QString key = profileKey(choice->profile);
-        QApplication::setOverrideCursor(Qt::WaitCursor);
+        QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
         if (!key.isEmpty()) {
             runCommand("document.profile", {{"action", "convert"}, {"profile", key}, {"intent", QString::fromLatin1(compositor::renderingIntentKey(choice->options.intent))},
                                             {"blackPointCompensation", choice->options.blackPointCompensation}}, tr("Convert to Profile"));

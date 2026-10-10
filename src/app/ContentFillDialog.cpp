@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "ContentFillDialog.h"
 #include "ActionLibrary.h"
 #include "ImageConvert.h"
@@ -137,7 +138,7 @@ void ContentFillDialog::previewFill() {
     r.newLayer = false;   // the preview shows the layer as it would look
     LayerTransform placed;
     QString error;
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
     auto result = session_->contentAwareFillResult(r, placed, &error);
     QApplication::restoreOverrideCursor();
     if (!result) { QMessageBox::warning(this, windowTitle(), error); return; }
@@ -153,13 +154,13 @@ void ContentFillDialog::apply() {
     // Both choices are pixels.contentAwareFill (the command path; an error is shown by it).
     const QJsonObject step{{"sampling", r.sampling == ContentFillRequest::Sampling::All ? "all" : "auto"}, {"output", r.newLayer ? "new" : "current"}};
     if (session_->commandsRouted()) {
-        QApplication::setOverrideCursor(Qt::WaitCursor);
+        QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
         const bool filled = session_->runCommand(QStringLiteral("pixels.contentAwareFill"), step).has_value();
         QApplication::restoreOverrideCursor();
         if (filled) accept();
         return;
     }
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
     const bool done = session_->contentAwareFill(&error, r);
     QApplication::restoreOverrideCursor();
     if (!done) { QMessageBox::warning(this, windowTitle(), error); return; }

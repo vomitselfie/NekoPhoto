@@ -1,5 +1,6 @@
 // The main window's file handling: new, open, import, save, export, and files dropped on the window.
 #include <QLocale>
+#include "Theme.h"
 #include "Platform.h"
 #include "TextLayer.h"
 #include "MainWindow.h"
@@ -144,7 +145,7 @@ void MainWindow::openPath(const QString& path) {
 
 void MainWindow::openLayeredFile(const QString& path) {
     // The import reads the whole file; a big one takes a moment.
-    QApplication::setOverrideCursor(Qt::BusyCursor);
+    QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
     const std::string file = path.toStdString();
     const bool clip = hasSuffix(path, {".clip"}), ase = hasSuffix(path, {".ase", ".aseprite"}), psd = hasSuffix(path, {".psd", ".psb"});
     const bool affinity = hasSuffix(path, {".afphoto", ".afdesign", ".afpub", ".af"});
@@ -159,7 +160,7 @@ void MainWindow::openLayeredFile(const QString& path) {
         const std::optional<bool> choice = askPsdMergedOnly(path);
         if (!choice) return;
         mergedOnly = *choice;
-        QApplication::setOverrideCursor(Qt::BusyCursor);
+        QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
     }
     QApplication::restoreOverrideCursor();
     DocumentSource source;
@@ -239,7 +240,7 @@ std::optional<PsdImport> MainWindow::readLayeredSource(DocumentSource& source, Q
     const bool clip = hasSuffix(path, {".clip"}), ase = hasSuffix(path, {".ase", ".aseprite"}), psd = hasSuffix(path, {".psd", ".psb"});
     std::string error;
     std::optional<PsdImport> imported;
-    QApplication::setOverrideCursor(Qt::BusyCursor);
+    QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
     if (isVectorFilePath(path)) {
         // SVG as shape layers, PDF as a rendered page (VectorFiles.h).
         QString message;
@@ -303,7 +304,7 @@ namespace {
 compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error, std::optional<compositor::ColorProfile>* embedded) {
     if (compositor::isRawPath(path.toStdString())) {
         // A camera RAW file, developed through LibRaw (a few seconds for a large sensor).
-        QApplication::setOverrideCursor(Qt::BusyCursor);
+        QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
         std::string message;
         auto developed = compositor::decodeRaw(path.toStdString(), &message);
         QApplication::restoreOverrideCursor();
@@ -454,7 +455,7 @@ bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenR
         developed = dialog.developed();
     } else {
         if (request) { settings = request->settings.normalized(); asObject = request->asSmartObject; bits = request->bitsPerChannel; }
-        QApplication::setOverrideCursor(Qt::BusyCursor);
+        QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
         developed = compositor::developRaw(*bytes, settings, {}, &why);
         QApplication::restoreOverrideCursor();
         if (!developed) { if (error) *error = QString::fromStdString(why); return false; }
@@ -513,7 +514,7 @@ bool MainWindow::editSmartObjectContents(QString* errorOut, const compositor::Ca
             developed = dialog.developed();
         } else {
             std::string why;
-            QApplication::setOverrideCursor(Qt::BusyCursor);
+            QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
             developed = compositor::developRaw(*raw->bytes, settings, {}, &why);
             QApplication::restoreOverrideCursor();
             if (!developed) return fail(QString::fromStdString(why));
@@ -599,7 +600,7 @@ std::optional<EditorSession::LoadedProject> MainWindow::readSource(DocumentSourc
             std::string why;
             auto bytes = std::make_shared<const std::vector<uint8_t>>(compositor::readRawFileBytes(path.toStdString(), &why));
             if (bytes->empty()) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
-            QApplication::setOverrideCursor(Qt::BusyCursor);
+            QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
             std::shared_ptr<compositor::Image16> developed = compositor::developRaw(*bytes, source.raw, {}, &why);
             QApplication::restoreOverrideCursor();
             if (!developed) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
@@ -721,7 +722,7 @@ void MainWindow::quickExport(bool layer) {
 
 void MainWindow::writeExport(const QJsonObject& params) {
     const QString name = QFileInfo(params.value("path").toString()).fileName();
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
     // Any error is shown once the busy cursor is gone (or goes to the sink a caller set).
     const QString title = tr("Couldn’t export %1").arg(name);
     QString* const sink = errorSink_;
@@ -786,7 +787,7 @@ void MainWindow::exportPsd() {
                            : askExportPath(tr("Export Photoshop Document"), tr("Photoshop document (*.psd);;Photoshop large document (*.psb)"), {"psd", "psb"});
     if (path.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
     compositor::PsdExportSummary summary;
     std::string error;
     compositor::PsdExportOptions options = app::psdExportOptions();
@@ -803,7 +804,7 @@ void MainWindow::exportSvg() {
     QString path = askExportPath(tr("Export SVG"), tr("SVG image (*.svg)"), {"svg"});
     if (path.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
     compositor::SvgExportSummary summary;
     std::string error;
     const bool ok = compositor::exportSvg(*session_->document(), path.toStdString(), &summary, &error);
@@ -845,7 +846,7 @@ void MainWindow::exportGif() {
     if (!convert) return;
     QString path = askExportPath(tr("Export Animated GIF"), tr("GIF image (*.gif)"), {"gif"});
     if (path.isEmpty()) return;
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
     std::string error;
     std::optional<Document> converted;
     if (*convert && color::hasNonSrgbProfile(*session_->document())) {

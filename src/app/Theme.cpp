@@ -1,6 +1,12 @@
 #include "Theme.h"
 #include <QApplication>
 #include <QFile>
+#include <QGuiApplication>
+#include <QPainter>
+#include <QPixmap>
+#include <QScreen>
+#include <QSvgRenderer>
+#include <QWidget>
 #include <QPalette>
 #include <QSettings>
 #include <QStyle>
@@ -111,6 +117,48 @@ Scheme desktopScheme() {
     return Scheme::Unknown;
 }
 
+bool gothKitty() { return themeSetting() == QLatin1String("gothkitty"); }
+
+/// A cursor drawn from one of the theme's SVGs, 32 pixels across at the screen's scale, with its hot spot in those pixels.
+QCursor svgCursor(const QString& name, QPoint hotSpot) {
+    const qreal dpr = QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->devicePixelRatio() : 1.0;
+    QPixmap pixmap(QSize(32, 32) * dpr);
+    pixmap.setDevicePixelRatio(dpr);
+    pixmap.fill(Qt::transparent);
+    QSvgRenderer svg(QStringLiteral(":/gothkitty/%1.svg").arg(name));
+    QPainter p(&pixmap);
+    svg.render(&p, QRectF(0, 0, 32, 32));
+    p.end();
+    return QCursor(pixmap, hotSpot.x(), hotSpot.y());
+}
+
+/// Gives every window the theme's pointer as it is shown (its widgets inherit it unless they choose their own, as the
+/// canvas's tool cursors and the text fields' I-beam do), and takes it back when the theme changes.
+class WindowCursors : public QObject {
+public:
+    bool eventFilter(QObject* object, QEvent* event) override {
+        if (event->type() == QEvent::Show) if (auto* w = qobject_cast<QWidget*>(object); w && w->isWindow()) dress(w);
+        return false;
+    }
+    static void dress(QWidget* w) {
+        if (w->testAttribute(Qt::WA_SetCursor) && !w->property("themeCursor").toBool()) return;   // its own cursor
+        w->setCursor(themedCursor(Qt::ArrowCursor));
+        w->setProperty("themeCursor", true);
+    }
+    static void undress(QWidget* w) {
+        if (!w->property("themeCursor").toBool()) return;
+        w->unsetCursor();
+        w->setProperty("themeCursor", false);
+    }
+};
+
+void applyWindowCursors(bool on) {
+    static WindowCursors* filter = nullptr;
+    if (on && !filter) { filter = new WindowCursors; qApp->installEventFilter(filter); }
+    if (!on && filter) { qApp->removeEventFilter(filter); delete filter; filter = nullptr; }
+    for (QWidget* w : QApplication::topLevelWidgets()) on ? WindowCursors::dress(w) : WindowCursors::undress(w);
+}
+
 bool paletteIsDark(const QPalette& p) { return p.color(QPalette::Window).lightness() < 128; }
 
 } // namespace
@@ -131,6 +179,7 @@ void applyTheme() {
     // Only Goth Kitty draws with a stylesheet; every other choice clears it.
     qApp->setStyleSheet(choice == "gothkitty" ? gothKittyStyleSheet() : QString());
     qApp->setProperty("canvasBackdrop", choice == "gothkitty" ? QVariant(QColor(33, 23, 40)) : QVariant());
+    applyWindowCursors(choice == "gothkitty");
     if (choice == "gothkitty") {
         if (QApplication::style()->objectName() != QLatin1String("fusion")) QApplication::setStyle(QStyleFactory::create("Fusion"));
         QApplication::setPalette(gothKittyPalette());
@@ -152,6 +201,17 @@ void applyTheme() {
     // Fusion draws both palettes consistently; the platform style may not.
     if (QApplication::style()->objectName() != QLatin1String("fusion")) QApplication::setStyle(QStyleFactory::create("Fusion"));
     QApplication::setPalette(wantDark ? darkPalette() : QStyleFactory::create("Fusion")->standardPalette());
+}
+
+QCursor themedCursor(Qt::CursorShape shape) {
+    if (!gothKitty()) return QCursor(shape);
+    switch (shape) {
+    case Qt::ArrowCursor: return svgCursor(QStringLiteral("cursor"), QPoint(4, 3));
+    case Qt::BusyCursor:
+    case Qt::WaitCursor: return svgCursor(QStringLiteral("busy"), QPoint(16, 16));
+    case Qt::ForbiddenCursor: return svgCursor(QStringLiteral("forbidden"), QPoint(16, 16));
+    default: return QCursor(shape);
+    }
 }
 
 } // namespace app

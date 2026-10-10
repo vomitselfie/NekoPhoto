@@ -1,4 +1,4 @@
-// Tool icons from Lucide (ISC), bundled as SVG and tinted to the palette so
+// Tool icons from MingCute (Apache-2.0; Lucide, ISC, for the lasso and the mask), bundled as SVG and tinted to the palette so
 // they read on light and dark themes; the checked state uses the highlight's
 // text colour.
 #pragma once

@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "Style.h"
 #include "Names.h"
 #include "FilterDialog.h"
@@ -517,7 +518,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     // The model runs once, off the UI thread; the sliders only redo the refinement. A quick coarse model,
     // when there is one, gives a preview within a few milliseconds while the chosen model works.
     computing_ = true;
-    setCursor(Qt::BusyCursor);
+    setCursor(themedCursor(Qt::BusyCursor));
     std::shared_ptr<const Image> image = guide_;
     std::string quick = quickModelPath == modelPath_ ? std::string() : quickModelPath.toStdString();
     const QString path = modelPath_;
@@ -545,7 +546,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
 void BackgroundDialog::startDetail() {
     if (!coarse_ || detailed_ || computing_ || !guide_) return;
     computing_ = true;
-    setCursor(Qt::BusyCursor);
+    setCursor(themedCursor(Qt::BusyCursor));
     if (worker_.joinable()) worker_.join();
     std::shared_ptr<const Image> image = guide_;
     const QString path = modelPath_;

@@ -222,7 +222,8 @@ qt_add_resources(nekophoto "gothkitty" PREFIX "/gothkitty" BASE theme/gothkitty 
     theme/gothkitty/gothkitty.qss theme/gothkitty/heart.svg theme/gothkitty/heart-hover.svg theme/gothkitty/check.svg
     theme/gothkitty/uncheck.svg theme/gothkitty/radio-on.svg theme/gothkitty/radio-off.svg theme/gothkitty/bow.svg
     theme/gothkitty/arrow-down.svg theme/gothkitty/check-disabled.svg theme/gothkitty/uncheck-disabled.svg
-    theme/gothkitty/close.svg theme/gothkitty/close-hover.svg theme/gothkitty/branch-open.svg theme/gothkitty/branch-closed.svg)
+    theme/gothkitty/close.svg theme/gothkitty/close-hover.svg theme/gothkitty/branch-open.svg theme/gothkitty/branch-closed.svg
+    theme/gothkitty/cursor.svg theme/gothkitty/busy.svg theme/gothkitty/forbidden.svg)
 qt_add_resources(nekophoto "gmic_lists" PREFIX "/" FILES gmic/unsupported.txt)
 qt_add_resources(nekophoto "mypaint_brushes" PREFIX "/" FILES ${COMPOSITOR_BRUSH_FILES} brushes/mypaint/order.conf)
 # Translations (Qt Linguist): translations/nekophoto_<lang>.ts is compiled to .qm and embedded under :/i18n, so
