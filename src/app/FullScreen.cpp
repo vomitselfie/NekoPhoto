@@ -516,22 +516,28 @@ void FullScreenMode::moveFocusOut(Edge edge) {
     if (focus && edges_[size_t(edge)].flyout->isAncestorOf(focus) && window_->canvas_) window_->canvas_->setFocus();
 }
 
-void FullScreenMode::togglePinned(bool withTools) {
-    if (!active_) return;
-    std::vector<Edge> wanted;
-    for (Edge e : {Left, Top, Right, Bottom})
-        if ((withTools || e != Left) && hasContent(e)) wanted.push_back(e);
-    bool already = !wanted.empty();
+bool FullScreenMode::pinnedAll(bool withTools) const {
+    bool any = false;
     for (int i = 0; i < edgeCount; i++) {
-        const bool want = std::find(wanted.begin(), wanted.end(), Edge(i)) != wanted.end();
-        if (edges_[size_t(i)].pinned != want) already = false;
+        const bool want = (withTools || i != Left) && hasContent(Edge(i));
+        if (edges_[size_t(i)].pinned != want) return false;
+        any = any || want;
     }
+    return any;
+}
+
+void FullScreenMode::togglePinned(bool withTools) {
+    if (active_) pin(!pinnedAll(withTools), withTools);
+}
+
+void FullScreenMode::pin(bool on, bool withTools) {
+    if (!active_) return;
     for (int i = 0; i < edgeCount; i++) {
         EdgeState& s = edges_[size_t(i)];
-        const bool pin = !already && std::find(wanted.begin(), wanted.end(), Edge(i)) != wanted.end();
-        s.pinned = pin;
+        const bool want = on && (withTools || i != Left) && hasContent(Edge(i));
+        s.pinned = want;
         s.held = false;
-        slide(Edge(i), pin);
+        slide(Edge(i), want);
     }
 }
 

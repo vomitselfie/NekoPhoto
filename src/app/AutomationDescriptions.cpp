@@ -62,6 +62,8 @@ const MethodDoc methodDocs[] = {
     {"view.zoom", "Zoom the view (not the document).", "zoom:number Zoom factor, 1 = 100%; fit:bool=false Fit the document in the window"},
     {"view.exposure", "A 32-bit document's view (View > 32-bit Preview Options, the status bar's exposure): how the canvas shows its linear values, not the pixels; not an undo step. Returns the view; with no parameters, only reads it.",
      "exposure:number Stops, -20..20; gamma:number 0.1..9.99; method:(exposure-gamma|highlight-compression) Exposure and Gamma, or Highlight Compression"},
+    {"view.screenMode", "View > Screen Mode: standard, or full (nothing on screen but the canvas; at a screen edge the pointer slides out the tools, the options bar, the panels or the Timeline). The window, not the document; not an undo step. Returns the mode and the edges out; with no parameters, only reads it.",
+     "mode:(standard|full) The screen mode; panels:(hidden|all|exceptTools) In full screen: every edge kept out (Tab), all but the tools (Shift+Tab), or none"},
     {"debug.eye", "Test hook: a pointer event on a layer's eye button in the Layers panel.",
      "id:layer! The layer whose eye is pressed; to:layer The eye the pointer is over; action:(press|move|release)! The event"},
     {"debug.dragSmartFilter", "Test hook: drag a Smart Filter row in the Layers panel and release it above or below another entry row (refused unless in the same stack).",

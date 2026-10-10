@@ -1106,17 +1106,20 @@ void MainWindow::buildMenus() {
     // the menus.
     QMenu* screenMode = view->addMenu(tr("Scree&n Mode"));
     auto* screenModes = new QActionGroup(this);
-    QAction* standardMode = add(screenMode, Spec("view.screenMode.standard", tr("&Standard Screen Mode")).runs([this] { setScreenMode(false); }));
-    QAction* fullMode = add(screenMode, Spec("view.screenMode.fullScreen", tr("&Full Screen Mode")).runs([this] { setScreenMode(true); }));
+    // They run view.screenMode (the window, not the document: nothing is recorded).
+    QAction* standardMode = add(screenMode, Spec("view.screenMode.standard", tr("&Standard Screen Mode")).request("view.screenMode", [] { return QJsonObject{{"mode", "standard"}}; }));
+    QAction* fullMode = add(screenMode, Spec("view.screenMode.fullScreen", tr("&Full Screen Mode")).request("view.screenMode", [] { return QJsonObject{{"mode", "full"}}; }));
     for (QAction* a : {standardMode, fullMode}) { a->setCheckable(true); screenModes->addAction(a); }
     standardMode->setChecked(true);
     connect(fullScreen_, &FullScreenMode::activeChanged, this, [standardMode, fullMode](bool on) { fullMode->setChecked(on); standardMode->setChecked(!on); });
-    add(nullptr, Spec("view.screenMode.cycle", tr("Cycle Screen Modes"), {QKeySequence("F")}).runs([this] { setScreenMode(!fullScreen_->active()); }));
+    add(nullptr, Spec("view.screenMode.cycle", tr("Cycle Screen Modes"), {QKeySequence("F")})
+                     .request("view.screenMode", [this] { return QJsonObject{{"mode", fullScreen_->active() ? "standard" : "full"}}; }));
     screenMode->addSeparator();
     auto onlyFullScreen = [this] { return fullScreen_->active() ? QString() : tr("In Full Screen Mode only"); };
-    add(screenMode, Spec("view.screenMode.panels", tr("Show or Hide &Panels"), {QKeySequence(Qt::Key_Tab)}).runs([this] { fullScreen_->togglePinned(true); }).when(onlyFullScreen));
+    add(screenMode, Spec("view.screenMode.panels", tr("Show or Hide &Panels"), {QKeySequence(Qt::Key_Tab)})
+                        .request("view.screenMode", [this] { return QJsonObject{{"panels", fullScreen_->pinnedAll(true) ? "hidden" : "all"}}; }).when(onlyFullScreen));
     add(screenMode, Spec("view.screenMode.panelsExceptTools", tr("Show or Hide Panels &Except Tools"), {QKeySequence(Qt::SHIFT | Qt::Key_Tab)})
-                        .runs([this] { fullScreen_->togglePinned(false); }).when(onlyFullScreen));
+                        .request("view.screenMode", [this] { return QJsonObject{{"panels", fullScreen_->pinnedAll(false) ? "hidden" : "exceptTools"}}; }).when(onlyFullScreen));
     // F10 opens the menus (in full screen over the canvas, the menu bar showing while one is open).
     add(nullptr, Spec("view.showMenus", tr("Show Menus"), {QKeySequence(Qt::Key_F10)}).runs([this] { fullScreen_->showMenus(); }));
     view->addSeparator();

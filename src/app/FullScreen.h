@@ -91,6 +91,10 @@ public:
 
     /// Tab: every edge out and pinned, or (when they all are) back to hidden. Shift+Tab: the same without the tools.
     void togglePinned(bool withTools);
+    /// Every edge pinned out (`withTools`: the tools' too), or none; view.screenMode's `panels`.
+    void pin(bool on, bool withTools);
+    /// Whether exactly those edges are pinned (what Tab, or Shift+Tab, would hide again).
+    bool pinnedAll(bool withTools) const;
     /// F7 and the Window menu's panels: slides out the edge holding `dock` with its tab in front; again while it is out
     /// in front, slides it back.
     void revealPanel(QDockWidget* dock);

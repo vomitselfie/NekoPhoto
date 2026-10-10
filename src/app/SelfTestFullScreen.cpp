@@ -311,8 +311,44 @@ int fullScreen(MainWindow& w) {
         expect(!timelineDock->isVisible(), "Window > Timeline showed its dock in the window");
     } else expect(false, "no Window > Timeline command");
 
-    // Esc: first the edges slide back, then full screen ends.
+    // Window ▸ Actions, closed when full screen began: it joins the right column, in front.
+    if (auto* actionsDock = w.findChild<QDockWidget*>(QStringLiteral("actionsDock")); actionsDock && actionsDock->isHidden()) {
+        if (const Command* actions = w.commandRegistry().find(QStringLiteral("window.actions")); actions && actions->action) actions->action->trigger();
+        pump(50);
+        QTabWidget* tabs = fs->tabsHolding(actionsDock);
+        expect(out(FullScreenMode::Right) && fs->edgeHolding(actionsDock) == FullScreenMode::Right && tabs && tabs->tabText(tabs->currentIndex()) == actionsDock->windowTitle(),
+               "Window > Actions did not bring the Actions panel out on the right");
+        expect(!actionsDock->isVisible(), "Window > Actions showed its dock in the window");
+    } else expect(false, "no closed Actions dock");
+
+    // A tab opened in full screen: its options bar goes in the top flyout, nothing appears in the window.
+    {
+        fs->closeFlyouts();
+        const int before = w.currentTabIndex();
+        const int added = w.newTab();
+        pump(50);
+        bool shown = false;
+        for (QToolBar* t : w.findChildren<QToolBar*>()) if (t->isVisible() && !fs->flyout(FullScreenMode::Top)->isAncestorOf(t) && !fs->flyout(FullScreenMode::Left)->isAncestorOf(t)) shown = true;
+        expect(!shown, "a new tab's options bar showed in the window");
+        move(middle);
+        move(QPoint(middle.x(), 0));
+        expect(waitFor([&] { return out(FullScreenMode::Top); }), "the top edge did not slide out on the new tab");
+        const QList<QToolBar*> bars = fs->flyout(FullScreenMode::Top)->findChildren<QToolBar*>();
+        int visibleBars = 0;
+        for (QToolBar* t : bars) if (t->isVisible()) visibleBars++;
+        expect(visibleBars == 1, "the top flyout does not hold exactly the new tab's options bar");
+        move(middle);
+        w.closeTabAt(added);
+        w.selectTab(std::min(before, w.tabCount() - 1));
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);   // the closed tab's bar, as the event loop would
+        pump(50);
+        canvas = w.canvasAt(w.currentTabIndex());
+    }
+
+    // Esc: first the edges slide back (the right one, brought out by F7), then full screen ends.
     canvas->setFocus();
+    press(canvas, Qt::Key_F7, Qt::NoModifier);
+    expect(waitFor([&] { return out(FullScreenMode::Right); }), "F7 did not bring the right edge out before Esc");
     press(canvas, Qt::Key_Escape, Qt::NoModifier);
     pump(50);
     expect(fs->active() && noneOut(), "Esc did not slide the edges back first");
