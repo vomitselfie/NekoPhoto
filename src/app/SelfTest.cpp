@@ -1248,8 +1248,13 @@ int search(MainWindow& w) {
 int heldKeys(MainWindow& w) {
     EditorSession& s = *w.session();
     buildDemoDocument(s);
+    // A roomy window with the document fitted: the clicks below land on document points, which a small window under a
+    // theme with taller panels (Windows' fonts under Goth Kitty) could leave outside the canvas.
+    w.resize(1400, 900);
     w.show();
     w.activateWindow();
+    QApplication::processEvents();
+    s.fitView();
     QApplication::processEvents();
     CanvasWidget* canvas = w.canvasAt(w.currentTabIndex());
     if (!canvas) { std::fprintf(stderr, "no canvas\n"); return 1; }
@@ -1257,6 +1262,12 @@ int heldKeys(MainWindow& w) {
     QApplication::processEvents();
     int failures = 0;
     auto expect = [&](bool ok, const char* what) { if (!ok) { std::fprintf(stderr, "held keys: %s\n", what); failures++; } };
+    // Every point the test clicks must be on the canvas widget, or the presses go nowhere.
+    for (QPointF p : {QPointF(30, 400), QPointF(330, 260), QPointF(350, 270), QPointF(320, 210), QPointF(40, 40), QPointF(100, 100)})
+        if (!canvas->rect().contains(canvas->viewPointForTest(p).toPoint())) {
+            std::fprintf(stderr, "held keys: document point %g,%g is off the canvas (%dx%d)\n", p.x(), p.y(), canvas->width(), canvas->height());
+            failures++;
+        }
     // A key press goes to the shortcuts first, then (when none took it) to the widget; true when a shortcut took it.
     auto press = [](QWidget* target, int key, Qt::KeyboardModifiers modifiers, const QString& text = QString()) {
         if (qt_sendShortcutOverrideEvent(target, 0, key, modifiers, text, false, 1)) return true;
@@ -1291,6 +1302,14 @@ int heldKeys(MainWindow& w) {
     expect(s.tool() == Tool::Brush, "Alt changed the session's tool");
     click(sample, Qt::AltModifier);
     expect(expected.isValid() && expected != QColor(Qt::black) && s.foregroundColor == expected, "the held Eyedropper did not sample the foreground");
+    if (s.foregroundColor != expected) {
+        // What it saw, for a failure only one platform shows: the colours, where the click landed, what took it.
+        const QPointF at = canvas->viewPointForTest(sample);
+        QWidget* under = QApplication::widgetAt(canvas->mapToGlobal(at.toPoint()));
+        std::fprintf(stderr, "  expected %s, foreground %s, held tool %d, click at %g,%g on a %dx%d canvas, widget there: %s\n",
+                     qPrintable(expected.name(QColor::HexArgb)), qPrintable(s.foregroundColor.name(QColor::HexArgb)), int(canvas->heldTool().value_or(Tool::Move)),
+                     at.x(), at.y(), canvas->width(), canvas->height(), under ? under->metaObject()->className() : "none");
+    }
     expect(s.backgroundColor == QColor(Qt::white), "the held Eyedropper changed the background");
     expect(s.undoNames().size() == stepsBefore, "Alt-click with the Brush painted");
     release(canvas, Qt::Key_Alt, Qt::NoModifier);
