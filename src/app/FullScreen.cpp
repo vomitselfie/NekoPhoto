@@ -301,7 +301,7 @@ void FullScreenMode::build() {
     for (QDockWidget* d : docks) if (!d->isHidden()) d->hide();
 
     // The tool rail on the left, the tab's options bar at the top.
-    rail_ = w->toolRail_;
+    rail_ = w->toolRail_ && !w->toolRail_->isHidden() ? w->toolRail_ : nullptr;   // a rail the person closed stays closed
     if (rail_) {
         w->removeToolBar(rail_);
         edges_[Left].flyout->body()->insertWidget(0, rail_, 0, Qt::AlignTop | Qt::AlignLeft);
