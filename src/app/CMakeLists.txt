@@ -77,6 +77,7 @@ qt_add_executable(nekophoto
     SelfTest.h
     SelfTest.cpp
     SelfTestWork.cpp
+    SelfTestFullScreen.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     DocumentSource.h
@@ -186,6 +187,8 @@ qt_add_executable(nekophoto
     Scrub.cpp
     ImportBanner.h
     ImportBanner.cpp
+    FullScreen.h
+    FullScreen.cpp
     WelcomeDialog.h
     WelcomeDialog.cpp
     Dialogs.h

@@ -20,6 +20,8 @@
 #include "KeyboardShortcuts.h"
 #include "ToolOptionsBar.h"
 #include "WelcomeDialog.h"
+#include "FullScreen.h"
+#include <QKeyEvent>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -248,6 +250,7 @@ MainWindow::MainWindow() {
         if (session_->featuresGated() && (feature.empty() || !session_->supportsFeature(feature))) return session_->unavailableTip(feature);
         return {};
     });
+    fullScreen_ = new FullScreenMode(this);   // after the docks, whose panels it moves into its edges
     buildToolRail();
     buildMenus();
     applyShortcuts();   // the person's keys over the defaults (Edit > Keyboard Shortcuts)
@@ -432,6 +435,7 @@ void MainWindow::switchTo(int index) {
     if (timeline_) timeline_->setSession(session_);
     if (histogram_) histogram_->setSession(session_);
     tab.options->setVisible(true);
+    if (fullScreen_) fullScreen_->currentTabChanged();   // in full screen, the options bar goes in the top edge
     // The import bar shows over its own document only.
     if (importBanner_) importBanner_->setVisible(bannerSession_ && bannerSession_ == session_ && !importBanner_->notes().isEmpty());
     { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
@@ -764,10 +768,27 @@ void MainWindow::closeEvent(QCloseEvent* e) {
     for (int i = 0; i < int(tabs_.size()); i++) if (i != current_) order.push_back(i);
     for (int i : order) if (!confirmDiscard(i)) { e->ignore(); return; }
     QSettings settings;
-    settings.setValue("window/geometry", saveGeometry());
-    settings.setValue("window/state", saveState());
+    // In full screen, the layout from before it: the next launch opens the standard window as it was.
+    const bool full = fullScreen_ && fullScreen_->active();
+    settings.setValue("window/geometry", full ? fullScreen_->normalGeometry() : saveGeometry());
+    settings.setValue("window/state", full ? fullScreen_->normalState() : saveState());
     if (autosave_) autosave_->finish();   // a clean quit leaves nothing to recover
     e->accept();
+}
+
+void MainWindow::setScreenMode(bool fullScreen) {
+    if (fullScreen_->active() == fullScreen) return;
+    fullScreen_->setActive(fullScreen);
+    refreshActions();   // Tab and Shift+Tab work in full screen only
+}
+
+void MainWindow::keyPressEvent(QKeyEvent* e) {
+    if (e->key() == Qt::Key_Escape && e->modifiers() == Qt::NoModifier && fullScreen_ && fullScreen_->active()) {
+        if (!fullScreen_->closeFlyouts()) setScreenMode(false);
+        e->accept();
+        return;
+    }
+    QMainWindow::keyPressEvent(e);
 }
 
 void MainWindow::showError(const QString& title, const QString& message) {
@@ -810,6 +831,19 @@ void MainWindow::showPanel(const QString& name) {
     else if (name == "timeline") {
         timelineDock_->show();
         if (session_->hasDocument() && session_->document()->animation.empty()) session_->timelineFramesFromLayers();
+    } else if (name == "fullscreen" || name.startsWith("fullscreen:")) {
+        // Full Screen Mode, for screenshots: no pointer to follow, the slides immediate.
+        fullScreen_->setPolling(false);
+        fullScreen_->setTimings(0, 500);
+        const QString part = name.section(':', 1);
+        if (part == "bottom") showPanel("timeline");   // the bottom edge holds the Timeline when it is open
+        setScreenMode(true);
+        if (part == "left") fullScreen_->showEdge(FullScreenMode::Left);
+        else if (part == "top") fullScreen_->showEdge(FullScreenMode::Top);
+        else if (part == "right") fullScreen_->showEdge(FullScreenMode::Right);
+        else if (part == "bottom") fullScreen_->showEdge(FullScreenMode::Bottom);
+        else if (part == "panels") fullScreen_->togglePinned(true);
+        else if (part == "menus") fullScreen_->showMenus();
     } else if (name == "batch") {
         if (ActionLibrary::instance().actions().empty()) {
             RecordedAction sample{tr("Web Thumbnail"), {{"image.resize", QJsonObject{{"width", 400}}, true}, {"document.export", QJsonObject{{"path", "/tmp/thumb.png"}, {"overwrite", true}}, false}}};
