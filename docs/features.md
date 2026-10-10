@@ -110,6 +110,7 @@ interface language, and runs it; the last eight used come first.
 - An open project follows its file on disk: when another app or an agent writes the `.nekophoto` file or the `.comp` folder, the tab reloads in place (a project merely touched, or caught half written, is left alone, and unsaved work is never replaced without asking)
 
 - CPU power (Edit > Preferences > Performance): All, High, Medium or Low. Fewer cores for NekoPhoto's work, and at Medium and Low a lower priority, so a render or another heavy program running beside it gets the CPU first; `NEKOPHOTO_CPU=low` for one run
+- The look: Goth Kitty by default, an original kawaii-goth theme (plum-black panels, candy pink and lavender, heart-shaped slider handles, bows on the panel titles, a pink pointer and a cat-face busy cursor); Edit > Preferences > Theme switches to System, Dark or Light at once. The tool rail and panel buttons use [MingCute](https://www.mingcute.com) icons in every theme
 - The interface in English or Japanese (Photoshop's Japanese terms): it follows the desktop's language, or Edit > Preferences > Language picks one; `--lang ja` for one run ([translating.md](translating.md) explains adding a language)
 
 ## Working faster
@@ -237,6 +238,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 開いているプロジェクトはディスク上の変更に追従します:他のアプリやエージェントが `.nekophoto` ファイルや `.comp` フォルダーを書き換えると、タブがその場で読み込み直します(触れただけの変更や書き込み途中は無視し、未保存の作業は確認なしに置き換えません)
 
 - CPU パワー(編集 > 環境設定 > パフォーマンス):すべて・高・中・低。NekoPhoto が使うコア数を減らし、中と低では優先度も下げるので、横で動かしているレンダリングなどの重い処理に CPU を譲ります。その回だけなら `NEKOPHOTO_CPU=low`
+- 見た目は初期設定でゴスキティ。プラム色がかった黒のパネルにキャンディピンクとラベンダー、ハート型のスライダー、パネル名にリボン、ピンクのポインターと猫の顔の待機カーソルを添えたオリジナルのかわいいゴス系テーマです。編集 > 環境設定 > テーマ で システム・ダーク・ライト にすぐ切り替えられます。ツールパネルとパネルのボタンのアイコンは、どのテーマでも [MingCute](https://www.mingcute.com) です
 - 画面表示は日本語と英語(用語は Photoshop 日本語版に準拠)。デスクトップの言語に合わせるか、編集 > 環境設定 > 言語 で選べます。`--lang ja` でその回だけ切り替えることもできます
 
 ### 操作

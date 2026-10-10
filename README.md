@@ -285,6 +285,9 @@ profile. The G'MIC filters need `gmic.exe` on `PATH`.
   click mode downloads its own model from the options bar.
 - The interface is in **English and Japanese**: it follows the desktop's language, and Edit › Preferences › Language
   picks one (at the next launch).
+- It dresses in **Goth Kitty** out of the box, an original kawaii-goth look: plum-black panels, candy pink and lavender,
+  heart-shaped slider handles and a bow on every panel title. Prefer something plainer? Edit › Preferences › Theme
+  also offers System, Dark and Light, and switches at once.
 - NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor) for macOS and was called
   compositor-linux until 1.0; your settings, brushes and downloaded model move over by themselves. `.comp` project
   folders from older versions and the Mac app still open and save as they are.
@@ -608,6 +611,9 @@ curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/in
   クリックで選ぶモードは、オプションバーから専用のモデルをダウンロードします。
 - 画面表示は **日本語と英語** に対応しています。デスクトップの言語に合わせて切り替わり、編集 › 環境設定 › 言語 で
   選ぶこともできます(次回の起動から反映されます)。
+- 初期設定の見た目は **ゴスキティ**。プラム色がかった黒のパネルにキャンディピンクとラベンダー、ハート型のスライダー、
+  パネル名にはリボンを添えた、オリジナルのかわいいゴス系テーマです。落ち着いた見た目がよければ、編集 › 環境設定 › テーマ
+  で システム・ダーク・ライト にすぐ切り替えられます。
 - NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の Linux 移植として始まり、バージョン 1.0
   までは compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは自動で引き継がれます。以前のバージョンや
   Mac 版の `.comp` プロジェクトフォルダーも、そのまま開いて保存できます。
