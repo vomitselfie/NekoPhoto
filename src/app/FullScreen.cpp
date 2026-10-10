@@ -380,6 +380,14 @@ void FullScreenMode::addWindowShortcuts() {
     };
     for (QAction* top : w->menuBar()->actions())
         if (QMenu* menu = top->menu()) walk(menu);
+    // The tool rail's letters (B, V, M, …) and any toolbar key live on toolbars that are hidden in their flyouts too;
+    // a hidden widget's shortcuts don't fire, so they are lent to the window as well.
+    for (QToolBar* bar : w->findChildren<QToolBar*>())
+        for (QAction* a : bar->actions()) {
+            if (a->shortcuts().isEmpty() || own.contains(a) || addedShortcuts_.contains(a)) continue;
+            w->addAction(a);
+            addedShortcuts_ << a;
+        }
 }
 
 void FullScreenMode::leave() {

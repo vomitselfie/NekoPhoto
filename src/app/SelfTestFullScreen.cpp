@@ -219,6 +219,10 @@ int fullScreen(MainWindow& w) {
     // Menu commands keep their keys without the menu bar: Ctrl+0 (Fit on Screen) answers.
     canvas->setFocus();
     expect(press(canvas, Qt::Key_0, Qt::ControlModifier, QStringLiteral("0")), "Ctrl+0 did nothing in full screen");
+    // So do the tool rail's letters, with the rail out of sight in its flyout: E picks the Eraser, B the Brush.
+    expect(press(canvas, Qt::Key_E, Qt::NoModifier, QStringLiteral("e")) && s.tool() == Tool::Brush && s.brushErase, "E did not pick the Eraser in full screen");
+    expect(press(canvas, Qt::Key_B, Qt::NoModifier, QStringLiteral("b")) && s.tool() == Tool::Brush && !s.brushErase, "B did not pick the Brush in full screen");
+    s.selectTool(Tool::Hand);
 
     // F10, and Alt alone: the menu bar over the canvas with a menu open; it goes when the menu closes.
     canvas->setFocus();
