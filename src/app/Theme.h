@@ -7,7 +7,7 @@
 
 namespace app {
 
-/// "system", "dark", "light" or "gothkitty" (QSettings appearance/theme; COMPOSITOR_THEME overrides for a run).
+/// "gothkitty" (the default), "system", "dark" or "light" (QSettings appearance/theme; COMPOSITOR_THEME overrides for a run).
 QString themeSetting();
 void setThemeSetting(const QString& value);
 

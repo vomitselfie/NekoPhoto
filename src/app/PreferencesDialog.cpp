@@ -44,10 +44,10 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     auto* appearanceRow = new QHBoxLayout(appearance);
     appearanceRow->addWidget(new QLabel(tr("Theme")));
     auto* theme = new QComboBox;
+    theme->addItem(tr("Goth Kitty"), "gothkitty");
     theme->addItem(tr("System"), "system");
     theme->addItem(tr("Dark"), "dark");
     theme->addItem(tr("Light"), "light");
-    theme->addItem(tr("Goth Kitty"), "gothkitty");
     theme->setCurrentIndex(std::max(0, theme->findData(themeSetting())));
     connect(theme, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [theme](int) { setThemeSetting(theme->currentData().toString()); applyTheme(); });
     appearanceRow->addWidget(theme, 1);

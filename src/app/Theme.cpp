@@ -166,8 +166,9 @@ bool paletteIsDark(const QPalette& p) { return p.color(QPalette::Window).lightne
 QString themeSetting() {
     QString env = qEnvironmentVariable("COMPOSITOR_THEME");
     if (env == "dark" || env == "light" || env == "system" || env == "gothkitty") return env;
-    QString v = QSettings().value("appearance/theme", "system").toString();
-    return v == "dark" || v == "light" || v == "gothkitty" ? v : QStringLiteral("system");
+    // Goth Kitty unless the person chose another look (System follows the desktop, as before 1.8.12).
+    QString v = QSettings().value("appearance/theme", "gothkitty").toString();
+    return v == "dark" || v == "light" || v == "system" ? v : QStringLiteral("gothkitty");
 }
 
 void setThemeSetting(const QString& value) { QSettings().setValue("appearance/theme", value); }
