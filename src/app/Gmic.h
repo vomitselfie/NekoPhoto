@@ -64,8 +64,8 @@ public:
     /// patch-based inpainting built on them, plus every command of the definition file whose body calls one of those,
     /// directly or through others. `catalogueText` is the decompressed definition file (empty: the base set only).
     static QSet<QString> excludedCommands(const QByteArray& catalogueText);
-    /// The excluded set for the definition file in use (computed once).
-    static const QSet<QString>& excluded();
+    /// The excluded set for the definition file in use (computed again when that file changes).
+    static QSet<QString> excluded();
     /// The first excluded command named anywhere in `command`, or empty.
     static QString excludedIn(const QString& command);
 
@@ -81,12 +81,29 @@ public:
     explicit GmicRunner(QObject* parent = nullptr);
     ~GmicRunner() override;
 
-    /// G'MIC can run: the library is built in, or the executable is on PATH.
+    /// G'MIC can run: the library is built in, or the executable was found (locate()).
     static bool available();
     /// Filters run in-process through libgmic (no PNG round trip): built in and COMPOSITOR_GMIC_INPROCESS set.
     static bool inProcess();
+    /// Where the `gmic` executable was found, looked for in this order: COMPOSITOR_GMIC ("env"); a `gmic` folder
+    /// beside the app's executable, as someone unpacks G'MIC next to a portable NekoPhoto ("beside"); the copy
+    /// GmicStore downloads into the app's data folder ("downloaded"); then PATH ("path"). Empty when none.
+    struct Location { QString path, source; };
+    static Location locate();
     static QString executable();
+    /// The version of the executable found (`gmic -version`, asked once per executable), or libgmic's in-process.
     static QString version();
+    /// The executable's file name: gmic.exe on Windows, gmic elsewhere.
+    static QString executableName();
+    /// The folder beside the app's executable that may hold G'MIC (`<app dir>/gmic`).
+    static QString besideDirectory();
+    /// Where downloaded G'MIC builds live, one folder per version (`<app local data>/gmic`).
+    static QString downloadRoot();
+    /// The downloaded build the lookup uses: `downloadRoot()/<downloadVersion()>`.
+    static QString downloadedDirectory();
+    static QString downloadVersion() { return QStringLiteral("4.0.5"); }
+    /// Tests point the lookup at temporary folders (empty: the real ones).
+    static void setSearchRootsForTesting(const QString& appDir, const QString& dataDir);
     static QStringList tokenize(const QString& command);
     /// Whether automation may run `command`. G'MIC is a full language (it can run shell commands, read and
     /// write files, and fetch URLs), so a command from outside, where a prompt could have written it, must be

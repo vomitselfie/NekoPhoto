@@ -23,7 +23,7 @@
   <!-- compat-badges:start (tools/compat_table.py --write) -->
   <a href="docs/compatibility.md#at-a-glance"><img alt="PSD round trip: 117 of 117 files" src="https://img.shields.io/badge/PSD%20round%20trip-117%2F117-2ea44f?style=flat-square"></a>
   <a href="docs/compatibility.md#at-a-glance"><img alt="Matches Photoshop's render: 58 of 72 files" src="https://img.shields.io/badge/Photoshop%20match-58%2F72-97ca00?style=flat-square"></a>
-  <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 90 CTest suites" src="https://img.shields.io/badge/tests-90%20suites-2f7bf5?style=flat-square"></a>
+  <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 91 CTest suites" src="https://img.shields.io/badge/tests-91%20suites-2f7bf5?style=flat-square"></a>
   <a href="docs/automation.md"><img alt="Automation: 183 methods" src="https://img.shields.io/badge/automation-183%20methods-2f7bf5?style=flat-square"></a>
   <!-- compat-badges:end -->
 </p>
@@ -277,7 +277,8 @@ curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/in
 
 **Windows** (10 version 1903 or later, x86_64): download `NekoPhoto-<version>-windows-x86_64.zip` from the same page,
 unzip it anywhere and run `nekophoto.exe`. It is portable: nothing is installed, and settings live in your user
-profile. The G'MIC filters need `gmic.exe` on `PATH`.
+profile. Filter › G'MIC can download G'MIC for you (15 MB, from gmic.eu); a `gmic.exe` on `PATH`, or G'MIC unzipped
+into a `gmic` folder beside `nekophoto.exe`, works too.
 
 **Good to know**
 
@@ -356,7 +357,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
   <!-- compat-badges-ja:start (tools/compat_table.py --write) -->
   <a href="docs/compatibility.md#日本語"><img alt="PSD の往復: 117 個中 117 個" src="https://img.shields.io/badge/PSD%20%E5%BE%80%E5%BE%A9-117%2F117-2ea44f?style=flat-square"></a>
   <a href="docs/compatibility.md#日本語"><img alt="Photoshop の描画と一致: 72 個中 58 個" src="https://img.shields.io/badge/Photoshop%20%E3%81%A8%E4%B8%80%E8%87%B4-58%2F72-97ca00?style=flat-square"></a>
-  <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 90 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%2090%20%E5%80%8B-2f7bf5?style=flat-square"></a>
+  <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 91 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%2091%20%E5%80%8B-2f7bf5?style=flat-square"></a>
   <a href="docs/automation.md"><img alt="自動操作: メソッド 183 個" src="https://img.shields.io/badge/%E8%87%AA%E5%8B%95%E6%93%8D%E4%BD%9C-%E3%83%A1%E3%82%BD%E3%83%83%E3%83%89%20183%20%E5%80%8B-2f7bf5?style=flat-square"></a>
   <!-- compat-badges-ja:end -->
 </p>
@@ -603,7 +604,8 @@ curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/in
 
 **Windows**(10 バージョン 1903 以降、x86_64)では、同じページから `NekoPhoto-<version>-windows-x86_64.zip`
 をダウンロードし、好きな場所に展開して `nekophoto.exe` を起動します。インストール不要のポータブル版で、
-設定はユーザープロファイルに保存されます。G'MIC フィルターを使うには `gmic.exe` に PATH を通してください。
+設定はユーザープロファイルに保存されます。G'MIC はフィルター › G'MIC からダウンロードできます(15 MB、gmic.eu から)。
+PATH の通った `gmic.exe` や、`nekophoto.exe` と同じ場所の `gmic` フォルダーに展開した G'MIC も使えます。
 
 **知っておくと便利なこと**
 

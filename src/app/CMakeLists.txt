@@ -145,6 +145,8 @@ qt_add_executable(nekophoto
     Gmic.cpp
     GmicDialog.h
     GmicDialog.cpp
+    GmicStore.h
+    GmicStore.cpp
     TextLayer.h
     TextLayer.cpp
     TextDialog.h

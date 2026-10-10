@@ -1,5 +1,5 @@
-// Edit > Preferences: the AI background removal switch, model choice and
-// download, plus where the models live.
+// Edit > Preferences: the AI background removal switch, model choice and download, plus where the models live;
+// where G'MIC was found (and, on Windows, downloading it).
 #pragma once
 #include "ModelStore.h"
 #include <QDialog>
@@ -12,6 +12,8 @@ class QProgressBar;
 class QPushButton;
 
 namespace app {
+
+class GmicStore;
 
 class PreferencesDialog : public QDialog {
     Q_OBJECT
@@ -41,6 +43,14 @@ private:
     QPushButton* remove_;
     QPushButton* cancel_;
     std::optional<ModelStore::Download> active_;
+
+    void syncGmic();
+    QLabel* gmicStatus_;
+    QProgressBar* gmicProgress_;
+    QPushButton* gmicDownload_;
+    QPushButton* gmicRemove_;
+    QPushButton* gmicCancel_;
+    GmicStore* gmicStore_ = nullptr;
 };
 
 } // namespace app

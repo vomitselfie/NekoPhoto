@@ -17,8 +17,11 @@ class QTreeWidgetItem;
 class QVBoxLayout;
 class QWidget;
 class QNetworkAccessManager;
+class QProgressBar;
 
 namespace app {
+
+class GmicStore;
 
 class GmicDialog : public PixelDialog {
     Q_OBJECT
@@ -45,6 +48,8 @@ private:
     void previewFinished(std::shared_ptr<compositor::Image> result, QString error);
     void previewFinished16(std::shared_ptr<compositor::Image16> result, QString error);
     void updateFilters();
+    void downloadGmic();
+    void gmicInstalled();
 
     GmicCatalogue catalogue_;
     std::vector<GmicFilter> presets_;
@@ -65,6 +70,13 @@ private:
     QTimer debounce_;
     GmicRunner preview_runner_;
     QNetworkAccessManager* network_ = nullptr;
+    // G'MIC missing: the offer to download it (Windows), or how to install it.
+    QWidget* installBox_ = nullptr;
+    QLabel* installText_ = nullptr;
+    QPushButton* installButton_ = nullptr;
+    QPushButton* installCancel_ = nullptr;
+    QProgressBar* installProgress_ = nullptr;
+    GmicStore* store_ = nullptr;
     bool applying_ = false;
 };
 

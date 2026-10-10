@@ -28,7 +28,7 @@ const MethodDoc methodDocs[] = {
     {"rpc.methods", "Every method name.", ""},
     {"rpc.describe", "What a method does and takes: parameters with types, defaults and valid values. Without a method, a one-line summary of every method.",
      "method:string The method to describe, e.g. layers.set"},
-    {"app.info", "The editor's version and protocolVersion, the socket, the number of tabs, and what can run: removeBackground and clickSelect (their models are downloaded), scribble, raw (camera RAW files) and pdf (PDF files open).", ""},
+    {"app.info", "The editor's version and protocolVersion, the socket, the number of tabs, and what can run: removeBackground and clickSelect (their models are downloaded), scribble, raw (camera RAW files) and pdf (PDF files open); gmic is where G'MIC was found, {path, source: env, beside, downloaded or path, version}, or null when it is not installed.", ""},
     {"events.subscribe", "Push event lines on this connection when something changes; clients skip them while waiting for replies.",
      "kinds:array Kinds to receive: document, layers, selection, history, tool, view, tabs (default all)"},
     {"events.unsubscribe", "Stop the event lines on this connection.", ""},

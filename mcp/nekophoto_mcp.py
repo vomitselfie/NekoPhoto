@@ -196,7 +196,7 @@ def png(result: dict) -> Image:
 
 @look("App info")
 def app_info() -> str:
-    """Version, open tabs, and whether Remove Background is available."""
+    """Version, open tabs, whether Remove Background is available, and where G'MIC was found (gmic: path, source, version; null when not installed)."""
     return text(call("app.info"))
 
 

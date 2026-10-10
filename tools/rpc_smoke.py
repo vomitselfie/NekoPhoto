@@ -2154,6 +2154,13 @@ def main():
     info = rpc.call("app.info")
     assert info["name"] == "nekophoto", info
     print("version", info["version"], "platform", info["platform"])
+    # Where G'MIC was found: null, or {path, source, version} with source one of the lookup's places.
+    assert "gmic" in info, info
+    if info["gmic"] is not None:
+        assert info["gmic"]["source"] in ("env", "beside", "downloaded", "path", "library"), info["gmic"]
+        assert info["gmic"]["source"] == "library" or info["gmic"]["path"], info["gmic"]
+        print("gmic", info["gmic"]["source"], info["gmic"]["path"], info["gmic"]["version"])
+    assert (info["gmic"] is not None) == rpc.call("gmic.filters", search="-")["installed"] or (info["gmic"] or {}).get("source") == "library", info
 
     doc = rpc.call("document.info")
     assert doc["width"] > 0 and doc["layers"] > 0, doc
