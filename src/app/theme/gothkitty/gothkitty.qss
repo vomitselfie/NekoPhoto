@@ -56,7 +56,8 @@ QTabBar::tab {
 }
 QTabBar::tab:selected { background: #ff7eb6; color: #1b1320; font-weight: bold; }
 QTabBar::tab:hover:!selected { background: #33243d; color: #ffd6ea; }
-QTabBar::close-button { image: url(:/gothkitty/close.svg); subcontrol-position: right; margin: 2px; }
+QTabBar::tab:closable { padding-right: 6px; }
+QTabBar::close-button { image: url(:/gothkitty/close.svg); subcontrol-position: right; margin: 2px 6px 2px 2px; }
 QTabBar::close-button:hover { image: url(:/gothkitty/close-hover.svg); }
 
 /* ---- Buttons ---- */
@@ -111,9 +112,19 @@ QTreeView, QListView, QTableView, QTreeWidget, QListWidget {
     background: #170f1b; alternate-background-color: #1d1422; border: 1px solid #33243d; border-radius: 10px;
     selection-background-color: #ff7eb6; selection-color: #1b1320;
 }
-QTreeView::item, QListView::item { border-radius: 7px; padding: 2px; }
+QListView::item { border-radius: 7px; padding: 2px; }
+/* A tree row is one pill across its columns: only the first and last cells round their outer corners. */
+QTreeView::item { padding: 2px; border-radius: 0; }
+QTreeView::item:first { border-top-left-radius: 9px; border-bottom-left-radius: 9px; }
+QTreeView::item:last { border-top-right-radius: 9px; border-bottom-right-radius: 9px; }
+QTreeView::item:only-one { border-radius: 9px; }
 QTreeView::item:hover, QListView::item:hover { background: #2c2035; }
 QTreeView::item:selected, QListView::item:selected { background: #ff7eb6; color: #1b1320; }
+/* Only the rounded item shows the selection: not the branch column beside it, nor the row behind it. */
+QTreeView::branch, QTreeView::branch:selected, QTreeView::branch:hover { background: #170f1b; }
+QTreeView { show-decoration-selected: 0; }
+QTreeView::branch:has-children:closed { image: url(:/gothkitty/branch-closed.svg); }
+QTreeView::branch:has-children:open { image: url(:/gothkitty/branch-open.svg); }
 QHeaderView::section { background: #241a2b; color: #ffd6ea; border: none; border-bottom: 1px solid #3d2c47; padding: 4px 8px; }
 
 /* ---- Scrollbars: thin lavender-to-pink candy ---- */
