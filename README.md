@@ -23,8 +23,8 @@
   <!-- compat-badges:start (tools/compat_table.py --write) -->
   <a href="docs/compatibility.md#at-a-glance"><img alt="PSD round trip: 117 of 117 files" src="https://img.shields.io/badge/PSD%20round%20trip-117%2F117-2ea44f?style=flat-square"></a>
   <a href="docs/compatibility.md#at-a-glance"><img alt="Matches Photoshop's render: 58 of 72 files" src="https://img.shields.io/badge/Photoshop%20match-58%2F72-97ca00?style=flat-square"></a>
-  <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 91 CTest suites" src="https://img.shields.io/badge/tests-91%20suites-2f7bf5?style=flat-square"></a>
-  <a href="docs/automation.md"><img alt="Automation: 183 methods" src="https://img.shields.io/badge/automation-183%20methods-2f7bf5?style=flat-square"></a>
+  <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 92 CTest suites" src="https://img.shields.io/badge/tests-92%20suites-2f7bf5?style=flat-square"></a>
+  <a href="docs/automation.md"><img alt="Automation: 184 methods" src="https://img.shields.io/badge/automation-184%20methods-2f7bf5?style=flat-square"></a>
   <!-- compat-badges:end -->
 </p>
 
@@ -150,7 +150,7 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
       <h3>Works the way your hands expect</h3>
       Photoshop's tools and shortcuts, Shift+letter to step through a tool group, and its held keys: Ctrl for the Move tool, Alt for the Eyedropper while painting, a tool's letter held for a spring-loaded tool. Edit › Keyboard Shortcuts changes any key, with clashes caught as you type.
       <br><br>
-      Right-click menus that fit the tool and what is under the pointer, rulers, guides and smart guides, labels you drag to change a number, and File › Revert (F12).
+      Right-click menus that fit the tool and what is under the pointer, rulers, guides and smart guides, labels you drag to change a number, and File › Revert (F12). Full Screen Mode (F) leaves only the canvas: the tools, the options bar and the panels slide out from the screen's edges when the pointer reaches them, and Tab keeps them out.
     </td>
     <td width="50%" valign="top">
       <img src="docs/images/export-as.jpg" alt="Hiroshige's Asakusa Ricefields and Torinomachi Festival, with a white cat at the window, in the Export As dialog: WebP at quality 90, the image size, colour space options, a preview and the file's size" width="100%">
@@ -231,7 +231,7 @@ how export works is in [docs/psd-export.md](docs/psd-export.md) and [docs/psd-ro
 ## Built for scripts and agents
 
 Everything an agent or a script does goes through the same editor session you see, lands in the undo history, and
-shows on screen. 183 automation methods cover documents, layers, pixels, selections, painting and export.
+shows on screen. 184 automation methods cover documents, layers, pixels, selections, painting and export.
 
 Let Claude Code, or any MCP client, drive the editor:
 
@@ -277,8 +277,7 @@ curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/in
 
 **Windows** (10 version 1903 or later, x86_64): download `NekoPhoto-<version>-windows-x86_64.zip` from the same page,
 unzip it anywhere and run `nekophoto.exe`. It is portable: nothing is installed, and settings live in your user
-profile. Filter › G'MIC can download G'MIC for you (15 MB, from gmic.eu); a `gmic.exe` on `PATH`, or G'MIC unzipped
-into a `gmic` folder beside `nekophoto.exe`, works too.
+profile. The G'MIC filters need `gmic.exe` on `PATH`.
 
 **Good to know**
 
@@ -357,8 +356,8 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
   <!-- compat-badges-ja:start (tools/compat_table.py --write) -->
   <a href="docs/compatibility.md#日本語"><img alt="PSD の往復: 117 個中 117 個" src="https://img.shields.io/badge/PSD%20%E5%BE%80%E5%BE%A9-117%2F117-2ea44f?style=flat-square"></a>
   <a href="docs/compatibility.md#日本語"><img alt="Photoshop の描画と一致: 72 個中 58 個" src="https://img.shields.io/badge/Photoshop%20%E3%81%A8%E4%B8%80%E8%87%B4-58%2F72-97ca00?style=flat-square"></a>
-  <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 91 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%2091%20%E5%80%8B-2f7bf5?style=flat-square"></a>
-  <a href="docs/automation.md"><img alt="自動操作: メソッド 183 個" src="https://img.shields.io/badge/%E8%87%AA%E5%8B%95%E6%93%8D%E4%BD%9C-%E3%83%A1%E3%82%BD%E3%83%83%E3%83%89%20183%20%E5%80%8B-2f7bf5?style=flat-square"></a>
+  <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 92 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%2092%20%E5%80%8B-2f7bf5?style=flat-square"></a>
+  <a href="docs/automation.md"><img alt="自動操作: メソッド 184 個" src="https://img.shields.io/badge/%E8%87%AA%E5%8B%95%E6%93%8D%E4%BD%9C-%E3%83%A1%E3%82%BD%E3%83%83%E3%83%89%20184%20%E5%80%8B-2f7bf5?style=flat-square"></a>
   <!-- compat-badges-ja:end -->
 </p>
 
@@ -485,7 +484,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
       <h3>手が覚えている操作のままで</h3>
       Photoshop と同じツールとショートカット、Shift+キーでのツールグループの切り替え、押している間だけのキー(Ctrl で移動ツール、描画中の Alt でスポイト、ツールのキーを押し続けて一時的に切り替え)。編集 › キーボードショートカット でどのキーも変更でき、重複はその場で知らせます。
       <br><br>
-      ツールとポインター下の対象に合わせた右クリックメニュー、定規・ガイド・スマートガイド、ドラッグで数値を変えられるラベル、ファイル › 復帰(F12)。
+      ツールとポインター下の対象に合わせた右クリックメニュー、定規・ガイド・スマートガイド、ドラッグで数値を変えられるラベル、ファイル › 復帰(F12)。フルスクリーンモード(F)ではカンバスだけを表示し、ポインターを画面の端に寄せるとツール・オプションバー・パネルがスライドして現れます。Tab で出したままにできます。
     </td>
     <td width="50%" valign="top">
       <img src="docs/images/export-as.jpg" alt="広重『浅草田甫酉の町詣』(窓辺に白い猫)を 書き出し形式 のダイアログで WebP・品質 90 に設定し、画像サイズ、カラースペース、プレビューとファイルサイズを表示" width="100%">
@@ -564,7 +563,7 @@ NekoPhoto は実際の Photoshop ファイルで検証しており、その数�
 ### スクリプトと AI エージェントから使う
 
 エージェントやスクリプトの操作は、画面に見えているのと同じ編集セッションを通り、取り消し履歴に残り、画面にも表示されます。
-183 個の自動操作メソッドで、ドキュメント・レイヤー・ピクセル・選択範囲・描画・書き出しを扱えます。
+184 個の自動操作メソッドで、ドキュメント・レイヤー・ピクセル・選択範囲・描画・書き出しを扱えます。
 
 Claude Code などの MCP クライアントから操作するには:
 
@@ -604,8 +603,7 @@ curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/in
 
 **Windows**(10 バージョン 1903 以降、x86_64)では、同じページから `NekoPhoto-<version>-windows-x86_64.zip`
 をダウンロードし、好きな場所に展開して `nekophoto.exe` を起動します。インストール不要のポータブル版で、
-設定はユーザープロファイルに保存されます。G'MIC はフィルター › G'MIC からダウンロードできます(15 MB、gmic.eu から)。
-PATH の通った `gmic.exe` や、`nekophoto.exe` と同じ場所の `gmic` フォルダーに展開した G'MIC も使えます。
+設定はユーザープロファイルに保存されます。G'MIC フィルターを使うには `gmic.exe` に PATH を通してください。
 
 **知っておくと便利なこと**
 

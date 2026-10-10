@@ -20,6 +20,7 @@ class QDockWidget;
 class QLabel;
 class QSlider;
 class QMenu;
+class QToolBar;
 class QToolButton;
 class QStackedWidget;
 
@@ -39,6 +40,7 @@ class AdjustmentsPanel;
 class AutomationServer;
 class ToolOptionsBar;
 class CommandPalette;
+class FullScreenMode;
 struct PaletteEntry;
 
 /// The tab strip: accepts a layer dragged from another project's Layers panel.
@@ -56,6 +58,7 @@ protected:
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
+    friend class FullScreenMode;
 public:
     MainWindow();
     void openPath(const QString& path);
@@ -159,6 +162,9 @@ public:
     /// `viewPoint` on the canvas.
     QMenu* buildCanvasMenu(QPointF viewPoint, QWidget* parent);
     void showCanvasMenu(QPointF viewPoint);
+    /// View > Screen Mode: Full Screen (F) or Standard (FullScreen.h).
+    void setScreenMode(bool fullScreen);
+    FullScreenMode* fullScreenMode() const { return fullScreen_; }
 
 signals:
     /// Something an agent may want to know about changed: document, layers, selection, history, tool, view, tabs.
@@ -166,6 +172,9 @@ signals:
 
 protected:
     void closeEvent(QCloseEvent*) override;
+    /// Esc nothing else took (the canvas passes it on when it has nothing to cancel): in full screen, slides the
+    /// edges back, or leaves full screen when none is out.
+    void keyPressEvent(QKeyEvent*) override;
     void dragEnterEvent(QDragEnterEvent*) override;
     void dragMoveEvent(QDragMoveEvent*) override;
     void dragLeaveEvent(QDragLeaveEvent*) override;
@@ -353,6 +362,8 @@ private:
         }
     }
     QAction* eraserAction_;
+    QToolBar* toolRail_ = nullptr;
+    FullScreenMode* fullScreen_ = nullptr;
     /// The tool rail's tooltips with the tools' keys as they are now.
     void refreshToolTips();
 };

@@ -372,7 +372,9 @@ channel, as `pixels.fill` takes it too), `color.sample` (the Eyedropper at `x`, 
 `background` to set the background colour: answers `color` and the document's own `values`, linear R, G, B at 32 bits,
 C, M, Y, K ink percentages in CMYK, L, a, b in Lab, with `model`), `view.zoom`, `view.exposure` (a 32-bit
 document's view, not the pixels and not an undo step: `exposure` in stops, `gamma`, `method` exposure-gamma or
-highlight-compression; with no keys it reads it), `color.settings` (Edit > Color
+highlight-compression; with no keys it reads it), `view.screenMode` (View > Screen Mode: `mode` standard or full, where only
+the canvas is on screen and the screen's edges slide out the tools, options bar, panels and Timeline; `panels` in full screen:
+all, exceptTools or hidden, as Tab and Shift+Tab; answers `mode` and the edges `out`; with no keys it reads them), `color.settings` (Edit > Color
 Settings: `workingSpace`, `workingCmyk` (default, the bundled ISO Coated v2 300%, or a CMYK ICC file), the Conversion Options
 `intent` (perceptual, relative, saturation, absolute) and `blackPointCompensation` Image > Mode uses, `policy` preserve,
 convert or off, `askMissing`, `askMismatch`; the monitor profile: `monitorProfile` (an ICC file, "" for the system's),

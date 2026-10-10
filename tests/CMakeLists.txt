@@ -454,6 +454,12 @@ if(TARGET nekophoto)
     add_test(NAME keyboard_shortcuts_selftest COMMAND nekophoto --lang en --self-test shortcuts)
     set_tests_properties(keyboard_shortcuts_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/shortcuts-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/shortcuts-home/data")
+    # View > Screen Mode > Full Screen: nothing but the canvas; each edge's flyout slides out from its hot zone and back,
+    # not while a button is held on the canvas; the Layers panel in the right flyout; F10, Alt, Tab, Shift+Tab, F7, Esc;
+    # leaving restores the window's state byte for byte. Under the default theme (Goth Kitty).
+    add_test(NAME full_screen_selftest COMMAND nekophoto --lang en --self-test full-screen)
+    set_tests_properties(full_screen_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/full-screen-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/full-screen-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)

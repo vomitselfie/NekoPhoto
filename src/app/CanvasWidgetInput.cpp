@@ -146,7 +146,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (!lassoPoints_.empty()) { cancelLasso(); return; }
         if (session_->tool() == Tool::Scribble && (!session_->scribbles().empty() || !session_->clickPrompts().empty())) { session_->clearScribbles(); session_->clearClickPrompts(); return; }
         if (crop_) { cancelCrop(); return; }
-        return;
+        break;   // nothing to cancel: the window has it (full screen's edges, then full screen itself)
     case Qt::Key_Return: case Qt::Key_Enter:
         if (session_->transformEdit()) { session_->commitTransformCommand(); return; }
         if (session_->gradientPending()) { session_->commitGradient(); return; }

@@ -606,6 +606,18 @@ def remaining_methods(rpc):
     rpc.call("colors.set", foreground="#102030", background="#ffffff")
     rpc.call("view.zoom", zoom=1)
     rpc.call("screenshot", maxSize=64)
+    # View > Screen Mode: full screen with every edge kept out, then back; the window, not an undo step.
+    undo = rpc.call("history.info")["undo"]
+    assert rpc.call("view.screenMode")["mode"] == "standard"
+    full = rpc.call("view.screenMode", mode="full", panels="all")
+    assert full["mode"] == "full" and "left" in full["out"] and "right" in full["out"], full
+    assert "left" not in rpc.call("view.screenMode", panels="exceptTools")["out"]
+    rpc.call("screenshot", maxSize=64)
+    assert rpc.call("view.screenMode", panels="hidden")["out"] == []
+    back = rpc.call("view.screenMode", mode="standard")
+    assert back == {"mode": "standard", "out": []}, back
+    expect_refused(rpc, "Full Screen Mode", "view.screenMode", panels="all")
+    assert rpc.call("history.info")["undo"] == undo, "the screen mode is not an undo step"
     project = os.path.join(work, "Coverage.comp")
     rpc.call("document.save", path=project)
     rpc.call("document.close", discard=True)

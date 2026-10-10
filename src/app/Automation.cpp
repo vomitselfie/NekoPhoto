@@ -1,5 +1,6 @@
 #include "compositor/raw.h"
 #include "Automation.h"
+#include "FullScreen.h"
 #include "ColorManagement.h"
 #include "Language.h"
 #include "ActionLibrary.h"
@@ -242,7 +243,7 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
     static const QSet<QString> always = {
         "app.info", "tabs.list", "tabs.new", "tabs.select", "tabs.close", "history.undo", "history.redo", "history.list", "history.info",
         "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
-        "view.zoom", "view.exposure", "screenshot", "render", "colors.set", "color.settings", "presets.list", "brush.presets", "gmic.filters", "tool.select",
+        "view.zoom", "view.exposure", "view.screenMode", "screenshot", "render", "colors.set", "color.settings", "presets.list", "brush.presets", "gmic.filters", "tool.select",
         "actions.list", "actions.record", "actions.save", "actions.delete", "actions.export", "actions.import", "actions.play", "actions.batch",
         "document.new", "document.open", "document.revert", "document.close", "document.info", "document.overview", "document.histogram",
         "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
@@ -607,6 +608,25 @@ void AutomationServer::registerAppHandlers() {
         session()->setView32(v);
         const View32& now = session()->view32();
         return QJsonObject{{"exposure", now.exposure}, {"gamma", now.gamma}, {"method", QString::fromLatin1(toneMethodKey(now.method))}};
+    });
+    add("view.screenMode", [w](const QJsonObject& p) {
+        // View > Screen Mode (FullScreen.h): the window, not the document; not an undo step.
+        FullScreenMode* fs = w->fullScreenMode();
+        if (has(p, "mode")) {
+            const QString mode = str(p, "mode");
+            if (mode != QLatin1String("standard") && mode != QLatin1String("full")) fail("mode must be standard or full", invalidParams);
+            w->setScreenMode(mode == QLatin1String("full"));
+        }
+        if (has(p, "panels")) {
+            const QString panels = str(p, "panels");
+            if (panels != QLatin1String("hidden") && panels != QLatin1String("all") && panels != QLatin1String("exceptTools")) fail("panels must be hidden, all or exceptTools", invalidParams);
+            if (!fs->active()) fail("panels needs Full Screen Mode (mode full)", invalidParams);
+            fs->pin(panels != QLatin1String("hidden"), panels == QLatin1String("all"));
+        }
+        QJsonArray out;
+        const char* names[] = {"left", "top", "right", "bottom"};
+        for (int i = 0; i < FullScreenMode::edgeCount; i++) if (fs->isOut(FullScreenMode::Edge(i))) out.append(QString::fromLatin1(names[i]));
+        return QJsonObject{{"mode", fs->active() ? "full" : "standard"}, {"out", out}};
     });
 }
 

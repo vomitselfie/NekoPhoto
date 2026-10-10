@@ -1409,6 +1409,15 @@ def view_exposure(exposure: Optional[float] = None, gamma: Optional[float] = Non
     return text(call("view.exposure", exposure=exposure, gamma=gamma, method=method))
 
 
+@edit("Set the screen mode")
+def view_screen_mode(mode: Optional[str] = None, panels: Optional[str] = None) -> str:
+    """View > Screen Mode: mode standard, or full (nothing on screen but the canvas; the person brings out the tools,
+    options bar and panels at the screen's edges). panels, in full screen: all (every edge kept out, as Tab),
+    exceptTools (as Shift+Tab) or hidden. The window, not the document, and not an undo step; with no arguments it
+    reads the mode and which edges are out."""
+    return text(call("view.screenMode", mode=mode, panels=panels))
+
+
 # ---- prompts ------------------------------------------------------------------------------------
 
 @mcp.prompt(title="Edit a photo in NekoPhoto")

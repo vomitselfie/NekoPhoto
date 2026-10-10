@@ -52,6 +52,11 @@ app--BrushPicker, app--FontPicker {
 }
 app--BrushPicker:hover, app--FontPicker:hover { border-color: #ff7eb6; }
 
+/* ---- Full screen: each edge's flyout is a card with rounded inner corners and a soft shadow ---- */
+app--Flyout { qproperty-cornerRadius: 14; qproperty-shadow: 14; qproperty-fill: #1f1625; qproperty-border: #4a3556; }
+app--Flyout QToolBar { background: transparent; }
+QMenuBar#menuStrip { border-bottom: 1px solid #4a3556; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }
+
 QStatusBar { background: #150e19; border-top: 1px solid #3d2c47; color: #c9b2d6; }
 QStatusBar::item { border: none; }
 
