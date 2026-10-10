@@ -9,6 +9,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QUrl>
 #include <string>
 #include <vector>
@@ -148,7 +149,14 @@ bool GmicStore::install(const QString& archive, const Build& build, const QStrin
         aside = root + QStringLiteral("/.old-") + QString::number(QDateTime::currentMSecsSinceEpoch());
         if (!QDir().rename(dest, aside)) return fail(tr("Couldn’t replace %1; G'MIC may be running. Close the G'MIC dialog and try again.").arg(dest));
     }
-    if (!QDir().rename(unpack.path(), dest)) {
+    // A virus scanner looking at the new gmic.exe can hold it open for a moment, and Windows then refuses to move
+    // the folder: try again a few times before giving up.
+    bool moved = QDir().rename(unpack.path(), dest);
+    for (int attempt = 0; !moved && attempt < 10; attempt++) {
+        QThread::msleep(200);
+        moved = QDir().rename(unpack.path(), dest);
+    }
+    if (!moved) {
         if (!aside.isEmpty()) QDir().rename(aside, dest);
         return fail(tr("Couldn’t move G'MIC into %1.").arg(dest));
     }
