@@ -2244,8 +2244,8 @@ Working: %2</source>
         <translation>%1 はパッチベースの G&apos;MIC コマンドのため、NekoPhoto では実行しません。</translation>
     </message>
     <message>
-        <source>G&apos;MIC is not installed (no gmic executable on PATH).</source>
-        <translation>G&apos;MIC がインストールされていません(PATH に gmic 実行ファイルがありません)。</translation>
+        <source>G&apos;MIC is not installed (no gmic executable was found).</source>
+        <translation>G&apos;MIC がインストールされていません(gmic 実行ファイルが見つかりません)。</translation>
     </message>
     <message>
         <source>Couldn&apos;t create a temporary folder.</source>
@@ -5732,6 +5732,26 @@ File &gt; New creates a blank canvas.</source>
         <translation>適用</translation>
     </message>
     <message>
+        <source>G&apos;MIC is not installed. NekoPhoto can download the command-line G&apos;MIC %1 for Windows (%2 MB) from gmic.eu: free software under the CeCILL 2.1 licence, kept in %3.</source>
+        <translation>G&apos;MIC がインストールされていません。NekoPhoto が Windows 用のコマンドライン版 G&apos;MIC %1(%2 MB)を gmic.eu からダウンロードできます。CeCILL 2.1 ライセンスのフリーソフトウェアで、%3 に保存されます。</translation>
+    </message>
+    <message>
+        <source>Download G&apos;MIC (%1 MB)…</source>
+        <translation>G&apos;MIC をダウンロード(%1 MB)…</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>キャンセル</translation>
+    </message>
+    <message>
+        <source>Download cancelled.</source>
+        <translation>ダウンロードをキャンセルしました。</translation>
+    </message>
+    <message>
+        <source>Download failed</source>
+        <translation>ダウンロードに失敗しました</translation>
+    </message>
+    <message>
         <source>G&apos;MIC is not installed. Install the gmic package (Arch: pacman -S gmic; Ubuntu: apt install gmic) and reopen this dialog.</source>
         <translation>G&apos;MIC がインストールされていません。gmic パッケージをインストールして (Arch:pacman -S gmic、Ubuntu:apt install gmic)、このダイアログを開き直してください。</translation>
     </message>
@@ -5764,6 +5784,14 @@ File &gt; New creates a blank canvas.</source>
         <translation>%1 をダウンロード中...</translation>
     </message>
     <message>
+        <source>G&apos;MIC was downloaded but can&apos;t be found in %1.</source>
+        <translation>G&apos;MIC をダウンロードしましたが、%1 に見つかりません。</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC %1 is ready.</source>
+        <translation>G&apos;MIC %1 の準備ができました。</translation>
+    </message>
+    <message>
         <source>Download failed: %1</source>
         <translation>ダウンロードに失敗しました:%1</translation>
     </message>
@@ -5785,6 +5813,81 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>%1 is a patch-based G&apos;MIC command that NekoPhoto does not run.</source>
         <translation>%1 はパッチベースの G&apos;MIC コマンドのため、NekoPhoto では実行しません。</translation>
+    </message>
+</context>
+<context>
+    <name>app::GmicStore</name>
+    <message>
+        <source>Couldn’t remove G&apos;MIC from %1; it may be running. Close the G&apos;MIC dialog and try again.</source>
+        <translation>%1 から G&apos;MIC を削除できませんでした。実行中の可能性があります。G&apos;MIC ダイアログを閉じてからもう一度お試しください。</translation>
+    </message>
+    <message>
+        <source>Couldn’t read the downloaded file %1.</source>
+        <translation>ダウンロードしたファイル %1 を読み込めませんでした。</translation>
+    </message>
+    <message>
+        <source>The download is %1 bytes, not the %2 expected, so it was not used. Try again later.</source>
+        <translation>ダウンロードしたファイルは %1 バイトで、想定の %2 バイトと異なるため使用しませんでした。しばらくしてからもう一度お試しください。</translation>
+    </message>
+    <message>
+        <source>The downloaded file didn’t match its expected checksum, so it was not used. Try again later.</source>
+        <translation>ダウンロードしたファイルのチェックサムが一致しないため使用しませんでした。しばらくしてからもう一度お試しください。</translation>
+    </message>
+    <message>
+        <source>The downloaded G&apos;MIC archive could not be unpacked: %1</source>
+        <translation>ダウンロードした G&apos;MIC のアーカイブを展開できませんでした: %1</translation>
+    </message>
+    <message>
+        <source>it is not laid out as expected</source>
+        <translation>想定どおりの構成ではありません</translation>
+    </message>
+    <message>
+        <source>it is empty</source>
+        <translation>空です</translation>
+    </message>
+    <message>
+        <source>Couldn’t create the folder %1.</source>
+        <translation>フォルダー %1 を作成できませんでした。</translation>
+    </message>
+    <message>
+        <source>Couldn’t create a folder in %1.</source>
+        <translation>%1 にフォルダーを作成できませんでした。</translation>
+    </message>
+    <message>
+        <source>Couldn’t write %1.</source>
+        <translation>%1 を書き込めませんでした。</translation>
+    </message>
+    <message>
+        <source>%1 is missing</source>
+        <translation>%1 がありません</translation>
+    </message>
+    <message>
+        <source>Couldn’t replace %1; G&apos;MIC may be running. Close the G&apos;MIC dialog and try again.</source>
+        <translation>%1 を置き換えられませんでした。G&apos;MIC が実行中の可能性があります。G&apos;MIC ダイアログを閉じてからもう一度お試しください。</translation>
+    </message>
+    <message>
+        <source>Couldn’t move G&apos;MIC into %1.</source>
+        <translation>G&apos;MIC を %1 に移動できませんでした。</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC is already being downloaded.</source>
+        <translation>G&apos;MIC はすでにダウンロード中です。</translation>
+    </message>
+    <message>
+        <source>Couldn’t write to %1.</source>
+        <translation>%1 に書き込めませんでした。</translation>
+    </message>
+    <message>
+        <source>gmic.eu sent a larger file than expected, so it was not used. Try again later.</source>
+        <translation>gmic.eu から想定より大きなファイルが送られてきたため使用しませんでした。しばらくしてからもう一度お試しください。</translation>
+    </message>
+    <message>
+        <source>gmic.eu answered %1 (%2): the file may have moved or the site may be down. Try again later, or install G&apos;MIC yourself.</source>
+        <translation>gmic.eu の応答は %1 (%2) でした。ファイルが移動したか、サイトが停止している可能性があります。しばらくしてからもう一度試すか、G&apos;MIC を手動でインストールしてください。</translation>
+    </message>
+    <message>
+        <source>Couldn’t download G&apos;MIC from gmic.eu: %1. Check the internet connection and try again.</source>
+        <translation>gmic.eu から G&apos;MIC をダウンロードできませんでした: %1。インターネット接続を確認してもう一度お試しください。</translation>
     </message>
 </context>
 <context>
@@ -9549,6 +9652,26 @@ File &gt; New creates a blank canvas.</source>
         <translation>フォルダーを表示</translation>
     </message>
     <message>
+        <source>G&apos;MIC</source>
+        <translation>G&apos;MIC</translation>
+    </message>
+    <message>
+        <source>Filter &gt; G&apos;MIC runs G&apos;MIC, free software from gmic.eu under the CeCILL 2.1 licence. NekoPhoto does not include it: Download fetches the command-line G&apos;MIC %1 for Windows (%2 MB) from gmic.eu into %3.</source>
+        <translation>フィルター &gt; G&apos;MIC は、gmic.eu が CeCILL 2.1 ライセンスで公開しているフリーソフトウェア G&apos;MIC を実行します。NekoPhoto には含まれていません。「ダウンロード」で Windows 用のコマンドライン版 G&apos;MIC %1(%2 MB)を gmic.eu から %3 に取得します。</translation>
+    </message>
+    <message>
+        <source>Filter &gt; G&apos;MIC runs G&apos;MIC, free software from gmic.eu under the CeCILL 2.1 licence. Install G&apos;MIC from your package manager (gmic).</source>
+        <translation>フィルター &gt; G&apos;MIC は、gmic.eu が CeCILL 2.1 ライセンスで公開しているフリーソフトウェア G&apos;MIC を実行します。G&apos;MIC はパッケージマネージャーからインストールしてください(gmic)。</translation>
+    </message>
+    <message>
+        <source>Remove G&apos;MIC?</source>
+        <translation>G&apos;MIC を削除しますか?</translation>
+    </message>
+    <message>
+        <source>Delete the downloaded G&apos;MIC from %1? It can be downloaded again later.</source>
+        <translation>ダウンロードした G&apos;MIC を %1 から削除しますか?後でもう一度ダウンロードできます。</translation>
+    </message>
+    <message>
         <source>Export</source>
         <translation>書き出し</translation>
     </message>
@@ -9615,6 +9738,38 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Download cancelled.</source>
         <translation>ダウンロードをキャンセルしました。</translation>
+    </message>
+    <message>
+        <source>Downloading G&apos;MIC %1…</source>
+        <translation>G&apos;MIC %1 をダウンロード中…</translation>
+    </message>
+    <message>
+        <source>Downloaded G&apos;MIC %1, in %2.</source>
+        <translation>ダウンロードした G&apos;MIC %1(%2)。</translation>
+    </message>
+    <message>
+        <source>set by COMPOSITOR_GMIC</source>
+        <translation>COMPOSITOR_GMIC で指定</translation>
+    </message>
+    <message>
+        <source>beside NekoPhoto</source>
+        <translation>NekoPhoto と同じ場所</translation>
+    </message>
+    <message>
+        <source>on PATH</source>
+        <translation>PATH 上</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC %1 found at %2 (%3).</source>
+        <translation>G&apos;MIC %1 が %2 にあります(%3)。</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC %1 runs inside NekoPhoto (libgmic).</source>
+        <translation>G&apos;MIC %1 は NekoPhoto の内部で動作します(libgmic)。</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC is not installed.</source>
+        <translation>G&apos;MIC がインストールされていません。</translation>
     </message>
     <message>
         <source>Remove the model?</source>

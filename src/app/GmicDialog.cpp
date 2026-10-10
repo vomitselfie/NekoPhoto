@@ -1,5 +1,6 @@
 #include "GmicDialog.h"
 #include "ActionLibrary.h"
+#include "GmicStore.h"
 #include "Style.h"
 #include "compositor/filters.h"
 #include "compositor/render.h"
@@ -13,12 +14,14 @@
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileInfo>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QTreeWidgetItemIterator>
@@ -215,9 +218,56 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : PixelDialog(se
 
     capture(0, previewLimit);
     if (!GmicRunner::available()) {
-        status_->setText(tr("G'MIC is not installed. Install the gmic package (Arch: pacman -S gmic; Ubuntu: apt install gmic) and reopen this dialog."));
         ok_->setEnabled(false);
         update_->setEnabled(false);
+        if (GmicStore::offered()) {
+            // No package manager to install it from: offer to fetch it, above the catalogue.
+            installBox_ = new QFrame;
+            installBox_->setObjectName("gmicInstall");
+            auto* box = new QVBoxLayout(installBox_);
+            box->setContentsMargins(0, 0, 0, 6);
+            installText_ = new QLabel(tr("G'MIC is not installed. NekoPhoto can download the command-line G'MIC %1 for Windows "
+                                         "(%2 MB) from gmic.eu: free software under the CeCILL 2.1 licence, kept in %3.")
+                                          .arg(GmicStore::pinned().version)
+                                          .arg(qRound(GmicStore::pinned().bytes / 1e6))
+                                          .arg(QDir::toNativeSeparators(GmicStore::directory())));
+            installText_->setWordWrap(true);
+            box->addWidget(installText_);
+            auto* row = new QHBoxLayout;
+            installButton_ = new QPushButton(tr("Download G'MIC (%1 MB)…").arg(qRound(GmicStore::pinned().bytes / 1e6)));
+            installButton_->setObjectName("gmicDownload");
+            row->addWidget(installButton_);
+            installProgress_ = new QProgressBar;
+            installProgress_->setRange(0, 1000);
+            installProgress_->setVisible(false);
+            row->addWidget(installProgress_, 1);
+            installCancel_ = new QPushButton(tr("Cancel"));
+            installCancel_->setVisible(false);
+            row->addWidget(installCancel_);
+            row->addStretch();
+            box->addLayout(row);
+            layout->insertWidget(0, installBox_);
+            store_ = new GmicStore(this);
+            connect(installButton_, &QPushButton::clicked, this, &GmicDialog::downloadGmic);
+            connect(installCancel_, &QPushButton::clicked, store_, &GmicStore::cancel);
+            connect(store_, &GmicStore::progress, this, [this](qint64 received, qint64 total) {
+                installProgress_->setValue(int(received * 1000 / std::max<qint64>(1, total)));
+            });
+            auto idle = [this] {
+                installButton_->setEnabled(true);
+                installCancel_->setVisible(false);
+                installProgress_->setVisible(false);
+            };
+            connect(store_, &GmicStore::cancelled, this, [this, idle] { idle(); status_->setText(tr("Download cancelled.")); });
+            connect(store_, &GmicStore::failed, this, [this, idle](const QString& error) {
+                idle();
+                status_->setText(error);
+                QMessageBox::warning(this, tr("Download failed"), error);
+            });
+            connect(store_, &GmicStore::succeeded, this, &GmicDialog::gmicInstalled);
+        } else {
+            status_->setText(tr("G'MIC is not installed. Install the gmic package (Arch: pacman -S gmic; Ubuntu: apt install gmic) and reopen this dialog."));
+        }
     }
     loadCatalogue();
     fillTree({});
@@ -534,6 +584,29 @@ bool GmicDialog::apply() {
     if (source16()) runner->start(source16(), command, 5 * 60 * 1000);
     else runner->start(source(), command, 5 * 60 * 1000);
     return false;   // closes when the run finishes
+}
+
+void GmicDialog::downloadGmic() {
+    if (!store_ || store_->busy()) return;
+    installButton_->setEnabled(false);
+    installProgress_->setValue(0);
+    installProgress_->setVisible(true);
+    installCancel_->setVisible(true);
+    status_->setText(tr("Downloading %1…").arg(GmicStore::pinned().url));
+    store_->download();
+}
+
+void GmicDialog::gmicInstalled() {
+    // Ready without restarting: the lookup finds the new copy, and the filter catalogue for its version follows.
+    installBox_->setVisible(false);
+    if (!GmicRunner::available()) { status_->setText(tr("G'MIC was downloaded but can't be found in %1.").arg(GmicStore::directory())); return; }
+    ok_->setEnabled(true);
+    update_->setEnabled(true);
+    status_->setText(tr("G'MIC %1 is ready.").arg(GmicRunner::version()));
+    loadCatalogue();
+    fillTree(search_->text());
+    if (catalogue_.filters().empty()) updateFilters();
+    schedulePreview();
 }
 
 void GmicDialog::updateFilters() {

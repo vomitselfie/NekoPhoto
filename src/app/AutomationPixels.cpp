@@ -385,7 +385,7 @@ void AutomationServer::registerPixelsHandlers() {
         if (!s->canAdjustPixels()) fail("the active layer has no pixels; select a pixel layer");
         QString command = str(p, "command").trimmed();
         if (command.isEmpty()) fail("command is empty", invalidParams);
-        if (!GmicRunner::available()) fail("G'MIC is not installed (no gmic executable on PATH)");
+        if (!GmicRunner::available()) fail("G'MIC is not installed (no gmic executable was found; Filter > G'MIC can download it on Windows)");
         if (QString why; !GmicRunner::allowedForAutomation(command, &why)) fail(why, invalidParams);
         // The undo step's name after "G'MIC: ": the filter's name the dialog shows, else the command's first word.
         const QString stepName = has(p, "name") && !str(p, "name").trimmed().isEmpty() ? str(p, "name").trimmed() : command.section(' ', 0, 0);

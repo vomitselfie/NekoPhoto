@@ -6,6 +6,8 @@
 #include "Theme.h"
 #include "CpuPower.h"
 #include "Language.h"
+#include "Gmic.h"
+#include "GmicStore.h"
 #include <QSettings>
 #include <QSpinBox>
 #include "Autosave.h"
@@ -14,6 +16,7 @@
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QFileInfo>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -153,6 +156,65 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     v->addLayout(locationRow);
     layout->addWidget(group);
 
+    // G'MIC: where it was found; on Windows it can be downloaded from gmic.eu (GmicStore).
+    auto* gmicBox = new QGroupBox(tr("G'MIC"));
+    gmicBox->setObjectName("gmicPreferences");
+    auto* gv = new QVBoxLayout(gmicBox);
+    auto* gmicRow = new QHBoxLayout;
+    gmicStatus_ = new QLabel;
+    gmicStatus_->setWordWrap(true);
+    gmicStatus_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    gmicRow->addWidget(gmicStatus_, 1);
+    gmicDownload_ = new QPushButton(tr("Download"));
+    gmicRemove_ = new QPushButton(tr("Remove"));
+    gmicCancel_ = new QPushButton(tr("Cancel"));
+    auto* gmicFolder = new QPushButton(tr("Show Folder"));
+    gmicRow->addWidget(gmicDownload_);
+    gmicRow->addWidget(gmicRemove_);
+    gmicRow->addWidget(gmicCancel_);
+    gmicRow->addWidget(gmicFolder);
+    gv->addLayout(gmicRow);
+    gmicProgress_ = new QProgressBar;
+    gmicProgress_->setRange(0, 1000);
+    gmicProgress_->setVisible(false);
+    gv->addWidget(gmicProgress_);
+    auto* gmicHint = new QLabel(GmicStore::offered()
+        ? tr("Filter > G'MIC runs G'MIC, free software from gmic.eu under the CeCILL 2.1 licence. NekoPhoto does not include it: "
+             "Download fetches the command-line G'MIC %1 for Windows (%2 MB) from gmic.eu into %3.")
+              .arg(GmicStore::pinned().version)
+              .arg(qRound(GmicStore::pinned().bytes / 1e6))
+              .arg(QDir::toNativeSeparators(GmicStore::directory()))
+        : tr("Filter > G'MIC runs G'MIC, free software from gmic.eu under the CeCILL 2.1 licence. "
+             "Install G'MIC from your package manager (gmic)."));
+    gmicHint->setWordWrap(true);
+    gmicHint->setStyleSheet(hintStyle());
+    gv->addWidget(gmicHint);
+    layout->addWidget(gmicBox);
+    gmicStore_ = new GmicStore(this);
+    connect(gmicDownload_, &QPushButton::clicked, this, [this] {
+        gmicProgress_->setValue(0);
+        gmicStore_->download();
+        syncGmic();
+    });
+    connect(gmicCancel_, &QPushButton::clicked, gmicStore_, &GmicStore::cancel);
+    connect(gmicRemove_, &QPushButton::clicked, this, [this] {
+        if (QMessageBox::question(this, tr("Remove G'MIC?"), tr("Delete the downloaded G'MIC from %1? It can be downloaded again later.")
+                                      .arg(QDir::toNativeSeparators(GmicRunner::downloadedDirectory()))) != QMessageBox::Yes) return;
+        if (QString error; !GmicStore::remove(&error)) QMessageBox::warning(this, tr("G'MIC"), error);
+        syncGmic();
+    });
+    connect(gmicFolder, &QPushButton::clicked, this, [] {
+        const GmicRunner::Location found = GmicRunner::locate();
+        const QString folder = found.path.isEmpty() ? GmicStore::directory() : QFileInfo(found.path).absolutePath();
+        QDir().mkpath(folder);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
+    });
+    connect(gmicStore_, &GmicStore::progress, this, [this](qint64 received, qint64 total) { gmicProgress_->setValue(int(received * 1000 / std::max<qint64>(1, total))); });
+    connect(gmicStore_, &GmicStore::succeeded, this, [this] { syncGmic(); });
+    connect(gmicStore_, &GmicStore::cancelled, this, [this] { syncGmic(); gmicStatus_->setText(tr("Download cancelled.")); });
+    connect(gmicStore_, &GmicStore::failed, this, [this](const QString& error) { syncGmic(); QMessageBox::warning(this, tr("Download failed"), error); });
+    syncGmic();
+
     // File > Export > Quick Export's format, written with the settings Export As last used for it.
     auto* exportBox = new QGroupBox(tr("Export"));
     auto* exportRow = new QHBoxLayout(exportBox);
@@ -246,6 +308,24 @@ void PreferencesDialog::syncStatus() {
     progress_->setVisible(busy);
     model_->setEnabled(!busy);
     location_->setText(tr("Models folder: %1").arg(ModelStore::directory()));
+}
+
+void PreferencesDialog::syncGmic() {
+    const bool busy = gmicStore_->busy(), downloaded = GmicStore::downloaded();
+    const GmicRunner::Location found = GmicRunner::locate();
+    if (busy) gmicStatus_->setText(tr("Downloading G'MIC %1…").arg(GmicStore::pinned().version));
+    else if (found.source == QLatin1String("downloaded")) gmicStatus_->setText(tr("Downloaded G'MIC %1, in %2.").arg(GmicRunner::version(), QDir::toNativeSeparators(QFileInfo(found.path).absolutePath())));
+    else if (!found.path.isEmpty()) {
+        const QString where = found.source == QLatin1String("env") ? tr("set by COMPOSITOR_GMIC")
+                            : found.source == QLatin1String("beside") ? tr("beside NekoPhoto")
+                                                                      : tr("on PATH");
+        gmicStatus_->setText(tr("G'MIC %1 found at %2 (%3).").arg(GmicRunner::version(), QDir::toNativeSeparators(found.path), where));
+    } else if (GmicRunner::available()) gmicStatus_->setText(tr("G'MIC %1 runs inside NekoPhoto (libgmic).").arg(GmicRunner::version()));
+    else gmicStatus_->setText(tr("G'MIC is not installed."));
+    gmicDownload_->setVisible(GmicStore::offered() && !downloaded && found.path.isEmpty() && !busy);
+    gmicRemove_->setVisible(downloaded && !busy);
+    gmicCancel_->setVisible(busy);
+    gmicProgress_->setVisible(busy);
 }
 
 void PreferencesDialog::startDownload() {

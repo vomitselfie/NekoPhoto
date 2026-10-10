@@ -259,7 +259,11 @@ refused unless `COMPOSITOR_GMIC_UNRESTRICTED=1` is set; `name` is what the undo 
 filter's name when the G'MIC dialog's OK runs it; a command the dialog's typed line holds that the method refuses runs
 in the dialog as before;
 `gmic.filters` lists the catalogue with parameters and defaults, leaving out the filters that do not
-work here unless `all: true`, when they carry an `unsupported` reason).
+work here unless `all: true`, when they carry an `unsupported` reason). `app.info`'s `gmic` says where G'MIC was found:
+`{path, source, version}` with `source` `env` (`COMPOSITOR_GMIC`), `beside` (a `gmic` folder beside the app's
+executable), `downloaded` (the copy Filter > G'MIC or Preferences downloaded, on Windows) or `path`, in that order of
+preference; `library` (no path) when only libgmic runs it in-process; `null` when it is not installed. There is no
+method that installs it: downloading is the person's choice, in the interface.
 
 Selection: `selection.all`, `selection.none`, `selection.invert`, `selection.reselect` (the selection last dropped, back),
 `selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand` (`edgeAware`, on by default: see docs/smart-wand.md),

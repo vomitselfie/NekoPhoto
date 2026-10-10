@@ -85,8 +85,14 @@ What differs on Windows:
   (Qt's standard locations).
 - The executable's manifest sets the UTF-8 code page, so file names outside the ANSI code page open
   (Windows 10 1903 or later).
-- Not available: PDF import (MSYS2 has no Qt PDF), the desktop colour-scheme portal (DBus). G'MIC works when
-  `gmic.exe` is on `PATH`; in-process libgmic is not built. There is no installer and no file association.
+- G'MIC is not shipped. Filter > G'MIC (and Edit > Preferences > G'MIC) offers to download G'MIC's command-line
+  build for Windows from gmic.eu (`gmic_4.0.5_cli_win64.zip`, 15 MB, CeCILL 2.1), pinned by size and SHA-256; it is
+  checked before it is unpacked, unpacked with the core's ZIP reader into a temporary folder and renamed whole into
+  `%LOCALAPPDATA%\nekophoto\nekophoto\gmic\4.0.5`, then the dialog lists the full catalogue without a restart.
+  G'MIC unzipped by hand into a `gmic` folder beside `nekophoto.exe`, or a `gmic.exe` on `PATH`, works too (see
+  [G'MIC](#gmic) for the order). In-process libgmic is not built.
+- Not available: PDF import (MSYS2 has no Qt PDF), the desktop colour-scheme portal (DBus). There is no installer and
+  no file association.
 
 Under a Wayland session Qt picks the Wayland platform on its own; force it with
 `QT_QPA_PLATFORM=wayland` if needed. `QT_QPA_PLATFORM=xcb` runs under X11 or
@@ -151,8 +157,13 @@ For an AppImage, `tools/integrate-appimage.sh <file>` copies it to
 ## G'MIC
 
 Filter > G'MIC runs the `gmic` executable (an optional runtime dependency:
-`pacman -S gmic` / `apt install gmic`; `COMPOSITOR_GMIC` points at a specific
-binary) on the active layer's pixels through a PNG round trip. The dialog lists
+`pacman -S gmic` / `apt install gmic`) on the active layer's pixels through a PNG round trip. The executable is
+looked for in this order: `COMPOSITOR_GMIC` (a specific binary); a `gmic` folder beside the app's executable
+(`gmic/gmic.exe` on Windows, `gmic/gmic` elsewhere: G'MIC unzipped next to a portable NekoPhoto); the copy downloaded
+on Windows into the app's local data folder (`gmic/4.0.5/`, see the Windows section; `src/app/GmicStore.cpp`);
+then `PATH`. `app.info` reports which one is used (`gmic`: path, source, version). The download is offered only on
+Windows, where there is no package manager to install it from; `COMPOSITOR_GMIC_OFFER_DOWNLOAD=1` shows the offer
+elsewhere for testing (the win64 build it fetches does not run there). The dialog lists
 a few essentials from G'MIC's core, and the whole catalogue once its definition
 file is available: Update Filters downloads `https://gmic.eu/update<version>.gmic`
 into the app data folder's `gmic/`, and an existing G'MIC-Qt copy under

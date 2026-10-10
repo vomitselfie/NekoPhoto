@@ -8,6 +8,7 @@
 #include <QElapsedTimer>
 #include "LayersPanel.h"
 #include "ModelStore.h"
+#include "Gmic.h"
 #include "compositor/scribble.h"
 #include "compositor/supports.h"
 #include <QApplication>
@@ -391,7 +392,12 @@ void AutomationServer::registerAppHandlers() {
         return has(p, "method") ? describeMethod(str(p, "method")) : describeAll();
     });
     add("app.info", [this, w](const QJsonObject&) {
-        return QJsonObject{{"name", "nekophoto"}, {"version", QApplication::applicationVersion()}, {"protocolVersion", protocolVersion}, {"socket", path_},
+        // Where G'MIC was found (GmicRunner::locate's order), or null; "library" when only libgmic in-process runs it.
+        QJsonValue gmic;
+        if (const GmicRunner::Location found = GmicRunner::locate(); !found.path.isEmpty())
+            gmic = QJsonObject{{"path", QDir::toNativeSeparators(found.path)}, {"source", found.source}, {"version", GmicRunner::version()}};
+        else if (GmicRunner::available()) gmic = QJsonObject{{"path", QJsonValue()}, {"source", "library"}, {"version", GmicRunner::version()}};
+        return QJsonObject{{"name", "nekophoto"}, {"gmic", gmic}, {"version", QApplication::applicationVersion()}, {"protocolVersion", protocolVersion}, {"socket", path_},
                            {"platform", QApplication::platformName()}, {"tabs", w->tabCount()}, {"currentTab", w->currentTabIndex()},
                            {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}, {"clickSelect", ModelStore::promptReady()}, {"raw", compositor::rawSupported()}, {"pdf", app::pdfSupported()}};
     });

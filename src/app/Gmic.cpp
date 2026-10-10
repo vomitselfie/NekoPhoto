@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QDateTime>
+#include <QCoreApplication>
 #include <mutex>
 #ifdef COMPOSITOR_HAVE_LIBGMIC
 #include <gmic.h>
@@ -164,6 +165,14 @@ QByteArray catalogueText(const QByteArray& raw) {
     return qUncompress(framed);
 }
 
+/// The definition file in use and when it was written, to notice a new one.
+QString definitionStamp() {
+    const QString path = GmicCatalogue::preferredFile();
+    if (path.isEmpty()) return QStringLiteral("-");
+    const QFileInfo info(path);
+    return path + '|' + QString::number(info.size()) + '|' + QString::number(info.lastModified().toMSecsSinceEpoch());
+}
+
 } // namespace
 
 QSet<QString> GmicCatalogue::excludedCommands(const QByteArray& text) {
@@ -206,21 +215,29 @@ QSet<QString> GmicCatalogue::excludedCommands(const QByteArray& text) {
     return out;
 }
 
-const QSet<QString>& GmicCatalogue::excluded() {
-    static const QSet<QString> set = [] {
+QSet<QString> GmicCatalogue::excluded() {
+    // Computed again when the definition file in use changes, so a catalogue downloaded while the editor runs is
+    // covered at once.
+    static std::mutex mutex;
+    static QString stamp;
+    static QSet<QString> set;
+    const QString now = definitionStamp();
+    std::lock_guard<std::mutex> lock(mutex);
+    if (now != stamp || set.isEmpty()) {
         QByteArray text;
         if (const QString path = preferredFile(); !path.isEmpty()) {
             QFile file(path);
             if (file.open(QIODevice::ReadOnly)) text = catalogueText(file.readAll());
         }
-        return excludedCommands(text);
-    }();
+        set = excludedCommands(text);
+        stamp = now;
+    }
     return set;
 }
 
 QString GmicCatalogue::excludedIn(const QString& command) {
     static const QRegularExpression identifier(QStringLiteral(R"([A-Za-z_][A-Za-z0-9_]*)"));
-    const QSet<QString>& set = excluded();
+    const QSet<QString> set = excluded();
     for (auto it = identifier.globalMatch(command); it.hasNext();) {
         const QString name = it.next().captured();
         if (set.contains(name)) return name;
@@ -340,11 +357,73 @@ QString GmicCatalogue::preferredFile() {
 GmicRunner::GmicRunner(QObject* parent) : QObject(parent) {}
 GmicRunner::~GmicRunner() { cancel(); }
 
-QString GmicRunner::executable() {
-    QString env = qEnvironmentVariable("COMPOSITOR_GMIC");
-    if (!env.isEmpty() && QFileInfo(env).isExecutable()) return env;
-    return QStandardPaths::findExecutable("gmic");
+namespace {
+
+struct SearchRoots {
+    std::mutex mutex;
+    QString appDir, dataDir;
+};
+
+SearchRoots& searchRoots() {
+    static SearchRoots roots;
+    return roots;
 }
+
+bool runnable(const QString& path) {
+    const QFileInfo info(path);
+    return info.isFile() && info.isExecutable();
+}
+
+} // namespace
+
+void GmicRunner::setSearchRootsForTesting(const QString& appDir, const QString& dataDir) {
+    SearchRoots& roots = searchRoots();
+    std::lock_guard<std::mutex> lock(roots.mutex);
+    roots.appDir = appDir;
+    roots.dataDir = dataDir;
+}
+
+QString GmicRunner::executableName() {
+#ifdef _WIN32
+    return QStringLiteral("gmic.exe");
+#else
+    return QStringLiteral("gmic");
+#endif
+}
+
+QString GmicRunner::besideDirectory() {
+    SearchRoots& roots = searchRoots();
+    {
+        std::lock_guard<std::mutex> lock(roots.mutex);
+        if (!roots.appDir.isEmpty()) return roots.appDir + QStringLiteral("/gmic");
+    }
+    if (!QCoreApplication::instance()) return {};
+    return QCoreApplication::applicationDirPath() + QStringLiteral("/gmic");
+}
+
+QString GmicRunner::downloadRoot() {
+    SearchRoots& roots = searchRoots();
+    {
+        std::lock_guard<std::mutex> lock(roots.mutex);
+        if (!roots.dataDir.isEmpty()) return roots.dataDir + QStringLiteral("/gmic");
+    }
+    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + QStringLiteral("/gmic");
+}
+
+QString GmicRunner::downloadedDirectory() { return downloadRoot() + '/' + downloadVersion(); }
+
+GmicRunner::Location GmicRunner::locate() {
+    const QString env = qEnvironmentVariable("COMPOSITOR_GMIC");
+    if (!env.isEmpty() && runnable(env)) return {env, QStringLiteral("env")};
+    if (const QString dir = besideDirectory(); !dir.isEmpty())
+        if (const QString beside = dir + '/' + executableName(); runnable(beside)) return {beside, QStringLiteral("beside")};
+    // A download is only ever renamed into place whole (GmicStore), so a folder with the executable is complete.
+    if (const QString downloaded = downloadedDirectory() + '/' + executableName(); runnable(downloaded)) return {downloaded, QStringLiteral("downloaded")};
+    if (const QString found = QStandardPaths::findExecutable(QStringLiteral("gmic")); !found.isEmpty()) return {found, QStringLiteral("path")};
+    return {};
+}
+
+QString GmicRunner::executable() { return locate().path; }
 
 bool GmicRunner::inProcess() {
 #ifdef COMPOSITOR_HAVE_LIBGMIC
@@ -359,19 +438,27 @@ bool GmicRunner::inProcess() {
 bool GmicRunner::available() { return inProcess() || !executable().isEmpty(); }
 
 QString GmicRunner::version() {
-    static QString cached;
-    if (!cached.isEmpty()) return cached;
 #ifdef COMPOSITOR_HAVE_LIBGMIC
-    if (inProcess()) { cached = QString("%1.%2.%3").arg(gmic_version / 100).arg(gmic_version / 10 % 10).arg(gmic_version % 10); return cached; }
+    if (inProcess()) return QString("%1.%2.%3").arg(gmic_version / 100).arg(gmic_version / 10 % 10).arg(gmic_version % 10);
 #endif
-    QString exe = executable();
+    // Asked once per executable: the one found changes when G'MIC is downloaded or removed while the editor runs.
+    static std::mutex mutex;
+    static QString cachedFor, cached;
+    const QString exe = executable();
     if (exe.isEmpty()) return {};
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (exe == cachedFor) return cached;
+    }
     QProcess p;
     p.start(exe, {"-version"});
     p.waitForFinished(5000);
     static const QRegularExpression re(R"(Version\s+(\d+\.\d+\.\d+))");
     auto m = re.match(QString::fromUtf8(p.readAllStandardOutput()) + QString::fromUtf8(p.readAllStandardError()));
-    cached = m.hasMatch() ? m.captured(1) : QStringLiteral("0.0.0");
+    const QString found = m.hasMatch() ? m.captured(1) : QStringLiteral("0.0.0");
+    std::lock_guard<std::mutex> lock(mutex);
+    cachedFor = exe;
+    cached = found;
     return cached;
 }
 
@@ -407,17 +494,27 @@ bool GmicRunner::allowedForAutomation(const QString& command, QString* why) {
         "deblur", "smooth", "denoise", "median", "erode", "dilate", "edges", "gradient_norm", "normalize", "equalize", "negate",
         "threshold", "cut", "sepia", "cartoon", "pencilbw", "sketchbw", "drawing", "painting", "cubism", "kuwahara", "noise",
         "pixelize", "vignette", "mirror", "solarize", "posterize", "glow", "emboss"};
-    // The catalogue's filter commands (and their preview variants), read once.
-    static const QSet<QString> catalogue = [] {
-        QSet<QString> names;
-        GmicCatalogue c;
-        if (const QString path = GmicCatalogue::preferredFile(); !path.isEmpty() && c.load(path))
-            for (const GmicFilter& f : c.filters()) {
-                names.insert(f.command);
-                if (!f.previewCommand.isEmpty()) names.insert(f.previewCommand);
-            }
-        return names;
-    }();
+    // The catalogue's filter commands (and their preview variants), read again when the definition file changes
+    // (Update Filters, or the catalogue fetched after G'MIC is downloaded).
+    static std::mutex catalogueMutex;
+    static QString catalogueStamp;
+    static QSet<QString> catalogueNames;
+    QSet<QString> catalogue;
+    {
+        const QString stamp = definitionStamp();
+        std::lock_guard<std::mutex> lock(catalogueMutex);
+        if (stamp != catalogueStamp) {
+            catalogueNames.clear();
+            GmicCatalogue c;
+            if (const QString path = GmicCatalogue::preferredFile(); !path.isEmpty() && c.load(path))
+                for (const GmicFilter& f : c.filters()) {
+                    catalogueNames.insert(f.command);
+                    if (!f.previewCommand.isEmpty()) catalogueNames.insert(f.previewCommand);
+                }
+            catalogueStamp = stamp;
+        }
+        catalogue = catalogueNames;
+    }
     static const QRegularExpression numbers(QStringLiteral(R"(^[-+]?[0-9.,eE%+-]*[0-9][0-9.,eE%+-]*$)"));
     if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty())
         return refuse(QStringLiteral("\"%1\" is a patch-based command NekoPhoto does not run").arg(name));
@@ -780,7 +877,7 @@ std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& 
     if (inProcess()) return Interpreter::shared().run(source, command, error);
 #endif
     QString exe = executable();
-    if (exe.isEmpty()) { if (error) *error = QObject::tr("G'MIC is not installed (no gmic executable on PATH)."); return nullptr; }
+    if (exe.isEmpty()) { if (error) *error = QObject::tr("G'MIC is not installed (no gmic executable was found)."); return nullptr; }
     QTemporaryDir dir;
     if (!dir.isValid()) { if (error) *error = QObject::tr("Couldn't create a temporary folder."); return nullptr; }
     QString inPath = dir.filePath("in.png"), outPath = dir.filePath("out.png");
@@ -807,7 +904,7 @@ std::shared_ptr<compositor::Image16> GmicRunner::runSync(const compositor::Image
     if (inProcess()) return Interpreter::shared().run(source, command, error);
 #endif
     QString exe = executable();
-    if (exe.isEmpty()) { if (error) *error = QObject::tr("G'MIC is not installed (no gmic executable on PATH)."); return nullptr; }
+    if (exe.isEmpty()) { if (error) *error = QObject::tr("G'MIC is not installed (no gmic executable was found)."); return nullptr; }
     QTemporaryDir dir;
     if (!dir.isValid()) { if (error) *error = QObject::tr("Couldn't create a temporary folder."); return nullptr; }
     QString inPath = dir.filePath("in.cimg"), outPath = dir.filePath("out.cimg");
@@ -847,7 +944,7 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image16> source, const 
     }
 #endif
     QString exe = executable();
-    if (exe.isEmpty()) { emit finished16(nullptr, QObject::tr("G'MIC is not installed (no gmic executable on PATH).")); return; }
+    if (exe.isEmpty()) { emit finished16(nullptr, QObject::tr("G'MIC is not installed (no gmic executable was found).")); return; }
     dir_ = std::make_unique<QTemporaryDir>();
     if (!dir_->isValid()) { emit finished16(nullptr, QObject::tr("Couldn't create a temporary folder.")); return; }
     QString inPath = dir_->filePath("in.cimg"), outPath = dir_->filePath("out.cimg");
@@ -905,7 +1002,7 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QS
     }
 #endif
     QString exe = executable();
-    if (exe.isEmpty()) { emit finished(nullptr, QObject::tr("G'MIC is not installed (no gmic executable on PATH).")); return; }
+    if (exe.isEmpty()) { emit finished(nullptr, QObject::tr("G'MIC is not installed (no gmic executable was found).")); return; }
     dir_ = std::make_unique<QTemporaryDir>();
     if (!dir_->isValid()) { emit finished(nullptr, QObject::tr("Couldn't create a temporary folder.")); return; }
     QString inPath = dir_->filePath("in.png"), outPath = dir_->filePath("out.png");
