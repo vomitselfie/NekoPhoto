@@ -71,7 +71,7 @@ ExportAsDialog::ExportAsDialog(EditorSession* session, bool layer, const QString
     preview_->setMinimumSize(480, 380);
     preview_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);   // the pixmap follows the label, not the other way
     preview_->setAlignment(Qt::AlignCenter);
-    preview_->setStyleSheet(QStringLiteral("background: %1;").arg(QColor(46, 46, 46).name()));
+    preview_->setStyleSheet(QStringLiteral("background: %1;").arg(canvasBackdrop().name()));
     layout->addWidget(preview_, 1);
 
     auto* side = new QVBoxLayout;
@@ -375,7 +375,7 @@ void ExportAsDialog::refresh() {
     QSize fitted = shown.size();
     if (fitted.width() > preview_->width() || fitted.height() > preview_->height()) fitted = fitted.scaled(preview_->size(), Qt::KeepAspectRatio);
     QPixmap canvas(preview_->size());
-    canvas.fill(QColor(46, 46, 46));
+    canvas.fill(canvasBackdrop());
     QPainter p(&canvas);
     const QRect at(QPoint((canvas.width() - fitted.width()) / 2, (canvas.height() - fitted.height()) / 2), fitted);
     p.fillRect(at, QBrush(checkered(QSize(16, 16))));

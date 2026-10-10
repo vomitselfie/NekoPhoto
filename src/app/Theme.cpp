@@ -1,5 +1,6 @@
 #include "Theme.h"
 #include <QApplication>
+#include <QFile>
 #include <QPalette>
 #include <QSettings>
 #include <QStyle>
@@ -43,6 +44,42 @@ QPalette darkPalette() {
     return p;
 }
 
+/// Goth Kitty: plum-black panels, candy-pink highlights and lavender accents (gothkitty.qss draws the rest).
+QPalette gothKittyPalette() {
+    QPalette p;
+    const QColor window(27, 19, 32), base(18, 12, 22), text(246, 232, 242), disabled(110, 90, 115), pink(255, 126, 182), lavender(185, 163, 255);
+    p.setColor(QPalette::Window, window);
+    p.setColor(QPalette::WindowText, text);
+    p.setColor(QPalette::Base, base);
+    p.setColor(QPalette::AlternateBase, QColor(35, 26, 43));
+    p.setColor(QPalette::ToolTipBase, QColor(42, 31, 51));
+    p.setColor(QPalette::ToolTipText, text);
+    p.setColor(QPalette::Text, text);
+    p.setColor(QPalette::PlaceholderText, disabled);
+    p.setColor(QPalette::Button, QColor(46, 33, 56));
+    p.setColor(QPalette::ButtonText, QColor(255, 196, 225));   // the tool icons are tinted with this: pink on plum
+    p.setColor(QPalette::BrightText, Qt::white);
+    p.setColor(QPalette::Link, lavender);
+    p.setColor(QPalette::Highlight, pink);
+    p.setColor(QPalette::HighlightedText, window);
+    p.setColor(QPalette::Light, QColor(74, 53, 86));
+    p.setColor(QPalette::Midlight, QColor(61, 44, 71));
+    p.setColor(QPalette::Mid, QColor(42, 31, 51));
+    p.setColor(QPalette::Dark, QColor(21, 14, 25));
+    p.setColor(QPalette::Shadow, QColor(10, 6, 12));
+    for (auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText}) p.setColor(QPalette::Disabled, role, disabled);
+    p.setColor(QPalette::Disabled, QPalette::Highlight, QColor(61, 44, 71));
+    p.setColor(QPalette::Disabled, QPalette::HighlightedText, disabled);
+    return p;
+}
+
+QString gothKittyStyleSheet() {
+    // COMPOSITOR_THEME_QSS reads the stylesheet from a file instead, for working on the theme without a rebuild.
+    const QString override = qEnvironmentVariable("COMPOSITOR_THEME_QSS");
+    QFile file(override.isEmpty() ? QStringLiteral(":/gothkitty/gothkitty.qss") : override);
+    return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+}
+
 /// A desktop colour preference (Qt::ColorScheme arrived in Qt 6.5; CI builds against 6.4).
 enum class Scheme { Unknown, Light, Dark };
 
@@ -80,9 +117,9 @@ bool paletteIsDark(const QPalette& p) { return p.color(QPalette::Window).lightne
 
 QString themeSetting() {
     QString env = qEnvironmentVariable("COMPOSITOR_THEME");
-    if (env == "dark" || env == "light" || env == "system") return env;
+    if (env == "dark" || env == "light" || env == "system" || env == "gothkitty") return env;
     QString v = QSettings().value("appearance/theme", "system").toString();
-    return v == "dark" || v == "light" ? v : QStringLiteral("system");
+    return v == "dark" || v == "light" || v == "gothkitty" ? v : QStringLiteral("system");
 }
 
 void setThemeSetting(const QString& value) { QSettings().setValue("appearance/theme", value); }
@@ -91,6 +128,14 @@ void applyTheme() {
     static const QPalette original = QApplication::palette();
     static const QString originalStyle = QApplication::style()->objectName();
     QString choice = themeSetting();
+    // Only Goth Kitty draws with a stylesheet; every other choice clears it.
+    qApp->setStyleSheet(choice == "gothkitty" ? gothKittyStyleSheet() : QString());
+    qApp->setProperty("canvasBackdrop", choice == "gothkitty" ? QVariant(QColor(33, 23, 40)) : QVariant());
+    if (choice == "gothkitty") {
+        if (QApplication::style()->objectName() != QLatin1String("fusion")) QApplication::setStyle(QStyleFactory::create("Fusion"));
+        QApplication::setPalette(gothKittyPalette());
+        return;
+    }
     bool wantDark;
     if (choice == "dark") wantDark = true;
     else if (choice == "light") wantDark = false;

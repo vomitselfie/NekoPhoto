@@ -1,4 +1,5 @@
 #include "CanvasWidget.h"
+#include "Style.h"
 #include "ColorManagement.h"
 #include <QRegion>
 #include <cstring>
@@ -282,7 +283,7 @@ void CanvasWidget::flushDirty() {
 
 void CanvasWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(46, 46, 46));
+    painter.fillRect(rect(), canvasBackdrop());   // Photoshop's pasteboard grey, or the theme's own
     if (!session_->hasDocument()) {
         painter.setPen(QColor(150, 150, 150));
         painter.drawText(rect(), Qt::AlignCenter, tr("Open an image or project, or drop one here.\nFile > New creates a blank canvas."));

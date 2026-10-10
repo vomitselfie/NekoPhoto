@@ -1,0 +1,137 @@
+/* Goth Kitty: plum-black, candy pink and lavender, rounded and a little bit cute.
+   Applied over Fusion with Theme.cpp's gothKittyPalette(); only the look changes. */
+
+* { outline: none; }
+
+QMainWindow, QDialog { background: #1b1320; }
+
+QToolTip {
+    background: #2a1f33; color: #f6e8f2;
+    border: 1px solid #ff7eb6; border-radius: 8px; padding: 4px 8px;
+}
+
+/* ---- Menus: pink pills ---- */
+QMenuBar { background: #150e19; border-bottom: 1px solid #3d2c47; padding: 2px 4px; }
+QMenuBar::item { background: transparent; padding: 4px 10px; border-radius: 10px; margin: 1px 1px; }
+QMenuBar::item:selected { background: #3a2645; color: #ffd6ea; }
+QMenuBar::item:pressed { background: #ff7eb6; color: #1b1320; }
+
+QMenu {
+    background: #201725; border: 1px solid #4a3556; border-radius: 12px; padding: 6px;
+}
+QMenu::item { padding: 5px 26px 5px 22px; border-radius: 9px; margin: 1px 2px; }
+QMenu::item:selected { background: #ff7eb6; color: #1b1320; }
+QMenu::item:disabled { color: #6e5a73; }
+QMenu::separator { height: 1px; background: #3d2c47; margin: 5px 10px; }
+QMenu::indicator { width: 14px; height: 14px; left: 4px; }
+QMenu::indicator:checked { image: url(:/gothkitty/check.svg); }
+QMenu::right-arrow { image: url(:/gothkitty/arrow-down.svg); width: 9px; height: 9px; }
+
+/* ---- Panels: rounded cards with a bow on the title ---- */
+QDockWidget { color: #ffd6ea; font-weight: bold; titlebar-close-icon: none; }
+QDockWidget::title {
+    background: #241a2b; padding: 5px 8px 5px 34px;
+    border-top-left-radius: 10px; border-top-right-radius: 10px;
+    border-bottom: 1px solid #3d2c47;
+    background-image: url(:/gothkitty/bow.svg); background-repeat: no-repeat; background-position: left center;
+    background-origin: padding; margin-left: 0px;
+}
+QDockWidget > QWidget { background: #1f1625; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+
+QToolBar { background: #150e19; border: none; spacing: 3px; padding: 3px; }
+QToolBar::separator { background: #3d2c47; width: 1px; margin: 4px; }
+QToolButton { border-radius: 9px; padding: 3px; }
+QToolButton:hover { background: #33243d; }
+QToolButton:checked { background: #ff7eb6; color: #1b1320; }
+QToolButton:pressed { background: #ffa3cc; }
+
+QStatusBar { background: #150e19; border-top: 1px solid #3d2c47; color: #c9b2d6; }
+QStatusBar::item { border: none; }
+
+/* ---- Tabs: soft rounded tabs, the open one pink ---- */
+QTabWidget::pane { border: 1px solid #3d2c47; border-radius: 10px; top: -1px; }
+QTabBar::tab {
+    background: #241a2b; color: #c9b2d6; padding: 5px 14px; margin-right: 3px;
+    border-top-left-radius: 10px; border-top-right-radius: 10px; border: 1px solid #3d2c47; border-bottom: none;
+}
+QTabBar::tab:selected { background: #ff7eb6; color: #1b1320; font-weight: bold; }
+QTabBar::tab:hover:!selected { background: #33243d; color: #ffd6ea; }
+QTabBar::close-button { image: url(:/gothkitty/close.svg); subcontrol-position: right; margin: 2px; }
+QTabBar::close-button:hover { image: url(:/gothkitty/close-hover.svg); }
+
+/* ---- Buttons ---- */
+QPushButton {
+    background: #2e2138; color: #f6e8f2; border: 1px solid #4a3556; border-radius: 11px; padding: 5px 14px;
+}
+QPushButton:hover { background: #3a2a46; border-color: #ff7eb6; }
+QPushButton:pressed { background: #ff7eb6; color: #1b1320; }
+QPushButton:default { border: 2px solid #ff7eb6; }
+QPushButton:disabled { color: #6e5a73; border-color: #33243d; }
+
+/* ---- Fields ---- */
+/* Spin boxes are styled in dialogs only: a stylesheet on the narrow fixed-width fields of the options bar and the
+   panels leaves them blank (a Qt quirk); Fusion draws those with the palette, which matches. */
+QLineEdit, QDialog QSpinBox, QDialog QDoubleSpinBox, QComboBox, QPlainTextEdit, QTextEdit {
+    background: #120c16; color: #f6e8f2; border: 1px solid #4a3556; border-radius: 8px; padding: 1px 4px;
+    selection-background-color: #ff7eb6; selection-color: #1b1320;
+}
+QLineEdit:focus, QDialog QAbstractSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus { border-color: #ff7eb6; }
+QComboBox { padding: 1px 2px 1px 5px; }
+QComboBox::drop-down { border: none; width: 14px; }
+QComboBox::down-arrow { image: url(:/gothkitty/arrow-down.svg); width: 10px; height: 10px; }
+QComboBox QAbstractItemView {
+    background: #201725; border: 1px solid #4a3556; border-radius: 10px; padding: 4px;
+    selection-background-color: #ff7eb6; selection-color: #1b1320;
+}
+
+/* ---- Sliders: a pink ribbon with a heart to drag ---- */
+QSlider:horizontal { min-width: 70px; min-height: 20px; }
+QSlider:vertical { min-height: 70px; min-width: 20px; }
+QSlider::groove:horizontal { height: 6px; background: #33243d; border-radius: 3px; }
+QSlider::sub-page:horizontal { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b9a3ff, stop:1 #ff7eb6); border-radius: 3px; }
+QSlider::handle:horizontal { image: url(:/gothkitty/heart.svg); width: 18px; height: 18px; margin: -7px -2px; }
+QSlider::handle:horizontal:hover { image: url(:/gothkitty/heart-hover.svg); }
+QSlider::groove:vertical { width: 6px; background: #33243d; border-radius: 3px; }
+QSlider::add-page:vertical { background: qlineargradient(x1:0, y1:1, x2:0, y2:0, stop:0 #b9a3ff, stop:1 #ff7eb6); border-radius: 3px; }
+QSlider::handle:vertical { image: url(:/gothkitty/heart.svg); width: 18px; height: 18px; margin: -2px -7px; }
+
+/* ---- Checks and radios: a heart and a paw ---- */
+QCheckBox, QRadioButton { spacing: 7px; }
+QCheckBox::indicator, QRadioButton::indicator, QTreeView::indicator, QListView::indicator { width: 16px; height: 16px; }
+QCheckBox::indicator:unchecked, QTreeView::indicator:unchecked, QListView::indicator:unchecked { image: url(:/gothkitty/uncheck.svg); }
+QCheckBox::indicator:checked, QTreeView::indicator:checked, QListView::indicator:checked { image: url(:/gothkitty/check.svg); }
+QCheckBox::indicator:checked:disabled, QTreeView::indicator:checked:disabled { image: url(:/gothkitty/check-disabled.svg); }
+QCheckBox::indicator:unchecked:disabled, QTreeView::indicator:unchecked:disabled { image: url(:/gothkitty/uncheck-disabled.svg); }
+QCheckBox:disabled, QRadioButton:disabled, QLabel:disabled { color: #6e5a73; }
+QRadioButton::indicator:unchecked { image: url(:/gothkitty/radio-off.svg); }
+QRadioButton::indicator:checked { image: url(:/gothkitty/radio-on.svg); }
+
+/* ---- Lists and trees ---- */
+QTreeView, QListView, QTableView, QTreeWidget, QListWidget {
+    background: #170f1b; alternate-background-color: #1d1422; border: 1px solid #33243d; border-radius: 10px;
+    selection-background-color: #ff7eb6; selection-color: #1b1320;
+}
+QTreeView::item, QListView::item { border-radius: 7px; padding: 2px; }
+QTreeView::item:hover, QListView::item:hover { background: #2c2035; }
+QTreeView::item:selected, QListView::item:selected { background: #ff7eb6; color: #1b1320; }
+QHeaderView::section { background: #241a2b; color: #ffd6ea; border: none; border-bottom: 1px solid #3d2c47; padding: 4px 8px; }
+
+/* ---- Scrollbars: thin lavender-to-pink candy ---- */
+QScrollBar:vertical { background: transparent; width: 11px; margin: 2px; }
+QScrollBar::handle:vertical { background: #5a4270; border-radius: 4px; min-height: 26px; }
+QScrollBar::handle:vertical:hover { background: #ff7eb6; }
+QScrollBar:horizontal { background: transparent; height: 11px; margin: 2px; }
+QScrollBar::handle:horizontal { background: #5a4270; border-radius: 4px; min-width: 26px; }
+QScrollBar::handle:horizontal:hover { background: #ff7eb6; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+QGroupBox { border: 1px solid #3d2c47; border-radius: 12px; margin-top: 12px; padding-top: 6px; }
+QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; color: #ff9fca; }
+
+QProgressBar { background: #120c16; border: 1px solid #4a3556; border-radius: 8px; text-align: center; color: #f6e8f2; }
+QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b9a3ff, stop:1 #ff7eb6); border-radius: 7px; }
+
+QSplitter::handle { background: #241a2b; }
+QMainWindow::separator { background: #150e19; width: 4px; height: 4px; }
+QMainWindow::separator:hover { background: #ff7eb6; }

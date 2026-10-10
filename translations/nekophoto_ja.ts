@@ -9477,6 +9477,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>ライト</translation>
     </message>
     <message>
+        <source>Goth Kitty</source>
+        <translation>ゴスキティ</translation>
+    </message>
+    <message>
         <source>System follows the desktop (through its portal when running as an AppImage). Some text colours refresh at the next launch.</source>
         <translation>「システム」はデスクトップの設定に従います(AppImage で実行中はポータル経由)。一部の文字色は次回起動時に更新されます。</translation>
     </message>

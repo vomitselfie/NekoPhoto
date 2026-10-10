@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QPalette>
 #include <QString>
+#include <QVariant>
 
 namespace app {
 
@@ -18,6 +19,13 @@ inline QColor hintColor(int textTenths = 6) {
 
 inline QString hintStyle(const QString& extra = {}) {
     return QStringLiteral("color: %1;%2").arg(hintColor().name(), extra);
+}
+
+/// The grey behind the canvas and image previews (Photoshop's pasteboard), or the theme's own: Goth Kitty sets a plum
+/// through the application's "canvasBackdrop" property (Theme.cpp).
+inline QColor canvasBackdrop() {
+    const QVariant v = qApp->property("canvasBackdrop");
+    return v.isValid() ? v.value<QColor>() : QColor(46, 46, 46);
 }
 
 } // namespace app

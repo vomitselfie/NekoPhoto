@@ -217,6 +217,12 @@ file(GLOB_RECURSE COMPOSITOR_BRUSH_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURR
     ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*.myb ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*_prev.png)
 # G'MIC filters that do not work here at their defaults (tools/gmic-sweep.py makes the list).
 qt_add_resources(nekophoto "welcome" PREFIX "/" FILES images/welcome.jpg)
+# The Goth Kitty theme's stylesheet and ornaments (Preferences > Theme).
+qt_add_resources(nekophoto "gothkitty" PREFIX "/gothkitty" BASE theme/gothkitty FILES
+    theme/gothkitty/gothkitty.qss theme/gothkitty/heart.svg theme/gothkitty/heart-hover.svg theme/gothkitty/check.svg
+    theme/gothkitty/uncheck.svg theme/gothkitty/radio-on.svg theme/gothkitty/radio-off.svg theme/gothkitty/bow.svg
+    theme/gothkitty/arrow-down.svg theme/gothkitty/check-disabled.svg theme/gothkitty/uncheck-disabled.svg
+    theme/gothkitty/close.svg theme/gothkitty/close-hover.svg)
 qt_add_resources(nekophoto "gmic_lists" PREFIX "/" FILES gmic/unsupported.txt)
 qt_add_resources(nekophoto "mypaint_brushes" PREFIX "/" FILES ${COMPOSITOR_BRUSH_FILES} brushes/mypaint/order.conf)
 # Translations (Qt Linguist): translations/nekophoto_<lang>.ts is compiled to .qm and embedded under :/i18n, so
