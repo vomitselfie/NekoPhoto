@@ -485,7 +485,11 @@ command registry's (`CONTRIBUTING.md`, "Commands"); the tools are `tool.<name>` 
 | Shift Ctrl A, Ctrl Shift G | Camera Raw Filter, G'MIC |
 | Ctrl H | Show or hide the transform controls |
 | Ctrl Z, Ctrl Shift Z, Ctrl Alt Z | Undo (again for earlier steps), redo, toggle last state (Photoshop CC's defaults) |
-| F7, Alt F9 | Show or hide the Layers panel, the Actions panel |
+| F7, Alt F9 | Show or hide the Layers panel, the Actions panel (in full screen, the edge holding it slides out on its tab) |
+| F | View ▸ Screen Mode: Full Screen Mode, and back to Standard. Only the canvas is on screen; the pointer at an edge slides out its part over the canvas (left: the tools, top: the options bar, right: the panels, bottom: the Timeline when it is open) |
+| Esc (full screen) | Slide the edges back; with none out, leave full screen (the window and its panels come back as they were) |
+| Tab, Shift Tab (full screen) | Keep every edge out, or hide them again; the same without the tools. A field being typed in keeps Tab for itself |
+| F10, Alt (full screen) | The menus: the menu bar shows over the canvas while one is open (F10 opens the menu bar in the standard window too) |
 | F12 | File ▸ Revert: the file as opened or last saved, any format, as one undo step (no question; Undo brings the edits back) |
 | Ctrl Alt Shift W (also Ctrl Alt Shift S) | File ▸ Export ▸ Export As |
 | Ctrl Shift ', Ctrl Alt Shift ' | Layer ▸ Quick Export, Layer ▸ Export As (the active layer alone) |

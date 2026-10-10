@@ -9161,6 +9161,38 @@ File &gt; New creates a blank canvas.</source>
         <translation>新規ガイド</translation>
     </message>
     <message>
+        <source>Scree&amp;n Mode</source>
+        <translation>スクリーンモード(&amp;N)</translation>
+    </message>
+    <message>
+        <source>&amp;Standard Screen Mode</source>
+        <translation>標準スクリーンモード(&amp;S)</translation>
+    </message>
+    <message>
+        <source>&amp;Full Screen Mode</source>
+        <translation>フルスクリーンモード(&amp;F)</translation>
+    </message>
+    <message>
+        <source>Cycle Screen Modes</source>
+        <translation>スクリーンモードを切り替え</translation>
+    </message>
+    <message>
+        <source>In Full Screen Mode only</source>
+        <translation>フルスクリーンモードでのみ使用できます</translation>
+    </message>
+    <message>
+        <source>Show or Hide &amp;Panels</source>
+        <translation>パネルの表示・非表示(&amp;P)</translation>
+    </message>
+    <message>
+        <source>Show or Hide Panels &amp;Except Tools</source>
+        <translation>ツール以外のパネルの表示・非表示(&amp;E)</translation>
+    </message>
+    <message>
+        <source>Show Menus</source>
+        <translation>メニューを表示</translation>
+    </message>
+    <message>
         <source>&amp;Layers Panel</source>
         <translation>レイヤーパネル(&amp;L)</translation>
     </message>
