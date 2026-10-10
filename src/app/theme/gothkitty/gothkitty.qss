@@ -78,6 +78,21 @@ QLineEdit, QDialog QSpinBox, QDialog QDoubleSpinBox, QComboBox, QPlainTextEdit, 
     selection-background-color: #ff7eb6; selection-color: #1b1320;
 }
 QLineEdit:focus, QDialog QAbstractSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus { border-color: #ff7eb6; }
+/* A styled spin box needs its buttons styled too: Fusion's arrows vanish, and a field without buttons draws no text. */
+QDialog QAbstractSpinBox[buttonSymbols="UpDownArrows"] { padding-right: 16px; }
+QDialog QAbstractSpinBox[buttonSymbols="UpDownArrows"]::up-button, QDialog QAbstractSpinBox[buttonSymbols="UpDownArrows"]::down-button {
+    subcontrol-origin: border; width: 14px; border: none; background: transparent;
+}
+QDialog QAbstractSpinBox[buttonSymbols="UpDownArrows"]::up-button { subcontrol-position: top right; margin: 2px 2px 0 0; }
+QDialog QAbstractSpinBox[buttonSymbols="UpDownArrows"]::down-button { subcontrol-position: bottom right; margin: 0 2px 2px 0; }
+QDialog QAbstractSpinBox[buttonSymbols="UpDownArrows"]::up-button:hover, QDialog QAbstractSpinBox[buttonSymbols="UpDownArrows"]::down-button:hover {
+    background: #33243d; border-radius: 4px;
+}
+QDialog QAbstractSpinBox::up-arrow { image: url(:/gothkitty/spin-up.svg); width: 9px; height: 9px; }
+QDialog QAbstractSpinBox::down-arrow { image: url(:/gothkitty/spin-down.svg); width: 9px; height: 9px; }
+QDialog QAbstractSpinBox[buttonSymbols="NoButtons"]::up-button, QDialog QAbstractSpinBox[buttonSymbols="NoButtons"]::down-button {
+    subcontrol-origin: border; width: 0px; border: none; background: transparent;
+}
 QComboBox { padding: 1px 2px 1px 5px; }
 QComboBox::drop-down { border: none; width: 14px; }
 QComboBox::down-arrow { image: url(:/gothkitty/arrow-down.svg); width: 10px; height: 10px; }
