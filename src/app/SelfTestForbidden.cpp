@@ -2,13 +2,17 @@
 // and a type or shape layer (EditorSession::toolRefusal), say which in the status bar and show the forbidden cursor
 // over the canvas, following the active layer, its visibility and the tool without the pointer moving. A mask takes
 // the paint, an adjustment layer's too (it comes with one, targeted: painting it is one step and changes the composite
-// only under the stroke); rasterizing a type layer lets the brush on, and undoing it refuses it again.
+// only under the stroke); rasterizing a type layer lets the brush on, and undoing it refuses it again. Rasterize Shape
+// bakes the outline and drops the vector mask, the composite unchanged (on Patchy's Photoshop shapes too).
 #include "SelfTest.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "Theme.h"
+#include "compositor/psd.h"
 #include "compositor/render.h"
+#include "compositor/vectorlayer.h"
+#include "compositor/vectormask.h"
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QJsonObject>
@@ -16,7 +20,9 @@
 #include <QMouseEvent>
 #include <QStatusBar>
 #include <QThread>
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 using namespace compositor;
@@ -34,6 +40,16 @@ void settle(int ms) {
         QApplication::processEvents(QEventLoop::AllEvents, 20);
         QThread::msleep(2);
     } while (t.elapsed() < ms);
+}
+
+/// The largest difference of any channel between two renders (256 when their sizes differ).
+int maxDifference(const Image& a, const Image& b) {
+    if (a.width() != b.width() || a.height() != b.height()) return 256;
+    int most = 0;
+    for (int y = 0; y < a.height(); y++)
+        for (int x = 0; x < a.width(); x++)
+            for (int c = 0; c < 4; c++) most = std::max(most, std::abs(int(a.pixel(x, y)[c]) - int(b.pixel(x, y)[c])));
+    return most;
 }
 
 } // namespace
@@ -192,9 +208,59 @@ int forbiddenCursor(MainWindow& w) {
     // A shape layer and a smart object.
     expect(call("shape.draw", {{"x", 10}, {"y", 10}, {"width", 60}, {"height", 40}}).has_value(), "could not draw a shape");
     expect(kind(Tool::Brush, ToolRefusal::Rasterize), "a shape layer did not ask to be rasterized");
+
+    // Rasterize Shape: the outline and stroke baked into the pixels, past the canvas too, and the vector mask (the
+    // shape's path) gone, as in Photoshop; the composite stays as it was. One step, and its undo is the shape again.
+    expect(call("shape.draw", {{"kind", "ellipse"}, {"x", -10}, {"y", 30}, {"width", 70}, {"height", 50}, {"color", "#2060c0"},
+                               {"stroke", true}, {"strokeWidth", 4}, {"strokeColor", "#f0c020"}}).has_value(), "could not draw a stroked shape");
+    if (const Layer* shape = s.activeLayer(); shape && isVectorShapeLayer(*shape) && layerVectorMask(*shape, *s.document())) {
+        const auto before = renderFlattened(*s.document());
+        const size_t steps = s.undoNames().size();
+        expect(s.rasterizeLayer(), "the shape layer did not rasterize");
+        expect(s.undoNames().size() == steps + 1 && s.undoNames().back() == "Rasterize Shape", "Rasterize Shape was not one step");
+        const Layer* raster = s.activeLayer();
+        expect(raster && !isVectorShapeLayer(*raster) && !hasLayerVectorMask(*raster) && !layerVectorMask(*raster, *s.document()) && !layerVectorStroke(*raster),
+               "Rasterize Shape kept the shape's vector mask or stroke");
+        expect(raster && raster->transform.origin.x < -10, "Rasterize Shape lost the part of the shape past the canvas");
+        expect(!refusal(Tool::Brush), "the rasterized shape still refuses the brush");
+        expect(maxDifference(*before, *renderFlattened(*s.document())) <= 1, "Rasterize Shape changed the composite");
+        call("history.undo");
+        const Layer* again = s.activeLayer();
+        expect(again && isVectorShapeLayer(*again) && layerVectorMask(*again, *s.document()) && kind(Tool::Brush, ToolRefusal::Rasterize), "undoing Rasterize Shape did not bring the shape back");
+    } else expect(false, "the stroked shape is not a vector shape layer");
+
     s.selectLayer(pixels, false);
     if (call("smartObject.convert").has_value()) expect(kind(Tool::Brush, ToolRefusal::SmartObject) && kind(Tool::Gradient, ToolRefusal::SmartObject), "a smart object did not ask about its contents");
     else expect(false, "could not make a smart object");
+
+    // Photoshop's own shape layers (Patchy's fixtures, when PATCHY_FIXTURES names them): strokes, Feather,
+    // combined paths, a live rectangle. Each rasterized shape looks as it did. (A gradient or pattern fill is drawn from
+    // its PSD data and refused, not rasterized.)
+    const QString fixtures = qEnvironmentVariable("PATCHY_FIXTURES");
+    if (!fixtures.isEmpty()) {
+        for (const char* name : {"photoshop-shape-strokes.psd", "photoshop-shape-feather.psd", "photoshop-shape-boolean.psd", "photoshop-shape-live-rect.psd"}) {
+            const std::string path = (fixtures + "/" + QString::fromLatin1(name)).toStdString();
+            std::string why;
+            auto imported = importPsd(path, &why);
+            if (!imported) { std::fprintf(stderr, "forbidden cursor: %s: %s\n", name, why.c_str()); failures++; continue; }
+            s.adoptDocument(imported->document, QString::fromLatin1(name));
+            std::vector<Uuid> shapes;
+            for (const Layer& l : s.document()->layers)
+                if (EditorSession::rasterizable(l) == Rasterizable::Shape && layerVectorMask(l, *s.document())) shapes.push_back(l.id);
+            if (shapes.empty()) { std::fprintf(stderr, "forbidden cursor: %s has no shape layer\n", name); failures++; }
+            for (const Uuid& id : shapes) {
+                s.selectLayer(id, false);
+                const auto before = renderFlattened(*s.document());
+                const bool rasterized = s.rasterizeLayer();
+                const Layer* raster = s.document()->find(id);
+                const int difference = maxDifference(*before, *renderFlattened(*s.document()));
+                if (!rasterized || !raster || layerVectorMask(*raster, *s.document()) || difference > 2) {
+                    std::fprintf(stderr, "forbidden cursor: %s: Rasterize Shape on \"%s\": rasterized %d, difference %d\n", name, raster ? raster->name.c_str() : "?", int(rasterized), difference);
+                    failures++;
+                }
+            }
+        }
+    }
 
     std::printf("forbidden cursor: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;

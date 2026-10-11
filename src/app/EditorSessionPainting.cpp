@@ -15,8 +15,14 @@
 #include "compositor/blur.h"
 #include "compositor/depth.h"
 #include "compositor/psd_carry.h"
+#include "compositor/colormgmt.h"
+#include "compositor/filters.h"
+#include "compositor/render.h"
+#include "compositor/vectorlayer.h"
+#include "compositor/vectormask.h"
 #include <algorithm>
 #include <random>
+#include <set>
 
 using namespace compositor;
 
@@ -65,6 +71,52 @@ bool paintsNative(const Document& document) { return document.sampleType == Samp
 AnyImage flattenedNative(const Document& document) {
     if (document.sampleType == SampleType::F32) return ImageFPtr(renderFlattenedF(document));
     return renderNative(document);
+}
+
+/// A shape layer as the plain pixels it shows, at the document's depth and layout: its fill cut by its path, its
+/// stroke over it, softened by its Feather, over all the shape reaches (past the canvas too) and trimmed to it. Its
+/// effects, opacity, blend mode, Fill and pixel mask stay the layer's, so they are left out. None without a path, or
+/// when the shape reaches past the size limits.
+std::optional<std::pair<AnyImage, LayerTransform>> shapeAsPixels(const Document& document, const Layer& layer) {
+    if (!layer.psdCarry || !layer.asset || !layer.asset->image || !layerVectorMask(layer, document)) return std::nullopt;
+    const int pw = layer.pixelWidth(), ph = layer.pixelHeight();
+    const Rect placed = layer.transform.pixelToDocument(pw, ph).mapBounds(Rect(0, 0, pw, ph));
+    // A stroke may sit outside the fill's pixels, and a Feather spreads past both.
+    double pad = 2;
+    if (auto stroke = layerVectorStroke(layer); stroke && stroke->enabled && std::isfinite(stroke->width)) pad += std::clamp(stroke->width, 0.0, 30000.0);
+    if (auto params = parseMaskParameters(layer.psdCarry->maskData); params && params->vectorFeather) pad += 3 * vectorFeatherSigma(std::clamp(*params->vectorFeather, 0.0, 1000.0));
+    const double x0 = std::floor(placed.x - pad), y0 = std::floor(placed.y - pad);
+    const double w = std::ceil(placed.maxX() + pad) - x0, h = std::ceil(placed.maxY() + pad) - y0;
+    if (!(w >= 1 && h >= 1) || w > maxImageSide || h > maxImageSide || w * h > double(Document::pixelBudget)) return std::nullopt;
+    // The layer alone in a copy of the document (its patterns, profile and the canvas its path was stored against),
+    // keeping only the blocks that draw the shape.
+    Document single = document;
+    Layer copy = layer;
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
+    std::erase_if(carry->blocks, [](const PsdBlock& b) {
+        static const std::set<std::string> shape{"vmsk", "vsms", "vstk", "vscg", "vogk", "SoCo", "GdFl", "PtFl"};
+        return !shape.count(b.key);
+    });
+    copy.psdCarry = std::move(carry);
+    single.layers = {copy};
+    single.selection.reset();
+    RenderOptions options;
+    options.region = Rect(x0, y0, w, h);
+    AnyImage drawn;
+    if (document.sampleType == SampleType::F32) {
+        auto out = std::make_shared<ImageF>(int(w), int(h));
+        renderF(single, options, *out);
+        drawn = ImageFPtr(out);
+    } else drawn = renderNative(single, options);
+    if (!drawn) return std::nullopt;
+    LayerTransform trimmed;
+    bool empty = false;
+    AnyImage pixels = trimToPixelsAny(drawn, LayerTransform(Point(x0, y0), Size(w, h)), trimmed, &empty);
+    if (!pixels) return std::nullopt;
+    if (empty) { pixels = drawn; trimmed = LayerTransform(Point(x0, y0), Size(w, h)); }   // nothing shows: kept as the clear pixels it is
+    trimmed.sampling = layer.transform.sampling;
+    return std::make_pair(pixels, trimmed);
 }
 
 } // namespace
@@ -135,18 +187,36 @@ bool EditorSession::rasterizeLayer() {
     if (!canEditLayers() || !layer) return false;
     const Rasterizable what = rasterizable(*layer);
     if (what == Rasterizable::No || what == Rasterizable::DrawnFill) return false;
+    // Rasterize Shape bakes the shape's outline (and stroke) into the pixels, so the vector mask that cut them goes, as
+    // in Photoshop: a shape layer's path is its vector mask (a shape has no other one here).
+    std::optional<std::pair<AnyImage, LayerTransform>> baked;
+    if (what == Rasterizable::Shape && layerVectorMask(*layer, *document_)) {
+        baked = shapeAsPixels(*document_, *layer);
+        if (!baked) { emit error(tr("The shape reaches too far to be rasterized.")); return false; }
+    }
     endOpacityEdit();
     beginEdit(what == Rasterizable::Type ? QT_TRANSLATE_NOOP("History", "Rasterize Type")
               : what == Rasterizable::Shape ? QT_TRANSLATE_NOOP("History", "Rasterize Shape") : QT_TRANSLATE_NOOP("History", "Rasterize Fill Content"));
-    // The pixels stay as they are; the layer stops being anything but them, as a stroke on it would make it. A PSD's
-    // blocks saying what the layer is instead of its pixels go with it (the vector mask stays, as after painting).
+    // Otherwise the pixels stay as they are; the layer stops being anything but them, as a stroke on it would make it.
+    // A PSD's blocks saying what the layer is instead of its pixels go with it (a type or fill layer's vector mask
+    // stays, as after painting).
+    if (baked) {
+        if (layer->mask && !layer->mask->placement) layer->mask->placement = layer->maskTransform();   // the pixel mask stays where it is
+        layer->asset = Asset::makeAny(baked->first, layer->name);
+        if (document_->colorMode != ColorMode::RGB) layer->asset->thumbnail = modeThumbnail(baked->first, document_->colorMode, document_->profile);
+        layer->transform = baked->second;
+    }
     layer->text.reset();
     layer->textImage = AnyImage();
     layer->shape.reset();
     layer->shapeImage = AnyImage();
     if (layer->psdCarry) {
         auto carry = std::make_shared<PsdLayerCarry>(*layer->psdCarry);
-        std::erase_if(carry->blocks, [](const PsdBlock& b) { return PsdLayerCarry::binding(b.key) != PsdLayerCarry::Binding::Always; });
+        const bool shape = what == Rasterizable::Shape;
+        std::erase_if(carry->blocks, [shape](const PsdBlock& b) {
+            if (shape && (b.key == "vmsk" || b.key == "vsms" || b.key == "vstk" || b.key == "vscg")) return true;   // the path and its stroke
+            return PsdLayerCarry::binding(b.key) != PsdLayerCarry::Binding::Always;
+        });
         layer->psdCarry = std::move(carry);
     }
     endEdit();

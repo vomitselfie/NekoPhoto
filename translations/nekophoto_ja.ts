@@ -5004,6 +5004,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>アクティブなレイヤーはグラデーションまたはパターンの塗りつぶしレイヤーです。ペイントするピクセルがありません。</translation>
     </message>
     <message>
+        <source>The shape reaches too far to be rasterized.</source>
+        <translation>シェイプの範囲が大きすぎるため、ラスタライズできません。</translation>
+    </message>
+    <message>
         <source>The brush %1 could not be read.</source>
         <translation>ブラシ %1 を読み込めませんでした。</translation>
     </message>
