@@ -7,7 +7,9 @@
 // are listed and skipped. Each case's mean and 95th-percentile ΔE00 over the patches (the wide-gamut row left out, as
 // the corpus does) are held to tests/camera_raw_parity_baseline.txt: a case fails when it gets worse by more than 0.1 on
 // the mean or 0.3 on the 95th percentile, RAWmakase's margins. COMPOSITOR_BLESS_CAMERA_RAW_PARITY=1 rewrites the baseline
-// after an intended change. COMPOSITOR_CAMERA_RAW_PARITY_DUMP=<file> writes every case's patch values as JSON for fitting.
+// after an intended change. COMPOSITOR_CAMERA_RAW_PARITY_DUMP=<file> writes every case's patch values as JSON for fitting;
+// COMPOSITOR_CAMERA_RAW_PARITY_ONLY=<text> runs only the cases whose name contains it, and
+// COMPOSITOR_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>" patches one case's settings, to try a mapping by hand.
 #include "check.h"
 #include "compositor/raw.h"
 #include <nlohmann/json.hpp>
@@ -53,14 +55,17 @@ std::vector<Patch> readLayout() {
 
 using Rgb = std::array<double, 3>;
 
-/// Each patch's mean encoded value on the 16-bit scale (0..65535), as the corpus records Camera Raw's.
+/// Each patch's mean encoded value on the 16-bit scale (0..65535), as the corpus records Camera Raw's. Where Geometry or
+/// Distortion uncovers the layer (transparent here), Camera Raw renders white, so the pixels are composited on white.
 std::vector<Rgb> measure(const Image16& image, const std::vector<Patch>& patches) {
     std::vector<Rgb> out;
     for (const Patch& p : patches) {
         Rgb sum{0, 0, 0};
         for (int y = p.y; y < p.y + p.h; y++)
-            for (int x = p.x; x < p.x + p.w; x++)
-                for (int c = 0; c < 3; c++) sum[size_t(c)] += image.pixel(x, y)[c];
+            for (int x = p.x; x < p.x + p.w; x++) {
+                const uint16_t* px = image.pixel(x, y);
+                for (int c = 0; c < 3; c++) sum[size_t(c)] += px[c] + (32768 - px[3]);
+            }
         for (double& v : sum) v = v / (p.w * p.h) * 65535.0 / 32768.0;
         out.push_back(sum);
     }
@@ -349,8 +354,16 @@ Run runCorpus() {
     for (const json& entry : cases["cases"]) {
         const std::string name = entry["name"].get<std::string>();
         const std::string key = chartName + "/" + name;
+        if (const char* only = std::getenv("COMPOSITOR_CAMERA_RAW_PARITY_ONLY"); only && name.find(only) == std::string::npos) continue;
         MappedCase m = mapCase(cases["base"], entry);
         if (!m.unsupported.empty()) { run.skipped[key] = m.unsupported; continue; }
+        // For fitting by hand: COMPOSITOR_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>" patches that case's settings.
+        if (const char* trial = std::getenv("COMPOSITOR_CAMERA_RAW_PARITY_TRY")) {
+            const std::string text = trial;
+            const size_t eq = text.find('=');
+            if (eq != std::string::npos && text.substr(0, eq) == name && !CameraRawSettings::parse(text.substr(eq + 1), m.settings))
+                check::fail(__FILE__, __LINE__, key + ": the trial settings do not parse");
+        }
         // Every case runs on synthetic-d65; the renders keep those the engine can map (a newly mapped control needs its
         // renders added from the corpus).
         if (!reference["cases"].contains(name)) { check::fail(__FILE__, __LINE__, key + ": no Camera Raw render"); continue; }
@@ -433,6 +446,7 @@ TEST_CASE(camera_raw_parity_does_not_regress) {
         std::fprintf(stderr, "    %s: %s\n", name.c_str(), list.c_str());
     }
 
+    if (std::getenv("COMPOSITOR_CAMERA_RAW_PARITY_ONLY")) return;   // a subset: nothing to hold to the baseline
     if (std::getenv("COMPOSITOR_BLESS_CAMERA_RAW_PARITY")) {
         writeBaseline(run.scores);
         std::fprintf(stderr, "  baseline rewritten: %s\n", baselinePath.c_str());

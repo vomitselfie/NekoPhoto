@@ -41,7 +41,9 @@ struct CameraRawCurveSettings {
     /// Dividers, 0…100, kept in order: where each parametric slider hands off to the next.
     double shadowSplit = 25, darkSplit = 50, lightSplit = 75;
     std::vector<CameraRawCurvePoint> rgb = linear(), red = linear(), green = linear(), blue = linear();
-    /// How much the composite curve also changes saturation, −100…100. 0 keeps it to brightness.
+    /// Lightroom's Refine Saturation (0…200, default 100) less 100: how much of the saturation change the RGB point curve
+    /// makes is kept. 0 keeps all of it; −100 keeps the colour's channel differences and takes only its brightness from
+    /// the curve; above 0 is the same as 0, as in Camera Raw.
     double refineSaturation = 0;
     bool operator==(const CameraRawCurveSettings&) const = default;
 
@@ -51,9 +53,9 @@ struct CameraRawCurveSettings {
     static bool isLinear(const std::vector<CameraRawCurvePoint>& points);
 
     bool adjusts() const;
-    /// Lifts or lowers the region a tone (0…1) belongs to.
+    /// The parametric curve at an encoded tone (0…1): Camera Raw's measured region curves (rawtone.h).
     double parametric(double tone) const;
-    /// 256 entries: the parametric curve followed by the RGB point curve.
+    /// 256 entries: the parametric curve followed by the RGB point curve, for drawing it.
     std::vector<float> lumaTable() const;
     std::vector<float> channelTable(const std::vector<CameraRawCurvePoint>& points) const;
     CameraRawCurveSettings normalized() const;
