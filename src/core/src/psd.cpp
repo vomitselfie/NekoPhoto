@@ -1015,6 +1015,9 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         auto decodeRecordChannels = [&](const Record& rec, std::map<int, std::vector<uint8_t>>& planes, std::map<int, std::vector<uint8_t>>& maskPlanes, size_t& cursor,
                                         std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw, WidePlanes& widePlanes, WidePlanes& wideMaskPlanes,
                                         std::vector<PsdLayerCarry::CarriedPlane>& rawPlanes, FloatPlanes& floatPlanes, FloatPlanes& floatMaskPlanes) {
+            // An 8-bit RGB smart object's channels too: with Smart Filters and a filter mask, its pixels here are the
+            // mask applied (applySmartFilterMask), and Photoshop's own unmasked ones go back on export.
+            const bool smartChannels = depth == 8 && mode == RGB && (rec.blocks.count("SoLd") || rec.blocks.count("SoLE"));
             for (const RecordChannel& c : rec.channels) {
                 // Subtraction, not addition: a PSB's channel length is a full 64-bit field, so `cursor +
                 // c.length` wraps and a wrapped sum passes the test while the reader runs off the file.
@@ -1027,7 +1030,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (c.id == -2) { w = rec.mask.width(); h = rec.mask.height(); }
                 if (c.id == -3) { w = rec.mask.realWidth(); h = rec.mask.realHeight(); }
                 if (c.id == -2 || c.id == -3) maskRaw.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
-                else if ((deep || float32 || nativeMode) && !psb && c.id >= -1 && c.id <= (mode == CMYK ? 3 : 2)) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
+                else if ((deep || float32 || nativeMode || smartChannels) && !psb && c.id >= -1 && c.id <= (mode == CMYK ? 3 : 2)) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
                 std::vector<uint8_t> plane;
                 std::vector<uint16_t> wide;
                 std::vector<float> floats;
@@ -1055,7 +1058,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         // What the record holds that NekoPhoto does not model, bound to the layer's content as imported.
         auto carryFor = [&](const Record& rec, const Layer& layer, bool modelledAdjustment,
                             const std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw,
-                            std::vector<PsdLayerCarry::CarriedPlane> rawPlanes = {}, bool planesRead = false) -> std::shared_ptr<const PsdLayerCarry> {
+                            std::vector<PsdLayerCarry::CarriedPlane> rawPlanes = {}, bool planesRead = false,
+                            bool filterMasked = false) -> std::shared_ptr<const PsdLayerCarry> {
             auto carry = std::make_shared<PsdLayerCarry>();
             for (auto& [key, data] : rec.ordered)
                 if (carriedLayerBlock(key, modelledAdjustment, layer.smartObject.has_value())) carry->blocks.push_back({key, std::vector<uint8_t>(data.first, data.first + data.second)});
@@ -1075,10 +1079,13 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             // A smart object drawn from its contents keeps the record's planes as Photoshop's raster of the placement.
             const bool smartRaster = layer.smartObject && !layer.smartObject->locked() && layer.smartImage == layer.asset->image
                                      && smartObjectPixelsArePlacement(*layer.smartObject);
-            if (!rawPlanes.empty() && layer.asset && (smartRaster || (nativeMode ? planesRead : bool(layer.asset->image.u16()) || bool(layer.asset->image.f32())))) {
+            // An 8-bit RGB smart object with its filter mask applied here keeps Photoshop's unmasked raster the same way.
+            const bool eightBit = !deep && !float32 && !nativeMode;
+            if (!rawPlanes.empty() && layer.asset
+                && (eightBit ? filterMasked : smartRaster || (nativeMode ? planesRead : bool(layer.asset->image.u16()) || bool(layer.asset->image.f32())))) {
                 carry->planes = std::move(rawPlanes);
                 carry->planesHash = carry->contentHash;
-                if (smartRaster) carry->planesRect = std::array<int, 4>{rec.left, rec.top, rec.right, rec.bottom};
+                if (smartRaster || filterMasked) carry->planesRect = std::array<int, 4>{rec.left, rec.top, rec.right, rec.bottom};
             }
             if (layer.adjustment) {
                 // Settings as read, so an unchanged adjustment's own block goes back byte for byte.
@@ -1298,7 +1305,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             // The mask covers the layer's pixels (the canvas for a layer without any).
             if (auto lm = userMaskFor(image ? image->width() : int(width), image ? image->height() : int(height),
                                       image ? int(layer.transform.origin.x) : 0, image ? int(layer.transform.origin.y) : 0)) layer.mask = lm;
-            bool smartInMode = false;
+            bool smartInMode = false, filterMasked = false;
             // A placed layer: an instance of its source. Editable, its pixels become the source's image placed by
             // the quad (the mask keeps the place it had); otherwise it shows Photoshop's preview, locked.
             {
@@ -1381,6 +1388,22 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         layer.transform.sampling = raster.sampling;
                         if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
                     }
+                    if (!warped && (keptFiltered || instance.locked()) && placement->filtered && mode == RGB && depth == 8 && layer.asset->image.u8()) {
+                        // Photoshop's pixels for a filtered instance are the filters' result before the filter mask; its
+                        // merged image shows them through the mask over the unfiltered instance the cache record holds.
+                        const LayerTransform raster = layer.transform;
+                        const PlacedRaster stored{std::make_shared<Image>(*layer.asset->image.u8()), int(std::lround(raster.origin.x)),
+                                                  int(std::lround(raster.origin.y))};
+                        if (raster.rotation == 0 && !raster.flipX && !raster.flipY && raster.size.width == stored.image->width()
+                            && raster.size.height == stored.image->height())
+                            if (auto masked = applySmartFilterMask(docCarry->globals, instance, stored)) {
+                                layer.asset = Asset::make(masked->image, layer.name);
+                                layer.transform = LayerTransform(Point(masked->x, masked->y), Size(masked->image->width(), masked->image->height()));
+                                layer.transform.sampling = raster.sampling;
+                                if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
+                                filterMasked = true;
+                            }
+                    }
                     instance.placedTransform = layer.transform;
                     instance.placedWidth = layer.asset->image.width();
                     instance.placedHeight = layer.asset->image.height();
@@ -1408,7 +1431,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (live) layer.textImage = layer.asset->image;
                 if (smart) layer.smartImage = layer.asset->image;
             }
-            layer.psdCarry = carryFor(rec, layer, settings.has_value(), maskRaw, std::move(rawPlanes), planesRead);
+            layer.psdCarry = carryFor(rec, layer, settings.has_value(), maskRaw, std::move(rawPlanes), planesRead, filterMasked);
             if (rec.clipping) {
                 // Clipped to the nearest unclipped layer below it in the same folder.
                 const size_t from = open.empty() ? 0 : open.back().firstChild;

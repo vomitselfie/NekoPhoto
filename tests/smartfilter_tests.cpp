@@ -456,6 +456,53 @@ TEST_CASE(edit_reorder_and_mask_a_stack_then_round_trip) {
     CHECK(!setSmartFilters(doc, doc.layers[0], *stack, &error));
 }
 
+TEST_CASE(a_filter_mask_is_applied_once_through_psd) {
+    // Photoshop stores a filtered instance's pixels before the filter mask and applies the mask itself; NekoPhoto
+    // applies it on import (applySmartFilterMask). So the PSD carries the unmasked pixels, and a gradient mask (which
+    // would show twice if the masked pixels were written) renders the same after any number of round trips.
+    Document doc = filteredDocument();
+    std::string error;
+    SmartFilterEntry blur;
+    blur.parameters = smartfilter::GaussianBlur{3};
+    REQUIRE(addSmartFilter(doc, doc.layers[0], blur, &error));
+    auto stack = smartFilterStackOf(doc, doc.layers[0]);
+    REQUIRE(stack && stack->supported);
+    auto mask = std::make_shared<GrayImage>(60, 40, 255);
+    // Black over the chip's left end, then a ramp to white: a ramp shows a mask applied twice.
+    for (int y = 0; y < 40; y++) for (int x = 0; x < 60; x++) mask->at(x, y) = uint8_t(x < 25 ? 0 : (x - 25) * 255 / 34);
+    stack->mask = mask;
+    stack->maskBounds = {0, 0, 60, 40};
+    REQUIRE(setSmartFilters(doc, doc.layers[0], *stack, &error));
+    auto before = renderFlattened(doc);
+    REQUIRE(before);
+    auto worst = [](const Image& a, const Image& b) {
+        int w = 0;
+        for (int y = 0; y < a.height(); y++) for (int x = 0; x < a.width(); x++) for (int c = 0; c < 4; c++)
+            w = std::max(w, std::abs(int(a.pixel(x, y)[c]) - int(b.pixel(x, y)[c])));
+        return w;
+    };
+    Document current = doc;
+    for (int trip = 0; trip < 2; trip++) {
+        auto bytes = encodePsd(current, {}, nullptr, &error);
+        auto back = importPsdBytes(bytes, &error);
+        REQUIRE(back.has_value());
+        const Layer& layer = back->document.layers[0];
+        REQUIRE(layer.isLiveSmartObject() && layer.asset->image.u8());
+        auto after = renderFlattened(back->document);
+        REQUIRE(after && after->width() == before->width() && after->height() == before->height());
+        // The record's unfiltered pixels are straight 8-bit colour: within a level or two of the drawn stack's own blend.
+        CHECK(worst(*before, *after) <= 2);
+        // The reopened instance still has a mask to apply.
+        CHECK(smartFilterMaskApplies(back->document.psdCarry->globals, *layer.smartObject, back->document));
+        current = back->document;
+    }
+    // Under black the unfiltered chip shows: its own green, opaque, by its left edge.
+    const Image& shown = *current.layers[0].asset->image.u8();
+    const int ox = int(current.layers[0].transform.origin.x), oy = int(current.layers[0].transform.origin.y);
+    CHECK_EQ(int(shown.pixel(21 - ox, 20 - oy)[1]), 200);
+    CHECK_EQ(int(shown.pixel(21 - ox, 20 - oy)[3]), 255);
+}
+
 TEST_CASE(radial_blur_zoom_round_trips_as_photoshops_zoom) {
     // Written as BlrM 'Zm  ' and read back as Zoom, still drawn here.
     Document doc = filteredDocument();

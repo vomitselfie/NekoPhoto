@@ -6,7 +6,7 @@ corpus photocraft
 commit f5b1178cab15309e05b7b504545df3c701f6d8fd
 compared 258
 flatten 0
-floor 162
+floor 165
 pass photoshop/adjustments/cmyk16/baseline-layer-copy.psd             [cmyk16]           max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/cmyk16/brightness-contrast-legacy.psd      [cmyk16]           max    0.58  >2:   0.00%  mean   0.058
 pass photoshop/adjustments/cmyk16/brightness-contrast.psd             [cmyk16]           max    0.50  >2:   0.00%  mean   0.083
@@ -187,8 +187,8 @@ pass photoshop/smart-filters/sf-blend-screen-100.psd                  [rgb8]    
 pass photoshop/smart-filters/sf-box-blur-r5.psd                       [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/smart-filters/sf-curves.psd                            [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/smart-filters/sf-emboss-135-3-100.psd                  [rgb8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/smart-filters/sf-filter-mask-gradient.psd              [rgb8]             max  161.00  >2:  78.28%  mean  10.967
-FAIL photoshop/smart-filters/sf-filter-mask-hard.psd                  [rgb8]             max  169.00  >2:  48.51%  mean  11.895
+pass photoshop/smart-filters/sf-filter-mask-gradient.psd              [rgb8]             max    2.00  >2:   0.00%  mean   0.079
+pass photoshop/smart-filters/sf-filter-mask-hard.psd                  [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/smart-filters/sf-gaussian-blur-r1.5.psd                [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/smart-filters/sf-gaussian-blur-r20.psd                 [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/smart-filters/sf-gaussian-blur-r4.psd                  [rgb8]             max    0.00  >2:   0.00%  mean   0.000
@@ -204,7 +204,7 @@ pass photoshop/smart-filters/sf-motion-blur-a30-d12.psd               [rgb8]    
 pass photoshop/smart-filters/sf-none-plain.psd                        [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/smart-filters/sf-none-transformed.psd                  [rgb8]             max  206.00  >2:  28.02%  mean   1.875
 pass photoshop/smart-filters/sf-shadows-highlights.psd                [rgb8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/smart-filters/sf-stack-blend-and-mask.psd              [rgb8]             max  233.00  >2:  38.07%  mean   7.970
+pass photoshop/smart-filters/sf-stack-blend-and-mask.psd              [rgb8]             max    1.00  >2:   0.00%  mean   0.001
 pass photoshop/smart-filters/sf-stack-blur-unsharp-motion.psd         [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/smart-filters/sf-transformed-gaussian.psd              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/smart-filters/sf-unsharp-mask-150-r2-t0.psd            [rgb8]             max    0.00  >2:   0.00%  mean   0.000
