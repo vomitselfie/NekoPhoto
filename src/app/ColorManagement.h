@@ -43,6 +43,9 @@ struct Settings {
     QString proofProfile = QStringLiteral("working-cmyk");
     compositor::RenderingIntent proofIntent = compositor::RenderingIntent::RelativeColorimetric;
     bool proofBlackPoint = true;
+    /// Customize Proof Condition's Preserve Numbers (applies when the proof's colour model is the document's) and its
+    /// display options, Simulate Paper Color (which simulates the black ink too) and Simulate Black Ink.
+    bool proofPreserveNumbers = false, proofSimulatePaper = false, proofSimulateBlackInk = false;
     QColor gamutColor{128, 128, 128};
     /// View > Proof Colors and Gamut Warning (for every window, for this run).
     bool proofColors = false, gamutWarning = false;
@@ -88,6 +91,9 @@ QString profileLabel(const compositor::ColorProfile& profile);
 /// is on. Null (nothing to do) when no monitor profile is known or the two are the same, and no proof is on: the
 /// canvas then shows exactly what it showed before colour management.
 compositor::ColorTransformPtr displayTransform(const compositor::Document& document);
+/// Why View > Proof Colors and Gamut Warning cannot proof `document` with the current Proof Setup (the proof profile
+/// cannot be read, or Little CMS refuses the combination); empty when they can.
+QString proofUnavailable(const compositor::Document& document);
 /// A colour of the document (its values) as the screen should show it (swatches, previews).
 QColor displayColor(const QColor& color, const compositor::ColorProfile& document);
 

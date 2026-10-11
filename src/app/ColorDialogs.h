@@ -20,7 +20,10 @@ struct ConvertChoice {
 };
 std::optional<ConvertChoice> askConvertProfile(QWidget* parent, const compositor::ColorProfile& current);
 
-/// View > Proof Setup > Custom: the proofing profile, intent, black point compensation and gamut warning colour.
-bool showProofSetup(QWidget* parent);
+/// View > Proof Setup > Custom (Customize Proof Condition): the device to simulate, Preserve Numbers, the intent,
+/// black point compensation, the display options (Simulate Paper Color, Simulate Black Ink) and the gamut warning
+/// colour. `document` is the current document's colour mode, when there is one: Preserve Numbers is offered only when
+/// the device's colour model is its own, as in Photoshop.
+bool showProofSetup(QWidget* parent, std::optional<compositor::ColorMode> document = std::nullopt);
 
 } // namespace app::color

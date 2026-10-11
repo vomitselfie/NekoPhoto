@@ -1379,6 +1379,8 @@ def color_sample(x: float, y: float, background: bool = False) -> str:
 def color_settings(working_space: Optional[str] = None, policy: Optional[str] = None, ask_missing: Optional[bool] = None,
                    ask_mismatch: Optional[bool] = None, monitor_profile: Optional[str] = None, use_system_monitor: Optional[bool] = None,
                    proof_profile: Optional[str] = None, proof_intent: Optional[str] = None, proof_black_point: Optional[bool] = None,
+                   proof_preserve_numbers: Optional[bool] = None, proof_simulate_paper: Optional[bool] = None,
+                   proof_simulate_black_ink: Optional[bool] = None,
                    proof_colors: Optional[bool] = None, gamut_warning: Optional[bool] = None, gamut_color: Optional[str] = None,
                    working_cmyk: Optional[str] = None, intent: Optional[str] = None, black_point_compensation: Optional[bool] = None) -> str:
     """Edit > Color Settings (working_space srgb, adobe-rgb, display-p3 or prophoto; working_cmyk "default" for the
@@ -1386,14 +1388,18 @@ def color_settings(working_space: Optional[str] = None, policy: Optional[str] = 
     black_point_compensation, the Conversion Options Image > Mode uses between RGB, CMYK and Lab; policy preserve,
     convert or off for embedded profiles; ask_missing,
     ask_mismatch), the monitor profile (an ICC path, "" for the system's) and View > Proof Setup (proof_profile
-    working-cmyk, the default, a working space or an RGB or CMYK ICC path) / Proof Colors / Gamut Warning. With no
-    arguments it only reads them. Untagged images count as sRGB."""
+    working-cmyk, the default, a working space or an RGB or CMYK ICC path; proof_preserve_numbers sends the document's
+    values to a device of its colour model unconverted; proof_simulate_paper and proof_simulate_black_ink are the display
+    options) / Proof Colors / Gamut Warning, in RGB, CMYK and Lab documents (proofUnavailable in the answer says why the
+    current document cannot be proofed, when it cannot). With no arguments it only reads them. Untagged images count as
+    sRGB."""
     if working_cmyk is not None and os.path.exists(working_cmyk):
         working_cmyk = os.path.abspath(working_cmyk)
     return text(call("color.settings", workingSpace=working_space, workingCmyk=working_cmyk, intent=intent, blackPointCompensation=black_point_compensation,
                      policy=policy, askMissing=ask_missing, askMismatch=ask_mismatch,
                      monitorProfile=monitor_profile, useSystemMonitor=use_system_monitor, proofProfile=proof_profile,
-                     proofIntent=proof_intent, proofBlackPoint=proof_black_point, proofColors=proof_colors,
+                     proofIntent=proof_intent, proofBlackPoint=proof_black_point, proofPreserveNumbers=proof_preserve_numbers,
+                     proofSimulatePaper=proof_simulate_paper, proofSimulateBlackInk=proof_simulate_black_ink, proofColors=proof_colors,
                      gamutWarning=gamut_warning, gamutColor=gamut_color))
 
 

@@ -386,7 +386,10 @@ Settings: `workingSpace`, `workingCmyk` (default, the bundled ISO Coated v2 300%
 `intent` (perceptual, relative, saturation, absolute) and `blackPointCompensation` Image > Mode uses, `policy` preserve,
 convert or off, `askMissing`, `askMismatch`; the monitor profile: `monitorProfile` (an ICC file, "" for the system's),
 `useSystemMonitor`; View > Proof Setup: `proofProfile` (working-cmyk, the default, a working space or an RGB or CMYK ICC file),
-`proofIntent`, `proofBlackPoint`, `proofColors`, `gamutWarning`, `gamutColor`; with no keys it only reads them).
+`proofIntent`, `proofBlackPoint`, `proofPreserveNumbers` (the document's values sent unconverted to a device of its colour
+model), `proofSimulatePaper`, `proofSimulateBlackInk`, `proofColors`, `gamutWarning`, `gamutColor`, in RGB, CMYK and Lab
+documents; the answer's `proofUnavailable` says why the current document cannot be proofed, when it cannot; with no
+keys it only reads them).
 
 Events: `events.subscribe` (`kinds`: document, layers, selection, history,
 tool, view, tabs; default all) makes the server push

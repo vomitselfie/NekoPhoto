@@ -2133,6 +2133,29 @@ def colour_management(rpc):
     except RuntimeError as e:
         print("expected error:", e)
     rpc.call("document.close", discard=True)
+    # CMYK and Lab documents proof too, at 8 and 16 bits: the blue converted to Lab is still outside the press, so the
+    # gamut warning covers it; a CMYK document proofed with Simulate Paper Color shows the press's paper, not white.
+    for mode, colour in (("lab", "#0000ff"), ("cmyk", "#ffffff")):
+        for bits in (8, 16):
+            rpc.call("document.new", width=32, height=32)
+            rpc.call("pixels.fill", color=colour)
+            if bits == 16:
+                rpc.call("image.mode", bits=16)
+            rpc.call("image.mode", colorMode=mode)
+            assert rpc.call("document.info")["bits"] == bits
+            plain = rpc.call("screenshot", maxSize=64)["png"]
+            if mode == "lab":
+                settings = rpc.call("color.settings", proofColors=True, gamutWarning=True, gamutColor="#00ff00")
+                what = "the gamut warning shows on a Lab document"
+            else:
+                settings = rpc.call("color.settings", proofColors=True, proofSimulatePaper=True)
+                assert settings["proofSimulateBlackInk"], settings
+                what = "Simulate Paper Color shows the press's paper on a CMYK document"
+            assert settings["proofUnavailable"] is None, settings
+            assert rpc.call("screenshot", maxSize=64)["png"] != plain, what
+            rpc.call("color.settings", proofColors=False, gamutWarning=False, proofSimulatePaper=False)
+            assert rpc.call("screenshot", maxSize=64)["png"] == plain
+            rpc.call("document.close", discard=True)
     rpc.call("document.open", path=project)
     # At 16 bits too.
     rpc.call("image.mode", bits=16)

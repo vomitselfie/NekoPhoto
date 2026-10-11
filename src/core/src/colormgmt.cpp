@@ -639,6 +639,10 @@ ColorTransformPtr lookupTransform(const ColorProfile& document, const std::vecto
     return made;
 }
 
+bool proofPreservesNumbers(const ProofSettings& proof, PixelFormat input) {
+    return proof.preserveNumbers && effectiveProfile(proof.profile).model == pixelFormatModel(input);
+}
+
 ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfile& display, const ProofSettings& proof, PixelFormat input, PixelFormat output) {
     if (isColorFormat(input) != isColorFormat(output)) return nullptr;
     if (output == PixelFormat::RGBAFloat || (input == PixelFormat::RGBAFloat && output != PixelFormat::RGBA8)) return nullptr;
@@ -648,27 +652,55 @@ ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfil
     if (a.model != pixelFormatModel(input) || b.model != pixelFormatModel(output)) return nullptr;
     if (c.model != ColorModel::RGB && c.model != ColorModel::CMYK && c.model != ColorModel::Gray) return nullptr;
     const bool staged = stagedLayouts(input, output);
+    const bool preserve = proofPreservesNumbers(proof, input);
+    // The proof to the display: Photoshop's display options.
+    const RenderingIntent displayIntent = proof.simulatePaper ? RenderingIntent::AbsoluteColorimetric : RenderingIntent::RelativeColorimetric;
+    const bool displayBlackPoint = !proof.simulatePaper && !proof.simulateBlackInk;
     CacheKey key;
-    key.from = fingerprint(a.icc); key.to = fingerprint(b.icc); key.proof = fingerprint(c.icc) | 1;
-    key.intent = int(RenderingIntent::RelativeColorimetric); key.proofIntent = int(proof.intent);
-    key.flags = (proof.blackPointCompensation ? 1 : 0) | (proof.gamutWarning ? 2 : 0);
+    key.from = preserve ? 0 : fingerprint(a.icc); key.to = fingerprint(b.icc); key.proof = fingerprint(c.icc) | 1;
+    key.intent = int(displayIntent); key.proofIntent = int(proof.intent);
+    key.flags = (proof.blackPointCompensation ? 1 : 0) | (proof.gamutWarning ? 2 : 0) | (preserve ? 4 : 0) | (displayBlackPoint ? 8 : 0);
     key.input = int(input); key.output = int(output);
     if (proof.gamutWarning) key.warning = {proof.warning[0], proof.warning[1], proof.warning[2]};
     if (auto hit = cached(key)) return hit;
     cmsContext context = cmsCreateContext(nullptr, nullptr);
     cmsHPROFILE ha = openProfile(context, a), hb = openProfile(context, b), hc = openProfile(context, c);
     cmsHTRANSFORM t = nullptr;
-    if (ha && hb && hc) {
+    if (ha && hb && hc && preserve) {
+        // Preserve Numbers: the values are the device's own, shown as it shows them; nothing is outside its gamut.
+        cmsUInt32Number flags = baseFlags(input, output);
+        if (displayBlackPoint) flags |= cmsFLAGS_BLACKPOINTCOMPENSATION;
+        t = cmsCreateTransformTHR(context, hc, lcmsFormat(input, staged), hb, lcmsFormat(output, staged), lcmsIntent(displayIntent), flags);
+    } else if (ha && hb && hc) {
+        // Little CMS's proofing chain (cmsCreateProofingTransform's: document, proof, proof, display) with the display
+        // step's intent and black point compensation chosen here; the gamut is checked against the proof. Between the
+        // proof's two ends its device values are clipped to the device's range, as the device itself would: Little
+        // CMS keeps a matrix-shaper device (sRGB, say) unbounded in float, which would show every colour outside it
+        // unchanged. The clip is an identity device link of tabulated curves, which clamp.
         cmsUInt32Number flags = baseFlags(input, output) | cmsFLAGS_SOFTPROOFING;
-        if (proof.blackPointCompensation) flags |= cmsFLAGS_BLACKPOINTCOMPENSATION;
         if (proof.gamutWarning) {
             flags |= cmsFLAGS_GAMUTCHECK;
             cmsUInt16Number alarm[cmsMAXCHANNELS] = {};
             for (int i = 0; i < 3; i++) alarm[i] = cmsUInt16Number(proof.warning[i] * 257);
             cmsSetAlarmCodesTHR(context, alarm);
         }
-        t = cmsCreateProofingTransformTHR(context, ha, lcmsFormat(input, staged), hb, lcmsFormat(output, staged), hc, lcmsIntent(proof.intent),
-                                          INTENT_RELATIVE_COLORIMETRIC, flags);
+        const cmsUInt16Number ends[2] = {0, 65535};
+        cmsToneCurve* identity = cmsBuildTabulatedToneCurve16(context, 2, ends);
+        cmsToneCurve* curves[cmsMAXCHANNELS] = {};
+        const cmsColorSpaceSignature device = cmsGetColorSpace(hc);
+        for (int i = 0; i < std::min(cmsChannelsOfColorSpace(device), cmsInt32Number(cmsMAXCHANNELS)); i++) curves[i] = identity;
+        cmsHPROFILE clip = identity ? cmsCreateLinearizationDeviceLinkTHR(context, device, curves) : nullptr;
+        if (identity) cmsFreeToneCurve(identity);
+        if (clip) {
+            cmsHPROFILE chain[5] = {ha, hc, clip, hc, hb};
+            cmsBool blackPoint[5] = {proof.blackPointCompensation, proof.blackPointCompensation, false, false, displayBlackPoint};
+            cmsUInt32Number intents[5] = {lcmsIntent(proof.intent), lcmsIntent(proof.intent), INTENT_PERCEPTUAL, INTENT_RELATIVE_COLORIMETRIC, lcmsIntent(displayIntent)};
+            const cmsFloat64Number adaptation = cmsSetAdaptationStateTHR(context, -1);
+            cmsFloat64Number adaptations[5] = {adaptation, adaptation, adaptation, adaptation, adaptation};
+            t = cmsCreateExtendedTransform(context, 5, chain, blackPoint, intents, adaptations, proof.gamutWarning ? hc : nullptr, 1,
+                                           lcmsFormat(input, staged), lcmsFormat(output, staged), flags);
+            cmsCloseProfile(clip);
+        }
     }
     for (cmsHPROFILE h : {ha, hb, hc}) if (h) cmsCloseProfile(h);
     if (!t) { cmsDeleteContext(context); return nullptr; }

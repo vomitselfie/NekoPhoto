@@ -58,6 +58,8 @@ const MethodDoc methodDocs[] = {
      "askMissing:bool Ask when a file has no profile; askMismatch:bool Ask when its profile is not the working space; "
      "monitorProfile:string An ICC file for the monitor (\"\" to use the system's); useSystemMonitor:bool Read the system's monitor profile (X11, Windows); "
      "proofProfile:string What to simulate: working-cmyk (the default, Photoshop's), a working space, or an RGB or CMYK ICC file; proofIntent:(perceptual|relative) How colours go to it; proofBlackPoint:bool Black point compensation; "
+     "proofPreserveNumbers:bool Preserve Numbers: the document's values sent to the device unconverted (when the device is of the document's colour model); "
+     "proofSimulatePaper:bool Simulate Paper Color (and black ink); proofSimulateBlackInk:bool Simulate Black Ink; "
      "proofColors:bool View > Proof Colors; gamutWarning:bool View > Gamut Warning; gamutColor:color The warning's colour"},
     {"view.zoom", "Zoom the view (not the document).", "zoom:number Zoom factor, 1 = 100%; fit:bool=false Fit the document in the window"},
     {"view.exposure", "A 32-bit document's view (View > 32-bit Preview Options, the status bar's exposure): how the canvas shows its linear values, not the pixels; not an undo step. Returns the view; with no parameters, only reads it.",

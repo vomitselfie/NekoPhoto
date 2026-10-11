@@ -86,12 +86,30 @@ transform; the values you pick and see in the colour dialogs are the document's.
 
 ## View ▸ Proof Setup, Proof Colors and Gamut Warning
 
-**Proof Setup ▸ Working CMYK** (the default, as in Photoshop) simulates the press the Working CMYK describes, so an RGB
-document shows how it would print. **Proof Setup ▸ Custom…** chooses another device to simulate (the Working CMYK, a
-working space, or an RGB or CMYK ICC file), its rendering intent, black point compensation, and the gamut warning's
-colour. **Proof Colors** (Ctrl+Y) then shows the document as it would look on that device, and **Gamut Warning**
-(Ctrl+Shift+Y) paints the colours that device cannot show in the warning colour (with the Working CMYK: sRGB's pure
-blues, greens and oranges). Both apply to every window and last until you turn them off; they change only the view.
+**Proof Setup ▸ Working CMYK** (the default, as in Photoshop) simulates the press the Working CMYK describes, so a
+document shows how it would print. **Proof Setup ▸ Custom…** (Customize Proof Condition) chooses another device to
+simulate (the Working CMYK, a working space, or an RGB or CMYK ICC file), its rendering intent, black point
+compensation, the display options and the gamut warning's colour. **Proof Colors** (Ctrl+Y) then shows the document as
+it would look on that device, and **Gamut Warning** (Ctrl+Shift+Y) paints the colours that device cannot show in the
+warning colour (with the Working CMYK: sRGB's pure blues, greens and oranges). Both apply to every window and last
+until you turn them off; they change only the view.
+
+Proofing works in every mode: RGB, CMYK and Lab documents at 8 and 16 bits, and 32-bit RGB. The document goes from its
+own profile and layout to the proof profile, and from there to the monitor, through Little CMS's proofing chain itself
+(never the display grid below). The device's values are clipped to its range on the way, as the device would: proofing
+to sRGB shows a Working CMYK document's full cyan as sRGB can show it, not as the press prints it.
+
+- **Preserve Numbers** (Photoshop's "Preserve CMYK Numbers" or "Preserve RGB Numbers") sends the document's values to
+  the device unconverted, as if they were its own: a CMYK document proofed to another press with it on shows how that
+  press would print the same inks. It is offered only when the device is of the document's colour model (a CMYK press
+  for a CMYK document, an RGB device for an RGB one; never for Lab); otherwise the document is converted to the device
+  as usual. The Rendering Intent and Black Point Compensation then do not apply, and nothing is out of gamut.
+- **Display Options (On-Screen)**: with neither, the proof goes to the monitor relative colorimetric with black point
+  compensation, so the device's black is the monitor's. **Simulate Black Ink** drops the black point compensation, so the
+  press's black shows as the dark grey it prints; **Simulate Paper Color** goes absolute colorimetric, so its paper
+  white shows too (and its black: it turns Simulate Black Ink on).
+- When the current document cannot be proofed with the chosen device (its profile file cannot be read any more, say),
+  View ▸ Proof Colors and Gamut Warning are greyed out with the reason; once on they can always be turned off.
 
 ## CMYK and Lab documents
 
@@ -116,7 +134,7 @@ Image ▸ Mode ▸ CMYK Color and Lab Color, how such documents draw, their chan
   CMS's float result (on average about 0.04 for CMYK and 0.0005 for Lab), and Lab grey (a = b = 0) is always drawn
   exactly grey. Colours with a channel near black, where the monitor's curve would magnify the grid's error, are
   still converted per pixel by Little CMS. A monitor profile that is not a matrix-shaper, 8-bit documents (which Little
-  CMS precalculates itself) and soft proofs keep Little CMS's transform. Only the screen uses the grid: exports, the
+  CMS precalculates itself) and soft proofs (View ▸ Proof Colors, the gamut warning) keep Little CMS's transform. Only the screen uses the grid: exports, the
   Info panel and colour readouts, the eyedropper, the histogram, mode conversions and saving go through Little CMS
   exactly as before. A 4K frame of a 16-bit CMYK document costs about a quarter of the instructions it did, a Lab one
   about a tenth (`tests/display_work.cpp` counts them).
@@ -164,8 +182,9 @@ sRGB** first (off by default, on for GIF); converted files carry no profile, whi
   `relative`; `blackPointCompensation`.
 - `color.settings`: reads and sets the working space, the Conversion Options (`intent`, `blackPointCompensation`), `workingCmyk` (`default` for the bundled profile, or a CMYK ICC
   file), the policy, the two prompts, the monitor profile, and the proof (`proofProfile`: `working-cmyk`, the default,
-  a working space or an RGB or CMYK ICC file; `proofIntent`, `proofBlackPoint`, `proofColors`, `gamutWarning`,
-  `gamutColor`).
+  a working space or an RGB or CMYK ICC file; `proofIntent`, `proofBlackPoint`, `proofPreserveNumbers`,
+  `proofSimulatePaper`, `proofSimulateBlackInk`, `proofColors`, `gamutWarning`, `gamutColor`). Its answer's
+  `proofUnavailable` says why the current document cannot be proofed, when it cannot (null otherwise).
 - `document.profile` takes profiles of the document's mode: `working-cmyk` or a CMYK ICC file for a CMYK document (and
   `working` means the Working CMYK there); an RGB document refuses a CMYK profile.
 - `document.export` takes `embedProfile` (true) and `convertToSrgb` (true for GIF, false otherwise).
@@ -204,7 +223,10 @@ Convert to Profile over a document, and the profile round trips through PSD, pro
 checks the CMYK and Lab layouts against Little CMS itself: 8-bit CMYK and 8-bit Lab give its bytes exactly, 16-bit CMYK
 its float inks within a 15-bit step and back within a step of its result for the inks held, 16-bit Lab its float Lab
 within half a stored step (sRGB red is Lab 54.29, 80.80, 69.89), premultiplied pixels, the fused reduction to 8 bits,
-the Working CMYK proof and gamut warning of an RGB document, and Convert to Profile on a CMYK document;
+the Working CMYK proof and gamut warning of an RGB document, a CMYK document proofed to a smaller press (made in the
+test) and to sRGB (out-of-gamut inks change, greys of black ink stay within one level) with Preserve Numbers, Simulate
+Paper Color and Simulate Black Ink, the gamut warning on a Lab document at 8 and 16 bits, and Convert to Profile on a
+CMYK document;
 `colormodes_tests` the CMYK and Lab document model and its projects. `display_grid_tests` holds
 `displayTransformBetween` (the canvas's precalculated 16-bit CMYK and Lab transform, `src/core/src/colormgmt_display.cpp`)
 to within one level of `transformBetween` on its sweep and checks Lab's neutral axis; `display_grid_tests --measure
@@ -275,10 +297,23 @@ Photoshop のダイアログを簡略にしたものです(Ctrl+Shift+K)。
 
 ### 表示 ▸ 校正設定、色の校正、色域外警告
 
-**校正設定 ▸ 作業用 CMYK**(Photoshop と同じく既定)は作業用 CMYK の印刷条件をシミュレートし、RGB ドキュメントの印刷
-結果を確認できます。**校正設定 ▸ カスタム…** でシミュレートするデバイス(作業用 CMYK、作業用スペース、RGB または CMYK
-の ICC ファイル)、マッチング方法、黒点の補正、警告色を選びます。**色の校正**(Ctrl+Y)でそのデバイスでの見え方を、
-**色域外警告**(Ctrl+Shift+Y)で表現できないカラーを警告色で示します。表示だけが変わります。
+**校正設定 ▸ 作業用 CMYK**(Photoshop と同じく既定)は作業用 CMYK の印刷条件をシミュレートし、ドキュメントの印刷
+結果を確認できます。**校正設定 ▸ カスタム…**(校正条件のカスタマイズ)でシミュレートするデバイス(作業用 CMYK、作業用
+スペース、RGB または CMYK の ICC ファイル)、マッチング方法、黒点の補正、表示オプション、警告色を選びます。**色の校正**
+(Ctrl+Y)でそのデバイスでの見え方を、**色域外警告**(Ctrl+Shift+Y)で表現できないカラーを警告色で示します。表示だけが
+変わります。
+
+色の校正は RGB・CMYK・Lab のドキュメント(8 bit・16 bit、RGB は 32 bit も)で使えます。ドキュメント自身のプロファイルと
+レイアウトから校正プロファイルを経てモニターへ、Little CMS の校正変換そのもので変換します(表示用の前計算は使いません)。
+途中でデバイスの値はデバイスの範囲に収めます。
+
+- **CMYK 値を保持**(RGB デバイスでは **RGB 値を保持**)は、ドキュメントの値を変換せずにそのままデバイスに送ります。
+  デバイスがドキュメントと同じカラーモデルのときだけ使えます(Lab では使えません)。そうでなければ通常どおり変換します。
+- **表示オプション(画面)**:どちらもオフなら黒点の補正付きの相対的な色域を維持でモニターへ表示します。**黒インキを
+  シミュレート** は黒点の補正をしません。**紙色をシミュレート** は絶対的な色域を維持で紙の白も表示します(黒インキの
+  シミュレートもオンになります)。
+- 現在のドキュメントを校正できないとき(プロファイルのファイルが読めないなど)は、表示メニューの色の校正と色域外警告を
+  理由付きで淡色表示します。オンになっているときはいつでもオフにできます。
 
 ### CMYK と Lab のドキュメント
 
@@ -304,5 +339,6 @@ Web 向けの形式(PNG・JPEG・WebP・GIF)では、sRGB 以外のプロファ�
 ### 自動化
 
 `document.profile`(取得・指定・変換。CMYK ドキュメントには `working-cmyk` または CMYK の ICC ファイル)、
-`color.settings`(`workingCmyk`、`proofProfile` の `working-cmyk` を含む)、`document.export` の `embedProfile` と
+`color.settings`(`workingCmyk`、`proofProfile` の `working-cmyk`、`proofPreserveNumbers`・`proofSimulatePaper`・
+`proofSimulateBlackInk`、校正できない理由の `proofUnavailable` を含む)、`document.export` の `embedProfile` と
 `convertToSrgb`。MCP ツールは `document_profile` と `color_settings` です。

@@ -1,15 +1,18 @@
 // CMYK and Lab colour management (P7 step B, colormgmt.h): the bundled Working CMYK and the built-in Lab profile, the
 // CMYKA and LabA layouts against Little CMS itself, round trips, premultiplied pixels, the fused reduction to 8-bit
-// RGBA from any layout, converting buffers between modes, the CMYK soft proof of an RGB document, and Convert to
-// Profile on a CMYK document.
+// RGBA from any layout, converting buffers between modes, soft proofs (an RGB document to the Working CMYK, a CMYK
+// document to a smaller press and to sRGB with Preserve Numbers and the display options, the gamut warning on Lab),
+// and Convert to Profile on a CMYK document.
 #include "check.h"
 #include "compositor/colormgmt.h"
 #include "compositor/colormodes.h"
 #include "compositor/depth.h"
 #include "compositor/document.h"
 #include "lcms2.h"
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 using namespace compositor;
@@ -31,6 +34,83 @@ void lcmsDirect(const ColorProfile& from, cmsUInt32Number inFormat, const ColorP
     cmsHTRANSFORM t = cmsCreateTransform(a, inFormat, b, outFormat, INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_BLACKPOINTCOMPENSATION | cmsFLAGS_NOCACHE);
     cmsDoTransform(t, in, out, cmsUInt32Number(count));
     cmsDeleteTransform(t); cmsCloseProfile(a); cmsCloseProfile(b);
+}
+
+/// A small CMYK press made here for proofing (never a fixture): ink mixes as sRGB's complement with every colour pulled
+/// 40% of the way to its grey, so saturated colours lie outside it while greys are its own. Plain CMY, no black.
+const ColorProfile& smallCmykProfile() {
+    static const ColorProfile made = [] {
+        cmsHPROFILE srgb = cmsCreate_sRGBProfile(), lab = cmsCreateLab4Profile(nullptr);
+        struct Pair { cmsHTRANSFORM toLab, toRgb; } pair{
+            cmsCreateTransform(srgb, TYPE_RGB_DBL, lab, TYPE_Lab_DBL, INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOCACHE),
+            cmsCreateTransform(lab, TYPE_Lab_DBL, srgb, TYPE_RGB_DBL, INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOCACHE)};
+        constexpr double keep = 0.6;
+        auto inks = [](const cmsUInt16Number in[], cmsUInt16Number out[], void* data) -> cmsInt32Number {
+            const Pair& p = *static_cast<const Pair*>(data);
+            const double k = in[3] / 65535.0;
+            double rgb[3];
+            for (int i = 0; i < 3; i++) rgb[i] = (1 - in[i] / 65535.0) * (1 - k);
+            const double grey = (rgb[0] + rgb[1] + rgb[2]) / 3;
+            for (double& v : rgb) v = grey + keep * (v - grey);
+            cmsCIELab l;
+            cmsDoTransform(p.toLab, rgb, &l, 1);
+            cmsFloat2LabEncoded(out, &l);
+            return 1;
+        };
+        auto separate = [](const cmsUInt16Number in[], cmsUInt16Number out[], void* data) -> cmsInt32Number {
+            const Pair& p = *static_cast<const Pair*>(data);
+            cmsCIELab l;
+            cmsLabEncoded2Float(&l, in);
+            double rgb[3];
+            cmsDoTransform(p.toRgb, &l, rgb, 1);
+            const double grey = (rgb[0] + rgb[1] + rgb[2]) / 3;
+            for (int i = 0; i < 3; i++) out[i] = cmsUInt16Number(std::lround((1 - std::clamp(grey + (rgb[i] - grey) / keep, 0.0, 1.0)) * 65535));
+            out[3] = 0;
+            return 1;
+        };
+        cmsHPROFILE p = cmsCreateProfilePlaceholder(nullptr);
+        cmsSetProfileVersion(p, 4.3);
+        cmsSetDeviceClass(p, cmsSigOutputClass);
+        cmsSetColorSpace(p, cmsSigCmykData);
+        cmsSetPCS(p, cmsSigLabData);
+        cmsWriteTag(p, cmsSigMediaWhitePointTag, cmsD50_XYZ());
+        cmsMLU* description = cmsMLUalloc(nullptr, 1);
+        cmsMLUsetASCII(description, "en", "US", "Small test press");
+        cmsWriteTag(p, cmsSigProfileDescriptionTag, description);
+        cmsPipeline* a2b = cmsPipelineAlloc(nullptr, 4, 3);
+        cmsStage* forward = cmsStageAllocCLut16bit(nullptr, 11, 4, 3, nullptr);
+        cmsStageSampleCLut16bit(forward, inks, &pair, 0);
+        // lutAtoBType's A curves, CLUT and B curves (identity curves around the grid).
+        cmsPipelineInsertStage(a2b, cmsAT_END, cmsStageAllocToneCurves(nullptr, 4, nullptr));
+        cmsPipelineInsertStage(a2b, cmsAT_END, forward);
+        cmsPipelineInsertStage(a2b, cmsAT_END, cmsStageAllocToneCurves(nullptr, 3, nullptr));
+        cmsWriteTag(p, cmsSigAToB0Tag, a2b);
+        cmsPipeline* b2a = cmsPipelineAlloc(nullptr, 3, 4);
+        cmsStage* back = cmsStageAllocCLut16bit(nullptr, 33, 3, 4, nullptr);
+        cmsStageSampleCLut16bit(back, separate, &pair, 0);
+        cmsPipelineInsertStage(b2a, cmsAT_END, cmsStageAllocToneCurves(nullptr, 3, nullptr));
+        cmsPipelineInsertStage(b2a, cmsAT_END, back);
+        cmsPipelineInsertStage(b2a, cmsAT_END, cmsStageAllocToneCurves(nullptr, 4, nullptr));
+        cmsWriteTag(p, cmsSigBToA0Tag, b2a);
+        cmsUInt32Number size = 0;
+        cmsSaveProfileToMem(p, nullptr, &size);
+        std::vector<uint8_t> bytes(size);
+        cmsSaveProfileToMem(p, bytes.data(), &size);
+        cmsPipelineFree(a2b); cmsPipelineFree(b2a); cmsMLUfree(description);
+        cmsCloseProfile(p);
+        cmsDeleteTransform(pair.toLab); cmsDeleteTransform(pair.toRgb);
+        cmsCloseProfile(srgb); cmsCloseProfile(lab);
+        auto profile = profileFromIcc(bytes);
+        return profile ? *profile : ColorProfile();
+    }();
+    return made;
+}
+
+/// The largest channel difference between two RGBA8 pixels' colours.
+int colourDifference(const uint8_t* a, const uint8_t* b) {
+    int most = 0;
+    for (int c = 0; c < 3; c++) most = std::max(most, std::abs(int(a[c]) - int(b[c])));
+    return most;
 }
 
 /// Opaque RGBA8 pixels of the sample colours.
@@ -328,6 +408,110 @@ TEST_CASE(proof_rgb_as_working_cmyk) {
     soft->apply(blue, shown, 1);
     CHECK(shown[0] > 10 || shown[1] > 10);
     CHECK_EQ(int(shown[3]), 255);
+}
+
+TEST_CASE(proof_cmyk_document) {
+    // View > Proof Colors on a CMYK document (the Working CMYK), on its own layouts, shown on an Adobe RGB monitor:
+    // proofed to a smaller press, and to sRGB, the press's full cyan (outside both) looks different from the unproofed
+    // view, and its magenta through the smaller press; greys of black ink look the same within one level.
+    REQUIRE(smallCmykProfile().model == ColorModel::CMYK);
+    const ColorProfile& monitor = builtinProfile(WorkingSpace::AdobeRGB);
+    // Inverted ink at 16 bits (0 is full ink): cyan, magenta, then K at 25%, 50% and 75%, and no ink.
+    const std::vector<std::array<int, 4>> inks = {{0, 32768, 32768, 32768}, {32768, 0, 32768, 32768}, {32768, 32768, 32768, 24576},
+                                                  {32768, 32768, 32768, 16384}, {32768, 32768, 32768, 8192}, {32768, 32768, 32768, 32768}};
+    const size_t n = inks.size();
+    for (PixelFormat layout : {PixelFormat::CMYKA16, PixelFormat::CMYKA8}) {
+        const bool wide = layout == PixelFormat::CMYKA16;
+        std::vector<uint16_t> in16;
+        std::vector<uint8_t> in8;
+        for (const auto& p : inks) {
+            for (int v : p) { in16.push_back(uint16_t(v)); in8.push_back(uint8_t((v * 255 + 16384) / 32768)); }
+            in16.push_back(32768); in8.push_back(255);
+        }
+        const void* in = wide ? static_cast<const void*>(in16.data()) : static_cast<const void*>(in8.data());
+        auto plainT = transformBetween(defaultCmykProfile(), monitor, {}, layout, PixelFormat::RGBA8);
+        REQUIRE(plainT);
+        std::vector<uint8_t> plain(n * 4);
+        plainT->apply(in, plain.data(), n);
+        for (const ColorProfile* device : {&smallCmykProfile(), &srgbProfile()}) {
+            ProofSettings proof;
+            proof.profile = *device;
+            auto t = proofTransform(defaultCmykProfile(), monitor, proof, layout, PixelFormat::RGBA8);
+            REQUIRE(t);
+            CHECK(!t->precalculated());   // proofs stay exact Little CMS
+            std::vector<uint8_t> shown(n * 4);
+            t->apply(in, shown.data(), n);
+            CHECK(colourDifference(&shown[0], &plain[0]) >= 8);   // cyan: outside both
+            if (device == &smallCmykProfile()) CHECK(colourDifference(&shown[4], &plain[4]) >= 8);   // magenta: inside sRGB
+            for (size_t i = 2; i < 5; i++) {
+                const int d = colourDifference(&shown[i * 4], &plain[i * 4]);
+                if (d > 1) std::fprintf(stderr, "grey %zu through %s: %d\n", i, device->description.c_str(), d);
+                CHECK(d <= 1);
+                CHECK_EQ(int(shown[i * 4 + 3]), 255);
+            }
+        }
+        // Preserve Numbers: the ink values go to the smaller press unconverted, as it shows them.
+        ProofSettings numbers;
+        numbers.profile = smallCmykProfile();
+        numbers.preserveNumbers = true;
+        CHECK(proofPreservesNumbers(numbers, layout));
+        auto preserved = proofTransform(defaultCmykProfile(), monitor, numbers, layout, PixelFormat::RGBA8);
+        auto direct = transformBetween(smallCmykProfile(), monitor, {}, layout, PixelFormat::RGBA8);
+        REQUIRE(preserved);
+        REQUIRE(direct);
+        std::vector<uint8_t> a(n * 4), b(n * 4);
+        preserved->apply(in, a.data(), n);
+        direct->apply(in, b.data(), n);
+        for (size_t i = 0; i < n; i++) CHECK(colourDifference(&a[i * 4], &b[i * 4]) <= 1);
+        // An RGB device is not of the document's colour model: the numbers are converted after all.
+        numbers.profile = srgbProfile();
+        CHECK(!proofPreservesNumbers(numbers, layout));
+        // Simulate Paper Color: no ink shows the press's paper, darker than the monitor's white; Simulate Black Ink:
+        // its 75% black shows lighter than with black point compensation to the monitor.
+        ProofSettings paper;
+        paper.profile = defaultCmykProfile();
+        paper.simulatePaper = true;
+        std::vector<uint8_t> onPaper(n * 4), inked(n * 4), usual(n * 4);
+        proofTransform(defaultCmykProfile(), monitor, paper, layout, PixelFormat::RGBA8)->apply(in, onPaper.data(), n);
+        ProofSettings ink;
+        ink.profile = defaultCmykProfile();
+        ink.simulateBlackInk = true;
+        proofTransform(defaultCmykProfile(), monitor, ink, layout, PixelFormat::RGBA8)->apply(in, inked.data(), n);
+        ProofSettings neither;
+        neither.profile = defaultCmykProfile();
+        proofTransform(defaultCmykProfile(), monitor, neither, layout, PixelFormat::RGBA8)->apply(in, usual.data(), n);
+        CHECK(usual[5 * 4] >= 254 && usual[5 * 4 + 1] >= 254 && usual[5 * 4 + 2] >= 254);
+        CHECK(onPaper[5 * 4] < 252 || onPaper[5 * 4 + 1] < 252 || onPaper[5 * 4 + 2] < 252);
+        CHECK(inked[4 * 4] > usual[4 * 4]);
+    }
+}
+
+TEST_CASE(proof_lab_document_gamut_warning) {
+    // Gamut Warning on a Lab document proofed to a small press: L 50, a +100 is far outside it and shows the warning
+    // colour; L 50 grey prints and does not. At 8 and 16 bits, to the bundled press and to the smaller one.
+    for (const ColorProfile* device : {&defaultCmykProfile(), &smallCmykProfile()}) {
+        ProofSettings proof;
+        proof.profile = *device;
+        proof.gamutWarning = true;
+        proof.warning[0] = 0; proof.warning[1] = 255; proof.warning[2] = 0;
+        auto t16 = proofTransform(labProfile(), srgbProfile(), proof, PixelFormat::LabA16, PixelFormat::RGBA8);
+        auto t8 = proofTransform(labProfile(), srgbProfile(), proof, PixelFormat::LabA8, PixelFormat::RGBA8);
+        REQUIRE(t16);
+        REQUIRE(t8);
+        const uint16_t lab16[8] = {16384, 100 * 128 + 16384, 16384, 32768, 16384, 16384, 16384, 32768};
+        const uint8_t lab8[8] = {128, 228, 128, 255, 128, 128, 128, 255};
+        uint8_t out16[8] = {}, out8[8] = {};
+        t16->apply(lab16, out16, 2);
+        t8->apply(lab8, out8, 2);
+        for (const uint8_t* out : {out16, out8}) {
+            CHECK(out[0] == 0 && out[1] == 255 && out[2] == 0);
+            CHECK(!(out[4] == 0 && out[5] == 255 && out[6] == 0));
+            CHECK(std::abs(int(out[4]) - int(out[5])) <= 2 && std::abs(int(out[5]) - int(out[6])) <= 2);
+        }
+        // Preserve Numbers never applies to Lab (no Lab device): the proof converts.
+        proof.preserveNumbers = true;
+        CHECK(!proofPreservesNumbers(proof, PixelFormat::LabA16));
+    }
 }
 
 TEST_CASE(convert_profile_of_a_cmyk_document) {
