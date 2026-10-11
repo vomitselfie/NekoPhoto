@@ -338,6 +338,13 @@ constexpr FeatureModes modeTable[] = {
     {"export.slices", allModes},
     {"export.svg", allModes},
     {"edit.pixels", allModes},
+    // Content-Aware Fill, Move, Extend and Scale on the document's own samples (inpaint.h, contentmove.h, seamcarve.h):
+    // the patches chosen on the inks (alpha too) or on L, a and b, the hole taking theirs; the seams chosen on the plates'
+    // look in CMYK. Remove Background: the model and the refinement see the layer through the profile in sRGB, for
+    // deciding only; the matte becomes the layer mask, and Clean edge colours estimates the edge inks, or L, a and b,
+    // on the layer's own samples (matte.h). Nothing written goes through RGB.
+    {"edit.contentAware", allModes},
+    {"edit.removeBackground", allModes},
 };
 
 // What stays RGB for good (not waiting for a port): refused in CMYK and Lab with "Not available in CMYK mode", where a

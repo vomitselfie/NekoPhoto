@@ -823,10 +823,15 @@ public:
     /// Remove Background: `mask` (white over the subject, on the layer's pixel grid) becomes the layer mask,
     /// multiplied with any mask already there; with a selection only the selected part changes. `pixels`, when
     /// given at the layer's size, replaces the layer's pixels in the same undo step (the edge colours after
-    /// foreground estimation). `layerId` as for commitPixels.
-    void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask, std::shared_ptr<const compositor::Image> pixels = nullptr, std::optional<compositor::Uuid> layerId = std::nullopt);
-    /// The same on a 16-bit layer: a 16-bit mask, and its pixels at 16 bits.
+    /// foreground estimation). `layerId` as for commitPixels. In an 8-bit CMYK or Lab document `pixels` are in the
+    /// document's layout (the edge inks, or L, a and b).
+    void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask, compositor::AnyImage pixels = {}, std::optional<compositor::Uuid> layerId = std::nullopt);
+    /// The same on a 16-bit layer: a 16-bit mask, and its pixels at 16 bits (five samples in CMYK).
     void applySubjectMask(std::shared_ptr<const compositor::Gray16> mask, std::shared_ptr<const compositor::Image16> pixels, std::optional<compositor::Uuid> layerId = std::nullopt);
+    /// `image` (pixels in this document's mode) as 8-bit sRGB, for deciding only: what the segmentation model and the
+    /// matte refinement see. In CMYK and Lab the pixels converted through the document's profile (the model was trained
+    /// on sRGB); in RGB the pixels themselves, reduced to 8 bits. Null for a 32-bit buffer or a conversion that fails.
+    std::shared_ptr<const compositor::Image> analysisView(const compositor::AnyImage& image) const;
 
     // Crop / canvas
     void cropTo(const QRectF& rect, const char* action = QT_TRANSLATE_NOOP("History", "Crop"));

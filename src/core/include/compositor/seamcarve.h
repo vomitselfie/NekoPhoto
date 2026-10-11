@@ -23,5 +23,9 @@ struct SeamCarveOptions {
 Image seamCarve(const Image& image, int width, int height, const SeamCarveOptions& options = {});
 /// The same at 16 bits: the seams chosen on the image rounded to 8 bits, the 16-bit pixels carried.
 Image16 seamCarve(const Image16& image, int width, int height, const SeamCarveOptions& options = {});
+/// In CMYK: five samples, the inks stored inverted, then alpha (8-bit `ImageC8`, and the Image16 overload above when it
+/// has five channels). The seams are chosen on the plates' look at 8 bits; the inks removed, kept and doubled are the
+/// image's own, at its depth. Lab's L, a and b carve as they are through the Image and Image16 overloads.
+ImageC8 seamCarve(const ImageC8& image, int width, int height, const SeamCarveOptions& options = {});
 
 } // namespace compositor

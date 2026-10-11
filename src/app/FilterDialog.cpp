@@ -429,11 +429,32 @@ bool FilterDialog::apply() {
 
 // ---- Remove Background -----------------------------------------------------------------------
 
+namespace {
+/// Every sample of `image` (any layout, 8 or 16 bits, premultiplied) times the matte: the layer as its new mask shows it.
+AnyImage timesMatte(const AnyImage& image, const AlphaPlane& plane) {
+    const int n = image.channels();
+    auto scale = [&](auto& out) {
+        if (out.width() != plane.width || out.height() != plane.height) return;
+        for (int y = 0; y < out.height(); y++)
+            for (int x = 0; x < out.width(); x++) {
+                const double k = std::clamp(double(plane.at(x, y)), 0.0, 1.0);
+                auto* p = out.pixel(x, y);
+                for (int c = 0; c < n; c++) p[c] = static_cast<std::remove_cvref_t<decltype(p[c])>>(std::lround(p[c] * k));
+            }
+    };
+    if (const Image16Ptr& deep = image.u16()) { auto out = std::make_shared<Image16>(*deep); scale(*out); return Image16Ptr(out); }
+    if (const ImageC8Ptr& inks = image.c8()) { auto out = std::make_shared<ImageC8>(*inks); scale(*out); return ImageC8Ptr(out); }
+    if (const ImagePtr& eight = image.u8()) { auto out = std::make_shared<Image>(*eight); scale(*out); return ImagePtr(out); }
+    return {};
+}
+} // namespace
+
 BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QString quickModelPath, QWidget* parent)
     : PixelDialog(session, parent), modelPath_(std::move(modelPath)), mirror_(ModelStore::mirrorAverage()) {
     setWindowTitle(tr("Remove Background"));
     capture(0, 0);
-    guide_ = source() ? source() : source16() ? std::shared_ptr<const Image>(narrowImage(*source16())) : nullptr;
+    // In CMYK and Lab the model and the refinement see the layer through the profile in sRGB, for deciding only.
+    guide_ = source() ? source() : source16() ? std::shared_ptr<const Image>(narrowImage(*source16())) : sourceNative() ? session->analysisView(sourceNative()) : nullptr;
     // The matting band is worth a few percent of the short side on a big photo.
     const int mattingMax = guide_ ? std::max(40, int(std::lround(std::min(guide_->width(), guide_->height()) * 0.025))) : 40;
     auto* layout = new QVBoxLayout(this);
@@ -583,6 +604,12 @@ AlphaPlane BackgroundDialog::refinedPlane(int limit) const {
 void BackgroundDialog::refreshPreview() {
     if (!guide_ || !raw_) return;
     if (!previewing()) { clearPreview(); return; }
+    if (sourceNative()) {
+        // CMYK and Lab: the float matte over the layer's own samples, with the edge inks (or L, a and b) they will have.
+        const AlphaPlane plane = refinedPlane(1400);
+        showPreviewNative(timesMatte(advancedMode_ && settings_.decontaminate ? estimateForegroundAny(sourceNative(), plane) : sourceNative(), plane));
+        return;
+    }
     if (source16()) {
         // At 16 bits: the float matte over the layer's 16-bit pixels, with the edge colours they will have.
         const AlphaPlane plane = refinedPlane(1400);
@@ -627,6 +654,13 @@ bool BackgroundDialog::apply() {
             params["decontaminate"] = settings_.decontaminate;
         }
         if (commitAsCommand(QStringLiteral("pixels.removeBackground"), params)) return true;
+    }
+    if (sourceNative()) {
+        const AlphaPlane plane = refinedPlane(0);
+        const AnyImage pixels = advancedMode_ && settings_.decontaminate ? estimateForegroundAny(sourceNative(), plane) : AnyImage();
+        if (sourceNative().u16()) session()->applySubjectMask(plane.toGray16(), pixels.u16(), layerId());
+        else session()->applySubjectMask(plane.toGray(), pixels, layerId());
+        return true;
     }
     if (source16()) {
         const AlphaPlane plane = refinedPlane(0);

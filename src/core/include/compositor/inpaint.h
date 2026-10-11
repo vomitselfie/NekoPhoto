@@ -14,6 +14,7 @@
 // adaptation (US 9058699); a user-painted sampling region. The tone match is the healing membrane (heal.h) on the
 // low-pass band: boundary offsets interpolated across the hole, never composited gradients.
 #pragma once
+#include "colormodes.h"
 #include "image.h"
 #include "imaget.h"
 #include <cstdint>
@@ -35,6 +36,9 @@ struct InpaintOptions {
     int wideSearchRadius = 192;
     /// The low-pass tone match after the fill (see contentFill).
     bool toneMatch = true;
+    /// What the samples of an `Image` or a four-channel `Image16` are: RGB, or Lab (L, a, b; the fill order follows L).
+    /// CMYK is told by its five channels.
+    ColorMode colorMode = ColorMode::RGB;
 };
 
 /// Fills the pixels of `image` where `hole` is nonzero from its opaque, unselected pixels. Returns false when
@@ -47,5 +51,10 @@ bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& opti
 bool contentFill(Image16& image, const Gray16& hole, const InpaintOptions& options = {}, const Gray16* visible = nullptr);
 /// With the decisions' masks at 8 bits (the hole nonzero, the sources 128 and up).
 bool contentFill16(Image16& image, const GrayImage& hole, const InpaintOptions& options = {}, const GrayImage* visible = nullptr);
+/// In CMYK: five samples, the inks stored inverted, then alpha (8-bit `ImageC8`, and the Image16 overloads above when
+/// the image has five channels). The patches are chosen on all five samples and the hole takes the inks they hold, at
+/// the image's own depth: nothing goes through RGB, and a hole in K-only black fills with K-only black. Lab works on
+/// L, a and b in `Image` and `Image16` with `options.colorMode` Lab.
+bool contentFill(ImageC8& image, const GrayImage& hole, const InpaintOptions& options = {}, const GrayImage* visible = nullptr);
 
 } // namespace compositor

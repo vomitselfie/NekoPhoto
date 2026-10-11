@@ -21,6 +21,37 @@ using namespace compositor;
 
 namespace app {
 
+namespace {
+/// What `layer`'s own mask shows (its pixels' grid, `width` x `height`) on the grid grown by `margin` on every side
+/// (`gw` x `gh`), at `depth`: shown past the layer's edge. Null when the layer has no mask on its grid, unless `always`
+/// (then all shown).
+AnyGray maskVisibility(const Layer& layer, int width, int height, int margin, int gw, int gh, SampleType depth, bool always) {
+    const bool own = layer.mask && layer.mask->enabled && !layer.mask->placement;
+    if (depth == SampleType::U16) {
+        const Gray16* m = own ? layer.mask->asset.image.u16().get() : nullptr;
+        if (m && (m->width() != width || m->height() != height || gw < width + 2 * margin || gh < height + 2 * margin)) m = nullptr;
+        if (!m && !always) return {};
+        auto out = std::make_shared<Gray16>(gw, gh, uint16_t(one16));
+        if (m) for (int y = 0; y < height; y++) std::memcpy(out->row(y + margin) + margin, m->row(y), size_t(width) * sizeof(uint16_t));
+        return Gray16Ptr(out);
+    }
+    const GrayImage* m = own ? layer.mask->asset.image.u8().get() : nullptr;
+    if (m && (m->width() != width || m->height() != height || gw < width + 2 * margin || gh < height + 2 * margin)) m = nullptr;
+    if (!m && !always) return {};
+    auto out = std::make_shared<GrayImage>(gw, gh, 255);
+    if (m) for (int y = 0; y < height; y++) std::memcpy(out->row(y + margin) + margin, m->row(y), size_t(width));
+    return GrayPtr(out);
+}
+
+/// The layer grid grown so it covers `area` (document pixels): the margin, in layer pixels, every side.
+int marginOver(const Layer& layer, const Rect& area) {
+    const AnyImage& own = layer.asset->image;
+    const Affine toPixels = layer.transform.pixelToDocument(own.width(), own.height()).inverted();
+    const Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, own.width(), own.height()));
+    return int(std::ceil(std::max({0.0, -wanted.minX(), -wanted.minY(), wanted.maxX() - own.width(), wanted.maxY() - own.height()})));
+}
+} // namespace
+
 // ---- Moving selected pixels ------------------------------------------------------------------
 
 bool EditorSession::canMovePixels(QPointF documentPoint) const {
@@ -450,6 +481,46 @@ AnyImage EditorSession::contentAwareFillResult(const ContentFillRequest& request
     const Layer* layer = activeLayer();
     // The layer grows over any of the selection on the canvas past its edge.
     Rect area = document_->selection->bounds().intersection(document_->rect());
+    if (document_->colorMode != ColorMode::RGB) {
+        // CMYK and Lab: the fill on the layer's own samples at their depth (inpaint.h): the patches are chosen on the
+        // inks (or L, a and b) and the hole takes those of the patches it copies; nothing goes through RGB.
+        const int margin = marginOver(*layer, area);
+        LayerTransform grown;
+        const AnyImage source = adjustmentSourceAny(margin, grown);
+        if (!source || source.channels() != colorModeChannels(document_->colorMode)) { if (errorText) *errorText = tr("The layer is too large to grow."); return nullptr; }
+        const AnyGray coverage = selectionOnGridAny(grown, source.width(), source.height());
+        if (!coverage) { if (errorText) *errorText = tr("Select an area to fill."); return nullptr; }
+        const bool all = request.sampling == ContentFillRequest::Sampling::All;
+        const AnyGray visible = maskVisibility(*layer, layer->asset->image.width(), layer->asset->image.height(), margin, source.width(), source.height(), source.sampleType(), all);
+        InpaintOptions options;
+        options.colorMode = document_->colorMode;
+        options.sampleWholeVisible = all;
+        AnyImage out;
+        bool filled = false;
+        if (source.u16() && coverage.u16()) {
+            auto image = std::make_shared<Image16>(*source.u16());
+            filled = contentFill(*image, *coverage.u16(), options, visible.u16().get());
+            out = Image16Ptr(image);
+        } else if (source.c8() && coverage.u8()) {
+            auto image = std::make_shared<ImageC8>(*source.c8());
+            filled = contentFill(*image, *coverage.u8(), options, visible.u8().get());
+            out = ImageC8Ptr(image);
+        } else if (source.u8() && coverage.u8()) {
+            auto image = std::make_shared<Image>(*source.u8());
+            filled = contentFill(*image, *coverage.u8(), options, visible.u8().get());
+            out = ImagePtr(image);
+        }
+        if (!filled) {
+            if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.");
+            return nullptr;
+        }
+        // Only the filled pixels, by the selection's coverage, for a layer of their own.
+        if (request.newLayer)
+            if (AnyImage masked = applyMaskAny(out, coverage)) out = masked;
+        if (AnyImage trimmed = trimToPixelsAny(out, grown, placed)) return trimmed;
+        placed = grown;
+        return out;
+    }
     if (layer->asset->image.u16()) {
         // At 16 bits: the same steps on the layer's 16-bit pixels (the fill votes from 16-bit texture, inpaint.h).
         const Image16& src = *layer->asset->image.u16();
@@ -533,7 +604,7 @@ bool EditorSession::contentAwareFill(QString* errorText, const ContentFillReques
     if (!request.newLayer) { commitPixels(result, placed, QT_TRANSLATE_NOOP("History", "Content-Aware Fill")); return true; }
     if (const BudgetCheck check = document_->canInsertImage(result.width(), result.height()); !check) { if (errorText) *errorText = budgetText(check); return false; }
     const Layer* active = activeLayer();
-    Layer layer(Asset::makeAny(result, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), Point{0, 0});
+    Layer layer(modeAsset(result, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), Point{0, 0});
     layer.transform = placed;
     layer.parentId = active ? active->parentId : std::nullopt;
     const int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
@@ -559,6 +630,50 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
     Rect sel = document_->selection->bounds();
     Rect area = sel.unionWith(Rect(sel.x + dx, sel.y + dy, sel.width, sel.height)).intersection(document_->rect());
     const QString name = contentMoveExtend ? QStringLiteral(QT_TRANSLATE_NOOP("History", "Content-Aware Extend")) : QStringLiteral(QT_TRANSLATE_NOOP("History", "Content-Aware Move"));
+    if (document_->colorMode != ColorMode::RGB) {
+        // CMYK and Lab: the same steps on the layer's own samples at their depth (contentmove.h): the hole filled with
+        // the inks (or L, a and b) of the patches it copies, the patch's tone adapted per sample.
+        const int margin = marginOver(*layer, area);
+        LayerTransform grown;
+        const AnyImage source = adjustmentSourceAny(margin, grown);
+        if (!source || source.channels() != colorModeChannels(document_->colorMode)) return failWith(tr("The layer is too large to grow."));
+        const AnyGray coverage = selectionOnGridAny(grown, source.width(), source.height());
+        if (!coverage) return failWith(tr("Select the area to move first."));
+        Affine gridFromDoc = grown.pixelToDocument(source.width(), source.height()).inverted();
+        const Point o = gridFromDoc.apply({0, 0}), d = gridFromDoc.apply({double(dx), double(dy)});
+        const int gdx = int(std::lround(d.x - o.x)), gdy = int(std::lround(d.y - o.y));
+        const AnyGray visible = maskVisibility(*layer, layer->asset->image.width(), layer->asset->image.height(), margin, source.width(), source.height(), source.sampleType(), false);
+        ContentMoveOptions options;
+        options.extend = contentMoveExtend;
+        options.adaptation = contentMoveAdaptation;
+        options.colorMode = document_->colorMode;
+        AnyImage out;
+        bool moved = false;
+        if (source.u16() && coverage.u16()) {
+            auto image = std::make_shared<Image16>(*source.u16());
+            moved = compositor::contentAwareMove(*image, *coverage.u16(), gdx, gdy, options, visible.u16().get());
+            out = Image16Ptr(image);
+        } else if (source.c8() && coverage.u8()) {
+            auto image = std::make_shared<ImageC8>(*source.c8());
+            moved = compositor::contentAwareMove(*image, *coverage.u8(), gdx, gdy, options, visible.u8().get());
+            out = ImageC8Ptr(image);
+        } else if (source.u8() && coverage.u8()) {
+            auto image = std::make_shared<Image>(*source.u8());
+            moved = compositor::contentAwareMove(*image, *coverage.u8(), gdx, gdy, options, visible.u8().get());
+            out = ImagePtr(image);
+        }
+        if (!moved) return failWith(tr("Nothing could be moved there: the selection must land on the layer and leave opaque pixels around it to fill from."));
+        LayerTransform placed = grown;
+        if (AnyImage trimmed = trimToPixelsAny(out, grown, placed)) out = trimmed;
+        else placed = grown;
+        beginEdit(name);
+        commitPixels(out, placed, name);
+        document_->selection = offsetSelection(*document_->selection, dx, dy);
+        endEdit();
+        notifyDocument();
+        emit selectionChanged();
+        return true;
+    }
     if (layer->asset->image.u16()) {
         // At 16 bits: the same steps on the 16-bit pixels and selection (contentmove.h).
         const Image16& src = *layer->asset->image.u16();
@@ -645,6 +760,29 @@ bool EditorSession::contentAwareScale(int width, int height, bool protectSelecti
     if (refusedAtDepth("edit.contentAware", tr("Content-aware editing"), errorText)) return false;
     if (!canAdjustPixels()) { if (errorText) *errorText = tr("Select a visible image layer to scale."); return false; }
     Layer* layer = activeLayerMutable();
+    if (document_->colorMode != ColorMode::RGB) {
+        // CMYK and Lab: the seams chosen on the plates' look (CMYK) or on L, a and b, the layer's own samples carried at
+        // their depth (seamcarve.h).
+        const AnyImage own = layer->asset->image;
+        if (const BudgetCheck check = Document::canCreate(width, height, document_->sampleType); !check) { if (errorText) *errorText = budgetText(check); return false; }
+        std::shared_ptr<GrayImage> protect;
+        if (protectSelection) {
+            const AnyGray coverage = selectionOnGridAny(layer->transform, own.width(), own.height());
+            if (coverage.u16()) protect = narrowGray(*coverage.u16());
+            else if (coverage.u8()) protect = std::make_shared<GrayImage>(*coverage.u8());
+        }
+        SeamCarveOptions options;
+        options.protect = protect.get();
+        AnyImage out;
+        if (own.u16()) out = Image16Ptr(std::make_shared<Image16>(seamCarve(*own.u16(), width, height, options)));
+        else if (own.c8()) out = ImageC8Ptr(std::make_shared<ImageC8>(seamCarve(*own.c8(), width, height, options)));
+        else if (own.u8()) out = ImagePtr(std::make_shared<Image>(seamCarve(*own.u8(), width, height, options)));
+        if (!out || out.width() <= 0 || out.height() <= 0) { if (errorText) *errorText = tr("Could not scale the layer."); return false; }
+        LayerTransform placed = layer->transform;
+        placed.size = {placed.size.width * width / own.width(), placed.size.height * height / own.height()};
+        commitPixels(out, placed, QT_TRANSLATE_NOOP("History", "Content-Aware Scale"));
+        return true;
+    }
     if (const Image16Ptr deep = layer->asset->image.u16()) {
         // At 16 bits: seams chosen on the pixels rounded to 8 bits, the 16-bit pixels carried (seamcarve.h).
         if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > document_->imagePixelBudget()) {

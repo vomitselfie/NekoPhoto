@@ -448,8 +448,12 @@ void AutomationServer::registerPixelsHandlers() {
         LayerTransform transform;
         // A 16-bit layer: the model and the refinement's guide see it reduced to 8 bits (the model takes 8-bit input),
         // the matte stays float to the end and becomes a 16-bit mask, and the edge colours are estimated at 16 bits.
-        auto deep = s->adjustmentSource16(0, transform);
-        auto source = deep ? std::shared_ptr<const Image>(narrowImage(*deep)) : s->adjustmentSource(0, transform);
+        // CMYK and Lab: the model and the guide see the layer converted through the profile to sRGB, for deciding only;
+        // the mask is at the document's depth and the edge colours are estimated on the layer's own inks, or L, a and b.
+        const bool inMode = s->colorMode() != ColorMode::RGB;
+        const AnyImage native = inMode ? s->adjustmentSourceAny(0, transform) : AnyImage();
+        auto deep = inMode ? nullptr : s->adjustmentSource16(0, transform);
+        auto source = inMode ? s->analysisView(native) : deep ? std::shared_ptr<const Image>(narrowImage(*deep)) : s->adjustmentSource(0, transform);
         if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         std::string error;
         const bool detail = flag(p, "detail", false), mirror = flag(p, "flip", ModelStore::mirrorAverage());
@@ -464,6 +468,14 @@ void AutomationServer::registerPixelsHandlers() {
         settings.cleanup = flag(p, "cleanup", settings.cleanup);
         settings.decontaminate = flag(p, "decontaminate", settings.decontaminate);
         const bool refine = flag(p, "refine", true);
+        if (inMode) {
+            AlphaPlane plane(*mask);
+            if (refine) plane = refineMatte(plane, *source, settings, 0);
+            const AnyImage pixels = refine && settings.decontaminate ? estimateForegroundAny(native, plane) : AnyImage();
+            if (native.u16()) s->applySubjectMask(plane.toGray16(), pixels.u16());
+            else s->applySubjectMask(plane.toGray(), pixels);
+            return QJsonObject{{"applied", true}, {"decontaminated", bool(pixels)}, {"detail", detail}};
+        }
         if (deep) {
             AlphaPlane plane(*mask);
             if (refine) plane = refineMatte(plane, *source, settings, 0);

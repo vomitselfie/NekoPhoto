@@ -3,6 +3,10 @@
 // the fill front advances in a fixed deterministic priority order, every target patch is matched by an exhaustive scan
 // of a bounded window at the working resolution, nothing found for one patch is reused, propagated, perturbed or
 // stored for another, and the only colour adaptation is the boundary membrane on the low-pass band.
+//
+// The fill works on the document's own samples: RGB's red, green and blue, Lab's L, a and b, CMYK's four inks (as
+// stored, inverted), each with alpha last. Nothing is converted: in CMYK a hole fills with the inks of the patches it
+// copies, so K-only black stays K-only.
 #include "compositor/inpaint.h"
 #include "compositor/depth.h"
 #include "compositor/heal.h"
@@ -27,7 +31,9 @@ constexpr int64_t kDataFloor = 64;   // keeps flat areas advancing by confidence
 /// The work region: the hole with the search window's reach around it, in its own coordinates.
 struct Work {
     int w = 0, h = 0, r = 4;
-    std::vector<uint8_t> pix;        // premultiplied RGBA at 8 bits
+    int n = 4;                       // samples per pixel, alpha last: 4 (RGB, Lab) or 5 (CMYK)
+    ColorMode mode = ColorMode::RGB;
+    std::vector<uint8_t> pix;        // the document's own samples at 8 bits, premultiplied
     std::vector<uint8_t> state;
     std::vector<uint8_t> holeAtStart;
     std::vector<uint8_t> sourceOk;   // the patch centred here is inside the region and wholly Known
@@ -35,7 +41,14 @@ struct Work {
     std::vector<int32_t> from;       // for each filled pixel, the region index of the pixel it copies
     size_t at(int x, int y) const { return size_t(y) * size_t(w) + size_t(x); }
     bool inside(int x, int y) const { return x >= 0 && y >= 0 && x < w && y < h; }
-    int luma(size_t p) const { const uint8_t* q = &pix[p * 4]; return (q[0] * 77 + q[1] * 151 + q[2] * 28) >> 8; }
+    /// The lightness the data term follows: Lab's L; in CMYK the plates' look (C, M and Y as stored, the inks
+    /// inverted, times K as stored); in RGB the luma.
+    int luma(size_t p) const {
+        const uint8_t* q = &pix[p * size_t(n)];
+        if (mode == ColorMode::Lab) return q[0];
+        const int rgb = (q[0] * 77 + q[1] * 151 + q[2] * 28) >> 8;
+        return mode == ColorMode::CMYK ? rgb * q[3] / 255 : rgb;
+    }
     bool seen(int x, int y) const { return inside(x, y) && (state[at(x, y)] == Known || state[at(x, y)] == Filled); }
 };
 
@@ -106,19 +119,18 @@ int64_t priorityAt(const Work& W, int x, int y, int32_t* confidenceOut) {
 
 struct Candidate { int64_t distance = std::numeric_limits<int64_t>::max(); int64_t order = std::numeric_limits<int64_t>::max(); int x = -1, y = -1; };
 
-/// The best source patch for the target at (tx, ty): every source centre within `radius` is scored, independently
-/// of any other target. The parallel reduction keeps the smallest distance, then the earliest in scan order, so the
-/// result does not depend on how the rows are split.
-Candidate bestSource(const Work& W, int tx, int ty, int radius, int penalty) {
+/// The scan behind bestSource, over `N` samples per pixel.
+template <int N>
+Candidate scanWindow(const Work& W, int tx, int ty, int radius, int penalty) {
     const int r = W.r;
     std::vector<int> deltas;             // region-index offsets of the target's seen pixels
-    std::vector<int> values;             // their RGBA
+    std::vector<int> values;             // their samples
     for (int j = -r; j <= r; j++)
         for (int i = -r; i <= r; i++) {
             if (!W.seen(tx + i, ty + j)) continue;
             deltas.push_back(j * W.w + i);
-            const uint8_t* p = &W.pix[W.at(tx + i, ty + j) * 4];
-            for (int c = 0; c < 4; c++) values.push_back(p[c]);
+            const uint8_t* p = &W.pix[W.at(tx + i, ty + j) * N];
+            for (int c = 0; c < N; c++) values.push_back(p[c]);
         }
     const int y0 = std::max(r, ty - radius), y1 = std::min(W.h - r - 1, ty + radius);
     const int x0 = std::max(r, tx - radius), x1 = std::min(W.w - r - 1, tx + radius);
@@ -134,11 +146,11 @@ Candidate bestSource(const Work& W, int tx, int ty, int radius, int penalty) {
                 if (!W.sourceOk[q]) continue;
                 int64_t sum = int64_t(penalty) * (std::abs(x - tx) + std::abs(y - ty));
                 if (sum > local.distance) continue;
-                const uint8_t* base = &W.pix[q * 4];
+                const uint8_t* base = &W.pix[q * N];
                 for (size_t k = 0; k < n && sum <= local.distance; k++) {
-                    const uint8_t* s = base + ptrdiff_t(deltas[k]) * 4;
-                    const int* t = &values[k * 4];
-                    sum += std::abs(t[0] - s[0]) + std::abs(t[1] - s[1]) + std::abs(t[2] - s[2]) + std::abs(t[3] - s[3]);
+                    const uint8_t* s = base + ptrdiff_t(deltas[k]) * N;
+                    const int* t = &values[k * N];
+                    for (int c = 0; c < N; c++) sum += std::abs(t[c] - s[c]);
                 }
                 const int64_t order = int64_t(y) * W.w + x;
                 if (sum < local.distance || (sum == local.distance && order < local.order)) local = {sum, order, x, y};
@@ -149,6 +161,14 @@ Candidate bestSource(const Work& W, int tx, int ty, int radius, int penalty) {
     return best;
 }
 
+/// The best source patch for the target at (tx, ty): every source centre within `radius` is scored, independently
+/// of any other target, on every sample (CMYK's inks and alpha, so a K-only black and a rich black differ). The
+/// parallel reduction keeps the smallest distance, then the earliest in scan order, so the result does not depend on
+/// how the rows are split.
+Candidate bestSource(const Work& W, int tx, int ty, int radius, int penalty) {
+    return W.n == 5 ? scanWindow<5>(W, tx, ty, radius, penalty) : scanWindow<4>(W, tx, ty, radius, penalty);
+}
+
 /// Tone match: the healing membrane on the low-pass band. At each pixel b of the ring just outside the hole, the
 /// destination-minus-source offset of the low-pass band is taken: the local mean of the surroundings at b minus the
 /// local mean at the pixel b was matched against (b's place relative to the copied patch next to it, at the patch's
@@ -156,36 +176,34 @@ Candidate bestSource(const Work& W, int tx, int ty, int radius, int penalty) {
 /// (Dirichlet interpolation of boundary values, heal.h, the expired US 6587592 membrane) and added to the fill, so a
 /// patch copied from a darker or lighter place takes the tone of where it lands. Matching content has equal local
 /// means at both places, so a pattern copied in phase is left alone; the fill's detail is untouched and no gradient
-/// is composited (US 9058699).
+/// is composited (US 9058699). `n` samples per pixel, alpha last: each colour sample (every ink in CMYK, L, a and b
+/// in Lab) takes its own offset.
 template <typename T>
-void matchTone(T* pix, int w, int h, const uint8_t* hole, const uint8_t* known, const int32_t* from, int radius, double one) {
-    const size_t n = size_t(w) * size_t(h);
+void matchTone(T* pix, int n, int w, int h, const uint8_t* hole, const uint8_t* known, const int32_t* from, int radius, double one) {
+    const size_t count = size_t(w) * size_t(h), N = size_t(n);
     // A summed-area table of the known cells and their count: their local means.
     const size_t sw = size_t(w) + 1;
-    std::vector<double> sum((size_t(h) + 1) * sw * 4, 0);
-    std::vector<int> count((size_t(h) + 1) * sw, 0);
+    std::vector<double> sum((size_t(h) + 1) * sw * N, 0);
+    std::vector<int> cells((size_t(h) + 1) * sw, 0);
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
             const size_t p = size_t(y) * w + size_t(x), s = (size_t(y) + 1) * sw + size_t(x) + 1;
             const size_t up = s - sw, left = s - 1, diag = s - sw - 1;
             const bool isK = known[p];
-            count[s] = count[up] + count[left] - count[diag] + isK;
-            for (int c = 0; c < 4; c++)
-                sum[s * 4 + size_t(c)] = sum[up * 4 + size_t(c)] + sum[left * 4 + size_t(c)] - sum[diag * 4 + size_t(c)] + (isK ? double(pix[p * 4 + size_t(c)]) : 0);
+            cells[s] = cells[up] + cells[left] - cells[diag] + isK;
+            for (size_t c = 0; c < N; c++)
+                sum[s * N + c] = sum[up * N + c] + sum[left * N + c] - sum[diag * N + c] + (isK ? double(pix[p * N + c]) : 0);
         }
-    auto mean = [&](int x, int y, double out[4]) {
+    auto mean = [&](int x, int y, double* out) {
         const int ax = std::max(0, x - radius), ay = std::max(0, y - radius), bx = std::min(w, x + radius + 1), by = std::min(h, y + radius + 1);
         const size_t a = size_t(ay) * sw + size_t(ax), b = size_t(ay) * sw + size_t(bx), c0 = size_t(by) * sw + size_t(ax), d = size_t(by) * sw + size_t(bx);
-        const int k = count[d] - count[b] - count[c0] + count[a];
+        const int k = cells[d] - cells[b] - cells[c0] + cells[a];
         if (!k) return false;
-        for (int c = 0; c < 4; c++) {
-            const size_t cc = size_t(c);
-            out[c] = (sum[d * 4 + cc] - sum[b * 4 + cc] - sum[c0 * 4 + cc] + sum[a * 4 + cc]) / k;
-        }
+        for (size_t c = 0; c < N; c++) out[c] = (sum[d * N + c] - sum[b * N + c] - sum[c0 * N + c] + sum[a * N + c]) / k;
         return true;
     };
-    std::vector<float> values(n * 4, 0.0f);
-    std::vector<uint8_t> ring(n, 0);
+    std::vector<float> values(count * N, 0.0f);
+    std::vector<uint8_t> ring(count, 0);
     bool any = false;
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
@@ -203,26 +221,29 @@ void matchTone(T* pix, int w, int h, const uint8_t* hole, const uint8_t* known, 
                     sx = fx - i; sy = fy - j;
                 }
             if (sx < 0 || sy < 0 || sx >= w || sy >= h || !known[size_t(sy) * w + size_t(sx)]) continue;
-            double here[4], there[4];
+            double here[5], there[5];
             if (!mean(x, y, here) || !mean(sx, sy, there)) continue;
-            for (int c = 0; c < 4; c++) values[p * 4 + size_t(c)] = float(here[c] - there[c]);
+            for (size_t c = 0; c < N; c++) values[p * N + c] = float(here[c] - there[c]);
             ring[p] = 1;
             any = true;
         }
     if (!any) return;
-    membraneFill(values.data(), 4, hole, ring.data(), w, h);
-    for (size_t p = 0; p < n; p++) {
+    membraneFill(values.data(), n, hole, ring.data(), w, h);
+    const size_t alpha = N - 1;
+    for (size_t p = 0; p < count; p++) {
         if (!hole[p]) continue;
-        T* o = &pix[p * 4];
-        const double a = std::clamp(double(o[3]) + values[p * 4 + 3], 0.0, one);
-        o[3] = T(std::lround(a));
-        for (int c = 0; c < 3; c++) o[c] = T(std::lround(std::clamp(double(o[c]) + values[p * 4 + size_t(c)], 0.0, double(o[3]))));
+        T* o = &pix[p * N];
+        const double a = std::clamp(double(o[alpha]) + values[p * N + alpha], 0.0, one);
+        o[alpha] = T(std::lround(a));
+        for (size_t c = 0; c < alpha; c++) o[c] = T(std::lround(std::clamp(double(o[c]) + values[p * N + c], 0.0, double(o[alpha]))));
     }
 }
 
-/// The fill itself over the region of `image` around the hole. On success `W` holds the filled region, with `from`
-/// naming where every filled pixel came from (for the 16-bit copy), and (x0, y0) its place in the image.
-bool exemplarFill(const Image& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible, Work& W, int& x0, int& y0) {
+/// The fill itself over the region of `image` (8-bit samples, `image.channels()` of them, alpha last) around the hole.
+/// On success `W` holds the filled region, with `from` naming where every filled pixel came from (for the 16-bit
+/// copy), and (x0, y0) its place in the image.
+template <class Eight>
+bool exemplarFill(const Eight& image, int channels, ColorMode mode, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible, Work& W, int& x0, int& y0) {
     const int r = std::clamp(options.patchRadius, 1, 8);
     const bool wide = visible && options.sampleWholeVisible;
     const int radius = std::max(2 * r + 1, wide ? options.wideSearchRadius : options.searchRadius);
@@ -232,15 +253,15 @@ bool exemplarFill(const Image& image, const GrayImage& hole, const InpaintOption
     const int reach = radius + 2 * r + 1;
     x0 = std::max(0, b.x0 - reach); y0 = std::max(0, b.y0 - reach);
     const int x1 = std::min(image.width(), b.x1 + reach), y1 = std::min(image.height(), b.y1 + reach);
-    W.w = x1 - x0; W.h = y1 - y0; W.r = r;
-    const size_t n = size_t(W.w) * size_t(W.h);
-    W.pix.resize(n * 4); W.state.assign(n, Unknown); W.confidence.assign(n, 0); W.from.assign(n, -1);
+    W.w = x1 - x0; W.h = y1 - y0; W.r = r; W.n = channels; W.mode = mode;
+    const size_t n = size_t(W.w) * size_t(W.h), N = size_t(channels);
+    W.pix.resize(n * N); W.state.assign(n, Unknown); W.confidence.assign(n, 0); W.from.assign(n, -1);
     for (int y = 0; y < W.h; y++) {
-        std::memcpy(&W.pix[W.at(0, y) * 4], image.pixel(x0, y0 + y), size_t(W.w) * 4);
+        std::memcpy(&W.pix[W.at(0, y) * N], image.pixel(x0, y0 + y), size_t(W.w) * N);
         for (int x = 0; x < W.w; x++) {
             const size_t p = W.at(x, y);
             if (hole.at(x0 + x, y0 + y)) { W.state[p] = Hole; continue; }
-            if (image.pixel(x0 + x, y0 + y)[3] == 255 && (!visible || visible->at(x0 + x, y0 + y) >= 128)) { W.state[p] = Known; W.confidence[p] = kFullConfidence; }
+            if (image.pixel(x0 + x, y0 + y)[channels - 1] == 255 && (!visible || visible->at(x0 + x, y0 + y) >= 128)) { W.state[p] = Known; W.confidence[p] = kFullConfidence; }
         }
     }
     W.holeAtStart.resize(n);
@@ -284,7 +305,7 @@ bool exemplarFill(const Image& image, const GrayImage& hole, const InpaintOption
                 const int px = tx + i, py = ty + j;
                 if (!W.inside(px, py) || W.state[W.at(px, py)] != Hole) continue;
                 const size_t p = W.at(px, py), s = W.at(best.x + i, best.y + j);
-                std::memcpy(&W.pix[p * 4], &W.pix[s * 4], 4);
+                std::memcpy(&W.pix[p * N], &W.pix[s * N], N);
                 W.state[p] = Filled;
                 W.confidence[p] = confidence;
                 W.from[p] = int32_t(s);
@@ -310,43 +331,64 @@ std::vector<uint8_t> knownCells(const Work& W) {
     return out;
 }
 
-} // namespace
-
-bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
+/// The fill at 8 bits, in place: the patches copied are the image's own samples, so the region's filled pixels go back
+/// as they are (after the tone match).
+template <class Eight>
+bool fillEight(Eight& image, int channels, ColorMode mode, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
     if (visible && (visible->width() != image.width() || visible->height() != image.height())) visible = nullptr;
     if (nonzeroBounds(hole).isEmpty()) return true;
     Work W;
     int x0 = 0, y0 = 0;
-    if (!exemplarFill(image, hole, options, visible, W, x0, y0)) return false;
+    if (!exemplarFill(image, channels, mode, hole, options, visible, W, x0, y0)) return false;
     const std::vector<uint8_t> known = knownCells(W);
-    if (options.toneMatch) matchTone<uint8_t>(W.pix.data(), W.w, W.h, W.holeAtStart.data(), known.data(), W.from.data(), 2 * W.r + 1, 255.0);
+    if (options.toneMatch) matchTone<uint8_t>(W.pix.data(), channels, W.w, W.h, W.holeAtStart.data(), known.data(), W.from.data(), 2 * W.r + 1, 255.0);
+    const size_t N = size_t(channels);
     for (int y = 0; y < W.h; y++)
         for (int x = 0; x < W.w; x++) {
             const size_t p = W.at(x, y);
-            if (W.holeAtStart[p]) std::memcpy(image.pixel(x0 + x, y0 + y), &W.pix[p * 4], 4);
+            if (W.holeAtStart[p]) std::memcpy(image.pixel(x0 + x, y0 + y), &W.pix[p * N], N);
         }
     return true;
 }
 
+} // namespace
+
+bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
+    return fillEight(image, 4, options.colorMode == ColorMode::Lab ? ColorMode::Lab : ColorMode::RGB, hole, options, visible);
+}
+
+bool contentFill(ImageC8& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
+    if (image.channels() != 5) return false;
+    return fillEight(image, 5, ColorMode::CMYK, hole, options, visible);
+}
+
 bool contentFill16(Image16& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
     // The order and the patches are chosen on the image rounded to 8 bits; every filled pixel then takes the 16-bit
-    // pixel its 8-bit copy came from, and the tone match runs on the 16-bit values.
+    // pixel its 8-bit copy came from, and the tone match runs on the 16-bit values. Five channels are CMYK's.
     if (visible && (visible->width() != image.width() || visible->height() != image.height())) visible = nullptr;
     if (nonzeroBounds(hole).isEmpty()) return true;
-    auto eight = narrowImage(image);
+    const int channels = image.channels();
+    if (channels != 4 && channels != 5) return false;
+    const size_t N = size_t(channels);
     Work W;
     int x0 = 0, y0 = 0;
-    if (!exemplarFill(*eight, hole, options, visible, W, x0, y0)) return false;
-    std::vector<uint16_t> deep(size_t(W.w) * size_t(W.h) * 4);
-    for (int y = 0; y < W.h; y++) std::memcpy(&deep[W.at(0, y) * 4], image.pixel(x0, y0 + y), size_t(W.w) * 4 * sizeof(uint16_t));
+    if (channels == 5) {
+        auto eight = narrowImageC8(image);
+        if (!exemplarFill(*eight, 5, ColorMode::CMYK, hole, options, visible, W, x0, y0)) return false;
+    } else {
+        auto eight = narrowImage(image);
+        if (!exemplarFill(*eight, 4, options.colorMode == ColorMode::Lab ? ColorMode::Lab : ColorMode::RGB, hole, options, visible, W, x0, y0)) return false;
+    }
+    std::vector<uint16_t> deep(size_t(W.w) * size_t(W.h) * N);
+    for (int y = 0; y < W.h; y++) std::memcpy(&deep[W.at(0, y) * N], image.pixel(x0, y0 + y), size_t(W.w) * N * sizeof(uint16_t));
     for (size_t p = 0; p < W.from.size(); p++)
-        if (W.holeAtStart[p] && W.from[p] >= 0) std::memcpy(&deep[p * 4], &deep[size_t(W.from[p]) * 4], 4 * sizeof(uint16_t));
+        if (W.holeAtStart[p] && W.from[p] >= 0) std::memcpy(&deep[p * N], &deep[size_t(W.from[p]) * N], N * sizeof(uint16_t));
     const std::vector<uint8_t> known = knownCells(W);
-    if (options.toneMatch) matchTone<uint16_t>(deep.data(), W.w, W.h, W.holeAtStart.data(), known.data(), W.from.data(), 2 * W.r + 1, double(one16));
+    if (options.toneMatch) matchTone<uint16_t>(deep.data(), channels, W.w, W.h, W.holeAtStart.data(), known.data(), W.from.data(), 2 * W.r + 1, double(one16));
     for (int y = 0; y < W.h; y++)
         for (int x = 0; x < W.w; x++) {
             const size_t p = W.at(x, y);
-            if (W.holeAtStart[p]) std::memcpy(image.pixel(x0 + x, y0 + y), &deep[p * 4], 4 * sizeof(uint16_t));
+            if (W.holeAtStart[p]) std::memcpy(image.pixel(x0 + x, y0 + y), &deep[p * N], N * sizeof(uint16_t));
         }
     return true;
 }

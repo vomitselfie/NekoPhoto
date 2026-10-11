@@ -111,8 +111,8 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Camera Raw Filter | `filter.Camera Raw` | native | native | greyed (not yet) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | G'MIC | `filter.G'MIC` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Mosh | `filter.Mosh` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
-| Remove Background | `edit.removeBackground` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Content-Aware Fill / Move / Scale | `edit.contentAware` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Remove Background | `edit.removeBackground` | native | native | greyed (not yet) | native | native | native | native |  |
+| Content-Aware Fill / Move / Scale | `edit.contentAware` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
 | Type tool | `tool.text` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: glyphs painted in sRGB, each colour then taken through the profile |
 | Text editing | `edit.text` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: glyphs painted in sRGB, each colour then taken through the profile |
 | Shape tool | `tool.shape` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: RGB gradient and pattern fills drawn in sRGB, then converted |
