@@ -839,6 +839,28 @@ float gradientPosition(const StyleGradient& g, double bx, double by, double bw, 
     // Photoshop's overlay geometry (Patchy's gradient_position, LayerProjection basis): the centre snaps to a
     // pixel, Linear and Reflected span the bounds' projection on the axis, the half-ramp is whole pixels.
     double cx = bx + bw * (0.5 + g.offsetX / 100.0), cy = by + bh * (0.5 + g.offsetY / 100.0);
+    if (g.fillLayer && (g.type == StyleGradient::Type::Linear || g.type == StyleGradient::Type::Reflected)) {
+        // A fill layer's Linear and Reflected ramps end on the pixel grid: the end point (and Linear's start) along the
+        // angle, a chord through the centre long, is truncated to whole pixels, and the ramp runs to the snapped point,
+        // which sets its real angle and length. psd-tools' 4x4 Reflected 30° fill (colormodes/4x4_*) is |x - y| / 4 at
+        // every depth: the end snaps to the corner. Rule after PhotoCraft's fill_layout.rs (88ffd89, MIT).
+        const double a0 = g.angle * M_PI / 180;
+        auto chord = [&](double a) { return std::max(1.0, std::min(std::abs(std::cos(a)) > 1e-6 ? bw / std::abs(std::cos(a)) : 1e300, std::abs(std::sin(a)) > 1e-6 ? bh / std::abs(std::sin(a)) : 1e300)); };
+        const double reach = chord(a0) * std::max(0.01f, g.scale) / 2, dx = std::cos(a0) * reach, dy = -std::sin(a0) * reach;
+        auto snap = [](double v) { return std::floor(v + 1e-4); };
+        const double ex = snap(cx + dx), ey = snap(cy + dy);
+        const bool reflected = g.type == StyleGradient::Type::Reflected;
+        const double sx = reflected ? cx : snap(cx - dx), sy = reflected ? cy : snap(cy - dy);
+        const double vx = ex - sx, vy = ey - sy, length = std::hypot(vx, vy);
+        if (length >= 0.5) {
+            const double ox = reflected ? cx : (sx + ex) / 2, oy = reflected ? cy : (sy + ey) / 2;
+            const double ux = vx / length, uy = vy / length;
+            const double along = (x + 0.5 - ox) * ux + (y + 0.5 - oy) * uy;
+            double position = reflected ? std::abs(along) / length : 0.5 + along / length;
+            if (g.reverse) position = 1 - position;
+            return unit(float(position));
+        }
+    }
     // A fill layer's Linear ramp is unsnapped (Patchy's calibration); its Radial one snaps as the overlay does (a
     // Photoshop-saved radial fill: centre on a pixel's centre, a whole-pixel radius).
     const bool snapped = !g.fillLayer || g.type != StyleGradient::Type::Linear;

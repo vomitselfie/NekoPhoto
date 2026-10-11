@@ -402,8 +402,8 @@ golden/reduced_layer 20afb8f967832f5c
 golden/transformed_layer c8ae323d04ec301c
 golden/transformed_layer_nearest dc1e414ea473abb4
 golden/zoomed_region 2ac737d156e610ab
-gradient_method/linear 2a0e94230286c2e4
-gradient_method/perceptual 97a90a8ed284325f
+gradient_method/linear 97a7fc236462d8c3
+gradient_method/perceptual 464d3edb4e1eb772
 lab/adjust/levels_curves 6e8e5d6443b21264
 lab/adjust/tones 4d92e8c5c720b571
 lab/artboard/coloured_background 2e514e8950ed82c2
@@ -652,7 +652,7 @@ u16/channels/base_clip_folder_adjustment 0cbe9a549942e8e5
 u16/export/artboard_rect 96889daae3a81d02
 u16/export/svg 726261fedab83944
 u16/feather/stroked_shape_and_vector_mask e79c578ec38cf685
-u16/fill_layer/gradient c8af46e5fa6b5d53
+u16/fill_layer/gradient 423c3f62cec2ff67
 u16/filter/add_noise_gaussian_mono 3f270c0ca8067784
 u16/filter/add_noise_uniform 4ba05a38e6a1d598
 u16/filter/gaussian_blur_20 20d45d9c87bd14b9
@@ -668,8 +668,8 @@ u16/filter/motion_blur_0 474efff93e42755b
 u16/filter/motion_blur_30 3cf7942e8687c099
 u16/golden/placed_mask 4c7b81da539a597a
 u16/golden/transformed_layer fb6f63fee069e412
-u16/gradient_method/linear 590f9b32ef98bc44
-u16/gradient_method/perceptual 95e084c4273ad7b5
+u16/gradient_method/linear 44039c3b99751f21
+u16/gradient_method/perceptual 6ce21fd19f5b50ee
 u16/remove_background/refined_and_decontaminated b119da06acd53cf8
 u16/shape/dashed_stroke 09c5d4403052a7f2
 u16/shape/gradient_fill_and_stroke 3760b5e6fe067971

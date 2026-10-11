@@ -2,6 +2,7 @@
 // would write and checks the pixels. The calibration itself is checked against Photoshop's own renders by
 // build/tests/psd_roundtrip's sibling scripts over Patchy's fixtures (docs/layer-styles.md).
 #include "check.h"
+#include "compositor/document.h"
 #include "compositor/layerstyle.h"
 #include "compositor/psd_carry.h"
 #include "compositor/render.h"
@@ -231,7 +232,8 @@ TEST_MAIN()
 
 TEST_CASE(radial_fill_layer_gradients_snap_as_photoshop_draws_them) {
     // A Photoshop-saved 100 x 100 radial fill (scale 85%) is centred on pixel 50's centre and spans a whole-pixel
-    // radius (42, not 42.5); a linear fill stays unsnapped (Patchy's calibration).
+    // radius (42, not 42.5). A linear fill's ends snap to the pixel grid: 50 -/+ 42.5 along the vertical axis truncate to
+    // rows 92 and 7, so the ramp runs over 85 pixels from 92 up to 7, half way at 49.5.
     StyleGradient g;
     g.fillLayer = true;
     g.type = StyleGradient::Type::Radial;
@@ -241,7 +243,52 @@ TEST_CASE(radial_fill_layer_gradients_snap_as_photoshop_draws_them) {
     CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 50 + 21, 50), 0.5, 1e-6);
     CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 50 + 42, 50), 1.0, 1e-6);
     g.type = StyleGradient::Type::Linear;
-    CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 49.5, 49.5), 0.5, 1e-6);
+    CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 49.5, 49), 0.5, 1e-6);
+    CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 10, 91.5), 0.0, 1e-6);
+    CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 10, 6.5), 1.0, 1e-6);
+}
+
+TEST_CASE(small_reflected_fill_snaps_its_end_to_the_corner) {
+    // psd-tools' colormodes/4x4_*: a Reflected 30° fill over 4 x 4 is |x - y| / 4 in Photoshop at 8, 16 and 32 bits, the
+    // end point (2 + 2, 2 - 1.15) truncated to the corner (4, 0).
+    StyleGradient g;
+    g.fillLayer = true;
+    g.type = StyleGradient::Type::Reflected;
+    g.angle = 30;
+    for (int y = 0; y < 4; y++)
+        for (int x = 0; x < 4; x++) CHECK_NEAR(gradientPosition(g, 0, 0, 4, 4, x, y), std::abs(x - y) / 4.0, 1e-6);
+}
+
+TEST_CASE(gradient_fill_layers_draw_the_same_at_every_depth) {
+    // A fill layer with no stored pixels is drawn at the document's depth: 16 and 32 bits draw what 8 bits does (the
+    // Reflected 30° fill of psd-tools' colormodes/4x4_*, here over 12 x 8 too).
+    for (auto [w, h] : {std::pair{4, 4}, std::pair{12, 8}}) {
+        Document doc(w, h);
+        StyleGradient g;
+        g.fillLayer = true;
+        g.type = StyleGradient::Type::Reflected;
+        g.angle = 30;
+        g.colors = {{0, {10, 0, 178}, 0.5f, std::nullopt}, {0.5f, {255, 0, 0}, 0.5f, std::nullopt}, {1, {255, 126, 0}, 0.5f, std::nullopt}};
+        Layer fill("Gradient Fill", doc.size());
+        auto carry = std::make_shared<PsdLayerCarry>();
+        carry->blocks.push_back({"GdFl", authorGradientFill(g)});
+        fill.psdCarry = carry;
+        doc.layers.push_back(fill);
+        const auto eight = renderFlattened(doc);
+        REQUIRE(eight);
+        if (w == 4) CHECK(std::equal(eight->pixel(0, 0), eight->pixel(0, 0) + 4, eight->pixel(3, 3)));   // |x - y|
+        for (SampleType type : {SampleType::U16, SampleType::F32}) {
+            Document deep = doc;
+            REQUIRE(convertSampleType(deep, type));
+            const auto drawn = renderFlattened(deep);
+            REQUIRE(drawn && drawn->width() == w && drawn->height() == h);
+            int worst = 0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    for (int c = 0; c < 4; c++) worst = std::max(worst, std::abs(int(drawn->pixel(x, y)[c]) - int(eight->pixel(x, y)[c])));
+            CHECK(worst <= 1);
+        }
+    }
 }
 
 TEST_CASE(two_stop_overlays_ease_as_photoshop_draws_them) {
