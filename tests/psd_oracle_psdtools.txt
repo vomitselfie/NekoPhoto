@@ -6,7 +6,7 @@ corpus psd-tools
 commit 96eb134c17b2c65edf4c4151c0f00b802ada86c2
 compared 285
 flatten 0
-floor 154
+floor 166
 pass tests/psd_files/0layers.psb                                      [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/0layers.psd                                      [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/0layers_tblocks.psb                              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
@@ -27,24 +27,24 @@ pass tests/psd_files/32bit5x5.psb                                     [f32]     
 pass tests/psd_files/32bit5x5.psd                                     [f32]              max    0.00  >2:   0.00%  mean   0.000
 --   tests/psd_files/adjustment-fillers.psd                                              saved without Maximize Compatibility
 --   tests/psd_files/adjustment-mask.psd                                                 saved without Maximize Compatibility
-FAIL tests/psd_files/adjustments/adjustment_backdrop_test.psd         [rgb8]             max   38.00  >2:  52.08%  mean   1.474
-FAIL tests/psd_files/adjustments/adjustment_clipping.psd              [rgb8]             max   41.00  >2: 100.00%  mean  21.820
-FAIL tests/psd_files/adjustments/adjustment_nested_composition_1.psd  [rgb8]             max  147.00  >2:  87.52%  mean  17.680
-FAIL tests/psd_files/adjustments/adjustment_nested_composition_2.psd  [rgb8]             max   48.00  >2:  95.52%  mean  11.529
-FAIL tests/psd_files/adjustments/adjustment_nested_composition_3.psd  [rgb8]             max   30.00  >2:  78.20%  mean   4.099
-FAIL tests/psd_files/adjustments/adjustment_nested_composition_4.psd  [rgb8]             max   12.00  >2:   3.52%  mean   1.500
-pass tests/psd_files/adjustments/adjustment_nested_composition_5.psd  [rgb8]             max    2.00  >2:   0.00%  mean   0.058
+FAIL tests/psd_files/adjustments/adjustment_backdrop_test.psd         [rgb8]             max   28.00  >2:  39.57%  mean   0.975
+FAIL tests/psd_files/adjustments/adjustment_clipping.psd              [rgb8]             max   34.00  >2: 100.00%  mean  22.142
+FAIL tests/psd_files/adjustments/adjustment_nested_composition_1.psd  [rgb8]             max  203.00  >2:  22.59%  mean   0.587
+FAIL tests/psd_files/adjustments/adjustment_nested_composition_2.psd  [rgb8]             max    4.00  >2:   2.13%  mean   0.136
+pass tests/psd_files/adjustments/adjustment_nested_composition_3.psd  [rgb8]             max    3.00  >2:   0.14%  mean   0.213
+pass tests/psd_files/adjustments/adjustment_nested_composition_4.psd  [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass tests/psd_files/adjustments/adjustment_nested_composition_5.psd  [rgb8]             max    1.00  >2:   0.00%  mean   0.041
 pass tests/psd_files/adjustments/brightnesscontrast_cmyk.psd          [cmyk8]            max    4.00  >2:   0.06%  mean   0.006
 pass tests/psd_files/adjustments/brightnesscontrast_grayscale.psd     [rgb8]             max    4.00  >2:   0.03%  mean   0.005
 pass tests/psd_files/adjustments/brightnesscontrast_legacy_cmyk.psd   [cmyk8]            max    1.00  >2:   0.00%  mean   0.029
 pass tests/psd_files/adjustments/brightnesscontrast_legacy_grayscale.psd [rgb8]             max    1.00  >2:   0.00%  mean   0.078
 pass tests/psd_files/adjustments/brightnesscontrast_legacy_rgb.psd    [rgb8]             max    1.00  >2:   0.00%  mean   0.132
 pass tests/psd_files/adjustments/brightnesscontrast_rgb.psd           [rgb8]             max    5.00  >2:   0.08%  mean   0.004
-FAIL tests/psd_files/adjustments/curves_cmyk.psd                      [cmyk8]            max  110.00  >2:  83.84%  mean   5.812
-FAIL tests/psd_files/adjustments/curves_grayscale.psd                 [rgb8]             max   96.00  >2:  74.77%  mean  16.308
-FAIL tests/psd_files/adjustments/curves_rgb.psd                       [rgb8]             max  143.00  >2:  83.69%  mean   7.340
-FAIL tests/psd_files/adjustments/exposure_grayscale.psd               [rgb8]             max   26.00  >2:  82.36%  mean   8.577
-FAIL tests/psd_files/adjustments/exposure_rgb.psd                     [rgb8]             max   23.00  >2:  23.07%  mean   1.090
+pass tests/psd_files/adjustments/curves_cmyk.psd                      [cmyk8]            max   10.00  >2:   0.39%  mean   0.106
+pass tests/psd_files/adjustments/curves_grayscale.psd                 [rgb8]             max    3.00  >2:   0.02%  mean   0.007
+pass tests/psd_files/adjustments/curves_rgb.psd                       [rgb8]             max    9.00  >2:   0.06%  mean   0.121
+pass tests/psd_files/adjustments/exposure_grayscale.psd               [rgb8]             max    3.00  >2:   0.04%  mean   0.119
+pass tests/psd_files/adjustments/exposure_rgb.psd                     [rgb8]             max    4.00  >2:   0.01%  mean   0.010
 pass tests/psd_files/adjustments/huesaturation_colorize_rgb.psd       [rgb8]             max    2.00  >2:   0.00%  mean   0.002
 pass tests/psd_files/adjustments/huesaturation_lightness_rgb.psd      [rgb8]             max    7.00  >2:   0.26%  mean   0.072
 FAIL tests/psd_files/adjustments/huesaturation_rgb.psd                [rgb8]             max   46.00  >2:   5.55%  mean   0.343
@@ -53,7 +53,7 @@ pass tests/psd_files/adjustments/invert_cmyk.psd                      [cmyk8]   
 pass tests/psd_files/adjustments/invert_grayscale.psd                 [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/adjustments/invert_rgb.psd                       [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 FAIL tests/psd_files/adjustments/levels_cmyk.psd                      [cmyk8]            max   20.00  >2:   1.29%  mean   0.174
-FAIL tests/psd_files/adjustments/levels_grayscale.psd                 [rgb8]             max   68.00  >2:  97.88%  mean  17.644
+FAIL tests/psd_files/adjustments/levels_grayscale.psd                 [rgb8]             max   11.00  >2:   4.08%  mean   0.271
 FAIL tests/psd_files/adjustments/levels_rgb.psd                       [rgb8]             max    6.00  >2:   2.20%  mean   0.235
 FAIL tests/psd_files/adjustments/posterize_16bits_cmyk.psd            [cmyk16]           max  125.52  >2:  10.06%  mean   0.515
 pass tests/psd_files/adjustments/posterize_16bits_grayscale.psd       [rgb16]            max   51.00  >2:   0.97%  mean   0.250
@@ -117,14 +117,14 @@ pass tests/psd_files/cmyk-gray-ramp.psd                               [cmyk8]   
 pass tests/psd_files/cmyk-spot.psd                                    [cmyk8]            max    0.00  >2:   0.00%  mean   0.000
 --   tests/psd_files/colormodes/100x20_1bit_bitmap_rle.psd                               does not open: The file has neither layers nor a readable merged image.
 --   tests/psd_files/colormodes/20x5_1bit_bitmap.psd                                     does not open: The file has neither layers nor a readable merged image.
-FAIL tests/psd_files/colormodes/4x4_16bit_cmyk.psd                    [cmyk16]           max  200.00  >2:  75.00%  mean  29.120
-FAIL tests/psd_files/colormodes/4x4_16bit_grayscale.psd               [rgb16]            max  115.86  >2:  75.00%  mean  27.694
+pass tests/psd_files/colormodes/4x4_16bit_cmyk.psd                    [cmyk16]           max    0.50  >2:   0.00%  mean   0.083
+pass tests/psd_files/colormodes/4x4_16bit_grayscale.psd               [rgb16]            max    0.47  >2:   0.00%  mean   0.221
 FAIL tests/psd_files/colormodes/4x4_16bit_lab.psd                     [lab16]            max  218.21  >2: 100.00%  mean 106.961
 pass tests/psd_files/colormodes/4x4_16bit_multichannel.psd            [rgb8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL tests/psd_files/colormodes/4x4_16bit_rgb.psd                     [rgb16]            max  195.85  >2:  75.00%  mean  31.009
+pass tests/psd_files/colormodes/4x4_16bit_rgb.psd                     [rgb16]            max    0.40  >2:   0.00%  mean   0.057
 --   tests/psd_files/colormodes/4x4_1bit_bitmap.psd                                      does not open: The file has neither layers nor a readable merged image.
-FAIL tests/psd_files/colormodes/4x4_32bit_grayscale.psd               [f32]              max   85.18  >2: 100.00%  mean  16.816
-FAIL tests/psd_files/colormodes/4x4_32bit_rgb.psd                     [f32]              max  144.08  >2:  93.75%  mean  27.651
+FAIL tests/psd_files/colormodes/4x4_32bit_grayscale.psd               [f32]              max   72.06  >2: 100.00%  mean  21.967
+FAIL tests/psd_files/colormodes/4x4_32bit_rgb.psd                     [f32]              max   72.82  >2:  75.00%  mean  17.904
 pass tests/psd_files/colormodes/4x4_8bit_cmyk.psd                     [cmyk8]            max    1.00  >2:   0.00%  mean   0.100
 pass tests/psd_files/colormodes/4x4_8bit_duotone.psd                  [rgb8]             max    1.00  >2:   0.00%  mean   0.234
 pass tests/psd_files/colormodes/4x4_8bit_grayscale.psd                [rgb8]             max    1.00  >2:   0.00%  mean   0.328
@@ -160,7 +160,7 @@ pass tests/psd_files/effects/stroke-without-vector-mask.psd           [rgb8]    
 pass tests/psd_files/empty-group.psd                                  [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/empty-layer.psb                                  [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/empty-layer.psd                                  [rgb8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL tests/psd_files/fill_adjustments.psd                             [rgb8]             max   28.00  >2:  95.27%  mean   4.414
+FAIL tests/psd_files/fill_adjustments.psd                             [rgb8]             max   20.00  >2:  92.51%  mean   4.045
 FAIL tests/psd_files/gradient-fill.psb                                [f32]              max   75.88  >2:   8.43%  mean   1.988
 FAIL tests/psd_files/gradient-fill.psd                                [f32]              max   75.88  >2:   8.43%  mean   1.988
 pass tests/psd_files/gradient-sizes.psd                               [rgb8]             max    1.00  >2:   0.00%  mean   0.183
@@ -252,12 +252,12 @@ pass tests/psd_files/opacity-fill.psd                                 [rgb8]    
 pass tests/psd_files/passthrough_blendmodes1.psd                      [rgb8]             max    1.00  >2:   0.00%  mean   0.002
 pass tests/psd_files/passthrough_blendmodes2.psd                      [rgb8]             max    2.00  >2:   0.00%  mean   0.041
 pass tests/psd_files/passthrough_blendmodes3.psd                      [rgb8]             max    3.00  >2:   0.59%  mean   0.447
-FAIL tests/psd_files/passthrough_clipping_mask_adjustment.psd         [rgb8]             max  171.00  >2:  99.12%  mean  33.250
+FAIL tests/psd_files/passthrough_clipping_mask_adjustment.psd         [rgb8]             max  170.00  >2:  50.00%  mean  29.515
 pass tests/psd_files/passthrough_clipping_mask_blendmode.psd          [rgb8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL tests/psd_files/passthrough_fill_adjustment.psd                  [rgb8]             max   69.00  >2:  99.80%  mean  43.826
-FAIL tests/psd_files/passthrough_fill_blendmode.psd                   [rgb8]             max   33.00  >2:  46.39%  mean   1.508
-FAIL tests/psd_files/passthrough_opacity.psd                          [rgb8]             max    4.00  >2:  10.35%  mean   0.550
-FAIL tests/psd_files/passthrough_vector_mask.psd                      [rgb8]             max  127.00  >2: 100.00%  mean  14.750
+pass tests/psd_files/passthrough_fill_adjustment.psd                  [rgb8]             max    1.00  >2:   0.00%  mean   0.040
+FAIL tests/psd_files/passthrough_fill_blendmode.psd                   [rgb8]             max   33.00  >2:  42.29%  mean   2.001
+pass tests/psd_files/passthrough_opacity.psd                          [rgb8]             max    1.00  >2:   0.00%  mean   0.020
+FAIL tests/psd_files/passthrough_vector_mask.psd                      [rgb8]             max  122.00  >2:  75.00%  mean  10.012
 FAIL tests/psd_files/path-operations/combine-group.psd                [rgb8]             max   62.00  >2:   5.37%  mean   0.922
 FAIL tests/psd_files/path-operations/combine.psd                      [rgb8]             max  153.00  >2:  25.39%  mean   6.844
 FAIL tests/psd_files/path-operations/exclude-first.psd                [rgb8]             max   41.00  >2:   6.71%  mean   0.478
