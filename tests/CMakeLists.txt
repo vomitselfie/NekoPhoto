@@ -466,6 +466,11 @@ if(TARGET nekophoto)
     add_test(NAME hide_panels_selftest COMMAND nekophoto --lang en --self-test hide-panels)
     set_tests_properties(hide_panels_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/data")
+    # The forbidden cursor: what the painting tools refuse (a group, an adjustment, a hidden layer, a smart object, type
+    # and shape layers), the cursor and the status bar's reason following the layer and the tool, Rasterize Type.
+    add_test(NAME forbidden_cursor_selftest COMMAND nekophoto --lang en --self-test forbidden-cursor)
+    set_tests_properties(forbidden_cursor_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/forbidden-cursor-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/forbidden-cursor-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)

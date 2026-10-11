@@ -346,6 +346,18 @@
         <translation>レイヤーのサンプリング</translation>
     </message>
     <message>
+        <source>Rasterize Type</source>
+        <translation>テキストをラスタライズ</translation>
+    </message>
+    <message>
+        <source>Rasterize Shape</source>
+        <translation>シェイプをラスタライズ</translation>
+    </message>
+    <message>
+        <source>Rasterize Fill Content</source>
+        <translation>塗りつぶしの内容をラスタライズ</translation>
+    </message>
+    <message>
         <source>Paint Mask</source>
         <translation>マスクをペイント</translation>
     </message>
@@ -4952,6 +4964,38 @@ File &gt; New creates a blank canvas.</source>
         <translation>アクティブなレイヤーが非表示です。</translation>
     </message>
     <message>
+        <source>The active layer is a group: choose a layer to paint on.</source>
+        <translation>アクティブなレイヤーはグループです。ペイントするレイヤーを選んでください。</translation>
+    </message>
+    <message>
+        <source>The active layer is an adjustment layer: it has no pixels to paint on.</source>
+        <translation>アクティブなレイヤーは調整レイヤーです。ペイントするピクセルがありません。</translation>
+    </message>
+    <message>
+        <source>Spot Healing and Clone Stamp work on a layer&apos;s pixels, not on its mask.</source>
+        <translation>スポット修復とコピースタンプはレイヤーのピクセルに使います。マスクには使えません。</translation>
+    </message>
+    <message>
+        <source>The active layer is a smart object: edit its contents, or rasterize it to paint on it.</source>
+        <translation>アクティブなレイヤーはスマートオブジェクトです。内容を編集するか、ラスタライズしてからペイントしてください。</translation>
+    </message>
+    <message>
+        <source>The active layer is a type layer: rasterize it to paint on it.</source>
+        <translation>アクティブなレイヤーはテキストレイヤーです。ラスタライズしてからペイントしてください。</translation>
+    </message>
+    <message>
+        <source>The active layer is a shape layer: rasterize it to paint on it.</source>
+        <translation>アクティブなレイヤーはシェイプレイヤーです。ラスタライズしてからペイントしてください。</translation>
+    </message>
+    <message>
+        <source>The active layer is a fill layer: rasterize it to paint on it.</source>
+        <translation>アクティブなレイヤーは塗りつぶしレイヤーです。ラスタライズしてからペイントしてください。</translation>
+    </message>
+    <message>
+        <source>The active layer is a gradient or pattern fill layer: it has no pixels to paint on.</source>
+        <translation>アクティブなレイヤーはグラデーションまたはパターンの塗りつぶしレイヤーです。ペイントするピクセルがありません。</translation>
+    </message>
+    <message>
         <source>The brush %1 could not be read.</source>
         <translation>ブラシ %1 を読み込めませんでした。</translation>
     </message>
@@ -7074,6 +7118,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Rasterized: paint again to work on its pixels.</source>
         <translation>ラスタライズしました。もう一度ペイントしてピクセルを編集してください。</translation>
+    </message>
+    <message>
+        <source>“%1” is a type layer. It must be rasterized before you paint on it; its text can no longer be edited.</source>
+        <translation>「%1」はテキストレイヤーです。ペイントするにはラスタライズが必要です。ラスタライズすると、テキストは編集できなくなります。</translation>
+    </message>
+    <message>
+        <source>“%1” is a shape layer. It must be rasterized before you paint on it; its shape can no longer be edited.</source>
+        <translation>「%1」はシェイプレイヤーです。ペイントするにはラスタライズが必要です。ラスタライズすると、シェイプは編集できなくなります。</translation>
+    </message>
+    <message>
+        <source>“%1” is a fill layer. It must be rasterized before you paint on it.</source>
+        <translation>「%1」は塗りつぶしレイヤーです。ペイントするにはラスタライズが必要です。</translation>
     </message>
     <message>
         <source>%1, saved %2</source>

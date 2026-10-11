@@ -79,6 +79,7 @@ qt_add_executable(nekophoto
     SelfTestWork.cpp
     SelfTestFullScreen.cpp
     SelfTestHidePanels.cpp
+    SelfTestForbidden.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     DocumentSource.h

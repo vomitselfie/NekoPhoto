@@ -79,6 +79,10 @@ public:
     std::optional<Tool> heldTool() const { return heldTool_; }
     /// The tool a press on the canvas uses: the held one, else the session's.
     Tool canvasTool() const { return heldTool_.value_or(session_->tool()); }
+    /// What the forbidden cursor says now (empty: the tool can work here).
+    const QString& refusal() const { return refusal_; }
+    /// The cursor again for where the pointer is, after the layer, its visibility or the tool changed.
+    void refreshCursor();
     /// A tool picked by its letter key: when the key is held a moment, or the tool is used while it is held, letting
     /// go of it runs `back` (Photoshop's spring-loaded tool keys). A quick tap keeps the new tool.
     void armToolSpring(int key, std::function<void()> back);
@@ -86,6 +90,8 @@ public:
 
 signals:
     void cursorMoved(QPointF documentPoint);
+    /// Why the tool cannot work on the active layer under the pointer (the forbidden cursor), or empty again.
+    void refusalChanged(const QString& reason);
     /// A right-click (or the menu key) on the canvas: MainWindow shows the context menu.
     void contextMenuRequested(QPointF viewPoint);
     void cropChanged();
@@ -138,6 +144,11 @@ private:
     HandleHit hitHandle(QPointF viewPoint, const compositor::Corners& corners, bool insideBox) const;
     bool boxShown() const;
     void updateCursor(QPointF viewPoint, Qt::KeyboardModifiers modifiers);
+    /// Why a press with the canvas's tool would be refused (EditorSession::toolRefusal; not a clone source Alt-click),
+    /// and refusing one: true when it was.
+    std::optional<ToolRefusal> pressRefusal(Qt::KeyboardModifiers modifiers) const;
+    bool refusePress(Qt::KeyboardModifiers modifiers);
+    void setRefusal(const QString& reason);
     void press(QPointF viewPoint, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void move(QPointF viewPoint, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);
     void release(QPointF viewPoint, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
@@ -201,6 +212,7 @@ private:
     struct ToolSpring { int key = 0; QElapsedTimer held; bool used = false; std::function<void()> back; };
     std::optional<ToolSpring> toolSpring_;
     std::optional<QPointF> hover_;
+    QString refusal_;   // the forbidden cursor's reason
     /// Direct Selection: what a view point is over on the target path, the knot chosen, and a drag in progress.
     struct PathHit { int sub = -1, knot = -1; enum Part { None, Anchor, In, Out, Subpath } part = None; };
     PathHit pathHit(QPointF view) const;

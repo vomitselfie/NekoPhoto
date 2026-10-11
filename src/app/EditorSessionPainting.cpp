@@ -14,6 +14,7 @@
 #include "compositor/toning.h"
 #include "compositor/blur.h"
 #include "compositor/depth.h"
+#include "compositor/psd_carry.h"
 #include <algorithm>
 #include <random>
 
@@ -67,6 +68,85 @@ AnyImage flattenedNative(const Document& document) {
 }
 
 } // namespace
+
+// ---- What a tool may paint on -------------------------------------------------------
+
+Rasterizable EditorSession::rasterizable(const Layer& layer) {
+    if (layer.isLiveText()) return Rasterizable::Type;
+    if (layer.isLiveShape()) return Rasterizable::Shape;
+    if (!layer.psdCarry) return Rasterizable::No;
+    // A PSD's fill layer: a solid colour ('SoCo', its pixels the colour; with a vector mask, Photoshop's shape layer),
+    // or a gradient or pattern the renderer draws from the carried block whatever the pixels hold.
+    bool solid = false, vector = false;
+    for (const PsdBlock& b : layer.psdCarry->blocks) {
+        if (b.key == "GdFl" || b.key == "PtFl") return Rasterizable::DrawnFill;
+        if (b.key == "SoCo") solid = true;
+        if (b.key == "vmsk" || b.key == "vsms") vector = true;
+    }
+    return solid ? (vector ? Rasterizable::Shape : Rasterizable::Fill) : Rasterizable::No;
+}
+
+std::optional<ToolRefusal> EditorSession::toolRefusal(Tool tool) const {
+    // The tools that paint the layer's pixels (Patch and Content-Aware Move drag a selection first).
+    const bool paints = tool == Tool::Brush || tool == Tool::CloneStamp || tool == Tool::Smudge || tool == Tool::Dodge || tool == Tool::PaintBucket
+        || tool == Tool::Gradient || (tool == Tool::SpotHealing && spotHealingMode != 4 && spotHealingMode != 5);
+    if (!paints || !document_ || transformEdit_) return std::nullopt;
+    const Layer* layer = activeLayer();
+    if (!layer) return std::nullopt;
+    const bool mask = isMaskSelected_ && layer->mask;
+    auto refused = [](ToolRefusal::Kind kind, const QString& reason) { return std::optional<ToolRefusal>(ToolRefusal{kind, reason}); };
+    // A group's or an adjustment layer's mask takes a gradient (as beginGradient does); nothing else paints on them.
+    if (layer->isGroup && !(mask && tool == Tool::Gradient)) return refused(ToolRefusal::Refused, tr("The active layer is a group: choose a layer to paint on."));
+    if (layer->adjustment && !(mask && tool == Tool::Gradient)) return refused(ToolRefusal::Refused, tr("The active layer is an adjustment layer: it has no pixels to paint on."));
+    if (mask) {
+        if (tool == Tool::SpotHealing || tool == Tool::CloneStamp) return refused(ToolRefusal::Refused, tr("Spot Healing and Clone Stamp work on a layer's pixels, not on its mask."));
+        return std::nullopt;
+    }
+    if (!effectiveVisibleIds(document_->layers).count(layer->id)) return refused(ToolRefusal::Refused, tr("The active layer is hidden."));
+    if (layer->isLiveSmartObject())
+        return refused(ToolRefusal::SmartObject, tr("The active layer is a smart object: edit its contents, or rasterize it to paint on it."));
+    switch (rasterizable(*layer)) {
+    case Rasterizable::Type: return refused(ToolRefusal::Rasterize, tr("The active layer is a type layer: rasterize it to paint on it."));
+    case Rasterizable::Shape: return refused(ToolRefusal::Rasterize, tr("The active layer is a shape layer: rasterize it to paint on it."));
+    case Rasterizable::Fill: return refused(ToolRefusal::Rasterize, tr("The active layer is a fill layer: rasterize it to paint on it."));
+    case Rasterizable::DrawnFill: return refused(ToolRefusal::Refused, tr("The active layer is a gradient or pattern fill layer: it has no pixels to paint on."));
+    case Rasterizable::No: break;
+    }
+    return std::nullopt;
+}
+
+void EditorSession::refuseTool(const ToolRefusal& refusal) {
+    const Layer* layer = activeLayer();
+    switch (refusal.kind) {
+    case ToolRefusal::SmartObject: if (layer) emit smartObjectPixelsRequested(layer->id); return;
+    case ToolRefusal::Rasterize: if (layer) emit rasterizeRequested(layer->id); return;
+    case ToolRefusal::Refused: emit error(refusal.reason); return;
+    }
+}
+
+bool EditorSession::rasterizeLayer() {
+    Layer* layer = activeLayerMutable();
+    if (!canEditLayers() || !layer) return false;
+    const Rasterizable what = rasterizable(*layer);
+    if (what == Rasterizable::No || what == Rasterizable::DrawnFill) return false;
+    endOpacityEdit();
+    beginEdit(what == Rasterizable::Type ? QT_TRANSLATE_NOOP("History", "Rasterize Type")
+              : what == Rasterizable::Shape ? QT_TRANSLATE_NOOP("History", "Rasterize Shape") : QT_TRANSLATE_NOOP("History", "Rasterize Fill Content"));
+    // The pixels stay as they are; the layer stops being anything but them, as a stroke on it would make it. A PSD's
+    // blocks saying what the layer is instead of its pixels go with it (the vector mask stays, as after painting).
+    layer->text.reset();
+    layer->textImage = AnyImage();
+    layer->shape.reset();
+    layer->shapeImage = AnyImage();
+    if (layer->psdCarry) {
+        auto carry = std::make_shared<PsdLayerCarry>(*layer->psdCarry);
+        std::erase_if(carry->blocks, [](const PsdBlock& b) { return PsdLayerCarry::binding(b.key) != PsdLayerCarry::Binding::Always; });
+        layer->psdCarry = std::move(carry);
+    }
+    endEdit();
+    notifyDocument();
+    return true;
+}
 
 // ---- Brush ---------------------------------------------------------------------
 

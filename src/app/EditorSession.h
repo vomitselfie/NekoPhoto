@@ -56,6 +56,18 @@ namespace app {
 
 enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket, Pen, DirectSelect, Artboard, Slice };
 enum class MarqueeKind { Rectangle, Ellipse };
+
+/// Why a tool cannot work on the active layer (Photoshop's forbidden cursor), and what a press does about it: says
+/// why, offers the smart object's Edit Contents or Rasterize, or offers to rasterize a type, shape or fill layer.
+struct ToolRefusal {
+    enum Kind { Refused, SmartObject, Rasterize };
+    Kind kind = Refused;
+    QString reason;
+};
+
+/// What rasterizing would take from a layer: its type, its shape, its solid colour fill, or (a gradient or pattern
+/// fill, drawn from its carried PSD data) nothing NekoPhoto can turn into pixels.
+enum class Rasterizable { No, Type, Shape, Fill, DrawnFill };
 enum class LassoKind { Freehand, Polygonal };
 enum class BlurToolMode { Liquify, Blur, Smudge, Sharpen };
 enum class GradientStyle { ForegroundToBackground, ForegroundToTransparent };
@@ -1036,6 +1048,17 @@ public:
     /// Whether a pixel edit on the active layer would replace a smart object's contents with pixels (not on its
     /// mask); `ask` also emits smartObjectPixelsRequested so the window can offer Edit Contents or Rasterize.
     bool smartObjectBlocksPixels(bool ask = false);
+    /// Why `tool` cannot work on the active layer here (none when it can): for the tools that paint pixels, a group, an
+    /// adjustment layer, a hidden layer, a smart object, or a type, shape or fill layer (a mask takes the paint
+    /// instead). The canvas shows the forbidden cursor and the reason from it, and refuses a press for the same.
+    std::optional<ToolRefusal> toolRefusal(Tool tool) const;
+    /// A press refused for `refusal`: the reason in a message, or the question it asks (smartObjectPixelsRequested,
+    /// rasterizeRequested).
+    void refuseTool(const ToolRefusal& refusal);
+    static Rasterizable rasterizable(const compositor::Layer& layer);
+    /// The active type, shape or solid colour fill layer as the plain pixels it shows (one undo step), as
+    /// Photoshop's Rasterize before painting.
+    bool rasterizeLayer();
 
 signals:
     void pathsChanged();
@@ -1049,6 +1072,8 @@ signals:
     void reloadedFromDisk();
     /// A pixel edit was stopped on smart object `id`: offer to edit its contents or rasterize it.
     void smartObjectPixelsRequested(compositor::Uuid id);
+    /// A canvas press was stopped on type, shape or fill layer `id`: offer to rasterize it (rasterizeLayer).
+    void rasterizeRequested(compositor::Uuid id);
     /// The document's pixels or structure changed; `region` is the document area affected (empty means all).
     void documentChanged(QRectF region);
     /// The document changed, but the canvas already shows it: a brush stroke committed as its live preview

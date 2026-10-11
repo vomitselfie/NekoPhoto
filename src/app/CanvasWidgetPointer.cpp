@@ -181,10 +181,12 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
             }
             return;
         }
+        if (refusePress(modifiers)) return;
         if (session_->beginBrush(doc, modifiers & Qt::ShiftModifier)) drag_ = Drag::Brush;
         return;
     }
     case Tool::Smudge:
+        if (refusePress(modifiers)) return;
         if (session_->beginWarp(doc)) drag_ = Drag::Warp;
         return;
     case Tool::Pen: {
@@ -257,12 +259,15 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         return;
     }
     case Tool::Dodge:
+        if (refusePress(modifiers)) return;
         if (session_->beginToning(doc)) drag_ = Drag::Warp;   // a stroke, continued and ended as Blur's
         return;
     case Tool::PaintBucket:
+        if (refusePress(modifiers)) return;
         session_->paintBucket(doc);
         return;
     case Tool::Gradient:
+        if (refusePress(modifiers)) return;
         session_->beginGradient(doc);
         if (session_->gradientPending()) drag_ = Drag::Gradient;
         return;

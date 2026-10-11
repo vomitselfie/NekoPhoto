@@ -2,6 +2,8 @@
 #include "CanvasWidget.h"
 #include <cstring>
 #include "QtGeometry.h"
+#include "Theme.h"
+#include <QApplication>
 #include <QKeyEvent>
 #include <QNativeGestureEvent>
 #include <QWheelEvent>
@@ -31,9 +33,14 @@ CanvasWidget::HandleHit CanvasWidget::hitHandle(QPointF view, const Corners& cor
 }
 
 void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
+    // What a press would be refused for (EditorSession::toolRefusal): the forbidden cursor, and the reason in the
+    // status bar while the pointer is over the canvas, as Photoshop does.
+    const auto refusal = pressRefusal(modifiers);
+    setRefusal(refusal && drag_ == Drag::None ? refusal->reason : QString());
     if (!session_->hasDocument()) { setCursor(Qt::ArrowCursor); return; }
     if ((spaceHeld_ && !(modifiers & Qt::ControlModifier)) || canvasTool() == Tool::Hand || drag_ == Drag::Pan) { setCursor(drag_ == Drag::Pan ? Qt::ClosedHandCursor : Qt::OpenHandCursor); return; }
     if (session_->canvasPressHook) { setCursor(Qt::CrossCursor); return; }
+    if (!refusal_.isEmpty()) { setCursor(themedCursor(Qt::ForbiddenCursor)); return; }
     switch (canvasTool()) {
     case Tool::Move: {
         const Layer* active = session_->activeLayer();
@@ -63,6 +70,33 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
     case Tool::Zoom: setCursor((modifiers & Qt::AltModifier) ? zoomOutCursor_ : zoomInCursor_); return;
     case Tool::Hand: setCursor(Qt::OpenHandCursor); return;
     }
+}
+
+std::optional<ToolRefusal> CanvasWidget::pressRefusal(Qt::KeyboardModifiers modifiers) const {
+    if (!session_->hasDocument() || (spaceHeld_ && !(modifiers & Qt::ControlModifier)) || session_->canvasPressHook || session_->warpCage()) return std::nullopt;
+    const Tool tool = canvasTool();
+    // Alt-click sets Clone Stamp's (and the sampling Healing Brush's) source, from any layer.
+    if ((tool == Tool::CloneStamp || (tool == Tool::SpotHealing && session_->spotHealingMode == 3)) && (modifiers & Qt::AltModifier)) return std::nullopt;
+    return session_->toolRefusal(tool);
+}
+
+bool CanvasWidget::refusePress(Qt::KeyboardModifiers modifiers) {
+    auto refusal = pressRefusal(modifiers);
+    if (!refusal) return false;
+    session_->refuseTool(*refusal);
+    return true;
+}
+
+void CanvasWidget::setRefusal(const QString& reason) {
+    if (reason == refusal_) return;
+    refusal_ = reason;
+    if (hover_ && isBrushLike()) update(brushCursorRect(*hover_));   // the brush outline goes, or comes back
+    emit refusalChanged(reason);
+}
+
+void CanvasWidget::refreshCursor() {
+    if (hover_) updateCursor(*hover_, QApplication::keyboardModifiers());
+    else setRefusal({});
 }
 
 SelectionMode CanvasWidget::selectionMode(Qt::KeyboardModifiers modifiers) const {
@@ -274,7 +308,7 @@ void CanvasWidget::armToolSpring(int key, std::function<void()> back) {
     toolSpring_->held.start();
 }
 
-void CanvasWidget::leaveEvent(QEvent*) { hover_.reset(); update(); }
+void CanvasWidget::leaveEvent(QEvent*) { hover_.reset(); setRefusal({}); update(); }
 void CanvasWidget::focusOutEvent(QFocusEvent* e) {
     // The keys are let go of as far as the canvas knows: no Space, no held tool, no spring.
     spaceHeld_ = false;

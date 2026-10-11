@@ -60,6 +60,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
         // Choosing another layer (the Layers panel, a shortcut) commits the type, as in Photoshop.
         if (typeEdit_ && session_->typeEditLayer() && session_->activeLayerId() != session_->typeEditLayer()) commitType();
         if (boxShown() || boxPainted_) update();
+        refreshCursor();   // another layer, one shown or hidden, its mask chosen: the forbidden cursor may come or go
     });
     connect(session_, &EditorSession::selectionChanged, this, [this] { refreshSelectionOutline(); update(); });
     connect(session_, &EditorSession::scribblesChanged, this, [this] { update(); });

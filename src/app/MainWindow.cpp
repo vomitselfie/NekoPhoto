@@ -317,6 +317,8 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     tab.session->commandReady = [this, session = tab.session] { return session == session_; };
     tab.canvas = new CanvasWidget(tab.session);
     connect(tab.canvas, &CanvasWidget::contextMenuRequested, this, [this, canvas = tab.canvas](QPointF at) { if (canvas == canvas_) showCanvasMenu(at); });
+    // The forbidden cursor's reason in the status bar while the pointer is over the canvas, else the tool's hint.
+    connect(tab.canvas, &CanvasWidget::refusalChanged, this, [this, canvas = tab.canvas] { if (canvas == canvas_) refreshHint(); });
     tab.frame = new CanvasFrame(tab.session, tab.canvas);
     tab.frame->setRulersVisible(rulersAction_ && rulersAction_->isChecked());
     tab.layers = new LayersPanel(tab.session);
@@ -336,6 +338,23 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
         box.exec();
         if (edit && box.clickedButton() == edit) editSmartObjectContents();
         else if (box.clickedButton() == rasterize) { session_->rasterizeSmartObject(); statusBar()->showMessage(tr("Rasterized: paint again to work on its pixels."), 5000); }
+    });
+    // Painting on a type, shape or fill layer: rasterize it first (Photoshop's question).
+    connect(tab.session, &EditorSession::rasterizeRequested, this, [this, session = tab.session](const Uuid& id) {
+        if (session != session_) return;
+        const Layer* layer = session_->document()->find(id);
+        if (!layer) return;
+        const QString name = QString::fromStdString(layer->name);
+        const Rasterizable what = EditorSession::rasterizable(*layer);
+        const QString text = what == Rasterizable::Type ? tr("“%1” is a type layer. It must be rasterized before you paint on it; its text can no longer be edited.").arg(name)
+                           : what == Rasterizable::Shape ? tr("“%1” is a shape layer. It must be rasterized before you paint on it; its shape can no longer be edited.").arg(name)
+                                                         : tr("“%1” is a fill layer. It must be rasterized before you paint on it.").arg(name);
+        QMessageBox box(QMessageBox::Question, tr("Rasterize"), text, QMessageBox::NoButton, this);
+        QPushButton* rasterize = box.addButton(tr("Rasterize"), QMessageBox::AcceptRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(rasterize);
+        box.exec();
+        if (box.clickedButton() == rasterize && session_->rasterizeLayer()) statusBar()->showMessage(tr("Rasterized: paint again to work on its pixels."), 5000);
     });
     connect(tab.layers, &LayersPanel::smartObjectContentsRequested, this, [this, session = tab.session](const Uuid& id) {
         if (session != session_) return;
@@ -459,7 +478,7 @@ void MainWindow::showImportNotes(const QString& summary, const QString& title, c
     importBanner_->setVisible(bannerSession_ == session_);
 }
 
-void MainWindow::refreshHint() { hintLabel_->setText(toolHint(session_->tool(), session_->brushErase)); }
+void MainWindow::refreshHint() { hintLabel_->setText(canvas_ && !canvas_->refusal().isEmpty() ? canvas_->refusal() : toolHint(session_->tool(), session_->brushErase)); }
 
 QString MainWindow::toolHint(Tool tool, bool erase) {
     switch (tool) {
