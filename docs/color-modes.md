@@ -143,8 +143,8 @@ paints L, a and b. Nothing is painted in RGB and converted back.
   - **Spot Healing, the Healing Brush and Patch**. In Lab they heal L, a and b as the RGB tools heal red, green and
     blue. In CMYK every one of the five samples is healed (the membrane that matches the tone to the edge runs on each
     ink, K included); where a spot heals from is chosen on the plates' look reduced to 8 bits (each of C, M and Y as
-    stored times K), for deciding only. Content-Aware synthesis works on RGBA, so in CMYK the Content-Aware type copies
-    the best-matching nearby patch, as Proximity Match does with a wider search.
+    stored times K), for deciding only. The Content-Aware type synthesises the spot on the inks themselves, as
+    Content-Aware Fill does (below).
   - **Blur, Sharpen, Smudge and Liquify** blur, sharpen, carry and resample every sample (five in CMYK).
   - **Dodge and Burn** move L along their range's curve in Lab, a and b kept (Lab holds colour apart from lightness,
     so Protect Tones changes nothing there). In CMYK they move each plate's brightness (the ink inverted) along the
@@ -175,6 +175,28 @@ edge in CMYK with the other plates kept, dodges L in Lab with a and b kept, burn
 smudges and pushes black ink, and checks the bucket's choice on K and on Lab's a and b. `rpc_smoke.py` paints, erases,
 clones, heals, patches, blurs, sharpens, smudges, dodges, burns, sponges, fills with the bucket, merges and applies a
 mask in each mode.
+
+## Content-aware tools and Remove Background
+
+- **Content-Aware Fill**, **Content-Aware Move** and **Extend** work on the document's own samples at 8 and 16 bits
+  ([content-aware.md](content-aware.md)): the patches are chosen on the four inks and alpha in CMYK (so a K-only black
+  and a rich black that look alike are told apart) and on L, a and b in Lab, and the hole takes the inks, or L, a and b,
+  of the patches it copies. A hole in K-only black fills with K-only black, with no rich black from a round trip
+  through RGB, and 16-bit values are copied as they are. The tone match and Move's tone adaptation run on each ink, or
+  L, a and b.
+- **Content-Aware Scale** chooses its seams on the plates' look in CMYK (C, M and Y as stored times K) and on L, a and
+  b in Lab, and removes or doubles the layer's own samples. Its dialog's preview is drawn in sRGB.
+- **Remove Background** and **Select ▸ Subject**: the models were trained on sRGB, so they (and the edge refinement)
+  see the layer converted through the document's profile to sRGB, for deciding only. Remove Background's result is the
+  layer mask, at the document's depth; **Clean edge colours** estimates the edge pixels' own colour on the layer's
+  inks, or L, a and b (the compositing equation holds per stored sample, as the mask blends them), so the colour
+  samples never pass through RGB.
+
+Checked by `content_modes_tests`: a CMYK and a Lab fill at 8 and 16 bits leave every pixel outside the hole as it was
+and fill it with the surrounding samples exactly (a 16-bit K that no 8-bit level widens to included); holes in K-only
+and rich black side by side each take their own; Content-Aware Move, Scale and Content-Aware spot healing carry the
+inks; foreground estimation keeps CMYK's and Lab's layouts. `rpc_smoke.py` runs every method in each mode and depth,
+and Remove Background and Select ▸ Subject when the models are downloaded.
 
 ## Text, shapes and layer styles
 
@@ -276,8 +298,7 @@ Smart objects work in CMYK and Lab documents at 8 and 16 bits, as in Photoshop:
 
 ## Not yet, and not here
 
-Remove Background, Content-Aware Fill, Move and Scale, and Clouds and Difference Clouds (which paint sRGB colours)
-stay greyed in CMYK and Lab ("Not available in CMYK mode yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Camera Raw, G'MIC and the MyPaint brushes stay
+Clouds and Difference Clouds (which paint sRGB colours) stay greyed in CMYK and Lab ("Not available in CMYK mode yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Camera Raw, G'MIC and the MyPaint brushes stay
 RGB only ("Not available in CMYK mode", for good), and so does **Mosh**: it is a glitch effect on RGB colour that
 Photoshop has no counterpart for, and running it through RGB and back is not done here.
 
@@ -415,8 +436,8 @@ RGB で塗ってから変換することはありません。
 - **レタッチ**(どちらのモードでもドキュメント自身の値に適用):
   - **スポット修復ブラシ、修復ブラシ、パッチ**:Lab では RGB の赤・緑・青と同じように L・a・b を修復します。CMYK では
     5 つの値すべて(K を含む各インキ)を修復します。修復元の選択は、版の見た目を 8 bit にしたもの(C・M・Y それぞれの
-    値に K を掛けたもの)で判断するだけで、ピクセルは変換しません。コンテンツに応じた合成は RGBA で動くため、CMYK の
-    「コンテンツに応じる」は近傍で最もよく合うパッチを(近似色に合わせるより広く探して)コピーします。
+    値に K を掛けたもの)で判断するだけで、ピクセルは変換しません。「コンテンツに応じる」は、コンテンツに応じた
+    塗りつぶし(下記)と同じようにインキそのもので合成します。
   - **ぼかし・シャープ・指先・ゆがみ**はすべての値(CMYK では 5 つ)をぼかし、シャープにし、運び、再サンプルします。
   - **覆い焼き・焼き込み**:Lab では範囲のカーブに沿って L を動かし、a・b は変えません(保護トーンは Lab では影響
     しません)。CMYK では各版の明るさ(インキの反転)を同じカーブで動かすため、覆い焼きはインキを減らし、焼き込みは
@@ -436,6 +457,21 @@ RGB で塗ってから変換することはありません。
   ストロークも同じ L・a・b を使い、クリックで選択するモデル(sRGB で学習)には合成画像を sRGB に変換して渡します。
 - **MyPaint** のプリセットは今後も使えません(「CMYK モードでは使用できません」)。libmypaint は RGB で混色し、インキや
   Lab を持たないため、RGB で塗って変換するしかなく、NekoPhoto はそうしないからです。
+
+### コンテンツに応じたツールと背景を削除
+
+- **コンテンツに応じた塗りつぶし**、**コンテンツに応じた移動**と**拡張**は 8 bit・16 bit ともドキュメント自身の値で動きます
+  ([content-aware.md](content-aware.md))。パッチは CMYK では 4 色のインキとアルファ(見た目が似た K だけの黒と
+  リッチブラックも区別します)、Lab では L・a・b で選び、穴にはコピーしたパッチのインキ(または L・a・b)が入ります。
+  K だけの黒の中の穴は K だけの黒で埋まり、RGB を経由したリッチブラックにはなりません。16 bit の値もそのままコピー
+  します。色調合わせと移動の色調の適応もインキごと(または L・a・b ごと)に行います。
+- **コンテンツに応じて拡大・縮小**は、CMYK では版の見た目(C・M・Y の値に K を掛けたもの)、Lab では L・a・b で
+  シームを選び、レイヤー自身の値を取り除いたり複製したりします。ダイアログのプレビューは sRGB で表示します。
+- **背景を削除**と**選択範囲 ▸ 被写体を選択**:モデルは sRGB で学習しているため、モデル(と境界の調整)には
+  ドキュメントのプロファイルで sRGB に変換したレイヤーを判定にだけ渡します。背景を削除の結果はドキュメントの
+  ビット数のレイヤーマスクです。**境界の色をきれいにする**は境界のピクセル本来の色をレイヤーのインキ(または
+  L・a・b)で推定するため(マスクは保存された値ごとに合成するので、合成の式は値ごとに成り立ちます)、色の値が
+  RGB を経由することはありません。
 
 ### テキスト、シェイプ、レイヤースタイル
 
@@ -525,7 +561,7 @@ CMYK・Lab ドキュメントでも、8 bit・16 bit ともに Photoshop と同�
 
 ### 未対応・対象外
 
-背景を削除、コンテンツに応じた塗りつぶし・移動・拡大・縮小、雲模様 1・2(sRGB の色で描くため)は CMYK・Lab では使えないままです(「CMYK モードでは
+雲模様 1・2(sRGB の色で描くため)は CMYK・Lab では使えないままです(「CMYK モードでは
 まだ使用できません」と表示)。CMYK の JPEG と TIFF(CMYK ドキュメントは sRGB で書き出します)もまだです。Camera Raw、
 G'MIC、MyPaint ブラシは RGB 専用で(「CMYK モードでは使用できません」)、**Mosh** も同じです。Mosh は RGB の色に
 かけるグリッチ効果で Photoshop に対応する機能がなく、RGB を経由して戻すことはしません。
