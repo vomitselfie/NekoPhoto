@@ -17,6 +17,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 #include <QMouseEvent>
@@ -280,6 +281,46 @@ int forbiddenCursor(MainWindow& w) {
         s.brushSettings = brush; s.brushErase = erase;
         s.selectTool(tool);
         emit s.toolChanged();
+    }
+
+    // A group's mask takes what a layer's does, as in Photoshop: the brushes and eraser, Blur, the Paint Bucket, Fill
+    // and the Gradient tool. Without a mask (or with the group itself the target) a group is refused.
+    {
+        expect(call("layers.add", {{"kind", "group"}, {"name", "Masked group"}}).has_value(), "could not add a group");
+        const auto groupId = s.activeLayerId();
+        expect(kind(Tool::Brush, ToolRefusal::Refused), "a group without a mask was not refused");
+        call("layers.mask", {{"action", "add"}, {"mode", "revealAll"}});
+        expect(s.isMaskSelected() && s.paintsMask(), "adding a group's mask did not target it");
+        for (Tool t : {Tool::Brush, Tool::Gradient, Tool::PaintBucket})
+            expect(!refusal(t), "a tool was refused on a group's mask");
+        const BlurToolMode blur = s.blurMode;
+        s.blurMode = BlurToolMode::Blur;
+        expect(!refusal(Tool::Smudge), "Blur was refused on a group's mask");
+        s.blurMode = blur;
+        expect(kind(Tool::CloneStamp, ToolRefusal::Refused), "Clone Stamp on a group's mask was not refused");
+        const Document& doc = *s.document();
+        const double x = doc.width * 0.5, y = doc.height * 0.5;
+        auto groupMask = [&] { const Layer* g = groupId ? s.document()->find(*groupId) : nullptr; return g ? maskAt(*g, x, y) : -1; };
+        const Tool tool = s.tool();
+        const BrushSettings brush = s.brushSettings;
+        const QColor foreground = s.foregroundColor;
+        s.selectTool(Tool::Brush);
+        s.brushSettings.diameter = 9; s.brushSettings.hardness = 1; s.brushSettings.opacity = 1;
+        s.foregroundColor = Qt::black;
+        const size_t steps = s.undoNames().size();
+        const bool began = s.beginBrush(QPointF(x, y), false);
+        expect(began, "the brush did not start on a group's mask");
+        if (began) { s.continueBrush(QPointF(x + 1, y)); s.endBrush(); }
+        expect(groupMask() == 0 && s.undoNames().size() == steps + 1 && s.undoNames().back() == "Paint Mask", "the brush did not paint the group's mask in one step");
+        s.foregroundColor = Qt::white;
+        s.fillSelection(s.foregroundColor);
+        expect(groupMask() == 255, "Fill did not fill the group's mask");
+        expect(call("brush.stroke", {{"points", QJsonArray{QJsonArray{x, y}, QJsonArray{x + 1, y}}}, {"size", 9}, {"hardness", 1}, {"mask", true}, {"color", "#000000"}}).has_value()
+                   && groupMask() == 0, "brush.stroke did not paint the group's mask");
+        s.brushSettings = brush; s.foregroundColor = foreground;
+        s.selectTool(tool);
+        if (groupId) s.selectLayer(*groupId, false);
+        expect(kind(Tool::Brush, ToolRefusal::Refused), "the group itself, its mask not the target, was not refused");
     }
 
     // A type layer: rasterize first. Rasterized, the brush works; undone, it is type again.

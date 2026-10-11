@@ -1419,6 +1419,15 @@ def mask_parity(rpc):
     rpc.call("brush.stroke", tool="eraser", points=[[40, 8], [41, 8]], size=6, hardness=1, mask=True, color="#0000ff")
     assert abs(green_at(40) - 227) <= 2, green_at(40)
     assert rpc.call("history.info")["undo"] == "Paint Mask"
+
+    # A folder's mask takes the brush, as a layer's does.
+    rpc.call("layers.mask", id=red, action="delete")
+    rpc.call("layers.select", id=red)
+    folder = rpc.call("layers.group")["id"]
+    rpc.call("layers.mask", id=folder, action="add")
+    rpc.call("brush.stroke", points=[[8, 8], [9, 8]], size=6, hardness=1, mask=True, color="#000000")
+    assert rpc.call("history.info")["undo"] == "Paint Mask"
+    assert rpc.call("color.sample", x=8, y=8)["color"] == "#ffffff" and rpc.call("color.sample", x=56, y=8)["color"] == "#ff0000"
     rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
     rpc.call("tabs.close", index=tab["index"], discard=True)

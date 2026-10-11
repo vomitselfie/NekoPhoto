@@ -147,9 +147,9 @@ std::optional<ToolRefusal> EditorSession::toolRefusal(Tool tool) const {
     if (!layer) return std::nullopt;
     const bool mask = isMaskSelected_ && layer->mask;
     auto refused = [](ToolRefusal::Kind kind, const QString& reason) { return std::optional<ToolRefusal>(ToolRefusal{kind, reason}); };
-    // A group's mask takes a gradient (as beginGradient does); nothing else paints on a group. An adjustment layer's
-    // mask (or a fill layer's) takes what a pixel layer's does; the adjustment itself has no pixels.
-    if (layer->isGroup && !(mask && tool == Tool::Gradient)) return refused(ToolRefusal::Refused, tr("The active layer is a group: choose a layer to paint on."));
+    // A group's mask, an adjustment layer's (or a fill layer's) takes what a pixel layer's does, as in Photoshop; the
+    // group and the adjustment themselves have no pixels.
+    if (layer->isGroup && !mask) return refused(ToolRefusal::Refused, tr("The active layer is a group: choose a layer to paint on."));
     if (layer->adjustment && !mask)
         return refused(ToolRefusal::Refused, layer->mask ? tr("The active layer is an adjustment layer: target its mask to paint on it.")
                                                          : tr("The active layer is an adjustment layer without a mask: add a layer mask to paint where it applies."));
@@ -237,9 +237,9 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (!document_ || stroke_ || transformEdit_) return false;
     const bool deep = document_->sampleType == SampleType::U16;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup) return false;
+    if (!layer) return false;
     bool mask = isMaskSelected_ && layer->mask;
-    if (layer->adjustment && !mask) return false;   // an adjustment layer has only its mask to paint
+    if ((layer->isGroup || layer->adjustment) && !mask) return false;   // a group or an adjustment layer has only its mask to paint
     if (!mask && smartObjectBlocksPixels(true)) return false;
     bool healing = tool_ == Tool::SpotHealing, cloning = tool_ == Tool::CloneStamp || (healing && spotHealingMode == 3);
     if (healing && spotHealingMode == 4) return false;   // Patch drags the selection instead
@@ -563,9 +563,9 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     if (refusedAtDepth("tool.smudge", tr("Editing pixels"))) return false;
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
-    // Blur softens a mask (an adjustment layer's too); everything else here works on the layer's pixels.
+    // Blur softens a mask (a group's or an adjustment layer's too); everything else here works on the layer's pixels.
     const bool blursMask = layer && isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask;
-    if (!layer || layer->isGroup || (!blursMask && (layer->adjustment || !layer->asset || !layer->asset->image))) return false;
+    if (!layer || (!blursMask && (layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image))) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const bool deep = document_->sampleType == SampleType::U16;
     if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.f32()) {

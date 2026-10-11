@@ -15,7 +15,7 @@ namespace app {
 
 bool EditorSession::fillThroughF(const QColor& color, const GrayF* selection, const char* name) {
     Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || (layer->adjustment && !(isMaskSelected_ && layer->mask))) return false;
+    if (!layer || ((layer->isGroup || layer->adjustment) && !(isMaskSelected_ && layer->mask))) return false;
     const bool mask = isMaskSelected_ && layer->mask;
     if (!mask && smartObjectBlocksPixels(true)) return false;
     auto coverageAt = [&](Point d) -> float {
