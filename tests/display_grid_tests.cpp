@@ -104,12 +104,14 @@ Error compare(const ColorTransform& fast, const ColorTransform& exact, const std
     exact.apply(pixels.data(), b.data(), count);
     Error e;
     e.add(a.data(), b.data(), count);
+    int shown = 0;
     if (std::getenv("DISPLAY_GRID_WORST") && e.max > 1)
-        for (size_t i = 0; i < count; i++)
+        for (size_t i = 0; i < count && shown < 12; i++)
             for (int c = 0; c < 3; c++)
                 if (std::abs(int(a[i * 4 + size_t(c)]) - int(b[i * 4 + size_t(c)])) > 1) {
                     const uint16_t* p = &pixels[i * size_t(channels)];
-                    std::printf("    off by %d at %u %u %u %u: fast %u %u %u exact %u %u %u\n", std::abs(int(a[i * 4 + size_t(c)]) - int(b[i * 4 + size_t(c)])), p[0], p[1], p[2], channels == 5 ? p[3] : 0u, a[i * 4], a[i * 4 + 1], a[i * 4 + 2], b[i * 4], b[i * 4 + 1], b[i * 4 + 2]);
+                    std::printf("    off by %d at %u %u %u %u %u: fast %u %u %u %u exact %u %u %u %u\n", std::abs(int(a[i * 4 + size_t(c)]) - int(b[i * 4 + size_t(c)])), p[0], p[1], p[2], p[3], channels == 5 ? p[4] : 0u, a[i * 4], a[i * 4 + 1], a[i * 4 + 2], a[i * 4 + 3], b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3]);
+                    shown++;
                     break;
                 }
     return e;

@@ -426,6 +426,7 @@ add_test(NAME colormgmt_cmyk_tests COMMAND colormgmt_cmyk_tests)
 add_executable(display_grid_tests display_grid_tests.cpp)
 target_link_libraries(display_grid_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME display_grid_tests COMMAND display_grid_tests)
+set_tests_properties(display_grid_tests PROPERTIES ENVIRONMENT "DISPLAY_GRID_WORST=1")
 # A fixed CMYK or Lab canvas workload for counting instructions (not a test; tests/display_work.cpp).
 add_executable(display_work display_work.cpp)
 target_link_libraries(display_work PRIVATE compositor::core compositor_warnings)

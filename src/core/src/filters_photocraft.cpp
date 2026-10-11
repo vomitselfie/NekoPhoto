@@ -256,11 +256,13 @@ void polar(const Plane& src, Plane& out, const Rect& bounds, PolarMode mode) {
     remap(src, out, bounds, Edge::Repeat, [&](float x, float y, float& sx, float& sy) {
         if (mode == PolarMode::RectangularToPolar) {
             // The output is polar: the angle from 12 o'clock clockwise gives the source's x, the radius its y.
-            const float nx = (x - cx) / hx, ny = (y - cy) / hy;
-            const float theta = euclidModF(std::atan2(nx, -ny), tau);
-            const float r = std::sqrt(nx * nx + ny * ny);
-            sx = float(bounds.x0) + theta / tau * w;
-            sy = float(bounds.y0) + r * h;
+            // In double: float atan2 is rounded differently by different C libraries, which moved samples.
+            const double nx = double(x - cx) / double(hx), ny = double(y - cy) / double(hy);
+            double theta = std::atan2(nx, -ny);
+            if (theta < 0) theta += 6.283185307179586;
+            const double r = std::sqrt(nx * nx + ny * ny);
+            sx = float(double(bounds.x0) + theta / 6.283185307179586 * double(w));
+            sy = float(double(bounds.y0) + r * double(h));
         } else {
             const float theta = (x - float(bounds.x0)) / w * tau;
             const float r = (y - float(bounds.y0)) / h;

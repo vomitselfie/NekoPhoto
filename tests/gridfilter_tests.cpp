@@ -291,7 +291,7 @@ TEST_CASE(distortion_values) {
 #ifndef _WIN32
     checkHash("twirl/default", t, 0x96a3905a3a70a023ull);
     checkHash("wave/default", w, 0x71d8c35bc24232a8ull);
-    checkHash("polar/default", p, 0x385beff128e9f53dull);
+    checkHash("polar/default", p, 0xbf3604765c7c7f5aull);
     checkHash("zigzag/default", z, 0x57732b278a61b8d9ull);
     checkHash("spherize/default", s, 0x4a46c3bca7023850ull);
 #endif
