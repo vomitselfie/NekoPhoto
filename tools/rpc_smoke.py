@@ -1428,6 +1428,11 @@ def mask_parity(rpc):
     rpc.call("brush.stroke", points=[[8, 8], [9, 8]], size=6, hardness=1, mask=True, color="#000000")
     assert rpc.call("history.info")["undo"] == "Paint Mask"
     assert rpc.call("color.sample", x=8, y=8)["color"] == "#ffffff" and rpc.call("color.sample", x=56, y=8)["color"] == "#ff0000"
+    # The Paint Bucket on the targeted mask chooses on the mask's greys, not the pixels: the white part takes the grey,
+    # the black dot stays black.
+    rpc.call("pixels.bucket", x=40, y=8, tolerance=0, antialias=False, color="#808080")
+    assert rpc.call("history.info")["undo"] == "Paint Bucket"
+    assert rpc.call("color.sample", x=8, y=8)["color"] == "#ffffff" and abs(green_at(40) - 127) <= 2, green_at(40)
     rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
     rpc.call("tabs.close", index=tab["index"], discard=True)

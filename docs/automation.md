@@ -353,7 +353,7 @@ the Exposure or Flow; `size`,
 mask; on a mask (an adjustment layer's, the Quick Mask's and an alpha channel's too) a colour paints its grey,
 0.30 R + 0.59 G + 0.11 B, as in Photoshop: the brush paints `color`'s, the eraser erases to it, and without `color`
 the brush paints white and the eraser black (D's colours on a mask); `pixels.fill`, `pixels.bucket` and
-`gradient.draw` paint their colours' greys on a mask too; with brush or eraser, `preset` paints with a MyPaint brush from
+`gradient.draw` paint their colours' greys on a mask too (`pixels.bucket` chooses what to fill on the mask's greys unless `allLayers`); with brush or eraser, `preset` paints with a MyPaint brush from
 `brush.presets`, or `"round"` for the plain tip, or an imported tip brush, at its own size unless `size`
 is given, and `pressure` 0..1 or `pressures`, one per point, drive it the way
 a pen would, as do `tilts` (`[tiltX, tiltY]` degrees per point), `twists` (degrees per point) and
