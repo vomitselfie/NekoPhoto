@@ -3,14 +3,18 @@
 // over the canvas, following the active layer, its visibility and the tool without the pointer moving. A mask takes
 // the paint, an adjustment layer's too (it comes with one, targeted: painting it is one step and changes the composite
 // only under the stroke); rasterizing a type layer lets the brush on, and undoing it refuses it again. Rasterize Shape
-// bakes the outline and drops the vector mask, the composite unchanged (on Patchy's Photoshop shapes too).
+// bakes the outline and drops the vector mask, the composite unchanged (on Patchy's Photoshop shapes too, gradient and
+// pattern fills included, and those fills as fill layers at 8 and 16 bits). Masks as Photoshop makes and paints them:
+// Add Layer Mask reveals the selection, a colour paints its grey, a folder's mask takes the brush.
 #include "SelfTest.h"
 #include "CanvasWidget.h"
 #include "ColorSwatches.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "Theme.h"
+#include "compositor/depth.h"
 #include "compositor/psd.h"
+#include "compositor/psd_carry.h"
 #include "compositor/render.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
@@ -400,11 +404,18 @@ int forbiddenCursor(MainWindow& w) {
     else expect(false, "could not make a smart object");
 
     // Photoshop's own shape layers (Patchy's fixtures, when PATCHY_FIXTURES names them): strokes, Feather,
-    // combined paths, a live rectangle. Each rasterized shape looks as it did. (A gradient or pattern fill is drawn from
-    // its PSD data and refused, not rasterized.)
+    // combined paths, a live rectangle, gradient and pattern fills. Each rasterized shape looks as it did.
     const QString fixtures = qEnvironmentVariable("PATCHY_FIXTURES");
+    int drawnShapes = 0, drawnFills = 0;   // gradient and pattern fills rasterized
     if (!fixtures.isEmpty()) {
-        for (const char* name : {"photoshop-shape-strokes.psd", "photoshop-shape-feather.psd", "photoshop-shape-boolean.psd", "photoshop-shape-live-rect.psd"}) {
+        // A gradient or pattern fill ('GdFl', 'PtFl') is drawn from its PSD data whatever the pixels hold: rasterizing
+        // renders it into them (Photoshop's Rasterize Shape / Fill Content), and the brush works on them after.
+        auto drawn = [](const Layer& l) {
+            if (l.psdCarry) for (const PsdBlock& b : l.psdCarry->blocks) if (b.key == "GdFl" || b.key == "PtFl") return true;
+            return false;
+        };
+        for (const char* name : {"photoshop-shape-strokes.psd", "photoshop-shape-feather.psd", "photoshop-shape-boolean.psd", "photoshop-shape-live-rect.psd",
+                                 "photoshop-shape-gradient.psd", "photoshop-shape-pattern.psd"}) {
             const std::string path = (fixtures + "/" + QString::fromLatin1(name)).toStdString();
             std::string why;
             auto imported = importPsd(path, &why);
@@ -416,18 +427,63 @@ int forbiddenCursor(MainWindow& w) {
             if (shapes.empty()) { std::fprintf(stderr, "forbidden cursor: %s has no shape layer\n", name); failures++; }
             for (const Uuid& id : shapes) {
                 s.selectLayer(id, false);
+                const bool fill = s.activeLayer() && drawn(*s.activeLayer());
+                drawnShapes += fill;
+                if (fill && !kind(Tool::Brush, ToolRefusal::Rasterize)) { std::fprintf(stderr, "forbidden cursor: %s: a gradient or pattern shape did not ask to be rasterized\n", name); failures++; }
                 const auto before = renderFlattened(*s.document());
                 const bool rasterized = s.rasterizeLayer();
                 const Layer* raster = s.document()->find(id);
                 const int difference = maxDifference(*before, *renderFlattened(*s.document()));
-                if (!rasterized || !raster || layerVectorMask(*raster, *s.document()) || difference > 2) {
+                if (!rasterized || !raster || layerVectorMask(*raster, *s.document()) || drawn(*raster) || difference > 2 || refusal(Tool::Brush)) {
                     std::fprintf(stderr, "forbidden cursor: %s: Rasterize Shape on \"%s\": rasterized %d, difference %d\n", name, raster ? raster->name.c_str() : "?", int(rasterized), difference);
                     failures++;
                 }
             }
         }
+        // The same fills as fill layers (no path): drawn over the whole canvas, Rasterize Fill Content, at 8 and 16
+        // bits, each composite as it was.
+        for (const char* name : {"photoshop-shape-gradient.psd", "photoshop-shape-pattern.psd"})
+            for (int bits : {8, 16}) {
+                auto imported = importPsd((fixtures + "/" + QString::fromLatin1(name)).toStdString(), nullptr);
+                if (!imported) continue;   // reported above
+                int fills = 0;
+                for (Layer& l : imported->document.layers) {
+                    if (!drawn(l)) continue;
+                    auto carry = std::make_shared<PsdLayerCarry>(*l.psdCarry);
+                    std::erase_if(carry->blocks, [](const PsdBlock& b) { return b.key == "vmsk" || b.key == "vsms" || b.key == "vstk" || b.key == "vscg" || b.key == "vogk"; });
+                    l.psdCarry = std::move(carry);
+                    fills++;
+                }
+                s.adoptDocument(imported->document, QString::fromLatin1(name));
+                if (bits == 16) call("image.mode", {{"bits", 16}});
+                if (!fills || s.document()->sampleType != (bits == 16 ? SampleType::U16 : SampleType::U8)) {
+                    std::fprintf(stderr, "forbidden cursor: %s at %d bits: no fill layer to rasterize\n", name, bits);
+                    failures++;
+                    continue;
+                }
+                auto flat = [&] { return bits == 16 ? narrowImage(*renderFlattened16(*s.document())) : renderFlattened(*s.document()); };
+                std::vector<Uuid> ids;
+                for (const Layer& l : s.document()->layers) if (drawn(l)) ids.push_back(l.id);
+                for (const Uuid& id : ids) {
+                    s.selectLayer(id, false);
+                    const bool asked = EditorSession::rasterizable(*s.activeLayer()) == Rasterizable::Fill && kind(Tool::Brush, ToolRefusal::Rasterize);
+                    const auto before = flat();
+                    const size_t steps = s.undoNames().size();
+                    const bool rasterized = s.rasterizeLayer();
+                    const Layer* raster = s.document()->find(id);
+                    const int difference = maxDifference(*before, *flat());
+                    const bool oneStep = s.undoNames().size() == steps + 1 && s.undoNames().back() == "Rasterize Fill Content";
+                    drawnFills++;
+                    if (!asked || !rasterized || !raster || drawn(*raster) || !raster->asset || difference > 2 || !oneStep || refusal(Tool::Brush)) {
+                        std::fprintf(stderr, "forbidden cursor: %s at %d bits: Rasterize Fill Content on \"%s\": asked %d, rasterized %d, one step %d, difference %d\n",
+                                     name, bits, raster ? raster->name.c_str() : "?", int(asked), int(rasterized), int(oneStep), difference);
+                        failures++;
+                    }
+                }
+            }
     }
 
+    if (!fixtures.isEmpty()) std::printf("forbidden cursor: %d gradient or pattern shapes and %d fill layers rasterized\n", drawnShapes, drawnFills);
     std::printf("forbidden cursor: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

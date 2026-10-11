@@ -65,9 +65,9 @@ struct ToolRefusal {
     QString reason;
 };
 
-/// What rasterizing would take from a layer: its type, its shape, its solid colour fill, or (a gradient or pattern
-/// fill, drawn from its carried PSD data) nothing NekoPhoto can turn into pixels.
-enum class Rasterizable { No, Type, Shape, Fill, DrawnFill };
+/// What rasterizing would take from a layer: its type, its shape (a solid, gradient or pattern fill cut by a path), or
+/// its fill (a solid colour, gradient or pattern fill layer).
+enum class Rasterizable { No, Type, Shape, Fill };
 enum class LassoKind { Freehand, Polygonal };
 enum class BlurToolMode { Liquify, Blur, Smudge, Sharpen };
 enum class GradientStyle { ForegroundToBackground, ForegroundToTransparent };
@@ -1074,8 +1074,8 @@ public:
     /// rasterizeRequested).
     void refuseTool(const ToolRefusal& refusal);
     static Rasterizable rasterizable(const compositor::Layer& layer);
-    /// The active type, shape or solid colour fill layer as the plain pixels it shows (one undo step), as
-    /// Photoshop's Rasterize before painting.
+    /// The active type, shape or fill layer (solid colour, gradient or pattern) as the plain pixels it shows, at the
+    /// document's depth and mode (one undo step), as Photoshop's Rasterize before painting.
     bool rasterizeLayer();
 
 signals:

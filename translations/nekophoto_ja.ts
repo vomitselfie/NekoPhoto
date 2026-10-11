@@ -5000,10 +5000,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>アクティブなレイヤーは塗りつぶしレイヤーです。ラスタライズしてからペイントしてください。</translation>
     </message>
     <message>
-        <source>The active layer is a gradient or pattern fill layer: it has no pixels to paint on.</source>
-        <translation>アクティブなレイヤーはグラデーションまたはパターンの塗りつぶしレイヤーです。ペイントするピクセルがありません。</translation>
-    </message>
-    <message>
         <source>The shape reaches too far to be rasterized.</source>
         <translation>シェイプの範囲が大きすぎるため、ラスタライズできません。</translation>
     </message>
