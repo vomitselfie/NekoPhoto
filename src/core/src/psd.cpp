@@ -477,11 +477,12 @@ std::optional<AdjustmentSettings> hueSaturationFrom(const uint8_t* data, size_t 
     return s;
 }
 
-std::optional<AdjustmentSettings> exposureFrom(const uint8_t* data, size_t size) {
+std::optional<AdjustmentSettings> exposureFrom(const uint8_t* data, size_t size, bool grey) {
     Reader r(data, size);
     if (r.u16() != 1) return std::nullopt;
     AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Exposure);
-    s.exposure = ExposureSettings{r.f32(), r.f32(), r.f32()}.normalized();
+    // A Grayscale file's Exposure linearises through Photoshop's grey tone curve, a 1.732 power (ExposureSettings).
+    s.exposure = ExposureSettings{r.f32(), r.f32(), r.f32(), grey ? 1.732 : 2.2}.normalized();
     return s;
 }
 
@@ -1231,7 +1232,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             if (auto b = block("levl")) settings = levelsFrom(b->first, b->second, mode == Grayscale || mode == Duotone);
             else if (auto b = block("curv")) settings = curvesFrom(b->first, b->second, mode == Grayscale || mode == Duotone);
             else if (auto b = block("hue2")) settings = hueSaturationFrom(b->first, b->second);
-            else if (auto b = block("expA")) settings = exposureFrom(b->first, b->second);
+            else if (auto b = block("expA")) settings = exposureFrom(b->first, b->second, mode == Grayscale || mode == Duotone);
             else if (auto b = block("grdm")) settings = gradientMapFrom(b->first, b->second);
             else if (block("CgEd") || block("brit")) settings = brightnessContrastFrom(block("CgEd"), block("brit"));
             if (!settings)

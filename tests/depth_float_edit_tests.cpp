@@ -194,8 +194,10 @@ TEST_CASE(colour_kinds_keep_light_above_one) {
 }
 
 TEST_CASE(adjustments_at_32_bits_match_8_bits_on_8_bit_pixels) {
-    // An 8-bit-sourced layer adjusted at 32 bits and encoded back at exposure 0, against the 8-bit adjustment. Exposure
-    // and Levels (inside 0..1) are within one level; the others are reported with their bounds (docs/bit-depth.md).
+    // An 8-bit-sourced layer adjusted at 32 bits and encoded back at exposure 0, against the 8-bit adjustment. Levels
+    // (inside 0..1) is within one level; the others are reported with their bounds (docs/bit-depth.md). Exposure is not
+    // the same function at both depths, in Photoshop either: 8 and 16 bits linearise through a 2.2 power, 32 bits takes
+    // the samples as stored (here the sRGB curve's linear light), so the two part by a few levels.
     std::mt19937 rng(5);
     const TransferCurve srgb = TransferCurve::srgb();
     AdjustmentSettings exposure = AdjustmentSettings::defaults(AdjustmentKind::Exposure);
@@ -224,8 +226,12 @@ TEST_CASE(adjustments_at_32_bits_match_8_bits_on_8_bit_pixels) {
             CHECK(over < 0.03);
             continue;
         }
+        if (settings.kind == AdjustmentKind::Exposure) {
+            CHECK(worst <= 8);
+            continue;
+        }
         switch (opaque ? AdjustmentKind::Levels : settings.kind) {
-        case AdjustmentKind::Exposure: case AdjustmentKind::Levels: case AdjustmentKind::Curves: case AdjustmentKind::Invert:
+        case AdjustmentKind::Levels: case AdjustmentKind::Curves: case AdjustmentKind::Invert:
         case AdjustmentKind::BlackWhite: case AdjustmentKind::ChannelMixer: case AdjustmentKind::GradientMap:
             CHECK(worst <= 1);
             break;

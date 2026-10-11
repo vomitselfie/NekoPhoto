@@ -11,6 +11,13 @@ Model and maths: `src/core/include/compositor/adjustments.h`, `src/core/src/adju
 Brightness/Contrast and Posterize are per-channel tables, so a run of them with Levels, Curves and Exposure composes
 into one pass.
 
+**Exposure** (`expA`) works in linear light as Photoshop does at 8 and 16 bits: the value is linearised through a 2.2
+power (not the sRGB curve), multiplied by 2^exposure, the offset added, raised to 1 / gamma and encoded again; an Exposure
+layer read from a grayscale PSD keeps Photoshop's grey power of 1.732 (the file opens as RGB). At 32 bits the samples are
+linear already and are taken as stored. photocraft-corpus `exposure.psd` in rgb8/16/32 and gray8/16/32 and psd-tools'
+`exposure_rgb` and `exposure_grayscale` are within a level or so of Photoshop (they were up to 34 levels off through the
+sRGB curve). Camera Raw's exposure is its own.
+
 **Curves** (`curv`) is drawn as Photoshop draws it: the natural cubic spline through the points (no bend at the end
 points), flat beyond the first and last point. Every `curves.psd` in photocraft-corpus (RGB, grayscale, CMYK and Lab, 8
 and 16 bits) renders within a level of Photoshop's merged image (max 0 at 8 bits); a monotone cubic, as before, was up

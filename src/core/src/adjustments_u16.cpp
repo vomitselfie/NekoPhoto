@@ -74,15 +74,7 @@ void applyFunction(Image16& image, F&& f) {
     if (buildTables(tables, f)) applyTables(image, tables);
 }
 
-double exposureAt(const ExposureSettings& settings, double encoded) {
-    // ExposureSettings::table()'s maths at any input.
-    const ExposureSettings s = settings.normalized();
-    const double scale = std::pow(2.0, s.exposure);
-    double linear = encoded <= 0.04045 ? encoded / 12.92 : std::pow((encoded + 0.055) / 1.055, 2.4);
-    linear = std::pow(std::max(0.0, linear * scale + s.offset), 1 / s.gamma);
-    const double output = linear <= 0.0031308 ? linear * 12.92 : 1.055 * std::pow(linear, 1 / 2.4) - 0.055;
-    return std::min(1.0, std::max(0.0, output));
-}
+double exposureAt(const ExposureSettings& settings, double encoded) { return settings.at(encoded); }
 
 double posterizeAt(const PosterizeSettings& settings, double x) {
     // Photoshop's buckets are slices of the 256 levels (posterizeTransfer): the bucket is chosen on the input rounded

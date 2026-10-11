@@ -257,20 +257,22 @@ void applyCurves(Image& image, const CurvesSettings& settings) {
 // ---- Exposure ----------------------------------------------------------------------
 
 ExposureSettings ExposureSettings::normalized() const {
-    return {clampFinite(exposure, -20, 20, 0), clampFinite(offset, -0.5, 0.5, 0), clampFinite(gamma, 0.01, 9.99, 1)};
+    return {clampFinite(exposure, -20, 20, 0), clampFinite(offset, -0.5, 0.5, 0), clampFinite(gamma, 0.01, 9.99, 1), clampFinite(toneGamma, 1, 3, 2.2)};
+}
+
+double ExposureSettings::at(double encoded) const {
+    // Photoshop linearises through a plain power law, 2.2 in RGB and 1.732 in Grayscale (photocraft-corpus and psd-tools
+    // exposure files; an offset of 0.1738 lifts 76 to 134, where the sRGB curve gives 136). Rule after PhotoCraft's
+    // crates/compose/src/adjust.rs (88ffd89, MIT).
+    const ExposureSettings s = normalized();
+    const double linear = std::pow(std::max(0.0, encoded), s.toneGamma);
+    const double v = std::pow(std::max(0.0, linear * std::pow(2.0, s.exposure) + s.offset), 1 / s.gamma);
+    return std::min(1.0, std::max(0.0, std::pow(v, 1 / s.toneGamma)));
 }
 
 std::array<float, 256> ExposureSettings::table() const {
-    ExposureSettings s = normalized();
     std::array<float, 256> result{};
-    double scale = std::pow(2.0, s.exposure);
-    for (int i = 0; i < 256; i++) {
-        double encoded = i / 255.0;
-        double linear = encoded <= 0.04045 ? encoded / 12.92 : std::pow((encoded + 0.055) / 1.055, 2.4);
-        linear = std::pow(std::max(0.0, linear * scale + s.offset), 1 / s.gamma);
-        double output = linear <= 0.0031308 ? linear * 12.92 : 1.055 * std::pow(linear, 1 / 2.4) - 0.055;
-        result[size_t(i)] = float(std::min(1.0, std::max(0.0, output)));
-    }
+    for (int i = 0; i < 256; i++) result[size_t(i)] = float(at(i / 255.0));
     return result;
 }
 
@@ -1008,7 +1010,7 @@ bool AdjustmentSettings::parse(const std::string& text, AdjustmentSettings& out)
     if (curves != j.end() && !curves->is_null() && !parseCurves(*curves, s.curves)) return false;
     auto exposure = j.find("exposureSettings");
     if (exposure != j.end() && exposure->is_object()) {
-        s.exposure = {num(*exposure, "exposure", 0), num(*exposure, "offset", 0), num(*exposure, "gamma", 1)};
+        s.exposure = {num(*exposure, "exposure", 0), num(*exposure, "offset", 0), num(*exposure, "gamma", 1), num(*exposure, "toneGamma", 2.2)};
         if (!(s.exposure == s.exposure.normalized())) return false;
     }
     auto gradient = j.find("gradientMapSettings");
@@ -1057,6 +1059,7 @@ std::string AdjustmentSettings::toJson() const {
     j["levels"] = levelsJson(levels);
     j["curves"] = curvesJson(curves);
     j["exposureSettings"] = {{"exposure", number(exposure.exposure)}, {"offset", number(exposure.offset)}, {"gamma", number(exposure.gamma)}};
+    if (exposure.toneGamma != 2.2) j["exposureSettings"]["toneGamma"] = number(exposure.toneGamma);
     j["gradientMapSettings"] = {{"shadows", {{"red", number(gradientMap.shadows.red)}, {"green", number(gradientMap.shadows.green)}, {"blue", number(gradientMap.shadows.blue)}}},
                                 {"highlights", {{"red", number(gradientMap.highlights.red)}, {"green", number(gradientMap.highlights.green)}, {"blue", number(gradientMap.highlights.blue)}}},
                                 {"reversed", gradientMap.reversed}, {"interpolation", gradientMethodKey(gradientMap.method)}};
