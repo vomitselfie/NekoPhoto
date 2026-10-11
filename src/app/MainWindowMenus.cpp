@@ -1166,15 +1166,20 @@ void MainWindow::buildMenus() {
     }));
     // Soft proofing (docs/color-management.md): Photoshop's Proof Setup, Proof Colors and Gamut Warning.
     QMenu* proofSetup = view->addMenu(tr("Proof Set&up"));
-    add(proofSetup, Spec("view.proofSetup.custom", tr("Custom…")).runs([this] { color::showProofSetup(this); }, "color.settings"));
+    add(proofSetup, Spec("view.proofSetup.custom", tr("Custom…")).runs([this] {
+        color::showProofSetup(this, session_->hasDocument() ? std::optional<ColorMode>(session_->document()->colorMode) : std::nullopt);
+    }, "color.settings"));
     proofSetup->addSeparator();
     // Photoshop's default proof: the press the Working CMYK describes.
     QAction* proofCmyk = add(proofSetup, Spec("view.proofSetup.workingCmyk", tr("Working CMYK")).runs([] { color::Settings s = color::settings(); s.proofProfile = QStringLiteral("working-cmyk"); color::setSettings(s); }, "color.settings"));
     proofCmyk->setCheckable(true);
     proofCmyk->setChecked(color::settings().proofProfile == QLatin1String("working-cmyk"));
-    QAction* proof = add(view, Spec("view.proofColors", tr("Proof Colo&rs"), {QKeySequence("Ctrl+Y")}));
+    // A document the proof cannot be made for (its profile unreadable, say) greys them with the reason; once on, they
+    // can always be turned off.
+    auto proofReason = [this](bool color::Settings::* on) { return [this, on] { return session_->hasDocument() && !(color::settings().*on) ? color::proofUnavailable(*session_->document()) : QString(); }; };
+    QAction* proof = add(view, Spec("view.proofColors", tr("Proof Colo&rs"), {QKeySequence("Ctrl+Y")}).when(proofReason(&color::Settings::proofColors)));
     connect(proof, &QAction::triggered, this, [](bool on) { color::Settings s = color::settings(); s.proofColors = on; color::setSettings(s); });
-    QAction* gamut = add(view, Spec("view.gamutWarning", tr("Gamut Wa&rning"), {QKeySequence("Ctrl+Shift+Y")}));
+    QAction* gamut = add(view, Spec("view.gamutWarning", tr("Gamut Wa&rning"), {QKeySequence("Ctrl+Shift+Y")}).when(proofReason(&color::Settings::gamutWarning)));
     connect(gamut, &QAction::triggered, this, [](bool on) { color::Settings s = color::settings(); s.gamutWarning = on; color::setSettings(s); });
     for (QAction* a : {proof, gamut}) a->setCheckable(true);
     connect(color::notifier(), &color::Notifier::changed, this, [this, proof, gamut, proofCmyk] {

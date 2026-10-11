@@ -526,7 +526,7 @@ void AutomationServer::registerAppHandlers() {
         result["color"] = color.name();
         return result;
     });
-    add("color.settings", [](const QJsonObject& p) {
+    add("color.settings", [session](const QJsonObject& p) {
         // Edit > Color Settings, the monitor profile (Preferences) and View > Proof Setup / Proof Colors (docs/color-management.md).
         color::Settings s = color::settings();
         if (has(p, "workingSpace")) {
@@ -574,11 +574,16 @@ void AutomationServer::registerAppHandlers() {
             s.proofIntent = *intent;
         }
         s.proofBlackPoint = flag(p, "proofBlackPoint", s.proofBlackPoint);
+        s.proofPreserveNumbers = flag(p, "proofPreserveNumbers", s.proofPreserveNumbers);
+        s.proofSimulatePaper = flag(p, "proofSimulatePaper", s.proofSimulatePaper);
+        s.proofSimulateBlackInk = flag(p, "proofSimulateBlackInk", s.proofSimulateBlackInk);
         s.proofColors = flag(p, "proofColors", s.proofColors);
         s.gamutWarning = flag(p, "gamutWarning", s.gamutWarning);
         if (has(p, "gamutColor")) { QColor c(str(p, "gamutColor")); if (!c.isValid()) fail("gamutColor must be a CSS colour", invalidParams); s.gamutColor = c; }
         if (p.size() > 0) color::setSettings(s);
         const ColorProfile monitor = color::monitorProfile();
+        // Why the current document cannot be proofed with this Proof Setup, if it cannot (the View menu greys its items).
+        const QString unproofable = session() && session()->hasDocument() ? color::proofUnavailable(*session()->document()) : QString();
         return QJsonObject{{"workingSpace", QString::fromLatin1(workingSpaceKey(s.workingSpace))}, {"workingSpaceName", QString::fromLatin1(workingSpaceName(s.workingSpace))},
                            {"workingCmyk", s.workingCmyk.isEmpty() ? QStringLiteral("default") : s.workingCmyk}, {"workingCmykName", color::workingCmykLabel()},
                            {"policy", QString::fromLatin1(color::policyKey(s.policy))}, {"untagged", "srgb"},
@@ -586,7 +591,9 @@ void AutomationServer::registerAppHandlers() {
                            {"useSystemMonitor", s.useSystemMonitor}, {"monitorProfile", s.monitorFile},
                            {"monitor", monitor.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(monitor.description))},
                            {"proofProfile", s.proofProfile}, {"proofIntent", QString::fromLatin1(renderingIntentKey(s.proofIntent))}, {"proofBlackPoint", s.proofBlackPoint},
-                           {"proofColors", s.proofColors}, {"gamutWarning", s.gamutWarning}, {"gamutColor", s.gamutColor.name()}};
+                           {"proofPreserveNumbers", s.proofPreserveNumbers}, {"proofSimulatePaper", s.proofSimulatePaper}, {"proofSimulateBlackInk", s.proofSimulateBlackInk || s.proofSimulatePaper},
+                           {"proofColors", s.proofColors}, {"gamutWarning", s.gamutWarning}, {"gamutColor", s.gamutColor.name()},
+                           {"proofUnavailable", unproofable.isEmpty() ? QJsonValue::Null : QJsonValue(unproofable)}};
     });
     add("view.zoom", [session, document](const QJsonObject& p) {
         document();

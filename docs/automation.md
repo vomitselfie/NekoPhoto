@@ -353,7 +353,7 @@ the Exposure or Flow; `size`,
 mask; on a mask (an adjustment layer's, the Quick Mask's and an alpha channel's too) a colour paints its grey,
 0.30 R + 0.59 G + 0.11 B, as in Photoshop: the brush paints `color`'s, the eraser erases to it, and without `color`
 the brush paints white and the eraser black (D's colours on a mask); `pixels.fill`, `pixels.bucket` and
-`gradient.draw` paint their colours' greys on a mask too; with brush or eraser, `preset` paints with a MyPaint brush from
+`gradient.draw` paint their colours' greys on a mask too (`pixels.bucket` chooses what to fill on the mask's greys unless `allLayers`); with brush or eraser, `preset` paints with a MyPaint brush from
 `brush.presets`, or `"round"` for the plain tip, or an imported tip brush, at its own size unless `size`
 is given, and `pressure` 0..1 or `pressures`, one per point, drive it the way
 a pen would, as do `tilts` (`[tiltX, tiltY]` degrees per point), `twists` (degrees per point) and
@@ -386,7 +386,10 @@ Settings: `workingSpace`, `workingCmyk` (default, the bundled ISO Coated v2 300%
 `intent` (perceptual, relative, saturation, absolute) and `blackPointCompensation` Image > Mode uses, `policy` preserve,
 convert or off, `askMissing`, `askMismatch`; the monitor profile: `monitorProfile` (an ICC file, "" for the system's),
 `useSystemMonitor`; View > Proof Setup: `proofProfile` (working-cmyk, the default, a working space or an RGB or CMYK ICC file),
-`proofIntent`, `proofBlackPoint`, `proofColors`, `gamutWarning`, `gamutColor`; with no keys it only reads them).
+`proofIntent`, `proofBlackPoint`, `proofPreserveNumbers` (the document's values sent unconverted to a device of its colour
+model), `proofSimulatePaper`, `proofSimulateBlackInk`, `proofColors`, `gamutWarning`, `gamutColor`, in RGB, CMYK and Lab
+documents; the answer's `proofUnavailable` says why the current document cannot be proofed, when it cannot; with no
+keys it only reads them).
 
 Events: `events.subscribe` (`kinds`: document, layers, selection, history,
 tool, view, tabs; default all) makes the server push

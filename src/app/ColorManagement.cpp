@@ -57,6 +57,9 @@ Settings loadSettings() {
     s.proofProfile = q.value("proofProfile", "working-cmyk").toString();
     if (auto i = renderingIntentFromKey(q.value("proofIntent", "relative").toString().toStdString())) s.proofIntent = *i;
     s.proofBlackPoint = q.value("proofBlackPoint", true).toBool();
+    s.proofPreserveNumbers = q.value("proofPreserveNumbers", false).toBool();
+    s.proofSimulatePaper = q.value("proofSimulatePaper", false).toBool();
+    s.proofSimulateBlackInk = q.value("proofSimulateBlackInk", false).toBool();
     const QColor gamut(q.value("gamutColor", "#808080").toString());
     if (gamut.isValid()) s.gamutColor = gamut;
     q.endGroup();
@@ -93,6 +96,9 @@ void setSettings(const Settings& s) {
     q.setValue("proofProfile", s.proofProfile);
     q.setValue("proofIntent", QString::fromLatin1(renderingIntentKey(s.proofIntent)));
     q.setValue("proofBlackPoint", s.proofBlackPoint);
+    q.setValue("proofPreserveNumbers", s.proofPreserveNumbers);
+    q.setValue("proofSimulatePaper", s.proofSimulatePaper);
+    q.setValue("proofSimulateBlackInk", s.proofSimulateBlackInk);
     q.setValue("gamutColor", s.gamutColor.name());
     q.endGroup();
     {
@@ -202,18 +208,49 @@ QString monitorProfileSource() {
     return monitorSource;
 }
 
+namespace {
+
+/// The proof Proof Setup describes, for the canvas; nullopt with `error` when its profile cannot be read.
+std::optional<ProofSettings> proofSettings(QString* error) {
+    const Settings& s = settings();
+    auto profile = profileForKey(s.proofProfile, error, ProfileKinds::RGBOrCMYK);
+    if (!profile) return std::nullopt;
+    ProofSettings proof;
+    proof.profile = *profile;
+    proof.intent = s.proofIntent;
+    proof.blackPointCompensation = s.proofBlackPoint;
+    proof.gamutWarning = s.gamutWarning;
+    proof.warning[0] = uint8_t(s.gamutColor.red()); proof.warning[1] = uint8_t(s.gamutColor.green()); proof.warning[2] = uint8_t(s.gamutColor.blue());
+    proof.preserveNumbers = s.proofPreserveNumbers;
+    proof.simulatePaper = s.proofSimulatePaper;
+    proof.simulateBlackInk = s.proofSimulateBlackInk || s.proofSimulatePaper;
+    return proof;
+}
+
+/// The soft proof of `document` on its own layout (RGB, CMYK or Lab; 32-bit RGB as float), exact Little CMS.
+ColorTransformPtr proofFor(const Document& document, const ProofSettings& proof) {
+    return proofTransform(document.profile, monitorProfile(), proof, pixelFormatFor(document.sampleType, document.colorMode), PixelFormat::RGBA8);
+}
+
+} // namespace
+
+QString proofUnavailable(const Document& document) {
+    QString error;
+    auto proof = proofSettings(&error);
+    if (!proof) return QObject::tr("The proof profile cannot be used: %1").arg(error);
+    if (!proofFor(document, *proof))
+        return QObject::tr("%1 cannot be proofed in this document's colour mode").arg(QString::fromStdString(effectiveProfile(proof->profile).description));
+    return {};
+}
+
 ColorTransformPtr displayTransform(const Document& document) {
     const Settings& s = settings();
     const PixelFormat input = document.sampleType == SampleType::F32 ? PixelFormat::RGBAFloat
                             : document.sampleType == SampleType::U16 ? PixelFormat::RGBA16 : PixelFormat::RGBA8;
     if (s.proofColors || s.gamutWarning) {
-        ProofSettings proof;
-        if (auto p = profileForKey(s.proofProfile, nullptr, ProfileKinds::RGBOrCMYK)) proof.profile = *p;
-        proof.intent = s.proofIntent;
-        proof.blackPointCompensation = s.proofBlackPoint;
-        proof.gamutWarning = s.gamutWarning;
-        proof.warning[0] = uint8_t(s.gamutColor.red()); proof.warning[1] = uint8_t(s.gamutColor.green()); proof.warning[2] = uint8_t(s.gamutColor.blue());
-        if (auto t = proofTransform(document.profile, monitorProfile(), proof, input, PixelFormat::RGBA8)) return t;
+        // A proof the canvas cannot make greys the View menu's items with the reason (proofUnavailable).
+        if (auto proof = proofSettings(nullptr))
+            if (auto t = proofFor(document, *proof)) return t;
     }
     const ColorProfile monitor = monitorProfile();
     if (document.colorMode != ColorMode::RGB) {

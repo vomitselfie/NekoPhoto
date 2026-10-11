@@ -5,13 +5,15 @@
 // only under the stroke); rasterizing a type layer lets the brush on, and undoing it refuses it again. Rasterize Shape
 // bakes the outline and drops the vector mask, the composite unchanged (on Patchy's Photoshop shapes too, gradient and
 // pattern fills included, and those fills as fill layers at 8 and 16 bits). Masks as Photoshop makes and paints them:
-// Add Layer Mask reveals the selection, a colour paints its grey, a folder's mask takes the brush.
+// Add Layer Mask reveals the selection, a colour paints its grey, a folder's mask takes the brush, and the Paint Bucket
+// chooses on the mask's own greys.
 #include "SelfTest.h"
 #include "CanvasWidget.h"
 #include "ColorSwatches.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "Theme.h"
+#include "compositor/channels.h"
 #include "compositor/depth.h"
 #include "compositor/psd.h"
 #include "compositor/psd_carry.h"
@@ -481,6 +483,59 @@ int forbiddenCursor(MainWindow& w) {
                     }
                 }
             }
+    }
+
+    // The Paint Bucket on a targeted mask chooses what to fill on the mask's own greys, as Photoshop's does: on a mask
+    // of two flat greys over a flat layer, a click in one at Tolerance 0 fills exactly that one, the other untouched, on
+    // a pixel layer's, an adjustment layer's and a group's mask, at 8 and 16 bits. Sample All Layers compares the canvas.
+    for (int bits : {8, 16}) {
+        s.adoptDocument(Document(64, 48), QStringLiteral("Bucket on a mask"));
+        if (bits == 16) call("image.mode", {{"bits", 16}});
+        if (s.document()->sampleType != (bits == 16 ? SampleType::U16 : SampleType::U8)) { expect(false, "the bucket document is not at its depth"); continue; }
+        auto greyAt = [&](const Uuid& id, int x, int y) {
+            SelectionSource source;
+            source.kind = SelectionSource::LayerMask;
+            source.id = id;
+            const AnyGray g = grayAtDepth(selectionSourceCoverage(*s.document(), source), SampleType::U8);
+            return g.u8() ? int(g.u8()->at(x, y)) : -1;
+        };
+        std::vector<std::pair<Uuid, const char*>> targets;
+        expect(call("layers.add", {{"kind", "pixels"}, {"name", "Flat"}}).has_value() && call("pixels.fill", {{"color", "#c03060"}}).has_value(), "could not add a flat layer");
+        if (const auto id = s.activeLayerId()) { s.addLayerMask(true); targets.emplace_back(*id, "a pixel layer's"); }
+        expect(call("layers.add", {{"kind", "adjustment"}, {"adjustmentKind", "levels"}}).has_value(), "could not add an adjustment layer to bucket");
+        if (const auto id = s.activeLayerId()) targets.emplace_back(*id, "an adjustment layer's");
+        expect(call("layers.add", {{"kind", "group"}, {"name", "Bucket group"}}).has_value(), "could not add a group to bucket");
+        if (const auto id = s.activeLayerId()) { call("layers.mask", {{"action", "add"}, {"mode", "revealAll"}}); targets.emplace_back(*id, "a group's"); }
+        const auto bucket = s.bucket;
+        const QColor foreground = s.foregroundColor;
+        const double opacity = s.brushSettings.opacity;
+        for (const auto& [id, what] : targets) {
+            s.selectLayer(id, true);
+            if (!s.isMaskSelected()) { std::fprintf(stderr, "forbidden cursor: %d bits: could not target %s mask\n", bits, what); failures++; continue; }
+            // White on the right, dark grey on the left.
+            s.deselect();
+            s.fillSelection(Qt::white);
+            call("selection.rect", {{"x", 0}, {"y", 0}, {"width", 32}, {"height", 48}});
+            s.fillSelection(QColor(64, 64, 64));
+            s.deselect();
+            s.bucket.tolerance = 0; s.bucket.contiguous = true; s.bucket.antialias = false; s.bucket.allLayers = false;
+            s.brushSettings.opacity = 1;
+            s.foregroundColor = Qt::black;
+            const bool filled = s.paintBucket(QPointF(48.5, 24.5));
+            const int right = greyAt(id, 48, 24), rightEdge = greyAt(id, 32, 0), left = greyAt(id, 31, 24), leftCorner = greyAt(id, 0, 47);
+            if (!filled || right != 0 || rightEdge != 0 || std::abs(left - 64) > 1 || std::abs(leftCorner - 64) > 1) {
+                std::fprintf(stderr, "forbidden cursor: %d bits: the bucket on %s mask: filled %d, right %d/%d, left %d/%d\n", bits, what, int(filled), right, rightEdge, left, leftCorner);
+                failures++;
+            }
+            // Clicking the grey half with white fills just that half.
+            s.foregroundColor = Qt::white;
+            const bool again = s.paintBucket(QPointF(10.5, 10.5));
+            if (!again || greyAt(id, 31, 24) != 255 || greyAt(id, 48, 24) != 0) {
+                std::fprintf(stderr, "forbidden cursor: %d bits: the bucket on %s grey half: filled %d, left %d, right %d\n", bits, what, int(again), greyAt(id, 31, 24), greyAt(id, 48, 24));
+                failures++;
+            }
+        }
+        s.bucket = bucket; s.foregroundColor = foreground; s.brushSettings.opacity = opacity;
     }
 
     if (!fixtures.isEmpty()) std::printf("forbidden cursor: %d gradient or pattern shapes and %d fill layers rasterized\n", drawnShapes, drawnFills);

@@ -139,17 +139,27 @@ ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile&
 /// transformBetween itself. Exports, pickers, readouts and conversions use transformBetween, never this.
 ColorTransformPtr displayTransformBetween(const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options, PixelFormat input);
 
-/// A soft proof (View > Proof Colors): `document` through `proof`, as `display` shows it. `proofIntent` is how the
-/// document goes to the proofing profile; the proof goes to the display relative colorimetric, as Photoshop does
-/// with "Preserve Numbers" off. With `gamutWarning`, colours outside the proofing profile's gamut are shown as
-/// `warning` (RGB bytes). Never null for usable profiles (a proof always converts).
+/// A soft proof (View > Proof Colors): `document` through `proof`, as `display` shows it, on the document's own layout
+/// (RGB, CMYK or Lab at 8 or 16 bits, RGB float at 32) to RGBA8, always through Little CMS. `intent` and
+/// `blackPointCompensation` are how the document goes to the proofing profile (Customize Proof Condition's Rendering
+/// Intent and Black Point Compensation). The proof goes to the display as Photoshop's display options say: relative
+/// colorimetric with black point compensation; with Simulate Black Ink without it (the proof's black as it prints);
+/// with Simulate Paper Color absolute colorimetric (its paper white too, and its black). With `gamutWarning`, colours
+/// outside the proofing profile's gamut are shown as `warning` (RGB bytes). Never null for usable profiles.
 struct ProofSettings {
     ColorProfile profile;
     RenderingIntent intent = RenderingIntent::RelativeColorimetric;
     bool blackPointCompensation = true;
     bool gamutWarning = false;
     uint8_t warning[3] = {128, 128, 128};
+    /// Preserve Numbers: the document's values go to the proof device as they are, unconverted, as if they were the
+    /// device's own (so nothing is out of its gamut). Only when the proof's colour model is the document's: otherwise
+    /// the document is converted to the proof as usual (proofPreservesNumbers says which).
+    bool preserveNumbers = false;
+    bool simulatePaper = false, simulateBlackInk = false;
 };
+/// Whether `proof` sends `input`'s values to the device unconverted: Preserve Numbers on, and the same colour model.
+bool proofPreservesNumbers(const ProofSettings& proof, PixelFormat input);
 ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfile& display, const ProofSettings& proof,
                                  PixelFormat input, PixelFormat output);
 

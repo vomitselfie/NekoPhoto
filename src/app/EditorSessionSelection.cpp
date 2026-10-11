@@ -1,6 +1,7 @@
 // EditorSession: Selections: setting, combining, the magic wand, fill and clear, and the Select menu.
 #include "EditorSession.h"
 #include "compositor/bucket.h"
+#include "compositor/channels.h"
 #include "ColorManagement.h"
 #include "compositor/smartwand.h"
 #include "compositor/morphology.h"
@@ -29,6 +30,36 @@ Document layerAloneNative(const Document& document, const Layer& layer, const La
     copy.transform = transform;
     single.layers = {copy};
     return single;
+}
+
+/// `layer`'s mask as it sits on the canvas, as opaque grey pixels at the document's depth (8 or 16 bits): what the
+/// Paint Bucket compares on a targeted mask. Null when the layer has no mask or the depth is 32 bits.
+AnyImage maskAsGreyPixels(const Document& document, const Layer& layer) {
+    SelectionSource source;
+    source.kind = SelectionSource::LayerMask;
+    source.id = layer.id;
+    const AnyGray grey = selectionSourceCoverage(document, source);
+    if (const Gray16Ptr& g = grey.u16()) {
+        auto out = std::make_shared<Image16>(g->width(), g->height());
+        for (int y = 0; y < g->height(); y++)
+            for (int x = 0; x < g->width(); x++) {
+                uint16_t* p = out->pixel(x, y);
+                p[0] = p[1] = p[2] = g->at(x, y);
+                p[3] = uint16_t(one16);
+            }
+        return Image16Ptr(out);
+    }
+    if (const GrayPtr& g = grey.u8()) {
+        auto out = std::make_shared<Image>(g->width(), g->height());
+        for (int y = 0; y < g->height(); y++)
+            for (int x = 0; x < g->width(); x++) {
+                uint8_t* p = out->pixel(x, y);
+                p[0] = p[1] = p[2] = g->at(x, y);
+                p[3] = 255;
+            }
+        return ImagePtr(out);
+    }
+    return {};
 }
 } // namespace
 
@@ -260,14 +291,25 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     const Layer* layer = activeLayer();
     if (!layer || ((layer->isGroup || layer->adjustment) && !(isMaskSelected_ && layer->mask))) return false;   // a group's or an adjustment layer's mask takes it
     if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && layer->mask)) return paintBucketMode(*layer, x, y);
+    // On a targeted mask, what to fill is chosen on the mask's own greys, as Photoshop's bucket does (Tolerance counts
+    // 8-bit levels, at 16 bits the same fraction); Sample All Layers still compares the canvas as shown.
+    std::optional<GrayImage> onMask;
+    if (isMaskSelected_ && layer->mask && !bucket.allLayers) {
+        const AnyImage grey = maskAsGreyPixels(*document_, *layer);
+        if (!grey) return false;
+        onMask.emplace(document_->width, document_->height);
+        if (bucketMask(grey, x, y, std::clamp(bucket.tolerance, 0, 255), bucket.contiguous, *onMask) <= 0) return false;
+    }
     if (document_->sampleType == SampleType::U16) {
         // What to fill is chosen on the pixels as the canvas shows them (Tolerance counts 8-bit levels, as the Magic
         // Wand's does); the fill itself, its antialiased edge and the selection are 16-bit.
         const Gray16* selection = document_->selection ? document_->selection->coverage.u16().get() : nullptr;
         if (document_->selection && (!selection || selection->at(x, y) == 0)) return false;
+        GrayImage chosen(document_->width, document_->height);
         std::shared_ptr<Image16> shown16;
+        if (onMask) chosen = *onMask;
         if (bucket.allLayers) shown16 = renderFlattened16(*document_);
-        else {
+        else if (!onMask) {
             Document single(document_->width, document_->height);
             single.sampleType = SampleType::U16;
             Layer copy = *layer;
@@ -276,8 +318,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
             single.layers = {copy};
             shown16 = renderFlattened16(single);
         }
-        GrayImage chosen(document_->width, document_->height);
-        if (wandMask(*narrowImage(*shown16), x, y, 0, std::clamp(bucket.tolerance, 0, 255), bucket.contiguous, chosen) <= 0) return false;
+        if (shown16 && wandMask(*narrowImage(*shown16), x, y, 0, std::clamp(bucket.tolerance, 0, 255), bucket.contiguous, chosen) <= 0) return false;
         auto coverage = widenGray(chosen);
         if (bucket.antialias) gaussianBlur(*coverage, 0.5);
         const uint32_t opacity = uint32_t(std::lround(std::clamp(brushSettings.opacity, 0.0, 1.0) * one16));
@@ -295,7 +336,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     // layer is all transparent, so it fills everywhere the fill reaches).
     std::shared_ptr<Image> sample;
     if (bucket.allLayers) sample = renderFlattened(*document_);
-    else {
+    else if (!onMask) {
         Document single(document_->width, document_->height);
         Layer copy = *layer;
         copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
@@ -303,8 +344,8 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
         single.layers = {copy};
         sample = renderFlattened(single);
     }
-    GrayImage coverage(document_->width, document_->height);
-    if (wandMask(*sample, x, y, 0, std::clamp(bucket.tolerance, 0, 255), bucket.contiguous, coverage) <= 0) return false;
+    GrayImage coverage = onMask ? *onMask : GrayImage(document_->width, document_->height);
+    if (sample && wandMask(*sample, x, y, 0, std::clamp(bucket.tolerance, 0, 255), bucket.contiguous, coverage) <= 0) return false;
     if (bucket.antialias) gaussianBlur(coverage, 0.5);
     if (selection)
         for (int py = 0; py < coverage.height(); py++)
@@ -464,7 +505,11 @@ bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, 
     };
     if (mask) {
         if (!layer->mask->asset.image.u16()) return false;
-        auto out = std::make_shared<Gray16>(*layer->mask->asset.image.u16());
+        // A solid mask (one pixel over the layer's grid, as a new mask is) takes the grid, so a fill can cover part of
+        // it, as the 8-bit stroke's grid does.
+        const Gray16& own = *layer->mask->asset.image.u16();
+        const bool solid = !layer->mask->placement && own.width() == 1 && own.height() == 1 && (layer->pixelWidth() > 1 || layer->pixelHeight() > 1);
+        auto out = solid ? std::make_shared<Gray16>(layer->pixelWidth(), layer->pixelHeight(), own.at(0, 0)) : std::make_shared<Gray16>(own);
         const uint32_t value = uint32_t(std::lround(maskPaintValue(color) * one16));   // the colour's grey
         const Affine toDoc = layer->maskTransform().pixelToDocument(out->width(), out->height());
         for (int py = 0; py < out->height(); py++)

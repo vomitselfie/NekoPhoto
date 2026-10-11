@@ -9,6 +9,7 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QGroupBox>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
@@ -229,7 +230,7 @@ std::optional<ConvertChoice> askConvertProfile(QWidget* parent, const ColorProfi
     return ConvertChoice{*profile, {RenderingIntent(intent->currentData().toInt()), bpc->isChecked()}};
 }
 
-bool showProofSetup(QWidget* parent) {
+bool showProofSetup(QWidget* parent, std::optional<ColorMode> document) {
     QDialog dialog(parent);
     dialog.setWindowTitle(QObject::tr("Customize Proof Condition"));
     auto* layout = new QVBoxLayout(&dialog);
@@ -237,6 +238,11 @@ bool showProofSetup(QWidget* parent) {
     auto* combo = new ProfileCombo(&dialog, ProfileKinds::RGBOrCMYK);
     combo->selectKey(settings().proofProfile);
     form->addRow(QObject::tr("Device to Simulate:"), combo);
+    // Preserve Numbers: the document's values sent to the device unconverted, offered (as Photoshop's "Preserve CMYK
+    // Numbers" or "Preserve RGB Numbers") when the device is of the document's colour model.
+    auto* preserve = new QCheckBox;
+    preserve->setChecked(settings().proofPreserveNumbers);
+    form->addRow(QString(), preserve);
     auto* intent = intentCombo(&dialog, settings().proofIntent);
     form->addRow(QObject::tr("Rendering Intent:"), intent);
     QColor gamut = settings().gamutColor;
@@ -252,6 +258,37 @@ bool showProofSetup(QWidget* parent) {
     auto* bpc = new QCheckBox(QObject::tr("Black Point Compensation"));
     bpc->setChecked(settings().proofBlackPoint);
     layout->addWidget(bpc);
+    // Display Options (On-Screen): paper white simulates the black ink too, as in Photoshop.
+    auto* displayOptions = new QGroupBox(QObject::tr("Display Options (On-Screen)"));
+    auto* displayLayout = new QVBoxLayout(displayOptions);
+    auto* paper = new QCheckBox(QObject::tr("Simulate Paper Color"));
+    auto* ink = new QCheckBox(QObject::tr("Simulate Black Ink"));
+    paper->setChecked(settings().proofSimulatePaper);
+    ink->setChecked(settings().proofSimulateBlackInk || settings().proofSimulatePaper);
+    displayLayout->addWidget(paper);
+    displayLayout->addWidget(ink);
+    layout->addWidget(displayOptions);
+    auto* preserveWhy = hint(QString());
+    layout->addWidget(preserveWhy);
+    auto update = [=] {
+        const auto device = combo->profile();
+        const ColorModel model = device ? effectiveProfile(*device).model : ColorModel::RGB;
+        preserve->setText(model == ColorModel::CMYK ? QObject::tr("Preserve CMYK Numbers") : QObject::tr("Preserve RGB Numbers"));
+        const ColorModel own = !document ? model : *document == ColorMode::CMYK ? ColorModel::CMYK : *document == ColorMode::Lab ? ColorModel::Lab : ColorModel::RGB;
+        const bool offered = model == own;
+        preserve->setEnabled(offered);
+        preserveWhy->setVisible(!offered);
+        if (!offered) preserveWhy->setText(QObject::tr("Preserve Numbers needs a device of the document's colour model; this document is converted to the device."));
+        const bool preserving = offered && preserve->isChecked();
+        intent->setEnabled(!preserving);
+        bpc->setEnabled(!preserving);
+        ink->setEnabled(!paper->isChecked());
+        if (paper->isChecked()) ink->setChecked(true);
+    };
+    QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, update);
+    QObject::connect(preserve, &QCheckBox::toggled, &dialog, update);
+    QObject::connect(paper, &QCheckBox::toggled, &dialog, update);
+    update();
     layout->addWidget(hint(QObject::tr("View ▸ Proof Colors shows the document as it would look on this device; View ▸ Gamut Warning marks the colours it cannot show.")));
     layout->addWidget(okCancel(&dialog));
     if (dialog.exec() != QDialog::Accepted) return false;
@@ -259,6 +296,9 @@ bool showProofSetup(QWidget* parent) {
     s.proofProfile = combo->key() == QLatin1String("__own__") ? QStringLiteral("working-cmyk") : combo->key();
     s.proofIntent = RenderingIntent(intent->currentData().toInt());
     s.proofBlackPoint = bpc->isChecked();
+    s.proofPreserveNumbers = preserve->isChecked();
+    s.proofSimulatePaper = paper->isChecked();
+    s.proofSimulateBlackInk = ink->isChecked();
     s.gamutColor = gamut;
     setSettings(s);
     return true;

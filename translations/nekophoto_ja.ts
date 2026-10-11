@@ -2118,6 +2118,14 @@
         <translation>システム:%1</translation>
     </message>
     <message>
+        <source>The proof profile cannot be used: %1</source>
+        <translation>校正プロファイルを使用できません:%1</translation>
+    </message>
+    <message>
+        <source>%1 cannot be proofed in this document&apos;s colour mode</source>
+        <translation>このドキュメントのカラーモードでは %1 で校正できません</translation>
+    </message>
+    <message>
         <source>Missing Profile</source>
         <translation>プロファイルなし</translation>
     </message>
@@ -2646,6 +2654,30 @@ Working: %2</source>
     <message>
         <source>Black Point Compensation</source>
         <translation>黒点の補正を使用</translation>
+    </message>
+    <message>
+        <source>Display Options (On-Screen)</source>
+        <translation>表示オプション(画面)</translation>
+    </message>
+    <message>
+        <source>Simulate Paper Color</source>
+        <translation>紙色をシミュレート</translation>
+    </message>
+    <message>
+        <source>Simulate Black Ink</source>
+        <translation>黒インキをシミュレート</translation>
+    </message>
+    <message>
+        <source>Preserve CMYK Numbers</source>
+        <translation>CMYK 値を保持</translation>
+    </message>
+    <message>
+        <source>Preserve RGB Numbers</source>
+        <translation>RGB 値を保持</translation>
+    </message>
+    <message>
+        <source>Preserve Numbers needs a device of the document&apos;s colour model; this document is converted to the device.</source>
+        <translation>値の保持には、ドキュメントと同じカラーモデルのデバイスが必要です。このドキュメントはデバイスへ変換して表示します。</translation>
     </message>
     <message>
         <source>View ▸ Proof Colors shows the document as it would look on this device; View ▸ Gamut Warning marks the colours it cannot show.</source>
