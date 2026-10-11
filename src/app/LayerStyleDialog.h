@@ -55,6 +55,9 @@ private:
     QPointer<EditorSession> session_;
     compositor::Uuid layer_;
     compositor::LayerStyle style_;
+    /// Blending Options' Fill Opacity: the layer's Fill, set only once the field is changed.
+    std::optional<double> fill_;
+    double fillBefore_ = 1;
     std::array<bool, EffectCount> madeUp_{};   // the dialog added this effect's instance; dropped again while off
     float globalAngle_ = 120, globalAltitude_ = 30;
     bool started_ = false, touched_ = false, finished_ = false;

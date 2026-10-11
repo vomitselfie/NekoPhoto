@@ -201,7 +201,7 @@ struct RenderExecDeep {
         if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
         Frame f{&g, nullptr, nullptr, cur, std::move(unexcluded)};
         if (isolates(g)) { f.buffer = std::make_unique<Img>(blank(outWidth, outHeight)); cur = f.buffer.get(); }
-        else if (fades(g) || folderContentFill(g) < 1) f.before = std::make_unique<Img>(*cur);
+        else if (fades(g)) f.before = std::make_unique<Img>(*cur);
         frames.push_back(std::move(f));
     }
 
@@ -209,8 +209,8 @@ struct RenderExecDeep {
         if (frames.empty() || frames.back().group != &g) return;
         Frame f = std::move(frames.back());
         frames.pop_back();
-        // The contents at the folder's opacity and, when it has a style, its Fill (the effects are drawn after).
-        const float opacity = float(clamp(g.opacity, 0.0, 1.0)) * folderContentFill(g);
+        // The contents at the folder's opacity and Fill (the effects, drawn after, take its opacity alone).
+        const float opacity = RenderPlan::contentOpacity(g);
         // Blend Interior Effects as Group: the overlays and satins join the folder's result before its mode blends it.
         bool foldsInteriors = false;
         if constexpr (O::styles) {
@@ -341,7 +341,7 @@ struct RenderExecDeep {
         Params params;
         params.image = image;
         params.transform = transformOf(layer);
-        params.opacity = layer.opacity;
+        params.opacity = RenderPlan::contentOpacity(layer);
         params.mode = blendOf(layer);
         params.layerTransformForMask = params.transform;
         if (layer.mask) {
@@ -460,7 +460,7 @@ struct RenderExecDeep {
                 }
             });
         };
-        auto drawStroke = [&] { strokeInto(target, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)) * (stroke ? stroke->opacity : 1.0f), coverageWithoutVector, true); };
+        auto drawStroke = [&] { strokeInto(target, blendOf(layer), RenderPlan::contentOpacity(layer) * (stroke ? stroke->opacity : 1.0f), coverageWithoutVector, true); };
         // A shape layer with a Feather: Photoshop draws the shape, fill and stroke, then feathers the drawing as a whole
         // (the 8-bit executor's rule, render_plan.h's featherDrawnShape).
         const bool stroked = stroke && stroke->enabled;
@@ -477,7 +477,7 @@ struct RenderExecDeep {
             }
             if (stroked) strokeInto(shape, BlendMode::Normal, stroke->opacity, nullptr, false);
             featherDrawnShape(shape, N, vectorFeatherSigma(*maskParameters->vectorFeather) * scale);
-            compositeRows(shape, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)), coverageWithoutVector, target);
+            compositeRows(shape, blendOf(layer), RenderPlan::contentOpacity(layer), coverageWithoutVector, target);
             return;
         }
         if (stroke && stroke->enabled && !stroke->fillEnabled) { drawStroke(); return; }
@@ -563,7 +563,7 @@ struct RenderExecDeep {
             if (!O::adjust(document, *layer.adjustment, adjusted, region, scale)) return;
         } else if (!O::adjust(*layer.adjustment, adjusted, region, scale)) return;
         const BlendMode mode = blendOf(layer);
-        const float opacity = float(clamp(layer.opacity, 0.0, 1.0));
+        const float opacity = RenderPlan::contentOpacity(layer);
         Cover clip = coverage;
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image) {
             auto own = std::make_shared<Gray>(outWidth, outHeight, 0);

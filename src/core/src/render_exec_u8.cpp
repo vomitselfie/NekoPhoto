@@ -144,7 +144,7 @@ struct RenderExec<SampleType::U8> {
         dumpStage(g, "2-exterior", *cur);
         Frame f{&g, nullptr, nullptr, cur, std::move(unexcluded)};
         if (isolates(g)) { f.buffer = std::make_unique<Image>(outWidth, outHeight); cur = f.buffer.get(); }
-        else if (fades(g) || folderContentFill(g) < 1) f.before = std::make_unique<Image>(*cur);
+        else if (fades(g)) f.before = std::make_unique<Image>(*cur);
         frames.push_back(std::move(f));
     }
 
@@ -153,8 +153,8 @@ struct RenderExec<SampleType::U8> {
         Frame f = std::move(frames.back());
         frames.pop_back();
         dumpStage(g, "3-children", *cur);
-        // The contents at the folder's opacity and, when it has a style, its Fill (the effects are drawn after).
-        const float opacity = float(clamp(g.opacity, 0.0, 1.0)) * folderContentFill(g);
+        // The contents at the folder's opacity and Fill (the effects, drawn after, take its opacity alone).
+        const float opacity = RenderPlan::contentOpacity(g);
         const bool foldsInteriors = f.buffer && interiorsAsGroup(g);
         if (foldsInteriors) drawGroupStyle(g, *f.buffer, StyledDraw::Phase::InteriorOverlays);
         if (f.buffer) {
@@ -319,7 +319,7 @@ struct RenderExec<SampleType::U8> {
         DrawParams params;
         params.image = image;
         params.transform = transformOf(layer);
-        params.opacity = layer.opacity;
+        params.opacity = RenderPlan::contentOpacity(layer);
         params.mode = blendOf(layer);
         params.layerTransformForMask = params.transform;
         if (layer.mask) {
@@ -424,7 +424,7 @@ struct RenderExec<SampleType::U8> {
                 }
             });
         };
-        auto drawStroke = [&] { strokeInto(target, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)) * (stroke ? stroke->opacity : 1.0f), coverageWithoutVector, true); };
+        auto drawStroke = [&] { strokeInto(target, blendOf(layer), RenderPlan::contentOpacity(layer) * (stroke ? stroke->opacity : 1.0f), coverageWithoutVector, true); };
         // A shape layer with a Feather: Photoshop draws the shape, fill and stroke, then feathers the drawing as a whole
         // (photoshop-shape-feather), so where the stroke covers the fill the edge fades once, not twice, and the fill
         // fades past its own pixels.
@@ -442,7 +442,7 @@ struct RenderExec<SampleType::U8> {
             }
             if (stroked) strokeInto(shape, BlendMode::Normal, stroke->opacity, nullptr, false);
             featherDrawnShape(shape, 4, vectorFeatherSigma(*maskParameters->vectorFeather) * scale);
-            const float opacity = float(clamp(layer.opacity, 0.0, 1.0));
+            const float opacity = RenderPlan::contentOpacity(layer);
             const BlendMode mode = blendOf(layer);
             parallelRows(0, outHeight, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
@@ -537,7 +537,7 @@ struct RenderExec<SampleType::U8> {
         Image adjusted = target;
         if (!applyAdjustment(*layer.adjustment, adjusted, region, scale)) return;
         BlendMode mode = blendOf(layer);
-        float opacity = float(clamp(layer.opacity, 0.0, 1.0));
+        float opacity = RenderPlan::contentOpacity(layer);
         // Clip: the layer's own mask over its transform (and folder masks in `coverage`).
         std::shared_ptr<GrayImage> clip = coverage;
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image.u8()) {
@@ -603,7 +603,7 @@ struct RenderExec<SampleType::U8> {
     /// opacity in Normal mode, without a layer mask or a masked folder above it.
     std::optional<Transfer> fusibleTransfer(const Layer& layer) {
         if (!layer.adjustment || layer.maskSourceId || stacked.count(layer.id)) return std::nullopt;
-        if (blendOf(layer) != BlendMode::Normal || clamp(layer.opacity, 0.0, 1.0) < 1) return std::nullopt;
+        if (blendOf(layer) != BlendMode::Normal || RenderPlan::contentOpacity(layer) < 1) return std::nullopt;
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image.u8()) return std::nullopt;
         if (foldersCoverage(layer.parentId)) return std::nullopt;
         if (plan.hasBlendIf(layer) || plan.excluded(layer)) return std::nullopt;

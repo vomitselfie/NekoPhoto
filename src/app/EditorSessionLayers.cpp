@@ -696,16 +696,17 @@ bool EditorSession::placeLayer(const Uuid& idRef, const std::optional<Uuid>& par
     return true;
 }
 
-void EditorSession::beginOpacityEdit() {
+void EditorSession::beginOpacityEdit(bool fill) {
     if (!canEditLayers() || opacityEditing_ || !activeLayerId_) return;
-    beginEdit(QT_TRANSLATE_NOOP("History", "Layer Opacity"));
+    beginEdit(fill ? QT_TRANSLATE_NOOP("History", "Layer Fill") : QT_TRANSLATE_NOOP("History", "Layer Opacity"));
     opacityEditing_ = true;
 }
 
 void EditorSession::endOpacityEdit() {
     if (opacityPreview_) {
         // Another edit starts while the slider is held: the value it shows becomes its own step first.
-        if (const std::optional<double> value = endOpacityPreview()) setLayerOpacity(*value);
+        const bool fill = opacityPreviewFill_;
+        if (const std::optional<double> value = endOpacityPreview()) setLayerOpacityField(*value, fill);
         return;
     }
     if (!opacityEditing_) return;
@@ -714,30 +715,39 @@ void EditorSession::endOpacityEdit() {
     notifyDocument();
 }
 
-void EditorSession::setLayerOpacity(double opacity) {
+namespace {
+/// The value an opacity edit changes: the layer's opacity, or its Fill.
+double& opacityField(Layer& layer, bool fill) { return fill ? layer.fill : layer.opacity; }
+} // namespace
+
+void EditorSession::setLayerOpacity(double opacity) { setLayerOpacityField(opacity, false); }
+void EditorSession::setLayerFill(double fill) { setLayerOpacityField(fill, true); }
+
+void EditorSession::setLayerOpacityField(double opacity, bool fill) {
     if (!document_ || !std::isfinite(opacity) || (!canEditLayers() && !opacityEditing_)) return;
     double value = std::clamp(opacity, 0.0, 1.0);
     std::vector<Layer*> targets;
-    for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && l.opacity != value) targets.push_back(&l);
+    for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && opacityField(l, fill) != value) targets.push_back(&l);
     if (targets.empty()) return;
     bool standalone = !opacityEditing_;
-    if (standalone) beginEdit(QT_TRANSLATE_NOOP("History", "Layer Opacity"));
-    for (Layer* l : targets) l->opacity = value;
+    if (standalone) beginEdit(fill ? QT_TRANSLATE_NOOP("History", "Layer Fill") : QT_TRANSLATE_NOOP("History", "Layer Opacity"));
+    for (Layer* l : targets) opacityField(*l, fill) = value;
     if (standalone) { endEdit(); notifyDocument(); }
     else { emit documentChanged({}); emit layersChanged(); }
 }
 
-void EditorSession::beginOpacityPreview() {
+void EditorSession::beginOpacityPreview(bool fill) {
     if (!canEditLayers() || opacityEditing_ || opacityPreview_ || !activeLayerId_) return;
     std::map<Uuid, double> before;
-    for (const Layer& l : document_->layers) if (selectedLayerIds_.count(l.id)) before[l.id] = l.opacity;
+    for (Layer& l : document_->layers) if (selectedLayerIds_.count(l.id)) before[l.id] = opacityField(l, fill);
     opacityPreview_ = std::move(before);
+    opacityPreviewFill_ = fill;
 }
 
 void EditorSession::previewLayerOpacity(double opacity) {
     if (!opacityPreview_ || !document_ || !std::isfinite(opacity)) return;
     const double value = std::clamp(opacity, 0.0, 1.0);
-    for (const auto& [id, was] : *opacityPreview_) if (Layer* l = document_->find(id)) l->opacity = value;
+    for (const auto& [id, was] : *opacityPreview_) if (Layer* l = document_->find(id)) opacityField(*l, opacityPreviewFill_) = value;
     emit documentChanged({});
     emit layersChanged();
 }
@@ -750,9 +760,10 @@ std::optional<double> EditorSession::endOpacityPreview() {
     bool changed = false;
     for (const auto& [id, was] : before)
         if (Layer* l = document_ ? document_->find(id) : nullptr) {
-            if (!shown || id == activeLayerId_) shown = l->opacity;
-            changed = changed || l->opacity != was;
-            l->opacity = was;
+            double& field = opacityField(*l, opacityPreviewFill_);
+            if (!shown || id == activeLayerId_) shown = field;
+            changed = changed || field != was;
+            field = was;
         }
     emit documentChanged({});
     emit layersChanged();

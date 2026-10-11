@@ -237,7 +237,7 @@ def describe_method(method: Optional[str] = None) -> str:
 
 @look("List layers")
 def layers_list() -> str:
-    """All layers top to bottom with id, name, kind (pixels, shape, group, adjustment), depth, parent, visibility, opacity, blend mode, transform (document pixels), mask and adjustment settings."""
+    """All layers top to bottom with id, name, kind (pixels, shape, group, adjustment), depth, parent, visibility, opacity, fill, blend mode, transform (document pixels), mask and adjustment settings."""
     return text(call("layers.list"))
 
 
@@ -472,12 +472,12 @@ def layers_get(id: str) -> str:
 
 
 @edit("Set layer properties")
-def layers_set(id: Optional[str] = None, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None,
+def layers_set(id: Optional[str] = None, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, fill: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None,
                blend_if: Optional[dict] = None, channels: Optional[dict] = None, sampling: Optional[str] = None) -> str:
-    """Change a layer's name, visibility, opacity (0..1), blend mode (any of Photoshop's: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath; sampling (Nearest, Smooth, High quality) is how it resamples when transformed. id defaults to the active layer.
+    """Change a layer's name, visibility, opacity (0..1: the layer and its effects), fill (0..1, Photoshop's Fill: the layer's own pixels only, so fill 0 with a stroke or glow leaves the effect alone; opacity and fill never change each other), blend mode (any of Photoshop's: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath; sampling (Nearest, Smooth, High quality) is how it resamples when transformed. id defaults to the active layer.
     blend_if is Blending Options' Blend If: channels (gray, red, green, blue; in CMYK gray, cyan, magenta, yellow, black; in Lab lightness, a, b), each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255; a split handle is low != high and fades between them. Example: {"gray": {"underlying": [0, 0, 120, 200]}} lets the layer show only over darker pixels, fading out from 120 to 200. Channels left out stay; {"reset": true} clears them. layers_get reports blendIf.
     channels is Blending Options' Advanced Blending Channels: red, green, blue (in CMYK cyan, magenta, yellow, black; in Lab lightness, a, b), each true to blend it or false to leave it out, so the backdrop's value stays there. Example: {"green": false}. Channels left out stay; layers_get reports channels when one is left out."""
-    return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping, blendIf=blend_if, channels=channels, sampling=sampling))
+    return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, fill=fill, blend=blend, clipping=clipping, blendIf=blend_if, channels=channels, sampling=sampling))
 
 
 @edit("Add a layer")

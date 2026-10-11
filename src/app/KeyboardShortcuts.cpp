@@ -76,7 +76,7 @@ QString refusal(const QKeySequence& key) {
         return KeyboardShortcutsDialog::tr("The arrow keys nudge the selection, the layer or the selected pixels (with Shift, Ctrl or both); use them with Alt.");
     if ((k == Qt::Key_BracketLeft || k == Qt::Key_BracketRight || k == Qt::Key_BraceLeft || k == Qt::Key_BraceRight) && !ctrl && !alt)
         return KeyboardShortcutsDialog::tr("[ and ] change the brush's size (with Shift, its hardness); use them with Ctrl or Alt.");
-    if (k >= Qt::Key_0 && k <= Qt::Key_9 && !ctrl && !alt) return KeyboardShortcutsDialog::tr("The digits set the tool's opacity; use them with Ctrl or Alt.");
+    if (k >= Qt::Key_0 && k <= Qt::Key_9 && !ctrl && !alt) return KeyboardShortcutsDialog::tr("The digits set the tool's opacity (with Shift and the Move tool, the layers' Fill); use them with Ctrl or Alt.");
     if ((k == Qt::Key_Less || k == Qt::Key_Greater || k == Qt::Key_Comma || k == Qt::Key_Period) && (m & Qt::ControlModifier) && (m & Qt::ShiftModifier))
         return KeyboardShortcutsDialog::tr("Ctrl+Shift+< and > step the type size.");
     return {};

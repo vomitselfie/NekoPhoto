@@ -504,6 +504,8 @@ add_test(NAME blendif_tests COMMAND blendif_tests)
 add_executable(fill_opacity_tests fill_opacity_tests.cpp)
 target_link_libraries(fill_opacity_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME fill_opacity_tests COMMAND fill_opacity_tests other_modes_take_fill_as_coverage)
+add_test(NAME fill_opacity_separate COMMAND fill_opacity_tests opacity_edit_keeps_fill)
+add_test(NAME fill_opacity_project COMMAND fill_opacity_tests project_before_fill_splits_the_folded_opacity)
 add_test(NAME fill_opacity_special_eight COMMAND fill_opacity_tests special_eight_fill_matches_photoshop)
 set_tests_properties(fill_opacity_special_eight PROPERTIES WILL_FAIL TRUE)
 

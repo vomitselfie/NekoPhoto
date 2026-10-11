@@ -26,7 +26,7 @@ Document layerAloneNative(const Document& document, const Layer& layer, const La
     single.profile = document.profile;
     single.encodedProfile = document.encodedProfile;
     Layer copy = layer;
-    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     copy.transform = transform;
     single.layers = {copy};
     return single;
@@ -162,7 +162,7 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
             Layer copy = *layer;
             copy.parentId.reset();
             copy.visible = true;
-            copy.opacity = 1;
+            copy.opacity = 1; copy.fill = 1;
             copy.blendMode = BlendMode::Normal;
             copy.mask.reset();
             copy.maskSourceId.reset();
@@ -313,7 +313,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
             Document single(document_->width, document_->height);
             single.sampleType = SampleType::U16;
             Layer copy = *layer;
-            copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+            copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
             copy.transform = displayedTransform(*layer);
             single.layers = {copy};
             shown16 = renderFlattened16(single);
@@ -339,7 +339,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     else if (!onMask) {
         Document single(document_->width, document_->height);
         Layer copy = *layer;
-        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
         copy.transform = displayedTransform(*layer);
         single.layers = {copy};
         sample = renderFlattened(single);
@@ -395,7 +395,7 @@ bool EditorSession::patchSelection(int dx, int dy) {
         Document single(document_->width, document_->height);
         single.sampleType = SampleType::U16;
         Layer copy = *layer;
-        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
         copy.transform = displayedTransform(*layer);
         single.layers = {copy};
         auto shown = renderFlattened16(single);
@@ -415,7 +415,7 @@ bool EditorSession::patchSelection(int dx, int dy) {
     // The layer as the canvas shows it; the source is the same pixels shifted by the drag.
     Document single(document_->width, document_->height);
     Layer copy = *layer;
-    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     copy.transform = displayedTransform(*layer);
     single.layers = {copy};
     auto shown = renderFlattened(single);

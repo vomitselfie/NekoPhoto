@@ -117,6 +117,7 @@ QString describe(EditorSession& s) {
                    .arg(l.transform.origin.x, 0, 'g', 17).arg(l.transform.origin.y, 0, 'g', 17).arg(l.transform.size.width, 0, 'g', 17).arg(l.transform.size.height, 0, 'g', 17)
                    .arg(l.transform.rotation, 0, 'g', 17).arg(l.transform.flipX).arg(l.transform.flipY).arg(l.opacity).arg(int(l.blendMode)).arg(l.visible)
                    .arg(pixels).arg(l.asset && l.asset->image ? l.asset->image.width() : 0).arg(l.asset && l.asset->image ? l.asset->image.height() : 0).arg(mask);
+        if (l.fill != 1) out << QString("layer %1 fill %2").arg(QString::fromStdString(l.name)).arg(l.fill);
     }
     // Clipping, resampling, smart objects and a mask's state, which the pixels alone do not show.
     for (const Layer& l : d.layers)

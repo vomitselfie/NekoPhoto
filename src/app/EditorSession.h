@@ -290,12 +290,17 @@ public:
     /// Whether placeLayer would move the layer there.
     bool canPlaceLayer(const compositor::Uuid& id, const std::optional<compositor::Uuid>& parent, const std::optional<compositor::Uuid>& above, bool atBottom = false) const;
     void setLayerOpacity(double opacity);
-    void beginOpacityEdit();
+    /// The selected layers' Fill (Photoshop's Fill Opacity): their own pixels fade, their effects do not. Opacity and
+    /// Fill never change each other.
+    void setLayerFill(double fill);
+    /// A drag of the Opacity slider (or with `fill`, the Fill slider) as one undo step.
+    void beginOpacityEdit(bool fill = false);
     void endOpacityEdit();
-    /// The Layers panel's opacity slider dragged while commands are routed: the selected layers show each value
-    /// with no undo step, and the release puts them back and answers the value to commit (layers.set), or none
-    /// when it did not change. Another edit starting mid-drag commits it first, as endOpacityEdit does.
-    void beginOpacityPreview();
+    /// The Layers panel's opacity (or with `fill`, Fill) slider dragged while commands are routed: the selected layers
+    /// show each value with no undo step, and the release puts them back and answers the value to commit
+    /// (layers.set), or none when it did not change. Another edit starting mid-drag commits it first, as
+    /// endOpacityEdit does.
+    void beginOpacityPreview(bool fill = false);
     void previewLayerOpacity(double opacity);
     std::optional<double> endOpacityPreview();
     bool opacityPreviewing() const { return opacityPreview_.has_value(); }
@@ -394,8 +399,9 @@ public:
     compositor::BrushSmoothing brushSmoothing;
     /// The seed of the next stroke's tip-brush jitter (a replayed stroke); a fresh one per stroke when unset.
     std::optional<uint32_t> brushSeed;
-    /// Photoshop's opacity keys: 1 = 10% ... 9 = 90%, 0 = 100%; two digits typed quickly set an exact value.
-    void typeOpacityDigit(int digit);
+    /// Photoshop's opacity keys: 1 = 10% ... 9 = 90%, 0 = 100%; two digits typed quickly set an exact value. With
+    /// `fill` (Shift and the digits, with the Move tool) they set the selected layers' Fill instead.
+    void typeOpacityDigit(int digit, bool fill = false);
     void changeBrushHardness(bool increase);
     void changeBrushSize(bool increase);
     /// The Blur tool's modes; Liquify and Smudge push pixels, Blur paints a softened copy and Sharpen a sharpened one.
@@ -722,7 +728,8 @@ public:
     /// The Layer Style dialog's live edit: begin, show each change on the layer, then keep it as one undo step or put
     /// the layer back as it was (its carried style bytes untouched when nothing changed).
     bool beginLayerStyleEdit(const compositor::Uuid& id);
-    void previewLayerStyle(const compositor::LayerStyle& style);
+    /// The style shown on the layer while the dialog is open, with its Fill when `fill` is given (Cancel puts both back).
+    void previewLayerStyle(const compositor::LayerStyle& style, std::optional<double> fill = std::nullopt);
     void endLayerStyleEdit(bool keep);
     /// Gives a layer `style` as one undo step named `step` (automation's layers.setStyle: Layer Style, Paste Layer Style
     /// or Clear Layer Style).
@@ -1215,6 +1222,8 @@ private:
     void addPixelLayer(compositor::AnyImage image, QPointF origin, const QString& editName, bool dropsSelection);
     bool opacityEditing_ = false;
     std::optional<std::map<compositor::Uuid, double>> opacityPreview_;   // the layers' opacity before the drag
+    bool opacityPreviewFill_ = false;   // the preview is of the layers' Fill
+    void setLayerOpacityField(double value, bool fill);
     bool visibilitySwipe_ = false;
     std::map<compositor::Uuid, bool> swipeOriginal_;   // each eye the swipe changed, as it was
     const char* swipeName_ = nullptr;
@@ -1284,6 +1293,7 @@ private:
     std::optional<compositor::Uuid> styleEditLayer_;
     void giveLayerStyle(compositor::Layer& layer, const compositor::LayerStyle& style);
     std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;
+    double styleEditFill_ = 1;
     std::shared_ptr<const compositor::PsdDocumentCarry> styleEditDocumentCarry_;   // put back on Cancel (patterns the preview added)
     std::optional<compositor::LayerStyle> styleClipboard_;
     std::optional<compositor::VectorPath::Subpath> penDraft_;

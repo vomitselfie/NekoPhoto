@@ -274,6 +274,10 @@
         <translation>レイヤーの不透明度</translation>
     </message>
     <message>
+        <source>Layer Fill</source>
+        <translation>レイヤーの塗り</translation>
+    </message>
+    <message>
         <source>Layer Blend Mode</source>
         <translation>レイヤーの描画モード</translation>
     </message>
@@ -6178,8 +6182,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>[ と ] はブラシの直径を変えます(Shift と一緒なら硬さ)。Ctrl または Alt と一緒に使ってください。</translation>
     </message>
     <message>
-        <source>The digits set the tool&apos;s opacity; use them with Ctrl or Alt.</source>
-        <translation>数字キーはツールの不透明度を設定します。Ctrl または Alt と一緒に使ってください。</translation>
+        <source>The digits set the tool&apos;s opacity (with Shift and the Move tool, the layers&apos; Fill); use them with Ctrl or Alt.</source>
+        <translation>数字キーはツールの不透明度を設定します(移動ツールで Shift と一緒なら、レイヤーの塗り)。Ctrl または Alt と一緒に使ってください。</translation>
     </message>
     <message>
         <source>Ctrl+Shift+&lt; and &gt; step the type size.</source>
@@ -6429,6 +6433,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Blending Options</source>
         <translation>描画オプション</translation>
+    </message>
+    <message>
+        <source>Fill opacity</source>
+        <translation>塗りの不透明度</translation>
     </message>
     <message>
         <source>Show effects</source>
@@ -6812,6 +6820,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Delete the selected layers</source>
         <translation>選択したレイヤーを削除</translation>
+    </message>
+    <message>
+        <source>Fill</source>
+        <translation>塗り</translation>
+    </message>
+    <message>
+        <source>Fill: fades the layer&apos;s own pixels and leaves its effects as they are (Shift and a digit with the Move tool)</source>
+        <translation>塗り:レイヤー自体のピクセルだけを薄くし、効果はそのまま残します(移動ツールで Shift+数字キー)</translation>
     </message>
     <message>
         <source>Smart Filters</source>

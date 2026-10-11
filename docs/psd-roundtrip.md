@@ -14,7 +14,7 @@ Per layer and folder, as the file's bytes:
 |---|---|
 | Layer styles (`lfx2`, `lmfx`, `lfxs`, `lrFX`; drawn here too: [layer-styles.md](layer-styles.md)), Blend If ranges, knockout, blend-interior options, colour label, locks, metadata, and every other tagged block we do not read | always |
 | The blend mode's own key (Linear Burn, Vivid Light, Dissolve ...), and an isolated (Normal) folder | while the layer keeps the mode it was read as |
-| Opacity and Fill as two values | while the combined opacity is unchanged; otherwise our opacity, Fill 100% |
+| Opacity and Fill as two values | always: they are the layer's own (the Layers panel's Opacity and Fill), and an edit of one leaves the other |
 | Vector masks (`vmsk`, `vsms`) | always, the path moved with the layer ([vector-masks.md](vector-masks.md)) |
 | A shape's stroke and fill content (`vstk`, `vscg`) | always |
 | A shape's live-shape origination (`vogk`, `vowv`) | while the layer has not moved or changed size; after that, `vogk` is written anew with the live shapes moved along, those still true of the path ([vector-tools.md](vector-tools.md)) |

@@ -31,7 +31,8 @@ struct PsdLayerCarry {
     std::vector<PsdBlock> blocks;
     /// The record's blending ranges (Blend If), as stored; empty when the file had none.
     std::vector<uint8_t> blendingRanges;
-    /// Opacity and Fill as Photoshop had them (NekoPhoto folds them into one opacity).
+    /// Opacity and Fill as the file had them. The layer's own opacity and fill model them; these are read only to split
+    /// the single opacity of a project saved before Fill was modelled (format version 10).
     uint8_t opacity = 255, fill = 255;
     /// The blend mode's key as stored, and the mode NekoPhoto read it as: while the layer keeps that mode,
     /// the key is written back (Linear Burn stays Linear Burn, a Normal folder stays isolated).

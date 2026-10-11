@@ -1,7 +1,7 @@
 // Fill opacity in Photoshop's "special eight" blend modes (Color Burn, Linear Burn, Color Dodge, Linear Dodge, Vivid
 // Light, Linear Light, Hard Mix, Difference). For every other mode a layer's Fill is just less coverage, like Opacity;
 // for these eight, Photoshop applies Fill inside the blend, so a layer at Fill 50% does not look like the same layer at
-// Opacity 50%. A PSD keeps Fill apart from Opacity ('iOpa'); NekoPhoto keeps it in the layer's carry (psd_carry.h).
+// Opacity 50%. A PSD keeps Fill apart from Opacity ('iOpa'), as the layer does (Layer::fill).
 //
 // The expected colours are Photoshop's own composites of a solid layer over a solid Background, measured by two
 // independent projects:
@@ -15,16 +15,24 @@
 //
 // Each case goes the way a user's file does: the document is written as a PSD with Opacity 100% and the Fill, read back,
 // and flattened. The controls (Normal, Multiply) check that Fill stays plain coverage in the other modes.
+//
+// Fill is also its own value: an Opacity edit never changes it (a Fill-0 layer with a stroke keeps its pixels hidden),
+// and a project saved before Fill was modelled (one opacity, Opacity x Fill, beside the file's two in the carry) opens
+// with the two apart again.
 #include "check.h"
 #include "compositor/document.h"
+#include "compositor/layerstyle.h"
+#include "compositor/project.h"
 #include "compositor/psd.h"
 #include "compositor/psd_carry.h"
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
 #include <algorithm>
+#include <cmath>
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -55,11 +63,7 @@ std::optional<RGB> flattenThroughPsd(const RGB& base, const RGB& top, BlendMode 
     Layer layer("Fill", doc.size());
     layer.asset = Asset::make(solid(top), "Fill");
     layer.blendMode = mode;
-    auto carry = std::make_shared<PsdLayerCarry>();
-    carry->opacity = 255;
-    carry->fill = uint8_t(fill);
-    layer.psdCarry = carry;
-    layer.opacity = fill / 255.0;   // NekoPhoto's one opacity: Opacity x Fill
+    layer.fill = fill / 255.0;
     doc.layers.push_back(layer);
 
     std::string error;
@@ -69,7 +73,7 @@ std::optional<RGB> flattenThroughPsd(const RGB& base, const RGB& top, BlendMode 
     if (!imported) { std::fprintf(stderr, "  importPsdBytes: %s\n", error.c_str()); return std::nullopt; }
     // The file kept Fill apart from Opacity.
     const Layer& back = imported->document.layers.back();
-    if (!back.psdCarry || back.psdCarry->fill != fill || back.psdCarry->opacity != 255) {
+    if (std::lround(back.fill * 255) != fill || back.opacity != 1) {
         std::fprintf(stderr, "  Fill did not survive the PSD\n");
         return std::nullopt;
     }
@@ -155,6 +159,109 @@ TEST_CASE(special_eight_fill_matches_photoshop) {
         {pc, BlendMode::Difference, kBaseB, kTopB, 191, {97, 53, 158}, 2},
     };
     for (const Measured& m : cases) expect(m);
+}
+
+namespace {
+
+std::shared_ptr<Image> solidSized(int w, int h, const RGB& c) {
+    auto image = std::make_shared<Image>(w, h);
+    image->fill(uint8_t(c[0]), uint8_t(c[1]), uint8_t(c[2]), 255);
+    return image;
+}
+
+/// A grey canvas under a red square with a blue outside stroke, at Fill 0 and the given opacity.
+Document strokedAtFillZero(double opacity) {
+    Document doc(16, 16);
+    Layer background(Asset::make(solidSized(16, 16, {100, 100, 100}), "Background"), Point(0, 0));
+    doc.layers.push_back(background);
+    Layer square(Asset::make(solidSized(6, 6, {255, 0, 0}), "Square"), Point(5, 5));
+    LayerStyle style;
+    Stroke stroke;
+    stroke.color = StyleColor{0, 0, 255};
+    stroke.size = 2;
+    style.strokes.push_back(stroke);
+    setLayerStyle(square, style);
+    square.fill = 0;
+    square.opacity = opacity;
+    doc.layers.push_back(square);
+    return doc;
+}
+
+RGB pixelAt(const Image& image, int x, int y) {
+    const uint8_t* p = image.pixel(x, y);
+    return RGB{p[0], p[1], p[2]};
+}
+
+bool near(const RGB& a, const RGB& b, int tolerance) {
+    for (int k = 0; k < 3; k++) if (std::abs(a[k] - b[k]) > tolerance) return false;
+    return true;
+}
+
+} // namespace
+
+TEST_CASE(opacity_edit_keeps_fill) {
+    // The audit's case: a Fill-0 layer with an effect shows the effect alone; giving it 50% Opacity fades the effect and
+    // leaves the pixels hidden (before Fill was its own value, the edit dropped it and the red came back: 178,50,50).
+    for (double opacity : {1.0, 0.5}) {
+        Document doc = strokedAtFillZero(opacity);
+        auto flat = renderFlattened(doc);
+        REQUIRE(flat != nullptr);
+        CHECK(near(pixelAt(*flat, 8, 8), {100, 100, 100}, 0));   // the square's own pixels stay hidden
+        const RGB stroke = pixelAt(*flat, 4, 8);                  // the stroke, faded by the opacity alone
+        const int blue = int(std::lround(100 + (255 - 100) * opacity)), rest = int(std::lround(100 * (1 - opacity)));
+        CHECK(near(stroke, {rest, rest, blue}, 2));
+        // Through a PSD: Opacity and Fill come back as two values.
+        std::string error;
+        const std::vector<uint8_t> bytes = encodePsd(doc, PsdExportOptions{}, nullptr, &error);
+        REQUIRE(!bytes.empty());
+        auto imported = importPsdBytes(bytes, &error);
+        REQUIRE(imported.has_value());
+        const Layer& back = imported->document.layers.back();
+        CHECK_EQ(back.fill, 0.0);
+        CHECK(std::abs(back.opacity - opacity) < 0.5 / 255);
+        auto again = renderFlattened(imported->document);
+        REQUIRE(again != nullptr);
+        CHECK(near(pixelAt(*again, 8, 8), {100, 100, 100}, 0));
+    }
+}
+
+TEST_CASE(project_before_fill_splits_the_folded_opacity) {
+    // A project written before format version 10 kept Opacity x Fill as the layer's opacity, with the PSD's two in its
+    // carry; it opens with Opacity and Fill apart, and saves with Fill as its own value.
+    Document doc(4, 4);
+    Layer layer(Asset::make(solidSized(4, 4, {10, 20, 30}), "From a PSD"), Point(0, 0));
+    auto carry = std::make_shared<PsdLayerCarry>();
+    carry->opacity = 204;
+    carry->fill = 128;
+    carry->layerId = 7;
+    layer.psdCarry = carry;
+    layer.opacity = 204 / 255.0 * (128 / 255.0);
+    doc.layers.push_back(layer);
+    Layer edited = layer;   // its opacity changed afterwards: the Fill had already been dropped
+    edited.id = makeUuid();
+    edited.opacity = 0.3;
+    doc.layers.push_back(edited);
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / ("nekophoto-fill-tests-" + std::to_string(std::rand()));
+    std::filesystem::create_directories(dir);
+    ProjectError error;
+    const std::string path = (dir / "Old.comp").string();
+    REQUIRE(saveProject(doc, std::nullopt, path, error));   // no layer has a Fill yet: an older version's file
+    auto loaded = loadProject(path, error);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->layers.size() == 2);
+    CHECK(std::abs(loaded->layers[0].opacity - 204 / 255.0) < 1e-9);
+    CHECK(std::abs(loaded->layers[0].fill - 128 / 255.0) < 1e-9);
+    CHECK(std::abs(loaded->layers[1].opacity - 0.3) < 1e-9);
+    CHECK_EQ(loaded->layers[1].fill, 1.0);
+    // Saved again, Fill is written as itself (version 10) and read back as it is.
+    REQUIRE(saveProject(*loaded, std::nullopt, path, error));
+    CHECK(manifestJson(*loaded, std::nullopt).find("\"version\": 10") != std::string::npos);
+    auto again = loadProject(path, error);
+    REQUIRE(again.has_value());
+    CHECK(std::abs(again->layers[0].fill - 128 / 255.0) < 1e-9);
+    CHECK(std::abs(again->layers[0].opacity - 204 / 255.0) < 1e-9);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
 }
 
 TEST_MAIN()

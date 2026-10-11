@@ -423,17 +423,7 @@ static const std::vector<uint8_t>* effectsBlock(const Layer& layer) {
 
 void layerOpacities(const Layer& layer, float& master, float& fill) {
     master = float(std::clamp(layer.opacity, 0.0, 1.0));
-    fill = 1;
-    if (layer.psdCarry) {
-        const auto& c = *layer.psdCarry;
-        if (std::abs(layer.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255) { master = c.opacity / 255.0f; fill = c.fill / 255.0f; }
-    }
-}
-
-float folderContentFill(const Layer& layer) {
-    if (!layer.isGroup || !layer.psdCarry || !effectsBlock(layer)) return 1;
-    const auto& c = *layer.psdCarry;
-    return std::abs(layer.opacity - c.opacity / 255.0) < 0.5 / 255 ? c.fill / 255.0f : 1.0f;
+    fill = float(std::clamp(layer.fill, 0.0, 1.0));
 }
 
 std::shared_ptr<const LayerStyle> layerStyleOf(const Layer& layer, const Document& document) {

@@ -10,6 +10,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QJsonArray>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
@@ -19,6 +20,8 @@
 #include <QStackedWidget>
 #include <QStandardItemModel>
 #include <QVBoxLayout>
+#include <algorithm>
+#include <cmath>
 
 using namespace compositor;
 
@@ -195,6 +198,18 @@ LayerStyleDialog::LayerStyleDialog(EditorSession* session, const Uuid& layer, QW
     // Blending Options
     auto* blending = newPage(tr("Blending Options"));
     list_->addItem(tr("Blending Options"));
+    // Advanced Blending's Fill Opacity: the layer's Fill (the Layers panel's), fading its pixels and not its effects.
+    if (const Layer* l = session->document()->find(layer)) fillBefore_ = l->fill;
+    {
+        auto* spin = new QDoubleSpinBox(this);
+        spin->setObjectName(QStringLiteral("fillOpacity"));
+        spin->setRange(0, 100);
+        spin->setDecimals(0);
+        spin->setSuffix(QStringLiteral(" %"));
+        spin->setValue(std::round(fillBefore_ * 100));
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this](double v) { fill_ = std::clamp(v / 100, 0.0, 1.0); changed(); });
+        blending->addRow(tr("Fill opacity"), spin);
+    }
     checkRow(blending, tr("Show effects"), &style_.visible);
     checkRow(blending, tr("Layer mask hides effects"), &style_.maskHidesEffects);
     checkRow(blending, tr("Blend interior effects as group"), &style_.blendInteriorAsGroup);
@@ -233,7 +248,14 @@ void LayerStyleDialog::accept() {
         finished_ = true;
         QJsonObject params{{"style", layerStyleRequest(style, mode)}};
         if (session_->activeLayerId() != layer_) params["id"] = QString::fromStdString(layer_);
-        session_->runCommand(QStringLiteral("layers.setStyle"), params);
+        if (fill_ && *fill_ != fillBefore_) {
+            // A changed Fill Opacity goes with the style, as one step.
+            QJsonObject fill{{"fill", *fill_}};
+            if (params.contains("id")) fill["id"] = params["id"];
+            session_->runCommand(QStringLiteral("rpc.batch"), {{"name", QStringLiteral("Layer Style")},
+                                                               {"calls", QJsonArray{QJsonObject{{"method", "layers.set"}, {"params", fill}},
+                                                                                    QJsonObject{{"method", "layers.setStyle"}, {"params", params}}}}});
+        } else session_->runCommand(QStringLiteral("layers.setStyle"), params);
         QDialog::accept();
         return;
     }
@@ -252,7 +274,7 @@ void LayerStyleDialog::reject() {
 
 void LayerStyleDialog::changed() {
     touched_ = true;
-    if (session_) session_->previewLayerStyle(output());
+    if (session_) session_->previewLayerStyle(output(), fill_);
 }
 
 bool& LayerStyleDialog::enabled(Effect e) {

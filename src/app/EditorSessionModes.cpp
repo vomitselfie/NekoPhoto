@@ -102,7 +102,7 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
         single.colorMode = doc.colorMode;
         single.profile = doc.profile;
         Layer copy = *layer;
-        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
+        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
         single.layers = {copy};
         out = renderNative(single, options);
     } else return std::nullopt;

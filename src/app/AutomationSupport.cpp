@@ -128,7 +128,7 @@ QJsonObject layerJson(const Layer& layer, int depth) {
         {"id", qs(layer.id)}, {"name", qs(layer.name)}, {"depth", depth},
         {"kind", layer.isGroup ? "group" : layer.adjustment ? "adjustment" : (layer.isLiveShape() || compositor::isVectorShapeLayer(layer)) ? "shape" : layer.isLiveText() ? "text"
                  : layer.isLiveSmartObject() ? "smartObject" : "pixels"},
-        {"visible", layer.visible}, {"opacity", layer.opacity}, {"blend", layer.isGroup && layer.passThrough ? QStringLiteral("Pass Through") : QString::fromUtf8(blendModeName(layer.blendMode))},
+        {"visible", layer.visible}, {"opacity", layer.opacity}, {"fill", layer.fill}, {"blend", layer.isGroup && layer.passThrough ? QStringLiteral("Pass Through") : QString::fromUtf8(blendModeName(layer.blendMode))},
         {"clipping", layer.maskSourceId.has_value()}, {"transform", transformJson(layer.transform)},
     };
     if (layer.parentId) o["parent"] = qs(*layer.parentId);

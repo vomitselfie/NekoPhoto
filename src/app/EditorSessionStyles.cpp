@@ -61,14 +61,16 @@ bool EditorSession::beginLayerStyleEdit(const Uuid& id) {
     beginEdit(QT_TRANSLATE_NOOP("History", "Layer Style"));
     styleEditLayer_ = id;
     styleEditCarry_ = document_->find(id)->psdCarry;
+    styleEditFill_ = document_->find(id)->fill;
     styleEditDocumentCarry_ = document_->psdCarry;
     return true;
 }
 
-void EditorSession::previewLayerStyle(const LayerStyle& style) {
+void EditorSession::previewLayerStyle(const LayerStyle& style, std::optional<double> fill) {
     if (!styleEditLayer_ || !document_) return;
     Layer* layer = document_->find(*styleEditLayer_);
     if (!layer) return;
+    if (fill && std::isfinite(*fill)) layer->fill = std::clamp(*fill, 0.0, 1.0);
     // A pattern chosen from the preset library joins the document's patterns, as Photoshop's picker does.
     addDocumentPatterns(*document_, PresetLibrary::instance().patternsFor(style));
     giveLayerStyle(*layer, style);
@@ -78,7 +80,7 @@ void EditorSession::previewLayerStyle(const LayerStyle& style) {
 void EditorSession::endLayerStyleEdit(bool keep) {
     if (!styleEditLayer_) return;
     if (!keep && document_) {
-        if (Layer* layer = document_->find(*styleEditLayer_)) layer->psdCarry = styleEditCarry_;
+        if (Layer* layer = document_->find(*styleEditLayer_)) { layer->psdCarry = styleEditCarry_; layer->fill = styleEditFill_; }
         document_->psdCarry = styleEditDocumentCarry_;
     }
     styleEditLayer_.reset();

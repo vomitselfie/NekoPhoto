@@ -206,7 +206,7 @@ Layer::Layer(std::string name_, Size blankSize) : id(makeUuid()), transform(Poin
 bool Layer::operator==(const Layer& o) const {
     return id == o.id && name == o.name && visible == o.visible && transform == o.transform
         && (asset ? asset->image : AnyImage()) == (o.asset ? o.asset->image : AnyImage())
-        && parentId == o.parentId && isGroup == o.isGroup && passThrough == o.passThrough && opacity == o.opacity && blendMode == o.blendMode
+        && parentId == o.parentId && isGroup == o.isGroup && passThrough == o.passThrough && opacity == o.opacity && fill == o.fill && blendMode == o.blendMode
         && mask == o.mask && maskSourceId == o.maskSourceId && adjustment == o.adjustment
         && shape == o.shape && shapeImage == o.shapeImage && text == o.text && textImage == o.textImage && psdCarry == o.psdCarry
         && smartObject == o.smartObject && smartImage == o.smartImage && artboard == o.artboard;

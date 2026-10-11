@@ -37,6 +37,13 @@ photoshop-group-fx-interior); a
 Stroke with Overprint off knocks the layer's content out of its band, even at 0% opacity; a clipped layer is
 masked by the base's pixels, never its effects; with Fill below 100% the overlays are their own passes.
 
+## Fill
+
+A layer's Fill (the Layers panel's field under Opacity, Blending Options' Fill Opacity, `layers.set` `fill`) is its
+own value, as in Photoshop: Opacity fades the layer and its effects, Fill only the layer's pixels, so a layer at Fill 0%
+shows its stroke, shadow or glow alone, and an Opacity edit never changes it. A folder's Fill fades its contents (its
+effects excepted). PSD files keep the two apart ('iOpa').
+
 Bevel & Emboss goes past Patchy in three places, each fitted to Photoshop's merged image of a Patchy fixture
 (`build/tests/psd_composite_oracle`):
 
