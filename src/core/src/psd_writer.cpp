@@ -604,10 +604,6 @@ private:
         // Transparency lock (bit 0) always; "pixel data irrelevant" (bit 4) while what makes it so is kept.
         r.flags = uint8_t((c.flags & 0x01) | (contentKept ? c.flags & 0x10 : 0));
         if (r.section == 1 && c.closedFolder) r.section = 2;
-        // Opacity and Fill as they were while the combined opacity is unchanged; else ours alone.
-        // (A styled folder keeps its opacity alone here, its Fill carried beside it.)
-        const bool styledFolder = l.isGroup && std::any_of(c.blocks.begin(), c.blocks.end(), [](const PsdBlock& b) { return b.key == "lfx2" || b.key == "lmfx" || b.key == "lfxs"; });
-        if (std::abs(l.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255 || (styledFolder && std::abs(l.opacity - c.opacity / 255.0) < 0.5 / 255)) { r.opacity = c.opacity; r.fill = c.fill; }
         const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image, l.mask->enabled) : 0;
         // The stored mask channels are PSD's (16-bit row counts) at the file's depth: as they are into a PSD of that depth only.
         if (!options_.large && !c.maskData.empty() && c.maskDepth == (float_ ? 32 : deep_ ? 16 : 8) && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
@@ -709,6 +705,7 @@ private:
         r.name = l.name;
         r.blend = blendKey(l.blendMode);
         r.opacity = uint8_t(std::clamp(std::lround(l.opacity * 255), 0L, 255L));
+        r.fill = uint8_t(std::clamp(std::lround(l.fill * 255), 0L, 255L));
         r.hidden = !l.visible;
         return r;
     }
@@ -739,7 +736,7 @@ private:
         for (Layer& l : copy.layers) {
             if (!keep.count(l.id)) l.visible = false;
             if (!keepClips) l.maskSourceId.reset();
-            if (neutralise && l.id == *neutralise) { l.opacity = 1; l.blendMode = BlendMode::Normal; }
+            if (neutralise && l.id == *neutralise) { l.opacity = 1; l.fill = 1; l.blendMode = BlendMode::Normal; }
             if (!folderMasks && l.isGroup) l.mask.reset();
         }
         return renderFlattened(copy);
@@ -756,7 +753,7 @@ private:
         for (Layer& l : copy.layers) {
             if (!keep.count(l.id)) l.visible = false;
             if (!keepClips) l.maskSourceId.reset();
-            if (neutralise && l.id == *neutralise) { l.opacity = 1; l.blendMode = BlendMode::Normal; }
+            if (neutralise && l.id == *neutralise) { l.opacity = 1; l.fill = 1; l.blendMode = BlendMode::Normal; }
             if (!folderMasks && l.isGroup) l.mask.reset();
         }
         return renderNative(copy);
@@ -769,7 +766,7 @@ private:
         single.colorMode = doc_.colorMode;
         single.profile = doc_.profile;
         Layer copy = layer;
-        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
         copy.psdCarry.reset();
         single.layers = {copy};
         RenderOptions options;

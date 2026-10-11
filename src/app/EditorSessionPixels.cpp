@@ -320,7 +320,7 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
             Document single(document_->width, document_->height);
             single.sampleType = document_->sampleType;
             Layer copy = *layer;
-            copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
+            copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
             single.layers = {copy};
             if constexpr (std::is_same_v<Out, Image>) render(single, options, out); else render16(single, options, out);
         } else return false;

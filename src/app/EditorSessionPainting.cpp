@@ -58,7 +58,7 @@ Document layerAlone(const Document& document, const Layer& layer, std::optional<
     single.profile = document.profile;
     single.encodedProfile = document.encodedProfile;
     Layer copy = layer;
-    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     if (transform) copy.transform = *transform;
     single.layers = {copy};
     return single;
@@ -116,7 +116,7 @@ std::optional<std::pair<AnyImage, LayerTransform>> layerAsPixels(const Document&
     // keeping only the blocks that draw the shape or the fill (a pattern's reference point too).
     Document single = document;
     Layer copy = layer;
-    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
     std::erase_if(carry->blocks, [](const PsdBlock& b) {
         static const std::set<std::string> shape{"vmsk", "vsms", "vstk", "vscg", "vogk", "SoCo", "GdFl", "PtFl", "fxrp"};
@@ -313,7 +313,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
             else if (layer->asset && layer->asset->image.u8()) {
                 Document single(document_->width, document_->height);
                 Layer copy = *layer;
-                copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+                copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
                 single.layers = {copy};
                 sample = renderFlattened(single);
             } else sample = std::make_shared<Image>(document_->width, document_->height);
@@ -539,10 +539,11 @@ void EditorSession::cancelBrush() {
 
 // ---- Opacity keys and brush steps ---------------------------------------------------
 
-void EditorSession::typeOpacityDigit(int digit) {
+void EditorSession::typeOpacityDigit(int digit, bool fill) {
     if (stroke_ || digit < 0 || digit > 9) return;
     bool brushLike = tool_ == Tool::Brush || tool_ == Tool::SpotHealing || tool_ == Tool::CloneStamp || tool_ == Tool::Smudge || tool_ == Tool::Dodge || tool_ == Tool::PaintBucket;
     if (!brushLike && tool_ != Tool::Gradient && tool_ != Tool::Move) return;
+    if (fill && tool_ != Tool::Move) return;   // Shift and a digit is the layers' Fill with the Move tool alone
     qint64 now = opacityTimer_.isValid() ? opacityTimer_.elapsed() : 0;
     if (!opacityTimer_.isValid()) opacityTimer_.start();
     int percent = digit == 0 ? 100 : digit * 10;
@@ -555,11 +556,11 @@ void EditorSession::typeOpacityDigit(int digit) {
     else if (tool_ == Tool::Gradient) { gradientSettings.opacity = value; refreshGradient(); emit toolChanged(); }
     else {
         std::vector<Layer*> targets;
-        for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && l.opacity != value) targets.push_back(&l);
+        for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && (fill ? l.fill : l.opacity) != value) targets.push_back(&l);
         if (targets.empty()) return;
         endOpacityEdit();
-        beginEdit(QT_TRANSLATE_NOOP("History", "Layer Opacity"));
-        for (Layer* l : targets) l->opacity = value;
+        beginEdit(fill ? QT_TRANSLATE_NOOP("History", "Layer Fill") : QT_TRANSLATE_NOOP("History", "Layer Opacity"));
+        for (Layer* l : targets) (fill ? l->fill : l->opacity) = value;
         endEdit();
         notifyDocument();
     }
@@ -690,7 +691,7 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     // The layer as the canvas shows it, at document size.
     Document single(document_->width, document_->height);
     Layer copy = *layer;
-    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     copy.transform = displayedTransform(*layer);
     single.layers = {copy};
     auto rendered = renderFlattened(single);
@@ -753,7 +754,7 @@ bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::funct
     }
     Document single(document_->width, document_->height);
     Layer copy = *layer;
-    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     copy.transform = displayedTransform(*layer);
     single.layers = {copy};
     stroke_ = makeRasterEdit(*layer, false, brushSettings);

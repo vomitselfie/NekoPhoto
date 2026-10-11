@@ -154,7 +154,7 @@ json transformJson(const LayerTransform& t) {
     return j;
 }
 
-const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
+const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "fill", "blendMode",
     "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough", "artboard"};
 const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "guides", "animation", "sampleType", "profile", "channels", "colorMode", "encodedProfile"};
 
@@ -189,6 +189,9 @@ bool parseRecord(const json& j, Record& r) {
     double opacity = 1;
     if (!getDouble(j, "opacity", opacity, false)) return false;
     l.opacity = opacity;
+    double fill = 1;
+    if (!getDouble(j, "fill", fill, false)) return false;
+    l.fill = fill;
     std::string blend;
     if (!getString(j, "blendMode", blend, false)) return false;
     if (!blend.empty() && !parseBlendMode(blend, l.blendMode)) return false;
@@ -303,6 +306,7 @@ json recordJson(const Layer& l) {
                          {"red", number(a.red)}, {"green", number(a.green)}, {"blue", number(a.blue)}, {"preset", a.presetName}};
     }
     if (l.opacity != 1) j["opacity"] = number(l.opacity);
+    if (l.fill != 1) j["fill"] = number(l.fill);
     if (l.blendMode != BlendMode::Normal) j["blendMode"] = blendModeName(l.blendMode);
     if (l.mask && l.mask->asset.image) {
         j["maskFile"] = l.id + ".mask.png";
@@ -504,6 +508,17 @@ std::string layerImageFile(const std::string& id, ColorMode mode) { return id + 
 std::string layerImageFile(const std::string& id, ColorMode mode, SampleType type) { return type == SampleType::F32 ? id + ".f32z" : layerImageFile(id, mode); }
 std::string layerMaskFile(const std::string& id, SampleType type) { return id + (type == SampleType::F32 ? ".mask.f32z" : ".mask.png"); }
 
+/// A project saved before Fill was modelled (below version 10) kept a PSD layer's Opacity x Fill as its one opacity,
+/// and a styled folder's opacity alone, with the file's two values in the layer's PSD carry: while the opacity is still
+/// what they made, they are taken apart again.
+void splitFoldedFill(Layer& layer) {
+    if (!layer.psdCarry || layer.psdCarry->fill == 255) return;
+    const PsdLayerCarry& c = *layer.psdCarry;
+    const double master = c.opacity / 255.0, fill = c.fill / 255.0;
+    if (std::abs(layer.opacity - master * fill) < 0.5 / 255) { layer.opacity = master; layer.fill = fill; }
+    else if (layer.isGroup && std::abs(layer.opacity - master) < 0.5 / 255) layer.fill = fill;
+}
+
 bool validateManifest(const Manifest& m, ProjectError& error) {
     if (!Document::validDimension(m.width) || !Document::validDimension(m.height) || m.records.size() > size_t(Document::maxLayers)) { error = tooLarge(); return false; }
     std::vector<Layer> layers;
@@ -516,7 +531,9 @@ bool validateManifest(const Manifest& m, ProjectError& error) {
         }
         if (r.maskEnabled && !r.maskFile) { error = invalid(); return false; }
         if (r.maskPlacement && (!r.maskPlacement->isValid() || !r.maskFile)) { error = invalid(); return false; }
-        if (!(l.opacity >= 0 && l.opacity <= 1)) { error = invalid(); return false; }
+        if (!(l.opacity >= 0 && l.opacity <= 1) || !(l.fill >= 0 && l.fill <= 1)) { error = invalid(); return false; }
+        // Version 10: a layer's Fill apart from its opacity.
+        if (m.version < 10 && l.fill != 1) { error = invalid(); return false; }
         if (m.version < 3 && (l.opacity != 1 || l.blendMode != BlendMode::Normal)) { error = invalid(); return false; }
         // Version 8: folders with their own opacity, blend mode and isolation (Photoshop's folders).
         if (l.isGroup && m.version < 8 && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough)) { error = invalid(); return false; }
@@ -947,6 +964,7 @@ std::optional<Document> loadPackageFolder(const fs::path& path, ProjectError& er
     };
     for (Layer& layer : d.layers)
         if (auto bytes = readCarry(path / "images" / (layer.id + ".psdcarry"))) layer.psdCarry = parsePsdLayerCarry(*bytes);
+    if (m.version < 10) for (Layer& layer : d.layers) splitFoldedFill(layer);
     if (auto bytes = readCarry(path / "images" / "document.psdcarry")) d.psdCarry = parsePsdDocumentCarry(*bytes);
     for (Channel& c : d.channels)
         if (auto bytes = readCarry(path / "channels" / (c.id + ".psdcarry"))) c.psdCarry = parsePsdChannelCarry(*bytes);
@@ -1232,7 +1250,8 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     folders |= document.sampleType != SampleType::U8;   // so is a 16-bit document
     folders |= !document.profile.empty();               // and one with a colour profile
     folders |= !document.channels.empty();              // or with alpha channels
-    j["version"] = document.colorMode != ColorMode::RGB ? projectFormatVersion : folders ? projectRgbFormatVersion : projectMacFormatVersion;
+    const bool fills = std::any_of(document.layers.begin(), document.layers.end(), [](const Layer& l) { return l.fill != 1; });
+    j["version"] = fills ? projectFormatVersion : document.colorMode != ColorMode::RGB ? projectModesFormatVersion : folders ? projectRgbFormatVersion : projectMacFormatVersion;
     j["colorSpace"] = document.profile.empty() ? "sRGB" : "icc";
     if (!document.profile.empty()) j["profile"] = "profile.icc";
     else j.erase("profile");

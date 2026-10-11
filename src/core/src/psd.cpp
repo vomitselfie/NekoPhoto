@@ -1093,7 +1093,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 carry->maskHash = layer.mask ? psdMaskHash(layer.mask->asset.image, layer.mask->enabled) : 0;
             }
             const bool plainBlend = rec.blend == "norm" || (rec.blend == "pass" && layer.isGroup);
-            if (carry->blocks.empty() && carry->blendingRanges.empty() && carry->fill == 255 && carry->layerId == 0 && carry->maskData.empty()
+            if (carry->blocks.empty() && carry->blendingRanges.empty() && carry->layerId == 0 && carry->maskData.empty()
                 && plainBlend && (rec.flags & ~0x0A) == 0 && !carry->closedFolder && carry->planes.empty()) return nullptr;
             return carry;
         };
@@ -1175,11 +1175,10 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 Layer folder(rec.name.empty() ? "Folder" : rec.name, document.size());
                 folder.isGroup = true;
                 folder.visible = !hidden;
-                // Fill applies to an unstyled folder's contents as its opacity does (a Photoshop folder at Fill 0
-                // hides them): kept as their product, like a layer's, and split again on export. A styled folder keeps
-                // its opacity alone, since its Fill must not fade its effects (its Fill is carried for export).
-                const bool styled = rec.blocks.count("lfx2") || rec.blocks.count("lmfx") || rec.blocks.count("lfxs");
-                folder.opacity = (rec.opacity / 255.0) * (styled ? 1.0 : rec.fillOpacity / 255.0);
+                // Fill fades the folder's contents as its opacity does (a Photoshop folder at Fill 0 hides them),
+                // its effects excepted.
+                folder.opacity = rec.opacity / 255.0;
+                folder.fill = rec.fillOpacity / 255.0;
                 folder.blendMode = blend;
                 folder.passThrough = rec.blend == "pass";
                 if (auto lm = userMaskFor(int(width), int(height), 0, 0)) folder.mask = lm;   // over the canvas, as our folders are
@@ -1268,7 +1267,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             }
             layer.name = rec.name.empty() ? "Layer" : rec.name;
             layer.visible = !hidden;
-            layer.opacity = (rec.opacity / 255.0) * (rec.fillOpacity / 255.0);
+            layer.opacity = rec.opacity / 255.0;
+            layer.fill = rec.fillOpacity / 255.0;
             layer.blendMode = blend;
             layer.adjustment = adjustment;
             layer.extraJson = extraJson;
@@ -1277,7 +1277,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 layer = Layer(Asset::make(std::make_shared<Image>(1, 1), rec.name), Point(std::floor(type->anchorX), std::floor(type->anchorY)));
                 layer.name = rec.name.empty() ? "Layer" : rec.name;
                 layer.visible = !hidden;
-                layer.opacity = (rec.opacity / 255.0) * (rec.fillOpacity / 255.0);
+                layer.opacity = rec.opacity / 255.0;
+                layer.fill = rec.fillOpacity / 255.0;
                 layer.blendMode = blend;
                 layer.extraJson = extraJson;
             }

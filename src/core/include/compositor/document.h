@@ -208,7 +208,12 @@ struct Layer {
     /// A folder's children blend straight into what is below it (Photoshop's Pass Through); false isolates them
     /// and composites the folder's result in its own blend mode, as Photoshop does for every other mode.
     bool passThrough = true;
+    /// Opacity fades the layer and its effects; Fill (Photoshop's Fill Opacity) fades only its own pixels, so a layer
+    /// at Fill 0% shows its effects alone. In Color Burn, Linear Burn, Color Dodge, Linear Dodge (Add), Vivid Light,
+    /// Linear Light, Hard Mix and Difference, Fill works inside the blend (blend.h's fillIsSpecial). A folder's Fill
+    /// fades its contents like its opacity, its effects excepted.
     double opacity = 1;
+    double fill = 1;
     BlendMode blendMode = BlendMode::Normal;
     std::optional<Uuid> maskSourceId;
     std::optional<LayerMask> mask;
@@ -402,8 +407,8 @@ struct Document {
     bool fitsMacBudget() const {
         // The Mac app is 8-bit RGB only.
         if (sampleType != SampleType::U8 || colorMode != ColorMode::RGB) return false;
-        // The Mac app reads projects up to version 7: folders with their own opacity, mode or isolation need 8.
-        for (const Layer& l : layers) if (l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough || l.artboard)) return false;
+        // The Mac app reads projects up to version 7: folders with their own opacity, mode or isolation need 8, and a layer's Fill 10.
+        for (const Layer& l : layers) if (l.fill != 1 || (l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough || l.artboard))) return false;
         if (!slices.empty()) return false;
         return layerPixels() <= pixelBudget && maskPixels() <= pixelBudget;
     }

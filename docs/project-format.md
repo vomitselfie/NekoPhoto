@@ -84,6 +84,14 @@ toward that backdrop; `passThrough: false` isolates the children and composites 
 blend mode and opacity, as Photoshop does. A save writes version 7 whenever no folder uses these, so the Mac app
 (which reads up to 7) still opens it; version 7 files cannot give a folder non-default values.
 
+Version 10 gives a layer or folder its `fill` (finite 0–1, default 1): Photoshop's Fill, apart from `opacity`. Fill
+fades the layer's own pixels and leaves its effects (a folder's, its contents; [layer-styles.md](layer-styles.md#fill)). A save writes version 10 only when a
+layer's Fill is below 100%, so a document without one keeps opening in older releases; a manifest below version 10
+with `fill` is refused. Before version 10 a layer opened from a PSD kept Opacity × Fill as its one `opacity`, with the
+file's two values in its PSD data (`images/<id>.psdcarry`); such a project opens with them apart again while the
+opacity is still the product (a styled folder's, its Opacity alone), and a layer whose opacity was edited since keeps
+that opacity at Fill 100%, as it showed.
+
 Version 8 also carries the document's depth (docs/bit-depth.md): `"sampleType": "u16"` makes every layer's
 `imageFile` a 16-bit RGBA PNG and every `maskFile` a 16-bit grayscale PNG (0..65535 on disk, 0..32768 in memory,
 the values mapped on the way in and out). An 8-bit document writes no `sampleType` and its PNGs as before; a manifest

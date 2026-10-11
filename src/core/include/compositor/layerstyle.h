@@ -192,11 +192,8 @@ std::optional<FillPattern> parseFillPattern(const std::vector<uint8_t>& block);
 std::vector<uint8_t> authorGradientFill(const StyleGradient& gradient);
 std::vector<uint8_t> authorPatternFill(const FillPattern& pattern, const std::string& name = std::string());
 
-/// Master opacity and Fill as Photoshop splits them (NekoPhoto keeps one opacity: their product).
+/// The layer's master opacity (its effects and pixels) and Fill (its pixels alone), within 0..1.
 void layerOpacities(const Layer& layer, float& master, float& fill);
-/// A styled folder's Fill (its opacity holds only the master opacity): it fades the folder's contents but not its
-/// effects, which are made from the contents' unfaded shape. 1 for any other layer (their Fill is in their opacity).
-float folderContentFill(const Layer& layer);
 
 // ---- Pieces the renderer uses (layerstyle_render.cpp) --------------------------------------------------------
 

@@ -195,13 +195,37 @@ struct RenderExecDeep {
         });
     }
 
+    /// Whether the layer's Fill works inside its blend (blend.h's fillIsSpecial): its pixels are then drawn alone and
+    /// blended over the target by compositeFillRows.
+    bool fillInside(const Layer& layer) const {
+        return !plainOnly && layer.fill < 1 && fillIsSpecial(blendModeFor(blendOf(layer), document.colorMode));
+    }
+    /// `src` (pixels drawn alone over transparency) over `dst` in `mode` at `opacity` and Fill `fill`, through `coverage`,
+    /// in the document's channels (CMYK's and Lab's as stored, as their blending works).
+    void compositeFillRows(const Img& src, BlendMode mode, float opacity, float fill, const Gray* coverage, Img& dst) {
+        const BlendMode drawn = blendModeFor(mode, document.colorMode);
+        auto blend = [drawn](const float* cb, float* cs) {
+            if constexpr (S == SampleType::F32) { for (int k = 0; k < C; k++) cs[k] = blendChannelF(drawn, cb[k], cs[k]); }
+            else O::blendStraight(drawn, cb, cs);
+        };
+        parallelRows(0, outHeight, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                const Sample* s = src.row(y);
+                const Sample* c = coverage ? coverage->row(y) : nullptr;
+                Sample* d = dst.row(y);
+                for (int x = 0; x < outWidth; x++)
+                    if (s[x * N + C]) compositeAtFill(drawn, C, s + x * N, opacity * (c ? O::unit(c[x]) : 1.0f), fill, d + x * N, float(O::one), blend);
+            }
+        });
+    }
+
     void openGroup(const Layer& g, Img*& cur) {
         // Excluded channels hold over the folder's effects and every child, Pass Through or not.
         std::unique_ptr<Img> unexcluded = plan.excluded(g) ? std::make_unique<Img>(*cur) : nullptr;
         if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
         Frame f{&g, nullptr, nullptr, cur, std::move(unexcluded)};
         if (isolates(g)) { f.buffer = std::make_unique<Img>(blank(outWidth, outHeight)); cur = f.buffer.get(); }
-        else if (fades(g) || folderContentFill(g) < 1) f.before = std::make_unique<Img>(*cur);
+        else if (fades(g)) f.before = std::make_unique<Img>(*cur);
         frames.push_back(std::move(f));
     }
 
@@ -209,8 +233,8 @@ struct RenderExecDeep {
         if (frames.empty() || frames.back().group != &g) return;
         Frame f = std::move(frames.back());
         frames.pop_back();
-        // The contents at the folder's opacity and, when it has a style, its Fill (the effects are drawn after).
-        const float opacity = float(clamp(g.opacity, 0.0, 1.0)) * folderContentFill(g);
+        // The contents at the folder's opacity and Fill (the effects, drawn after, take its opacity alone).
+        const float opacity = RenderPlan::contentOpacity(g);
         // Blend Interior Effects as Group: the overlays and satins join the folder's result before its mode blends it.
         bool foldsInteriors = false;
         if constexpr (O::styles) {
@@ -341,7 +365,7 @@ struct RenderExecDeep {
         Params params;
         params.image = image;
         params.transform = transformOf(layer);
-        params.opacity = layer.opacity;
+        params.opacity = RenderPlan::contentOpacity(layer);
         params.mode = blendOf(layer);
         params.layerTransformForMask = params.transform;
         if (layer.mask) {
@@ -393,6 +417,9 @@ struct RenderExecDeep {
         if (!image) return;
         Params params = paramsFor(layer, image);
         if (!image->isEmpty() && !layer.asset) params.transform = LayerTransform(Point(0, 0), Size(document.width, document.height));
+        // Fill in the special eight: the pixels (and a shape's stroke) drawn alone, then blended at the layer's Fill.
+        const bool atFill = fillInside(layer);
+        const float opacity = float(clamp(layer.opacity, 0.0, 1.0)), fill = float(clamp(layer.fill, 0.0, 1.0));
         const Gray* coverageWithoutVector = coverage;
         const std::optional<MaskParameters> maskParameters = layer.psdCarry ? parseMaskParameters(layer.psdCarry->maskData) : std::nullopt;
         std::optional<VectorPath> vector = layerVectorMask(layer, document);
@@ -460,7 +487,14 @@ struct RenderExecDeep {
                 }
             });
         };
-        auto drawStroke = [&] { strokeInto(target, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)) * (stroke ? stroke->opacity : 1.0f), coverageWithoutVector, true); };
+        auto drawStroke = [&] {
+            if (!stroke || !stroke->enabled) return;
+            if (atFill) {
+                Img own = blank(outWidth, outHeight);
+                strokeInto(own, BlendMode::Normal, stroke->opacity, coverageWithoutVector, true);
+                compositeFillRows(own, blendOf(layer), opacity, fill, nullptr, target);
+            } else strokeInto(target, blendOf(layer), RenderPlan::contentOpacity(layer) * stroke->opacity, coverageWithoutVector, true);
+        };
         // A shape layer with a Feather: Photoshop draws the shape, fill and stroke, then feathers the drawing as a whole
         // (the 8-bit executor's rule, render_plan.h's featherDrawnShape).
         const bool stroked = stroke && stroke->enabled;
@@ -477,7 +511,8 @@ struct RenderExecDeep {
             }
             if (stroked) strokeInto(shape, BlendMode::Normal, stroke->opacity, nullptr, false);
             featherDrawnShape(shape, N, vectorFeatherSigma(*maskParameters->vectorFeather) * scale);
-            compositeRows(shape, blendOf(layer), float(clamp(layer.opacity, 0.0, 1.0)), coverageWithoutVector, target);
+            if (atFill) compositeFillRows(shape, blendOf(layer), opacity, fill, coverageWithoutVector, target);
+            else compositeRows(shape, blendOf(layer), RenderPlan::contentOpacity(layer), coverageWithoutVector, target);
             return;
         }
         if (stroke && stroke->enabled && !stroke->fillEnabled) { drawStroke(); return; }
@@ -520,7 +555,14 @@ struct RenderExecDeep {
                 drawStroke();
                 return;
             }
-        O::drawLayer(params, region, scale, coverage, target);
+        if (atFill) {
+            Params plain = params;
+            plain.opacity = 1;
+            plain.mode = BlendMode::Normal;
+            Img own = blank(outWidth, outHeight);
+            O::drawLayer(plain, region, scale, coverage, own);
+            compositeFillRows(own, params.mode, opacity, fill, nullptr, target);
+        } else O::drawLayer(params, region, scale, coverage, target);
         drawStroke();
     }
 
@@ -563,7 +605,7 @@ struct RenderExecDeep {
             if (!O::adjust(document, *layer.adjustment, adjusted, region, scale)) return;
         } else if (!O::adjust(*layer.adjustment, adjusted, region, scale)) return;
         const BlendMode mode = blendOf(layer);
-        const float opacity = float(clamp(layer.opacity, 0.0, 1.0));
+        const float opacity = RenderPlan::contentOpacity(layer);
         Cover clip = coverage;
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image) {
             auto own = std::make_shared<Gray>(outWidth, outHeight, 0);

@@ -973,6 +973,18 @@ void drawStyled(const StyledDraw& in, Img& target) {
     // carries them; without (Photoshop's default) its mode blends its own pixels and the interiors land on that.
     const bool interiorsFirst = style.blendInteriorAsGroup;
     const EffectBlend layerMode = asEffect(in.mode);
+    // Fill in Photoshop's special eight (blend.h's fillIsSpecial): the pixels blend at Fill, covering the backdrop by
+    // the opacity alone; Fill stays coverage over transparency.
+    const BlendMode drawnMode = blendModeFor(in.mode, M);
+    const bool fillInside = fill < 1 && fillIsSpecial(drawnMode);
+    auto blendAtLayerFill = [&](const float* b, const float* c, float* out) {
+        for (int k = 0; k < nc; k++) out[k] = c[k];
+        blendAtFill(drawnMode, nc, b, out, fill, [&](const float* cb, float* cs) {
+            float blended[4];
+            blendEffect<M>(layerMode, cb, cs, blended);
+            for (int k = 0; k < nc; k++) cs[k] = blended[k];
+        });
+    };
     if (ownContent) paintOut([&](int ox, int oy, T* d, size_t i) {
         const T* p = source.row(oy - wy0) + (ox - wx0) * n;
         if (p[nc] == 0) return;
@@ -982,7 +994,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
             if constexpr (S == SampleType::F32) c[k] = std::max(0.0f, p[k] / a);   // linear, above 1 kept
             else c[k] = std::min(1.0f, p[k] / one / a);
         }
-        const float paint = a * master * fill * knock(i) * coverAt(ox, oy);
+        const float paint = a * master * (fillInside ? 1.0f : fill) * knock(i) * coverAt(ox, oy);
         if (paint <= 0) return;
         if (foldInteriors && interiorsFirst) foldInto(c, ox, oy, i);
         if (in.mode != BlendMode::Normal && foldInteriors && !interiorsFirst) {
@@ -1007,10 +1019,30 @@ void drawStyled(const StyledDraw& in, Img& target) {
             if (ba > 0) {
                 float b[4], blended[4];
                 for (int k = 0; k < nc; k++) b[k] = bd[k] / one / ba;
-                blendEffect<M>(layerMode, b, c, blended);
+                if (fillInside) blendAtLayerFill(b, c, blended);
+                else blendEffect<M>(layerMode, b, c, blended);
                 for (int k = 0; k < nc; k++) c[k] = c[k] + (blended[k] - c[k]) * ba;
             }
-            compositeEffect<T, M>(d, c, paint, EffectBlend::Normal);
+            // At Fill in the special eight, the part over transparency is Fill's coverage.
+            compositeEffect<T, M>(d, c, fillInside ? paint * (ba + (1 - ba) * fill) : paint, EffectBlend::Normal);
+            return;
+        }
+        if (fillInside) {
+            // The layer's colour at Fill over the backdrop by `paint`, and alone over transparency by `paint` x Fill.
+            const float da = std::clamp(d[nc] / one, 0.0f, 1.0f), alone = paint * fill, outA = da + (1 - da) * alone;
+            float b[4] = {}, blended[4];
+            if (da > 0) for (int k = 0; k < nc; k++) b[k] = d[k] / one / da;
+            blendAtLayerFill(b, c, blended);
+            for (int k = 0; k < nc; k++) {
+                const float premul = da * (1 - paint) * b[k] + da * paint * blended[k] + (1 - da) * alone * c[k];
+                if constexpr (std::is_same_v<T, float>) d[k] = std::max(0.0f, premul);
+                else d[k] = T(std::clamp(premul * one + 0.5f, 0.0f, one));
+            }
+            if constexpr (std::is_same_v<T, float>) d[nc] = std::clamp(outA, 0.0f, 1.0f);
+            else {
+                d[nc] = T(std::clamp(outA * one + 0.5f, 0.0f, one));
+                for (int k = 0; k < nc; k++) d[k] = std::min(d[k], d[nc]);
+            }
             return;
         }
         compositeEffect<T, M>(d, c, paint, layerMode);

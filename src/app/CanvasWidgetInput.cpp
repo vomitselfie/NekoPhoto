@@ -230,9 +230,18 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         return;
     default: break;
     }
-    if (e->key() >= Qt::Key_0 && e->key() <= Qt::Key_9 && !(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {
-        session_->typeOpacityDigit(e->key() - Qt::Key_0);
-        return;
+    if (!(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {
+        // The digits set the opacity; with Shift (the digit row's shifted symbols on a US layout) the layers' Fill,
+        // as Photoshop's Move tool does.
+        static constexpr int shifted[10] = {Qt::Key_ParenRight, Qt::Key_Exclam, Qt::Key_At, Qt::Key_NumberSign, Qt::Key_Dollar,
+                                            Qt::Key_Percent, Qt::Key_AsciiCircum, Qt::Key_Ampersand, Qt::Key_Asterisk, Qt::Key_ParenLeft};
+        const bool shift = e->modifiers() & Qt::ShiftModifier;
+        int digit = e->key() >= Qt::Key_0 && e->key() <= Qt::Key_9 ? e->key() - Qt::Key_0 : -1;
+        if (digit < 0 && shift) for (int d = 0; d < 10; d++) if (e->key() == shifted[d]) digit = d;
+        if (digit >= 0) {
+            session_->typeOpacityDigit(digit, shift);
+            return;
+        }
     }
     QWidget::keyPressEvent(e);
 }

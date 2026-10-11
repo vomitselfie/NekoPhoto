@@ -352,7 +352,8 @@ Layer carried(const std::string& name, std::shared_ptr<Image> image, Point at, c
     c->blendingRanges = std::vector<uint8_t>(40, 0);
     c->blendingRanges[3] = 0xff;
     c->opacity = 204; c->fill = 128;
-    l.opacity = 204 / 255.0 * (128 / 255.0);
+    l.opacity = 204 / 255.0;
+    l.fill = 128 / 255.0;
     c->layerId = 42;
     c->blendKey = blend;
     c->blendAs = int(as);
@@ -394,9 +395,11 @@ TEST_CASE(psd_carry_comes_back_while_it_is_still_true) {
     CHECK_EQ(int(back[0].psdCarry->fill), 128);
     CHECK_EQ(int(back[0].psdCarry->layerId), 42);
     CHECK(back[1].psdCarry->layerId != 42 && back[2].psdCarry->layerId != 42);   // ids stay unique
-    CHECK_EQ(int(back[3].psdCarry->fill), 255);                                 // ours alone once changed
+    CHECK_EQ(int(back[3].psdCarry->fill), 128);                                 // a new opacity leaves the Fill alone
     CHECK(std::abs(back[3].opacity - 0.3) < 1.0 / 255);
-    CHECK(std::abs(back[0].opacity - doc.layers[0].opacity) < 1.0 / 255);
+    CHECK(std::abs(back[3].fill - 128 / 255.0) < 1e-9);
+    CHECK(std::abs(back[0].opacity - doc.layers[0].opacity) < 1e-9);
+    CHECK(std::abs(back[0].fill - doc.layers[0].fill) < 1e-9);
     bool textNote = false, vectorWarning = false;
     for (auto& n : rt.summary.notes) textNote |= n.find("Painted") != std::string::npos && n.find("editable text") != std::string::npos;
     for (auto& w : rt.summary.warnings) vectorWarning |= w.find("Moved") != std::string::npos && w.find("vector mask") != std::string::npos;
