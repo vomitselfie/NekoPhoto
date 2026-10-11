@@ -88,6 +88,14 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& m
 std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& matte, const MatteTransfer& decode = MatteTransfer::identity());
 /// The same on a 16-bit layer: its colours read and written at 16 bits (Decontaminate Colors in a 16-bit document).
 std::shared_ptr<Image16> estimateForeground(const Image16& image, const AlphaPlane& matte, const MatteTransfer& decode = MatteTransfer::identity());
+/// In CMYK and Lab, on the document's own samples (the compositing equation holds per stored sample, as the layer mask
+/// blends them): Lab's L, a and b through the Image and four-channel Image16 overloads above (identity `decode`); CMYK's
+/// four inks as stored, through this 8-bit overload and the Image16 one when it has five channels. Nothing passes
+/// through RGB; alpha is kept.
+std::shared_ptr<ImageC8> estimateForeground(const ImageC8& image, const AlphaPlane& matte);
+/// Whichever of the above `image` holds (RGB or Lab at 8 or 16 bits, CMYK at either), in its own layout and depth;
+/// null for a 32-bit buffer.
+AnyImage estimateForegroundAny(const AnyImage& image, const AlphaPlane& matte);
 
 /// Guided filtering (He, Sun & Tang): `mask` pulled onto the edges of `guide` (the layer's pixels), on a copy no
 /// larger than `limit` on its longest side (0 for full size).

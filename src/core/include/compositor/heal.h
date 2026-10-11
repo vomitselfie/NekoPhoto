@@ -39,7 +39,7 @@ void healFrom(Image16& image, const Image16& source, const Gray16& coverage, flo
 
 /// Both in CMYK (five samples, the inks stored inverted, then alpha): 8-bit `ImageC8`, and the Image16 overloads above
 /// when the image has five channels. The patch is chosen on the plates' look reduced to 8 bits; every sample is healed.
-/// Content-Aware copies the best-matching nearby patch (the synthesis works on RGBA).
+/// Content-Aware synthesises the spot on the inks themselves (inpaint.h).
 void spotHeal(ImageC8& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed, const GrayImage* visible = nullptr);
 void healFrom(ImageC8& image, const ImageC8& source, const GrayImage& coverage, float opacity, const GrayImage* visible = nullptr);
 

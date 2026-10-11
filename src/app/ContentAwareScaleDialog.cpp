@@ -54,9 +54,9 @@ ContentAwareScaleDialog::ContentAwareScaleDialog(EditorSession* session, QWidget
     // A reduced copy of the layer (and of the selection over it) for the preview.
     const Document* doc = session_->document() ? &*session_->document() : nullptr;
     const Layer* layer = session_->activeLayer();
-    // The preview is drawn at 8 bits whatever the document's depth.
-    std::shared_ptr<const Image> shown = layer && layer->asset ? layer->asset->image.u8() : nullptr;
-    if (!shown && layer && layer->asset && layer->asset->image.u16()) shown = narrowImage(*layer->asset->image.u16());
+    // The preview is drawn at 8 bits whatever the document's depth, in sRGB whatever its mode (the seams the preview
+    // shows are chosen on that picture; the command carves the layer's own samples).
+    std::shared_ptr<const Image> shown = layer && layer->asset && layer->asset->image ? session_->analysisView(layer->asset->image) : nullptr;
     if (doc && layer && !layer->isGroup && shown) {
         const Image& src = *shown;
         pixelWidth_ = src.width(); pixelHeight_ = src.height();

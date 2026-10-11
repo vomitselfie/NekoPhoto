@@ -295,20 +295,21 @@ void EditorSession::applySubjectMask(std::shared_ptr<const Gray16> mask, std::sh
     m.enabled = true;
     layer->mask = m;
     isMaskSelected_ = true;
-    if (pixels && pixels->width() == out->width() && pixels->height() == out->height()) {
-        layer->asset = Asset::makeAny(Image16Ptr(pixels), layer->name);
+    if (pixels && pixels->width() == out->width() && pixels->height() == out->height() && pixels->channels() == src.channels()) {
+        layer->asset = modeAsset(Image16Ptr(pixels), layer->name);
         layer->shapeImage.reset();
     }
     endEdit();
     notifyDocument();
 }
 
-void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std::shared_ptr<const Image> pixels, std::optional<Uuid> layerId) {
+void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, AnyImage pixels, std::optional<Uuid> layerId) {
     if (refusedAtDepth("edit.removeBackground", tr("Remove Background"))) return;
     clearPixelPreview();
     Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayerMutable();
-    if (!layer || !mask || !layer->asset || !layer->asset->image.u8()) return;
-    const Image& src = *layer->asset->image.u8();
+    // An 8-bit layer: RGB or Lab (`Image`), or CMYK (`ImageC8`).
+    if (!layer || !mask || !layer->asset || !(layer->asset->image.u8() || layer->asset->image.c8())) return;
+    const AnyImage& src = layer->asset->image;
     if (mask->width() != src.width() || mask->height() != src.height()) return;
     auto out = std::make_shared<GrayImage>(*mask);
     // A mask already on the layer (in its own grid) is kept: what either one hides stays hidden.
@@ -330,8 +331,8 @@ void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std:
     m.enabled = true;
     layer->mask = m;
     isMaskSelected_ = true;
-    if (pixels && pixels->width() == out->width() && pixels->height() == out->height()) {
-        layer->asset = Asset::make(pixels, layer->name);
+    if (pixels && pixels.sampleType() == SampleType::U8 && pixels.channels() == src.channels() && pixels.width() == out->width() && pixels.height() == out->height()) {
+        layer->asset = modeAsset(pixels, layer->name);
         layer->shapeImage.reset();
     }
     endEdit();

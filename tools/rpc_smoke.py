@@ -1440,6 +1440,62 @@ def colour_mode_painting(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def colour_mode_content_aware(rpc):
+    """Content-Aware Fill, Move, Extend and Scale, Remove Background and Select > Subject in CMYK and Lab documents at 8
+    and 16 bits (docs/color-modes.md): the fill takes the surrounding inks (or L, a and b) exactly, pixels outside the
+    selection keep theirs, and each is one undo step. The model-driven methods need the downloaded models and OpenCV;
+    without them they fail with the model's reason, never a refusal for the mode."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    info = rpc.call("app.info")
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=96, height=64)
+        rpc.call("pixels.fill", color="#3a6ea5")
+        assert rpc.call("image.mode", colorMode=mode, bits=bits)["colorMode"] == mode
+        rpc.call("brush.stroke", points=[[40, 20], [56, 40]], size=8, color="#000000")
+        field = rpc.call("color.sample", x=10, y=50)["values"]
+        outside = rpc.call("color.sample", x=50, y=30)["values"]
+        rpc.call("selection.rect", x=30, y=10, width=34, height=42)
+        assert rpc.call("pixels.contentAwareFill")["filled"]
+        assert rpc.call("history.info")["undo"] == "Content-Aware Fill"
+        assert rpc.call("color.sample", x=47, y=31)["values"] == field, ("the field's own inks or L a b", mode, bits)
+        assert rpc.call("color.sample", x=10, y=50)["values"] == field, "outside the selection untouched"
+        assert rpc.call("document.info")["bits"] == bits
+        rpc.call("history.undo")
+        assert rpc.call("color.sample", x=50, y=30)["values"] == outside
+        layers = len(rpc.call("layers.list"))
+        filled = rpc.call("pixels.contentAwareFill", sampling="all", output="new")
+        assert filled["filled"] and "layer" in filled and len(rpc.call("layers.list")) == layers + 1, filled
+        rpc.call("history.undo")
+        moved = rpc.call("pixels.contentAwareMove", dx=-30, dy=0, adaptation=0)
+        assert moved["moved"] and rpc.call("history.info")["undo"] == "Content-Aware Move", moved
+        assert rpc.call("color.sample", x=47, y=31)["values"] == field, ("the hole the move left", mode, bits)
+        rpc.call("history.undo")
+        rpc.call("selection.rect", x=30, y=10, width=34, height=42)
+        assert rpc.call("pixels.contentAwareMove", dx=-30, dy=0, mode="extend")["mode"] == "extend"
+        rpc.call("history.undo")
+        scaled = rpc.call("pixels.contentAwareScale", widthPercent=80, protectSelection=True)
+        assert abs(scaled["width"] - 77) <= 1 and rpc.call("history.info")["undo"] == "Content-Aware Scale", scaled
+        assert rpc.call("color.sample", x=5, y=5)["values"] == field, "the field carried"
+        rpc.call("history.undo")
+        rpc.call("selection.none")
+        if info.get("clickSelect"):
+            assert rpc.call("selection.subject", box=[30, 10, 66, 50])["prompts"] >= 1
+            rpc.call("selection.none")
+        try:
+            applied = rpc.call("pixels.removeBackground", refine=True, decontaminate=True)
+            assert applied["applied"] and rpc.call("history.info")["undo"] == "Remove Background", applied
+            assert rpc.call("layers.get", id=rpc.call("layers.list")[0]["id"])["mask"], "the background hidden by a mask"
+            assert rpc.call("document.info")["bits"] == bits
+            rpc.call("history.undo")
+        except RuntimeError as e:
+            assert "mode" not in str(e), e
+            print("removeBackground in %s %d:" % (mode, bits), e)
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def colour_mode_vectors(rpc):
     """Text, shapes and layer styles in CMYK and Lab documents at 8 and 16 bits (docs/color-modes.md): the Type tool and
     editing, a shape whose fill is the colour through the profile (as the brush lays it), Fill and Stroke Path, vector
@@ -2660,6 +2716,7 @@ def main():
     colour_modes(rpc)
     pixel_clipboard(rpc)
     colour_mode_painting(rpc)
+    colour_mode_content_aware(rpc)
     colour_mode_vectors(rpc)
     gradient_methods(rpc)
     colour_mode_adjustments(rpc)

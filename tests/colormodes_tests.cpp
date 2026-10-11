@@ -210,6 +210,11 @@ TEST_CASE(supports_has_a_mode_axis) {
     // Text, shapes and layer styles (P8).
     for (const char* f : {"tool.text", "edit.text", "tool.shape", "tool.pen", "tool.directSelect", "edit.vector", "edit.paint", "edit.style"})
         for (ColorMode m : {ColorMode::CMYK, ColorMode::Lab}) CHECK(supports(f, SampleType::U8, m) && supports(f, SampleType::U16, m));
+    // The content-aware tools and Remove Background on the document's own samples; still not at 32 bits.
+    for (const char* f : {"edit.contentAware", "edit.removeBackground"}) {
+        for (ColorMode m : {ColorMode::CMYK, ColorMode::Lab}) CHECK(supports(f, SampleType::U8, m) && supports(f, SampleType::U16, m));
+        CHECK(!supports(f, SampleType::F32, ColorMode::RGB));
+    }
     CHECK(supports("tool.crop", SampleType::U16, ColorMode::CMYK) && supports("edit.clipboard", SampleType::U8, ColorMode::Lab));
     CHECK(supports("tool.dodge", SampleType::U16, ColorMode::CMYK));
     CHECK_EQ(unavailableReason("tool.dodge", SampleType::F32, ColorMode::RGB), std::string("Not available in 32-bit mode"));

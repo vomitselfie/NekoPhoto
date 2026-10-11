@@ -1151,8 +1151,52 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& 
     return estimateForegroundAt(image, matte, decode);
 }
 
+namespace {
+
+/// CMYK: the solve works on three samples and alpha, so the inks go through it in two passes, C, M and Y, then K, each
+/// with the image's own alpha, and come back together as stored.
+template <SampleType S, class Four>
+std::shared_ptr<ImageT<S>> estimateInks(const ImageT<S>& image, const AlphaPlane& matte) {
+    auto out = std::make_shared<ImageT<S>>(image);
+    const int w = image.width(), h = image.height();
+    if (image.channels() != 5 || w <= 0 || h <= 0 || matte.width != w || matte.height != h) return out;
+    Four cmy(w, h), black(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const SampleOf<S>* p = image.pixel(x, y);
+            auto* a = cmy.pixel(x, y);
+            auto* k = black.pixel(x, y);
+            for (int c = 0; c < 3; c++) { a[c] = p[c]; k[c] = p[3]; }
+            a[3] = k[3] = p[4];
+        }
+    const auto cmyOut = estimateForegroundAt(cmy, matte, MatteTransfer::identity());
+    const auto blackOut = estimateForegroundAt(black, matte, MatteTransfer::identity());
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            SampleOf<S>* p = out->pixel(x, y);
+            const auto* a = cmyOut->pixel(x, y);
+            for (int c = 0; c < 3; c++) p[c] = SampleOf<S>(a[c]);
+            p[3] = SampleOf<S>(blackOut->pixel(x, y)[0]);
+        }
+    return out;
+}
+
+} // namespace
+
 std::shared_ptr<Image16> estimateForeground(const Image16& image, const AlphaPlane& matte, const MatteTransfer& decode) {
+    if (image.channels() == 5) return estimateInks<SampleType::U16, Image16>(image, matte);
     return estimateForegroundAt(image, matte, decode);
+}
+
+std::shared_ptr<ImageC8> estimateForeground(const ImageC8& image, const AlphaPlane& matte) {
+    return estimateInks<SampleType::U8, Image>(image, matte);
+}
+
+AnyImage estimateForegroundAny(const AnyImage& image, const AlphaPlane& matte) {
+    if (const Image16Ptr& deep = image.u16()) return Image16Ptr(estimateForeground(*deep, matte));
+    if (const ImageC8Ptr& inks = image.c8()) return ImageC8Ptr(estimateForeground(*inks, matte));
+    if (const ImagePtr& eight = image.u8()) return ImagePtr(estimateForeground(*eight, matte));
+    return {};
 }
 
 } // namespace compositor

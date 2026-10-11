@@ -23,7 +23,7 @@
   <!-- compat-badges:start (tools/compat_table.py --write) -->
   <a href="docs/compatibility.md#at-a-glance"><img alt="PSD round trip: 117 of 117 files" src="https://img.shields.io/badge/PSD%20round%20trip-117%2F117-2ea44f?style=flat-square"></a>
   <a href="docs/compatibility.md#at-a-glance"><img alt="Matches Photoshop's render: 58 of 72 files" src="https://img.shields.io/badge/Photoshop%20match-58%2F72-97ca00?style=flat-square"></a>
-  <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 94 CTest suites" src="https://img.shields.io/badge/tests-94%20suites-2f7bf5?style=flat-square"></a>
+  <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 95 CTest suites" src="https://img.shields.io/badge/tests-95%20suites-2f7bf5?style=flat-square"></a>
   <a href="docs/automation.md"><img alt="Automation: 184 methods" src="https://img.shields.io/badge/automation-184%20methods-2f7bf5?style=flat-square"></a>
   <!-- compat-badges:end -->
 </p>
@@ -356,7 +356,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
   <!-- compat-badges-ja:start (tools/compat_table.py --write) -->
   <a href="docs/compatibility.md#日本語"><img alt="PSD の往復: 117 個中 117 個" src="https://img.shields.io/badge/PSD%20%E5%BE%80%E5%BE%A9-117%2F117-2ea44f?style=flat-square"></a>
   <a href="docs/compatibility.md#日本語"><img alt="Photoshop の描画と一致: 72 個中 58 個" src="https://img.shields.io/badge/Photoshop%20%E3%81%A8%E4%B8%80%E8%87%B4-58%2F72-97ca00?style=flat-square"></a>
-  <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 94 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%2094%20%E5%80%8B-2f7bf5?style=flat-square"></a>
+  <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 95 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%2095%20%E5%80%8B-2f7bf5?style=flat-square"></a>
   <a href="docs/automation.md"><img alt="自動操作: メソッド 184 個" src="https://img.shields.io/badge/%E8%87%AA%E5%8B%95%E6%93%8D%E4%BD%9C-%E3%83%A1%E3%82%BD%E3%83%83%E3%83%89%20184%20%E5%80%8B-2f7bf5?style=flat-square"></a>
   <!-- compat-badges-ja:end -->
 </p>

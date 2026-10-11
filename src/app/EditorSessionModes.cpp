@@ -54,6 +54,15 @@ AnyImage timesCoverage(const AnyImage& image, const AnyGray& coverage, int dx, i
 
 } // namespace
 
+std::shared_ptr<const Image> EditorSession::analysisView(const AnyImage& image) const {
+    if (!image || image.f32()) return nullptr;
+    AnyImage rgb = image;
+    if (document_ && document_->colorMode != ColorMode::RGB)
+        rgb = convertImage(image, document_->colorMode, document_->profile, ColorMode::RGB, ColorProfile(), color::conversionOptions());
+    if (const Image16Ptr& deep = rgb.u16(); deep && deep->channels() == 4) return narrowImage(*deep);
+    return rgb.u8();
+}
+
 Asset EditorSession::modeAsset(const AnyImage& image, const std::string& name) const {
     Asset asset = Asset::makeAny(image, name);
     if (document_ && document_->colorMode != ColorMode::RGB) asset.thumbnail = modeThumbnail(image, document_->colorMode, document_->profile);

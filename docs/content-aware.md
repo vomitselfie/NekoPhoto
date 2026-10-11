@@ -7,6 +7,10 @@ the best, then a membrane on the low-pass band evens out the tone. It is determi
 same fill every time. It deliberately differs from Photoshop's fill (no patch rotation, scaling or mirroring, no
 hand-painted sampling area); see [legal-boundaries.md](legal-boundaries.md).
 
+Both work at 8 and 16 bits and in RGB, CMYK and Lab documents, on the document's own samples: in CMYK the patches
+are compared on the four inks and alpha and the hole takes their inks, in Lab L, a and b; nothing is converted
+([color-modes.md](color-modes.md)). Content-Aware Scale carries the layer's own samples the same way.
+
 ## Content-Aware Fill
 
 Edit > Content-Aware Fill… (Shift+F5) needs a selection on a visible pixel layer. The dialog shows the document
