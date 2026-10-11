@@ -614,9 +614,17 @@ def remaining_methods(rpc):
     assert "left" not in rpc.call("view.screenMode", panels="exceptTools")["out"]
     rpc.call("screenshot", maxSize=64)
     assert rpc.call("view.screenMode", panels="hidden")["out"] == []
+    expect_refused(rpc, "Standard Screen Mode", "view.screenMode", panels="hiddenRight")
     back = rpc.call("view.screenMode", mode="standard")
-    assert back == {"mode": "standard", "out": []}, back
-    expect_refused(rpc, "Full Screen Mode", "view.screenMode", panels="all")
+    assert back == {"mode": "standard", "out": [], "hidden": "none"}, back
+    # In the standard mode Tab hides the panels, tools and options bar, Shift+Tab the panels on the right.
+    assert rpc.call("view.screenMode", panels="hidden")["hidden"] == "all"
+    assert rpc.call("view.screenMode", panels="all")["hidden"] == "none"
+    assert rpc.call("view.screenMode", panels="hiddenRight")["hidden"] == "right"
+    assert rpc.call("view.screenMode", mode="full")["hidden"] == "right"
+    assert rpc.call("view.screenMode", mode="standard")["hidden"] == "right"
+    assert rpc.call("view.screenMode", panels="all")["hidden"] == "none"
+    expect_refused(rpc, "Full Screen Mode", "view.screenMode", panels="exceptTools")
     assert rpc.call("history.info")["undo"] == undo, "the screen mode is not an undo step"
     project = os.path.join(work, "Coverage.comp")
     rpc.call("document.save", path=project)

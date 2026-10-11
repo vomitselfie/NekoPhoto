@@ -2078,6 +2078,7 @@ int keyboardShortcuts(MainWindow& w) {
 
 int workCounters(MainWindow& window);   // SelfTestWork.cpp
 int fullScreen(MainWindow& window);     // SelfTestFullScreen.cpp
+int hidePanels(MainWindow& window);     // SelfTestHidePanels.cpp
 
 int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("command-path")) {
@@ -2095,7 +2096,8 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("work-counters")) return workCounters(window);
     if (name == QLatin1String("shortcuts")) return keyboardShortcuts(window);
     if (name == QLatin1String("full-screen")) return fullScreen(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen)\n", qPrintable(name));
+    if (name == QLatin1String("hide-panels")) return hidePanels(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen, hide-panels)\n", qPrintable(name));
     return 2;
 }
 

@@ -118,6 +118,8 @@ public:
 
 signals:
     void activeChanged(bool active);
+    /// The standard window's dock layout was given back (on leaving, and again as the window comes back to its size).
+    void normalLayoutRestored();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

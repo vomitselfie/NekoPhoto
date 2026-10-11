@@ -1,6 +1,7 @@
 #include "compositor/raw.h"
 #include "Automation.h"
 #include "FullScreen.h"
+#include "HidePanels.h"
 #include "ColorManagement.h"
 #include "Language.h"
 #include "ActionLibrary.h"
@@ -617,16 +618,25 @@ void AutomationServer::registerAppHandlers() {
             if (mode != QLatin1String("standard") && mode != QLatin1String("full")) fail("mode must be standard or full", invalidParams);
             w->setScreenMode(mode == QLatin1String("full"));
         }
+        HidePanels* hide = w->hidePanels();
         if (has(p, "panels")) {
             const QString panels = str(p, "panels");
-            if (panels != QLatin1String("hidden") && panels != QLatin1String("all") && panels != QLatin1String("exceptTools")) fail("panels must be hidden, all or exceptTools", invalidParams);
-            if (!fs->active()) fail("panels needs Full Screen Mode (mode full)", invalidParams);
-            fs->pin(panels != QLatin1String("hidden"), panels == QLatin1String("all"));
+            if (panels != QLatin1String("hidden") && panels != QLatin1String("all") && panels != QLatin1String("exceptTools") && panels != QLatin1String("hiddenRight"))
+                fail("panels must be hidden, all, exceptTools or hiddenRight", invalidParams);
+            if (fs->active()) {
+                if (panels == QLatin1String("hiddenRight")) fail("panels hiddenRight is for the Standard Screen Mode (in full screen: exceptTools)", invalidParams);
+                fs->pin(panels != QLatin1String("hidden"), panels == QLatin1String("all"));
+            } else {
+                // The standard window (HidePanels.h): Tab hides everything, Shift+Tab the panels on the right.
+                if (panels == QLatin1String("exceptTools")) fail("panels exceptTools needs Full Screen Mode (in the standard mode: hiddenRight)", invalidParams);
+                hide->set(panels == QLatin1String("all") ? HidePanels::None : panels == QLatin1String("hidden") ? HidePanels::All : HidePanels::Right);
+            }
         }
         QJsonArray out;
         const char* names[] = {"left", "top", "right", "bottom"};
         for (int i = 0; i < FullScreenMode::edgeCount; i++) if (fs->isOut(FullScreenMode::Edge(i))) out.append(QString::fromLatin1(names[i]));
-        return QJsonObject{{"mode", fs->active() ? "full" : "standard"}, {"out", out}};
+        const char* hiddenNames[] = {"none", "all", "right"};
+        return QJsonObject{{"mode", fs->active() ? "full" : "standard"}, {"out", out}, {"hidden", QString::fromLatin1(hiddenNames[hide->hidden()])}};
     });
 }
 

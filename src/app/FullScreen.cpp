@@ -1,6 +1,7 @@
 // Full screen mode with edge flyouts: see FullScreen.h.
 #include "FullScreen.h"
 #include "CanvasWidget.h"
+#include "HidePanels.h"
 #include "MainWindow.h"
 #include "ToolOptionsBar.h"
 #include <QApplication>
@@ -35,11 +36,6 @@
 namespace app {
 
 namespace {
-
-/// A field that takes typed text: Tab and the letters stay with it.
-bool isTextField(const QWidget* w) {
-    return w && (w->inherits("QLineEdit") || w->inherits("QAbstractSpinBox") || w->inherits("QTextEdit") || w->inherits("QPlainTextEdit"));
-}
 
 Qt::Edge qtEdge(FullScreenMode::Edge edge) {
     switch (edge) {
@@ -442,6 +438,7 @@ void FullScreenMode::leave() {
     }
     w->restoreState(savedState_);
     for (size_t i = 0; i < w->tabs_.size(); i++) w->tabs_[i].options->setVisible(int(i) == w->current_);
+    emit normalLayoutRestored();
     // The window comes back to its size a moment later on most desktops: the layout is restored again then.
     reapplyState_ = true;
     QTimer::singleShot(1500, this, [this] { reapplyState_ = false; });
@@ -673,7 +670,7 @@ bool FullScreenMode::keepsOut(Edge edge) const {
     if (QWidget* active = QApplication::activeWindow(); active && active != window_) return true;
     // A drag that began in it (a layer dragged onto the canvas), or a field in it with the keys.
     if (pressEdge_ == int(edge) && buttons_ != Qt::NoButton) return true;
-    if (QWidget* focus = QApplication::focusWidget(); focus && s.flyout->isAncestorOf(focus) && isTextField(focus)) return true;
+    if (QWidget* focus = QApplication::focusWidget(); focus && s.flyout->isAncestorOf(focus) && takesTypedText(focus)) return true;
     return false;
 }
 
@@ -695,6 +692,7 @@ bool FullScreenMode::eventFilter(QObject* watched, QEvent* event) {
                 window_->restoreState(savedState_);
                 for (size_t i = 0; i < window_->tabs_.size(); i++) window_->tabs_[i].options->setVisible(int(i) == window_->current_);
                 if (window_->size() == normalSize_) reapplyState_ = false;
+                emit normalLayoutRestored();
             }
         }
         if (!active_) return false;
@@ -755,11 +753,7 @@ bool FullScreenMode::eventFilter(QObject* watched, QEvent* event) {
     case QEvent::ShortcutOverride: {
         auto* ke = static_cast<QKeyEvent*>(event);
         if (ke->key() != Qt::Key_Alt) altArmed_ = false;
-        // Tab and Shift+Tab move between fields while one has the keys, rather than pinning the edges.
-        if ((ke->key() == Qt::Key_Tab || ke->key() == Qt::Key_Backtab) && isTextField(QApplication::focusWidget())) {
-            ke->accept();
-            return true;
-        }
+        // (Tab and Shift+Tab in a field stay with it: HidePanels sees to that in either screen mode.)
         break;
     }
     case QEvent::KeyPress: {

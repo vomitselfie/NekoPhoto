@@ -41,6 +41,7 @@ class AutomationServer;
 class ToolOptionsBar;
 class CommandPalette;
 class FullScreenMode;
+class HidePanels;
 struct PaletteEntry;
 
 /// The tab strip: accepts a layer dragged from another project's Layers panel.
@@ -59,6 +60,7 @@ protected:
 class MainWindow : public QMainWindow {
     Q_OBJECT
     friend class FullScreenMode;
+    friend class HidePanels;
 public:
     MainWindow();
     void openPath(const QString& path);
@@ -165,6 +167,8 @@ public:
     /// View > Screen Mode: Full Screen (F) or Standard (FullScreen.h).
     void setScreenMode(bool fullScreen);
     FullScreenMode* fullScreenMode() const { return fullScreen_; }
+    /// Tab and Shift+Tab in the Standard Screen Mode (HidePanels.h).
+    HidePanels* hidePanels() const { return hidePanels_; }
 
 signals:
     /// Something an agent may want to know about changed: document, layers, selection, history, tool, view, tabs.
@@ -364,6 +368,7 @@ private:
     QAction* eraserAction_;
     QToolBar* toolRail_ = nullptr;
     FullScreenMode* fullScreen_ = nullptr;
+    HidePanels* hidePanels_ = nullptr;
     /// The tool rail's tooltips with the tools' keys as they are now.
     void refreshToolTips();
 };

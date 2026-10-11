@@ -21,6 +21,7 @@
 #include "ToolOptionsBar.h"
 #include "WelcomeDialog.h"
 #include "FullScreen.h"
+#include "HidePanels.h"
 #include <QKeyEvent>
 #include <QApplication>
 #include <QCloseEvent>
@@ -251,6 +252,8 @@ MainWindow::MainWindow() {
         return {};
     });
     fullScreen_ = new FullScreenMode(this);   // after the docks, whose panels it moves into its edges
+    hidePanels_ = new HidePanels(this);
+    connect(fullScreen_, &FullScreenMode::normalLayoutRestored, hidePanels_, &HidePanels::afterFullScreen);
     buildToolRail();
     buildMenus();
     applyShortcuts();   // the person's keys over the defaults (Edit > Keyboard Shortcuts)
@@ -434,7 +437,7 @@ void MainWindow::switchTo(int index) {
     adjustStack_->setCurrentWidget(tab.adjustments);
     if (timeline_) timeline_->setSession(session_);
     if (histogram_) histogram_->setSession(session_);
-    tab.options->setVisible(true);
+    tab.options->setVisible(!hidePanels_ || !hidePanels_->hidesOptions());   // Tab hid the options bar
     if (fullScreen_) fullScreen_->currentTabChanged();   // in full screen, the options bar goes in the top edge
     // The import bar shows over its own document only.
     if (importBanner_) importBanner_->setVisible(bannerSession_ && bannerSession_ == session_ && !importBanner_->notes().isEmpty());
@@ -771,15 +774,17 @@ void MainWindow::closeEvent(QCloseEvent* e) {
     // In full screen, the layout from before it: the next launch opens the standard window as it was.
     const bool full = fullScreen_ && fullScreen_->active();
     settings.setValue("window/geometry", full ? fullScreen_->normalGeometry() : saveGeometry());
-    settings.setValue("window/state", full ? fullScreen_->normalState() : saveState());
+    settings.setValue("window/state", full ? fullScreen_->normalState() : hidePanels_->normalState());
     if (autosave_) autosave_->finish();   // a clean quit leaves nothing to recover
     e->accept();
 }
 
 void MainWindow::setScreenMode(bool fullScreen) {
     if (fullScreen_->active() == fullScreen) return;
+    // Panels hidden with Tab come back for full screen's edges, and are hidden again after it (afterFullScreen).
+    if (fullScreen) hidePanels_->beforeFullScreen();
     fullScreen_->setActive(fullScreen);
-    refreshActions();   // Tab and Shift+Tab work in full screen only
+    refreshActions();
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* e) {

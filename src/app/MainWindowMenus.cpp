@@ -47,6 +47,7 @@
 #include "ActionLibrary.h"
 #include "ViewOptions.h"
 #include "FullScreen.h"
+#include "HidePanels.h"
 #include <QSignalBlocker>
 #include <QJsonObject>
 #include <QShortcutEvent>
@@ -1102,8 +1103,8 @@ void MainWindow::buildMenus() {
     view->addSeparator();
     // Photoshop's screen modes: Standard, and Full Screen (FullScreen.h), where nothing but the canvas is on screen and
     // each screen edge slides its part of the interface out when the pointer reaches it. F steps through them, Esc
-    // leaves full screen; Tab pins every edge out (or hides them again), Shift+Tab all but the tools; F10 or Alt opens
-    // the menus.
+    // leaves full screen; there Tab pins every edge out (or hides them again), Shift+Tab all but the tools; F10 or Alt
+    // opens the menus.
     QMenu* screenMode = view->addMenu(tr("Scree&n Mode"));
     auto* screenModes = new QActionGroup(this);
     // They run view.screenMode (the window, not the document: nothing is recorded).
@@ -1115,11 +1116,18 @@ void MainWindow::buildMenus() {
     add(nullptr, Spec("view.screenMode.cycle", tr("Cycle Screen Modes"), {QKeySequence("F")})
                      .request("view.screenMode", [this] { return QJsonObject{{"mode", fullScreen_->active() ? "standard" : "full"}}; }));
     screenMode->addSeparator();
-    auto onlyFullScreen = [this] { return fullScreen_->active() ? QString() : tr("In Full Screen Mode only"); };
+    // In the standard mode Tab hides the panels, the tools and the options bar, Shift+Tab the panels on the right
+    // (HidePanels.h); again gives them back.
     add(screenMode, Spec("view.screenMode.panels", tr("Show or Hide &Panels"), {QKeySequence(Qt::Key_Tab)})
-                        .request("view.screenMode", [this] { return QJsonObject{{"panels", fullScreen_->pinnedAll(true) ? "hidden" : "all"}}; }).when(onlyFullScreen));
+                        .request("view.screenMode", [this] {
+                            if (!fullScreen_->active()) return QJsonObject{{"panels", hidePanels_->hidden() != HidePanels::None ? "all" : "hidden"}};
+                            return QJsonObject{{"panels", fullScreen_->pinnedAll(true) ? "hidden" : "all"}};
+                        }));
     add(screenMode, Spec("view.screenMode.panelsExceptTools", tr("Show or Hide Panels &Except Tools"), {QKeySequence(Qt::SHIFT | Qt::Key_Tab)})
-                        .request("view.screenMode", [this] { return QJsonObject{{"panels", fullScreen_->pinnedAll(false) ? "hidden" : "exceptTools"}}; }).when(onlyFullScreen));
+                        .request("view.screenMode", [this] {
+                            if (!fullScreen_->active()) return QJsonObject{{"panels", hidePanels_->hidden() != HidePanels::None ? "all" : "hiddenRight"}};
+                            return QJsonObject{{"panels", fullScreen_->pinnedAll(false) ? "hidden" : "exceptTools"}};
+                        }));
     // F10 opens the menus (in full screen over the canvas, the menu bar showing while one is open).
     add(nullptr, Spec("view.showMenus", tr("Show Menus"), {QKeySequence(Qt::Key_F10)}).runs([this] { fullScreen_->showMenus(); }));
     view->addSeparator();

@@ -1413,8 +1413,9 @@ def view_exposure(exposure: Optional[float] = None, gamma: Optional[float] = Non
 def view_screen_mode(mode: Optional[str] = None, panels: Optional[str] = None) -> str:
     """View > Screen Mode: mode standard, or full (nothing on screen but the canvas; the person brings out the tools,
     options bar and panels at the screen's edges). panels, in full screen: all (every edge kept out, as Tab),
-    exceptTools (as Shift+Tab) or hidden. The window, not the document, and not an undo step; with no arguments it
-    reads the mode and which edges are out."""
+    exceptTools (as Shift+Tab) or hidden; in the standard mode: hidden (the panels, tools and options bar, as Tab),
+    hiddenRight (the panels on the right, as Shift+Tab) or all (everything back). The window, not the document, and
+    not an undo step; with no arguments it reads the mode, which edges are out and what Tab hid."""
     return text(call("view.screenMode", mode=mode, panels=panels))
 
 

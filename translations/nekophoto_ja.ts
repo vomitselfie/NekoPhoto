@@ -9280,10 +9280,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>スクリーンモードを切り替え</translation>
     </message>
     <message>
-        <source>In Full Screen Mode only</source>
-        <translation>フルスクリーンモードでのみ使用できます</translation>
-    </message>
-    <message>
         <source>Show or Hide &amp;Panels</source>
         <translation>パネルの表示・非表示(&amp;P)</translation>
     </message>

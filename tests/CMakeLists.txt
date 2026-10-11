@@ -460,6 +460,12 @@ if(TARGET nekophoto)
     add_test(NAME full_screen_selftest COMMAND nekophoto --lang en --self-test full-screen)
     set_tests_properties(full_screen_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/full-screen-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/full-screen-home/data")
+    # Tab and Shift+Tab in the Standard Screen Mode: the panels, tools and options bar hidden and given back byte for
+    # byte, a closed panel staying closed; Shift+Tab the right panels only; fields and typing keep Tab; full screen
+    # and F7 while they are hidden.
+    add_test(NAME hide_panels_selftest COMMAND nekophoto --lang en --self-test hide-panels)
+    set_tests_properties(hide_panels_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)
