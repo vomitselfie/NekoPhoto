@@ -498,6 +498,15 @@ target_link_libraries(blendif_tests PRIVATE compositor::core compositor_warnings
 target_compile_definitions(blendif_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
 add_test(NAME blendif_tests COMMAND blendif_tests)
 
+# Fill in Photoshop's special eight blend modes against Photoshop's measured composites. NekoPhoto still takes Fill
+# as opacity in every mode, so the special-eight case fails today: it is registered WILL_FAIL until Fill is applied
+# inside the blend; then drop WILL_FAIL (ctest reports the fixed test as failing until you do).
+add_executable(fill_opacity_tests fill_opacity_tests.cpp)
+target_link_libraries(fill_opacity_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME fill_opacity_tests COMMAND fill_opacity_tests other_modes_take_fill_as_coverage)
+add_test(NAME fill_opacity_special_eight COMMAND fill_opacity_tests special_eight_fill_matches_photoshop)
+set_tests_properties(fill_opacity_special_eight PROPERTIES WILL_FAIL TRUE)
+
 add_executable(photoshop_adjustment_tests photoshop_adjustment_tests.cpp)
 target_link_libraries(photoshop_adjustment_tests PRIVATE compositor::core compositor_warnings)
 target_compile_definitions(photoshop_adjustment_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
