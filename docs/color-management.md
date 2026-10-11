@@ -107,6 +107,19 @@ Image ▸ Mode ▸ CMYK Color and Lab Color, how such documents draw, their chan
   between CMYK profiles; Lab takes no other profile.
 - **The display is never skipped.** A CMYK or Lab frame is not RGB, so the canvas always converts it: the document's
   profile to the monitor profile, or to sRGB when none is known, fused with the reduction to 8 bits. Thumbnails too.
+- **The display grid.** At 16 bits the canvas's conversion is precalculated once per document profile, monitor
+  profile, rendering intent and black point compensation (and again when any of them changes), because Little CMS's
+  float pipeline per pixel was most of a deep CMYK or Lab frame. CMYK goes through a 33-point grid of Little CMS's own
+  results, taken in the monitor's linear light before its curve; Lab through the Lab formula and the monitor's
+  matrix. On a sweep of every 8th ink level (every 4th Lab level) through sRGB, Adobe RGB, Display P3 and ProPhoto
+  monitors, and on Photoshop-saved FOGRA39 and Japan Color files, no channel is more than one 8-bit level from Little
+  CMS's float result (on average about 0.04 for CMYK and 0.0005 for Lab), and Lab grey (a = b = 0) is always drawn
+  exactly grey. Colours with a channel near black, where the monitor's curve would magnify the grid's error, are
+  still converted per pixel by Little CMS. A monitor profile that is not a matrix-shaper, 8-bit documents (which Little
+  CMS precalculates itself) and soft proofs keep Little CMS's transform. Only the screen uses the grid: exports, the
+  Info panel and colour readouts, the eyedropper, the histogram, mode conversions and saving go through Little CMS
+  exactly as before. A 4K frame of a 16-bit CMYK document costs about a quarter of the instructions it did, a Lab one
+  about a tenth (`tests/display_work.cpp` counts them).
 - **Features by mode.** What does not work in a mode is greyed out with "Not available in CMYK mode" (or Lab mode), as
   in Photoshop; Camera Raw, G'MIC, Mosh and the MyPaint brushes stay RGB only.
 - **Projects** save and open CMYK and Lab documents ([project-format.md](project-format.md), version 9).
@@ -192,7 +205,12 @@ checks the CMYK and Lab layouts against Little CMS itself: 8-bit CMYK and 8-bit 
 its float inks within a 15-bit step and back within a step of its result for the inks held, 16-bit Lab its float Lab
 within half a stored step (sRGB red is Lab 54.29, 80.80, 69.89), premultiplied pixels, the fused reduction to 8 bits,
 the Working CMYK proof and gamut warning of an RGB document, and Convert to Profile on a CMYK document;
-`colormodes_tests` the CMYK and Lab document model and its projects.
+`colormodes_tests` the CMYK and Lab document model and its projects. `display_grid_tests` holds
+`displayTransformBetween` (the canvas's precalculated 16-bit CMYK and Lab transform, `src/core/src/colormgmt_display.cpp`)
+to within one level of `transformBetween` on its sweep and checks Lab's neutral axis; `display_grid_tests --measure
+[--monitor file.icc] [file.psd ...]` prints the error on a denser sweep and on CMYK or Lab files without checking, and
+`display_work` is a fixed 4K canvas workload to count instructions with `perf stat -e instructions:u`. Nothing but
+`color::displayTransform` (the canvas) may use `displayTransformBetween`.
 
 ---
 
@@ -267,7 +285,10 @@ Photoshop のダイアログを簡略にしたものです(Ctrl+Shift+K)。
 イメージ ▸ モード ▸ CMYK カラーと Lab カラー、表示、チャンネル、PSD は [color-modes.md](color-modes.md) を参照して
 ください。CMYK ドキュメントは自身の CMYK プロファイル(PSD のリソース 1039、または変換先の作業用 CMYK。タグなしは作業用
 CMYK として扱う)、Lab ドキュメントは Lab D50 です。CMYK・Lab のカンバスは常にモニタープロファイル(不明なら sRGB)へ
-変換して表示します。モードにない機能は「CMYK モードでは使用できません」と表示します。プロジェクトへの保存は形式
+変換して表示します。16 bit のときは、この表示用の変換をプロファイル・意図・黒点補正ごとに一度だけ前もって計算します
+(CMYK は 33 点のグリッド、Lab は計算式とモニターのマトリクス)。Little CMS の結果との差は 8 bit で 1 レベル以内、Lab
+のグレーは常にグレーです。前計算は画面表示だけで、書き出し、情報パネル、スポイト、ヒストグラム、モード変換、保存は
+従来どおり Little CMS で正確に変換します。モードにない機能は「CMYK モードでは使用できません」と表示します。プロジェクトへの保存は形式
 バージョン 9 です。
 
 ### スポイト

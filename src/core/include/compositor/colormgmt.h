@@ -96,6 +96,8 @@ ColorModel pixelFormatModel(PixelFormat format);
 int pixelFormatChannels(PixelFormat format);
 bool isColorFormat(PixelFormat format);
 
+struct DisplayGrid;
+
 /// A Little CMS transform with fixed layouts. Thread-safe to apply from several threads at once.
 class ColorTransform {
 public:
@@ -107,6 +109,9 @@ public:
     /// `count` pixels from `in` to `out` (which may be `in` when the layouts have the same size).
     void apply(const void* in, void* out, size_t count) const;
 
+    /// Whether this is the display's precalculated form (displayTransformBetween) rather than Little CMS itself.
+    bool precalculated() const { return bool(grid_); }
+
 private:
     friend struct TransformFactory;
     ColorTransform() = default;
@@ -115,6 +120,7 @@ private:
     void* transform_ = nullptr;
     PixelFormat input_ = PixelFormat::RGBA8, output_ = PixelFormat::RGBA8;
     bool staged_ = false;   // a CMYK or Lab layout on either side: made straight here, colours only for Little CMS
+    std::shared_ptr<const DisplayGrid> grid_;   // set: the display's grid, not Little CMS (colormgmt_display.cpp)
 };
 using ColorTransformPtr = std::shared_ptr<const ColorTransform>;
 
@@ -123,6 +129,15 @@ using ColorTransformPtr = std::shared_ptr<const ColorTransform>;
 /// model than its layout, say). Transforms come from a cache shared by every thread (the last 24 kept).
 ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options,
                                    PixelFormat input, PixelFormat output);
+
+/// The canvas's form of transformBetween(from, to, options, input, RGBA8), for drawing on screen only: for 16-bit CMYK
+/// and Lab it is precalculated once per profiles and options (docs/color-management.md, "The display grid") and costs a
+/// fraction of Little CMS's float pipeline, within one 8-bit level of it on its sweep (display_grid_tests); Lab a = b =
+/// 0 stays exactly neutral. CMYK goes through a 33-point grid in the monitor's linear light, Lab through its own formula
+/// and the monitor's matrix; colours with a channel so near black that the monitor's steep curve there would show the
+/// grid's error are taken through Little CMS. Any other layout, or a monitor profile that is not a matrix-shaper, gets
+/// transformBetween itself. Exports, pickers, readouts and conversions use transformBetween, never this.
+ColorTransformPtr displayTransformBetween(const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options, PixelFormat input);
 
 /// A soft proof (View > Proof Colors): `document` through `proof`, as `display` shows it. `proofIntent` is how the
 /// document goes to the proofing profile; the proof goes to the display relative colorimetric, as Photoshop does

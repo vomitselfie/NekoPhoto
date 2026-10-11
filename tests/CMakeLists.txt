@@ -411,6 +411,13 @@ add_test(NAME colormgmt_tests COMMAND colormgmt_tests)
 add_executable(colormgmt_cmyk_tests colormgmt_cmyk_tests.cpp)
 target_link_libraries(colormgmt_cmyk_tests PRIVATE compositor::core compositor_warnings nekophoto_lcms2)
 add_test(NAME colormgmt_cmyk_tests COMMAND colormgmt_cmyk_tests)
+# The display's precalculated CMYK and Lab transform against Little CMS (display_grid_tests --measure prints the error).
+add_executable(display_grid_tests display_grid_tests.cpp)
+target_link_libraries(display_grid_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME display_grid_tests COMMAND display_grid_tests)
+# A fixed CMYK or Lab canvas workload for counting instructions (not a test; tests/display_work.cpp).
+add_executable(display_work display_work.cpp)
+target_link_libraries(display_work PRIVATE compositor::core compositor_warnings)
 
 if(TARGET nekophoto)
     # The whole window: the converted commands give the same document and history from the menus, dialogs and

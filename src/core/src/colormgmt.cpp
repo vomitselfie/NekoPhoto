@@ -1,5 +1,6 @@
 // Colour management through Little CMS (colormgmt.h, docs/color-management.md).
 #include "compositor/colormgmt.h"
+#include "colormgmt_display.h"
 #include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/parallel.h"
@@ -110,7 +111,18 @@ struct TransformFactory {
         t->staged_ = stagedLayouts(input, output);
         return t;
     }
+    static std::shared_ptr<ColorTransform> make(std::shared_ptr<const DisplayGrid> grid, PixelFormat input) {
+        std::shared_ptr<ColorTransform> t(new ColorTransform());
+        t->input_ = input;
+        t->output_ = PixelFormat::RGBA8;
+        t->grid_ = std::move(grid);
+        return t;
+    }
 };
+
+ColorTransformPtr makeGridTransform(std::shared_ptr<const DisplayGrid> grid, PixelFormat input) {
+    return TransformFactory::make(std::move(grid), input);
+}
 
 ColorTransform::~ColorTransform() {
     if (transform_) cmsDeleteTransform(static_cast<cmsHTRANSFORM>(transform_));
@@ -184,6 +196,7 @@ void ColorTransform::applyStaged(const void* in, void* out, size_t count) const 
 }
 
 void ColorTransform::apply(const void* in, void* out, size_t count) const {
+    if (grid_) { grid_->apply(in, out, count); return; }
     auto* t = static_cast<cmsHTRANSFORM>(transform_);
     if (isColorFormat(input_)) { cmsDoTransform(t, in, out, cmsUInt32Number(count)); return; }
     if (staged_) { applyStaged(in, out, count); return; }
