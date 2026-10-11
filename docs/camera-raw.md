@@ -49,7 +49,7 @@ open document.
   preview when it is ready, reduced to 1,600 pixels on the long side. The panels are the filter's, with White
   Balance as Camera Raw shows it for a RAW file: Temperature in kelvin and Tint (see [White balance](#white-balance)).
 - **Depth** is Camera Raw's workflow option: 16 Bits/Channel (the default) or 8. The choice is remembered for the next
-  file, as Photoshop remembers its workflow options. The colour space is sRGB, which is what LibRaw develops into.
+  file, as Photoshop remembers its workflow options. The colour space is sRGB.
 - **Open** develops the whole file (off the UI thread) and opens it as a new document with one layer.
 - **Open Object** (Photoshop's Shift+Open) opens a new document whose one layer is a smart object. Its source is the
   RAW file itself, byte for byte, with the settings; the contents are the developed image at 16 bits.
@@ -58,8 +58,34 @@ open document.
 - **Cancel** (or Escape) stops a decode that is running and opens nothing.
 
 The develop is `compositor/raw.h`: LibRaw demosaics with the white balance's multipliers (the camera's own for As
-Shot) into sRGB at 16 bits, then `applyCameraRaw` grades it with the settings, the same code as the filter (so the dialog's result equals Open with
-no settings followed by Filter ▸ Camera Raw Filter with them, which `raw_tests` checks).
+Shot) and the camera's colour matrix into linear ProPhoto RGB at 16 bits, the raw white point at 1; a DNG's
+BaselineExposure scales it; the [default tone curve](#the-default-render) takes it to display light and sRGB. Then
+`applyCameraRaw` grades it with the settings, the same code as the filter (so the dialog's result equals Open with no
+settings followed by Filter ▸ Camera Raw Filter with them, which `raw_tests` checks).
+
+### The default render
+
+Camera Raw renders a RAW file with a tone curve of its own, and so does NekoPhoto. Ours is fitted to Camera Raw 18.7's
+render of the corpus chart's grey ramp ([Camera Raw parity](#camera-raw-parity)): 24 steps from −8 to +3.5 EV, read
+against the scene light LibRaw decodes for each, give the curve's knots (`tools/camera_raw_fit.py` writes them into
+`src/core/src/rawtone_tables.inc`; `src/core/src/rawtone.cpp` interpolates them with a monotone cubic). Below the
+darkest step display light is proportional to scene light; the raw white point renders white, as blown highlights do in
+Camera Raw. The curve is applied to the brightest and the darkest channel of the colour in ProPhoto RGB, and the
+middle channel keeps its place between them, so it keeps hues and only lightens and darkens; the colour then goes to
+sRGB. On the chart the default render is 0.28 mean ΔE00 from Camera Raw's (95th percentile 0.87); LibRaw's own
+rendering, with its BT.709 gamma and automatic brightening, was 14.9.
+
+What the fit cannot know:
+
+- Camera Raw brightens most cameras by an exposure offset of its own (their Adobe profiles' baseline). A DNG says
+  what it wants in BaselineExposure, which NekoPhoto applies; other formats develop without an offset, so they can
+  look darker than in Camera Raw.
+- Camera Raw rebuilds clipped channels from the ones that are not; LibRaw clips them. Pulling Exposure down shows the
+  difference in blown highlights.
+- Colours follow the camera's colour matrix (LibRaw's, or the DNG's ColorMatrix): a DNG's forward matrices and a
+  camera's Adobe profile (its hue and saturation tables) are not used. The chart's embedded profile is matrices only,
+  and its colours come out within the default render's 0.28 of Camera Raw's; with a camera's Adobe Standard profile
+  Camera Raw's colours differ by what the profile's tables do.
 
 Where it is kept:
 

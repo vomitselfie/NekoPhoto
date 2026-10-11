@@ -111,7 +111,8 @@ Camera Raw parity (`tests/camera_raw_parity.cpp`, [docs/camera-raw.md](docs/came
 chart DNG, its patch layout, the settings cases and Camera Raw 18.7's renders of them in `tests/fixtures/camera-raw-parity`
 come from the test corpus of [RAWmakase](https://github.com/pch/rawmakase) (`tests/corpus`, commit
 0f1bc320207658c9778922a4d6cf87bd174be2b2; the renders cut down to the cases NekoPhoto renders), copyright (c) 2026
-RAWmakase contributors, MIT ([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)). No RAWmakase code or table is used.
+RAWmakase contributors, MIT ([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)). The Camera Raw look fitted to those renders
+(`tools/camera_raw_fit.py`, `src/core/src/rawtone_tables.inc`) is fitted here; no RAWmakase code or table is used.
 
 Blend If (`src/core/src/blendif.cpp`): the inclusive split-handle ramp, the Gray weights and the transparency rule
 follow Patchy's calibration notes (`docs/layer-effects-render.md`, MIT, above), checked against its Photoshop fixture.
