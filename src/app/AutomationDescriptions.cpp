@@ -185,7 +185,9 @@ const MethodDoc methodDocs[] = {
      "id:layer The layer (default the active one); x:number Left; y:number Top; width:number Width; height:number Height; rotation:number Degrees clockwise; scale:number Scale the current size by this factor about its centre; flipX:bool Mirrored left to right; flipY:bool Mirrored top to bottom"},
     {"layers.flip", "Flip a layer's pixels.", "id:layer The layer (default the active one); vertical:bool=false Top to bottom instead of left to right"},
     {"layers.mask", "Add, remove or change a layer mask.",
-     "id:layer The layer (default the active one); action:(add|addFromSelection|delete|toggle|invert|apply|link)! What to do; revealing:bool=true For add: white (reveal all) rather than black"},
+     "id:layer The layer (default the active one); action:(add|addFromSelection|delete|toggle|invert|apply|link)! What to do; "
+     "revealing:bool=true For add: white (Reveal All) rather than black (Hide All); for addFromSelection: white inside the selection and black outside (Reveal Selection, the mask button's default) rather than the reverse (Hide Selection), add without a selection; "
+     "mode:(revealAll|hideAll|revealSelection|hideSelection) With add: Layer > Layer Mask's item by name, in place of revealing"},
     {"layers.merge", "Merge the selected layers, or the active layer into the one beneath; visible: true merges every visible layer (Layer > Merge Visible).", "down:bool=false Merge the active layer down; visible:bool=false Merge all visible layers into one; hidden layers stay"},
     {"layers.group", "Put the selected layers in a new folder.", ""},
     {"artboards.list", "The document's artboards: folders with a rectangle and a background, their children clipped to it.", ""},

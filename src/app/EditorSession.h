@@ -298,7 +298,9 @@ public:
     void toggleClippingMask(const compositor::Uuid& id);
     bool canToggleClippingMask(const compositor::Uuid& id) const;
     void addLayerMask(bool revealing);
-    void addMaskFromSelection(bool revealing);
+    /// Layer > Layer Mask > Reveal Selection (white inside the selection, black outside) or Hide Selection; without a
+    /// selection, Reveal All or Hide All.
+    void addMaskFromSelection(bool revealSelection);
     void toggleLayerMask();
     void deleteLayerMask();
     void toggleMaskLink(const compositor::Uuid& id);
@@ -1114,9 +1116,9 @@ private:
     std::weak_ptr<const compositor::GrayImage> selectAllCoverage_;
     void restore(const compositor::DocumentHistory::Snapshot& snapshot);
     void setActiveLayer(const std::optional<compositor::Uuid>& id);
-    /// The selection as a mask in `layer`'s pixel grid (the selected area revealed when `revealing`); none without a
-    /// selection or past the pixel budget.
-    std::optional<compositor::LayerMask> maskFromSelection(const compositor::Layer& layer, bool revealing) const;
+    /// The selection as a mask in `layer`'s pixel grid (the selected area white when `revealSelection`, else black);
+    /// none without a selection or past the pixel budget.
+    std::optional<compositor::LayerMask> maskFromSelection(const compositor::Layer& layer, bool revealSelection) const;
     void finishDeleting(const std::vector<compositor::Uuid>& ids);
     void notifyDocument(QRectF region = {});
     compositor::Layer* activeLayerMutable();

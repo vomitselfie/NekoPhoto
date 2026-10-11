@@ -649,7 +649,7 @@ int menuCommands(MainWindow& w) {
              return false;
          }), [](EditorSession& s, auto&) { s.addAdjustmentLayer(AdjustmentKind::Levels); }, {"layers.add"}},
         {"Panel Delete", nullptr, {}, layersButton(LayersPanel::tr("Delete the selected layers")), [](EditorSession& s, auto&) { s.deleteSelectedLayers(); }, {"layers.delete"}},
-        {"Panel Mask", "Background", backgroundUnderRed, layersButton(LayersPanel::tr("Add layer mask (reveal all, or hide the selection)")),
+        {"Panel Mask", "Background", backgroundUnderRed, layersButton(LayersPanel::tr("Add layer mask (it reveals the selection; Alt-click: hides it)")),
          [](EditorSession& s, auto&) { s.addMaskFromSelection(true); }, {"layers.mask"}},
         {"Panel Opacity Drag", "Paint", {}, layersPanel([](LayersPanel& p, EditorSession&) {
              auto* slider = p.findChild<QSlider*>();

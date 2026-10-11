@@ -11,7 +11,7 @@ interface language, and runs it; the last eight used come first.
 
 ## Layers
 - Layers and folders with opacity and all 27 of Photoshop's blend modes plus Pass Through, drawn with its calibrated byte arithmetic (Vivid Light, Linear Light, Hard Mix, Darker/Lighter Color and the rest match Photoshop captures; Dissolve dithers by document position)
-- Layer masks: paint, fill, invert, blur and feather; link or unlink them from the layer
+- Layer masks: Layer ▸ Layer Mask ▸ Reveal All, Hide All, Reveal Selection and Hide Selection; as in Photoshop the Layers panel's mask button reveals the selection (white inside it, black outside; Alt-click hides it instead), or the whole layer when nothing is selected. Paint, fill, invert, blur and feather them; link or unlink them from the layer
 - Clipping masks and folder masks
 - Adjustment layers: all seventeen kinds listed under [Adjustments and filters](#adjustments-and-filters), with masks, clipping and Blend If. As in Photoshop a new one comes with a layer mask, white (or the selection, which it takes), and the mask is its target: paint it with the brushes and eraser, the Gradient tool, the Paint Bucket, Blur or Fill to choose where the adjustment works
 - Merge Down, Merge Layers and Merge Group (Ctrl+E); Merge Visible (Ctrl+Shift+E) merges every visible layer into one and leaves the hidden ones
@@ -142,7 +142,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 
 ### レイヤー
 - 不透明度と、Photoshop の 27 種類の描画モードと通過を持つレイヤーとグループ。Photoshop の計算どおりのバイト演算で合成します(ビビッドライト、リニアライト、ハードミックス、カラー比較(暗)・(明)なども Photoshop の画面と一致。ディザ合成はドキュメント上の位置でディザリング)
-- レイヤーマスク:描画、塗りつぶし、反転、ぼかし、境界のぼかし。レイヤーとのリンクの切り替え
+- レイヤーマスク:レイヤー ▸ レイヤーマスク ▸ すべての領域を表示・すべての領域を隠す・選択範囲外をマスク・選択範囲をマスク。Photoshop と同じく、レイヤーパネルのマスクボタンは選択範囲を表示するマスクを作ります(選択範囲の内側が白、外側が黒。Alt キーを押しながらクリックすると選択範囲を隠します)。選択範囲がなければレイヤー全体を表示します。描画、塗りつぶし、反転、ぼかし、境界のぼかし。レイヤーとのリンクの切り替え
 - クリッピングマスクとグループのマスク
 - 調整レイヤー:[色調補正とフィルター](#色調補正とフィルター)にある 17 種類すべて。マスク、クリッピング、ブレンド条件も使えます。Photoshop と同じく、新しい調整レイヤーには白い(選択範囲があればそれを使った)レイヤーマスクが付き、マスクが編集対象になります。ブラシと消しゴム、グラデーションツール、塗りつぶしツール、ぼかし、塗りつぶしでマスクを描いて、補正の効く範囲を決められます
 - 下のレイヤーと結合、レイヤーを結合、グループを結合(Ctrl+E)。表示レイヤーを結合(Ctrl+Shift+E)は表示中のレイヤーをすべて 1 枚にまとめ、非表示のレイヤーは残します

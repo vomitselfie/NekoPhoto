@@ -204,8 +204,10 @@ any of `font`, `size`, `sizeBy` (pixels added to each letter's own size, as Phot
 above it, the whole layer without a selection), `layers.copy` and `layers.paste` (whole layers between documents, as Edit > Copy with layers
 selected and no selection, then Paste: `ids` to copy, default the selected ones; the paste answers the new ids),
 `layers.move`, `layers.reorder`, `layers.setTransform`,
-`layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
-apply, link), `layers.merge` (`down` for Merge Down, `visible` for Merge Visible), `layers.group`, `adjustments.set`.
+`layers.flip`, `layers.mask` (add: Reveal All, or Hide All with `revealing` false; addFromSelection: Reveal Selection,
+white inside the selection and black outside as Photoshop's mask button makes it, or Hide Selection with `revealing`
+false, the selection going into the mask; `mode` revealAll, hideAll, revealSelection or hideSelection with action add
+names Layer ▸ Layer Mask's item instead; delete, toggle, invert, apply, link), `layers.merge` (`down` for Merge Down, `visible` for Merge Visible), `layers.group`, `adjustments.set`.
 `layers.style` gives a layer's effects (Photoshop's layer style) as JSON, every kind a list with switched-off
 effects kept (`enabled` false), with the Blending Options' `blendIf` and `channels` (as `layers.get` shows them), the effects' reference
 point (`referenceX`, `referenceY`) and a CMYK colour's inks beside its `#rrggbb` (`colorInk` and the like); `layers.setStyle`

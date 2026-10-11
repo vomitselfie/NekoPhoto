@@ -580,9 +580,11 @@ def layers_apply_style(style: str, id: Optional[str] = None) -> str:
 
 
 @edit("Layer mask")
-def layers_mask(id: str, action: str, revealing: bool = True) -> str:
-    """Layer masks: action add (reveal all, or revealing=false to hide all), addFromSelection, delete, toggle, invert, apply, link."""
-    return text(call("layers.mask", id=id, action=action, revealing=revealing))
+def layers_mask(id: str, action: str, revealing: bool = True, mode: Optional[str] = None) -> str:
+    """Layer masks: action add (reveal all, or revealing=false to hide all), addFromSelection (reveal the selection:
+    white inside it, black outside; revealing=false hides it instead), delete, toggle, invert, apply, link. mode
+    (revealAll, hideAll, revealSelection, hideSelection) with action add names Layer > Layer Mask's item instead."""
+    return text(call("layers.mask", id=id, action=action, revealing=revealing, mode=mode))
 
 
 @edit("Merge layers")

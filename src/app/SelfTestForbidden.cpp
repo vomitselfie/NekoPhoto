@@ -13,6 +13,7 @@
 #include "compositor/render.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
+#include <QAction>
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QJsonObject>
@@ -40,6 +41,14 @@ void settle(int ms) {
         QApplication::processEvents(QEventLoop::AllEvents, 20);
         QThread::msleep(2);
     } while (t.elapsed() < ms);
+}
+
+/// A layer's mask at a document point, 0..255 (an 8-bit document's); -1 without one.
+int maskAt(const Layer& layer, double x, double y) {
+    const GrayImage* g = layer.mask ? layer.mask->asset.image.u8().get() : nullptr;
+    if (!g) return -1;
+    const Point p = layer.maskTransform().pixelToDocument(g->width(), g->height()).inverted().apply({x, y});
+    return g->at(std::clamp(int(std::floor(p.x)), 0, g->width() - 1), std::clamp(int(std::floor(p.y)), 0, g->height() - 1));
 }
 
 /// The largest difference of any channel between two renders (256 when their sizes differ).
@@ -155,6 +164,54 @@ int forbiddenCursor(MainWindow& w) {
         for (int y = 0; restored && y < before->height(); y++)
             for (int x = 0; restored && x < before->width(); x++) restored = std::memcmp(before->pixel(x, y), undone->pixel(x, y), 4) == 0;
         expect(restored, "undoing the mask stroke did not restore the composite");
+    }
+
+    // Add Layer Mask with a selection: Photoshop's button and Layer > Layer Mask > Reveal Selection make it white inside
+    // the selection and black outside; Hide Selection the reverse; Reveal All and Hide All ignore it. A new adjustment
+    // layer's mask is made the same way. The selection goes into the mask.
+    {
+        expect(call("layers.add", {{"kind", "pixels"}, {"name", "Masked"}}).has_value(), "could not add a layer to mask");
+        const auto maskedId = s.activeLayerId();
+        call("pixels.fill", {{"color", "#20a040"}});
+        const Document& doc = *s.document();
+        const double inX = doc.width * 0.25, outX = doc.width * 0.75, y = doc.height * 0.5;
+        auto select = [&] { call("selection.rect", {{"x", 0}, {"y", 0}, {"width", doc.width / 2}, {"height", doc.height}}); };
+        auto masked = [&] { return maskedId ? s.document()->find(*maskedId) : nullptr; };
+        struct Case { QJsonObject params; int inside, outside; const char* what; };
+        const Case cases[] = {
+            {{{"action", "addFromSelection"}}, 255, 0, "addFromSelection did not reveal the selection"},
+            {{{"action", "add"}, {"mode", "revealSelection"}}, 255, 0, "Reveal Selection did not reveal the selection"},
+            {{{"action", "add"}, {"mode", "hideSelection"}}, 0, 255, "Hide Selection did not hide the selection"},
+            {{{"action", "addFromSelection"}, {"revealing", false}}, 0, 255, "addFromSelection with revealing false did not hide the selection"},
+            {{{"action", "add"}, {"mode", "revealAll"}}, 255, 255, "Reveal All with a selection was not all white"},
+            {{{"action", "add"}, {"mode", "hideAll"}}, 0, 0, "Hide All with a selection was not all black"},
+        };
+        for (const Case& c : cases) {
+            select();
+            call("layers.mask", c.params);
+            const Layer* l = masked();
+            expect(l && maskAt(*l, inX, y) == c.inside && maskAt(*l, outX, y) == c.outside, c.what);
+            call("history.undo");
+            call("selection.none");
+        }
+        // The Layers panel's mask button and the menu items reach the same requests (MainWindow's menus and the panel).
+        select();
+        QAction* reveal = nullptr;
+        for (QAction* a : w.findChildren<QAction*>()) if (a->text() == QLatin1String("Reveal Selection")) reveal = a;
+        expect(reveal && reveal->isEnabled(), "no Layer > Layer Mask > Reveal Selection, or it is greyed with a selection");
+        if (reveal) reveal->trigger();
+        expect(masked() && maskAt(*masked(), inX, y) == 255 && maskAt(*masked(), outX, y) == 0 && !s.document()->selection,
+               "Layer > Layer Mask > Reveal Selection did not reveal the selection and take it");
+        call("history.undo");
+        call("selection.none");
+        select();
+        s.addAdjustmentLayer(AdjustmentKind::Invert);
+        const Layer* adjustment = s.activeLayer();
+        expect(adjustment && adjustment->adjustment && adjustment->mask && maskAt(*adjustment, inX, y) == 255 && maskAt(*adjustment, outX, y) == 0,
+               "a new adjustment layer's mask did not reveal the selection");
+        call("history.undo");
+        call("selection.none");
+        if (maskedId) s.selectLayer(*maskedId, false);
     }
 
     // A type layer: rasterize first. Rasterized, the brush works; undone, it is type again.

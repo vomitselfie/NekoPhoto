@@ -780,16 +780,21 @@ void MainWindow::buildMenus() {
     layer->addSeparator();
     QMenu* mask = layer->addMenu(tr("Layer &Mask"));
     // layers.mask, on the active layer (none: nothing to do).
-    auto maskItem = [&](QMenu* menu, const char* id, const QString& label, const char* feature, QJsonObject params) {
+    auto maskItem = [&](QMenu* menu, const char* id, const QString& label, const char* feature, QJsonObject params, bool selection = false) {
         return add(menu, Spec(id, label).document(feature).request("layers.mask", [this, params]() -> std::optional<QJsonObject> {
             if (!session_->activeLayerId()) return std::nullopt;
             return params;
-        }, tr("Layer Mask")).when(hasLayer));
+        }, tr("Layer Mask")).when([this, hasLayer, selection] {
+            const QString why = hasLayer();
+            if (!why.isEmpty() || !selection) return why;
+            return session_->document() && session_->document()->selection ? QString() : tr("No selection");
+        }));
     };
-    nameAction("mask.add", maskItem(mask, "layer.mask.revealAll", tr("Reveal All"), "layers.mask", {{"action", "add"}}));
-    maskItem(mask, "layer.mask.hideAll", tr("Hide All"), "layers.mask", {{"action", "add"}, {"revealing", false}});
-    maskItem(mask, "layer.mask.fromSelectionReveal", tr("From Selection (Reveal)"), "edit.selection", {{"action", "addFromSelection"}});
-    maskItem(mask, "layer.mask.fromSelectionHide", tr("From Selection (Hide)"), "edit.selection", {{"action", "addFromSelection"}, {"revealing", false}});
+    // Photoshop's four: the whole layer shown or hidden, or the selection shown (white inside it) or hidden.
+    nameAction("mask.add", maskItem(mask, "layer.mask.revealAll", tr("Reveal All"), "layers.mask", {{"action", "add"}, {"mode", "revealAll"}}));
+    maskItem(mask, "layer.mask.hideAll", tr("Hide All"), "layers.mask", {{"action", "add"}, {"mode", "hideAll"}});
+    maskItem(mask, "layer.mask.fromSelectionReveal", tr("Reveal Selection"), "edit.selection", {{"action", "add"}, {"mode", "revealSelection"}}, true);
+    maskItem(mask, "layer.mask.fromSelectionHide", tr("Hide Selection"), "edit.selection", {{"action", "add"}, {"mode", "hideSelection"}}, true);
     mask->addSeparator();
     nameAction("mask.toggle", maskItem(mask, "layer.mask.toggle", tr("Enable / Disable"), "layers.mask", {{"action", "toggle"}}));
     nameAction("mask.invert", maskItem(mask, "layer.mask.invert", tr("Invert"), "layers.mask", {{"action", "invert"}}));

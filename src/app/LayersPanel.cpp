@@ -434,7 +434,7 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
         session_->runCommandOr(QStringLiteral("layers.add"), below ? QJsonObject{{"below", true}} : QJsonObject{}, [this, below] { session_->addBlankLayer(below); });
     });
     button("folder-plus", tr("New folder"), [this] { session_->runCommandOr(QStringLiteral("layers.add"), {{"kind", "group"}}, [this] { session_->addGroup(); }); });
-    button("mask", tr("Add layer mask (reveal all, or hide the selection)"), [this] { addMask(true); });
+    button("mask", tr("Add layer mask (it reveals the selection; Alt-click: hides it)"), [this] { addMask(!(QApplication::keyboardModifiers() & Qt::AltModifier)); });
     auto* adjust = button("sliders-horizontal", tr("New adjustment layer"), [] {});
     auto* adjustMenu = new QMenu(adjust);
     for (int i = 0; i < adjustmentKindCount; i++) {
@@ -767,14 +767,16 @@ void LayersPanel::commitOpacity(double opacity) {
     session_->runCommandOr(QStringLiteral("layers.set"), {{"opacity", opacity}}, [this, opacity] { session_->setLayerOpacity(opacity); });
 }
 
-void LayersPanel::addMask(bool revealing) {
-    // Layer > Layer Mask's Reveal All / Hide All, or From Selection with a selection: layers.mask.
+void LayersPanel::addMask(bool revealing, bool whole) {
+    // Layer > Layer Mask's Reveal All / Hide All, or with a selection Reveal Selection / Hide Selection: layers.mask.
     const Layer* active = session_->activeLayer();
-    if (!active || active->mask || !session_->supportsFeature("edit.selection")) { session_->addMaskFromSelection(revealing); return; }
-    const bool selection = session_->document() && session_->document()->selection;
-    QJsonObject params{{"action", selection ? "addFromSelection" : "add"}};
-    if (!revealing) params["revealing"] = false;
-    maskCommand(session_, params, [this, revealing] { session_->addMaskFromSelection(revealing); });
+    if (!active || active->mask || (!whole && !session_->supportsFeature("edit.selection"))) {
+        if (whole) session_->addLayerMask(revealing); else session_->addMaskFromSelection(revealing);
+        return;
+    }
+    const bool selection = !whole && session_->document() && session_->document()->selection;
+    const QJsonObject params{{"action", "add"}, {"mode", selection ? (revealing ? "revealSelection" : "hideSelection") : (revealing ? "revealAll" : "hideAll")}};
+    maskCommand(session_, params, [this, revealing, selection] { if (selection) session_->addMaskFromSelection(revealing); else session_->addLayerMask(revealing); });
 }
 
 void LayersPanel::startRename(const Uuid& id) {
@@ -932,8 +934,8 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
         if (!layer->isGroup) menu->addAction(tr("Apply Layer Mask"), this, [this] { maskCommand(session_, {{"action", "apply"}}, [this] { session_->applyMask(); }); });
         menu->addAction(tr("Delete Layer Mask"), this, [this] { maskCommand(session_, {{"action", "delete"}}, [this] { session_->deleteLayerMask(); }); });
     } else {
-        menu->addAction(tr("Add Reveal-All Mask"), this, [this] { addMask(true); });
-        menu->addAction(tr("Add Hide-All Mask"), this, [this] { addMask(false); });
+        menu->addAction(tr("Add Reveal-All Mask"), this, [this] { addMask(true, true); });
+        menu->addAction(tr("Add Hide-All Mask"), this, [this] { addMask(false, true); });
     }
     // The vector mask items run vectorMask.delete and vectorMask.set, as Layer > Vector Mask does.
     if (hasLayerVectorMask(*layer)) gatedAtDepth(menu->addAction(tr("Delete Vector Mask"), this, [this] {

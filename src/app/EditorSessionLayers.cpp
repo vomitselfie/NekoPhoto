@@ -842,13 +842,13 @@ void EditorSession::addLayerMask(bool revealing) {
     notifyDocument();
 }
 
-void EditorSession::addMaskFromSelection(bool revealing) {
+void EditorSession::addMaskFromSelection(bool revealSelection) {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
-    if (!document_ || !document_->selection || !document_->selection->coverage) { addLayerMask(revealing); return; }
+    if (!document_ || !document_->selection || !document_->selection->coverage) { addLayerMask(revealSelection); return; }   // the mask button without one: Reveal All (Alt: Hide All)
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || layer->mask) return;
-    std::optional<LayerMask> m = maskFromSelection(*layer, revealing);
+    std::optional<LayerMask> m = maskFromSelection(*layer, revealSelection);
     if (!m) return;
     endOpacityEdit();
     beginEdit(QT_TRANSLATE_NOOP("History", "Add Mask from Selection"));
@@ -860,11 +860,12 @@ void EditorSession::addMaskFromSelection(bool revealing) {
     emit selectionChanged();
 }
 
-std::optional<LayerMask> EditorSession::maskFromSelection(const Layer& layer, bool revealing) const {
+std::optional<LayerMask> EditorSession::maskFromSelection(const Layer& layer, bool revealSelection) const {
     if (!document_ || !document_->selection || !document_->selection->coverage) return std::nullopt;
     int width = layer.pixelWidth(), height = layer.pixelHeight();
     if ((long long)width * height > Document::pixelBudget) return std::nullopt;
-    // The selection resampled into the layer's own pixel grid; the selected area gets the opposite value.
+    // The selection resampled into the layer's own pixel grid: white where it is selected (Reveal Selection), or
+    // black there and white elsewhere (Hide Selection).
     LayerTransform docTransform(Point(0, 0), document_->size());
     LayerMask m;
     if (const GrayFPtr& floating = document_->selection->coverage.f32()) {
@@ -872,7 +873,7 @@ std::optional<LayerMask> EditorSession::maskFromSelection(const Layer& layer, bo
         auto mask = std::make_shared<GrayF>(width, height);
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
             const float s = cleanCoverage(selected->at(x, y));
-            mask->at(x, y) = revealing ? 1.0f - s : s;
+            mask->at(x, y) = revealSelection ? s : 1.0f - s;
         }
         m.asset = MaskAsset::make(GrayFPtr(mask));
     } else if (const Gray16Ptr& deep = document_->selection->coverage.u16()) {
@@ -880,15 +881,15 @@ std::optional<LayerMask> EditorSession::maskFromSelection(const Layer& layer, bo
         auto mask = std::make_shared<Gray16>(width, height);
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
             const uint32_t s = std::min<uint32_t>(selected->at(x, y), one16);
-            mask->at(x, y) = uint16_t(revealing ? one16 - s : s);
+            mask->at(x, y) = uint16_t(revealSelection ? s : one16 - s);
         }
         m.asset = MaskAsset::make(Gray16Ptr(mask));
     } else {
         auto selected = resampleMask(*document_->selection->coverage.u8(), docTransform, layer.transform, width, height, 0);
-        auto mask = std::make_shared<GrayImage>(width, height, revealing ? 255 : 0);
+        auto mask = std::make_shared<GrayImage>(width, height);
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
             int s = selected->at(x, y);
-            mask->at(x, y) = uint8_t(revealing ? 255 - s : s);
+            mask->at(x, y) = uint8_t(revealSelection ? s : 255 - s);
         }
         m.asset = MaskAsset::make(mask);
     }

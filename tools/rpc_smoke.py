@@ -1377,6 +1377,36 @@ def gradient_methods(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def mask_parity(rpc):
+    """Layer masks as Photoshop makes and paints them: Add Layer Mask with a selection reveals it (layers.mask
+    addFromSelection, or add with mode revealSelection), Hide Selection hides it, Reveal All and Hide All ignore it."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=64, height=16)
+    rpc.call("pixels.fill", color="#ffffff")
+    red = rpc.call("layers.add")["id"]
+    rpc.call("pixels.fill", color="#ff0000")
+
+    def shown():
+        return rpc.call("color.sample", x=8, y=8)["color"], rpc.call("color.sample", x=56, y=8)["color"]
+
+    for params, inside, outside in (({"action": "addFromSelection"}, "#ff0000", "#ffffff"),
+                                    ({"action": "add", "mode": "revealSelection"}, "#ff0000", "#ffffff"),
+                                    ({"action": "add", "mode": "hideSelection"}, "#ffffff", "#ff0000"),
+                                    ({"action": "addFromSelection", "revealing": False}, "#ffffff", "#ff0000"),
+                                    ({"action": "add", "mode": "revealAll"}, "#ff0000", "#ff0000"),
+                                    ({"action": "add", "mode": "hideAll"}, "#ffffff", "#ffffff")):
+        rpc.call("selection.rect", x=0, y=0, width=32, height=16)
+        rpc.call("layers.mask", id=red, **params)
+        assert shown() == (inside, outside), (params, shown())
+        rpc.call("history.undo")
+        rpc.call("selection.none")
+    expect_refused(rpc, "mode must be", "layers.mask", id=red, action="add", mode="revealEverything")
+    rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def colour_mode_painting(rpc):
     """P7 E (docs/color-modes.md): painting in CMYK and Lab documents at 8 and 16 bits in the document's own samples.
     Black in CMYK lays the Working CMYK's rich black (K and C, M, Y); a Lab stroke's L is the colour's; the Eyedropper
@@ -2720,6 +2750,7 @@ def main():
     colour_modes(rpc)
     pixel_clipboard(rpc)
     colour_mode_painting(rpc)
+    mask_parity(rpc)
     colour_mode_content_aware(rpc)
     colour_mode_vectors(rpc)
     gradient_methods(rpc)

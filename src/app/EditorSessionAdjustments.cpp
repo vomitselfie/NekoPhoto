@@ -26,7 +26,7 @@ void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
     layer.adjustment = settings.toLayerAdjustment();
     // Photoshop's adjustment layer comes with a layer mask, targeted: white, or the selection (which it takes) so the
     // adjustment works where it was.
-    std::optional<LayerMask> fromSelection = maskFromSelection(layer, false);
+    std::optional<LayerMask> fromSelection = maskFromSelection(layer, true);
     if (fromSelection) layer.mask = *fromSelection;
     else { LayerMask white; white.asset = MaskAsset::solid(true, document_->sampleType); layer.mask = white; }
     const Layer* active = activeLayer();
