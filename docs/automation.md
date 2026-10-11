@@ -194,7 +194,7 @@ channels by name (`gray`, `red`, `green`, `blue`; in CMYK `gray`, `cyan`, `magen
 Blending Channels, one undo step: `red`, `green`, `blue` (in CMYK `cyan`, `magenta`, `yellow`, `black`; in Lab
 `lightness`, `a`, `b`), each `true` to blend it or `false` to leave it out (the backdrop's value stays there); channels
 left out stay; `layers.get` reports `channels` when a layer leaves one out), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
-`italic`, `color`, `align`; `below: true` puts it under the active layer), `text.set` (a text layer's
+`italic`, `color`, `align`; `below: true` puts it under the active layer; an adjustment layer comes with a layer mask, white or from the selection, as its target, so `brush.stroke` and the fills paint it), `text.set` (a text layer's
 content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in several styles, which
 `layers.get` lists as `text.runs`, the change carries into every run and a new size scales each), `text.styleRange` (some letters' style, as
 Photoshop's Character panel on a selection: `start` and `length` in UTF-16 units of the text, default all of it, and

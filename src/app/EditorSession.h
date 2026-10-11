@@ -690,6 +690,8 @@ public:
     bool wandRefineEdge = true;
 
     // Adjustment layers
+    /// A new adjustment layer above the active one, with a layer mask targeted (white, or the selection, which it
+    /// takes), as Photoshop adds one.
     void addAdjustmentLayer(compositor::AdjustmentKind kind);
     /// Live edits of an adjustment layer's settings; wrap a slider drag in begin/end for one undo step.
     void beginAdjustmentEdit();
@@ -1112,6 +1114,9 @@ private:
     std::weak_ptr<const compositor::GrayImage> selectAllCoverage_;
     void restore(const compositor::DocumentHistory::Snapshot& snapshot);
     void setActiveLayer(const std::optional<compositor::Uuid>& id);
+    /// The selection as a mask in `layer`'s pixel grid (the selected area revealed when `revealing`); none without a
+    /// selection or past the pixel budget.
+    std::optional<compositor::LayerMask> maskFromSelection(const compositor::Layer& layer, bool revealing) const;
     void finishDeleting(const std::vector<compositor::Uuid>& ids);
     void notifyDocument(QRectF region = {});
     compositor::Layer* activeLayerMutable();

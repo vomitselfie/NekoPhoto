@@ -4968,12 +4968,20 @@ File &gt; New creates a blank canvas.</source>
         <translation>アクティブなレイヤーはグループです。ペイントするレイヤーを選んでください。</translation>
     </message>
     <message>
-        <source>The active layer is an adjustment layer: it has no pixels to paint on.</source>
-        <translation>アクティブなレイヤーは調整レイヤーです。ペイントするピクセルがありません。</translation>
+        <source>The active layer is an adjustment layer: target its mask to paint on it.</source>
+        <translation>アクティブなレイヤーは調整レイヤーです。マスクを選んでからペイントしてください。</translation>
+    </message>
+    <message>
+        <source>The active layer is an adjustment layer without a mask: add a layer mask to paint where it applies.</source>
+        <translation>アクティブなレイヤーはマスクのない調整レイヤーです。補正の効く範囲をペイントするには、レイヤーマスクを追加してください。</translation>
     </message>
     <message>
         <source>Spot Healing and Clone Stamp work on a layer&apos;s pixels, not on its mask.</source>
         <translation>スポット修復とコピースタンプはレイヤーのピクセルに使います。マスクには使えません。</translation>
+    </message>
+    <message>
+        <source>This tool works on a layer&apos;s pixels, not on its mask.</source>
+        <translation>このツールはレイヤーのピクセルに使います。マスクには使えません。</translation>
     </message>
     <message>
         <source>The active layer is a smart object: edit its contents, or rasterize it to paint on it.</source>
@@ -4994,6 +5002,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>The active layer is a gradient or pattern fill layer: it has no pixels to paint on.</source>
         <translation>アクティブなレイヤーはグラデーションまたはパターンの塗りつぶしレイヤーです。ペイントするピクセルがありません。</translation>
+    </message>
+    <message>
+        <source>The shape reaches too far to be rasterized.</source>
+        <translation>シェイプの範囲が大きすぎるため、ラスタライズできません。</translation>
     </message>
     <message>
         <source>The brush %1 could not be read.</source>

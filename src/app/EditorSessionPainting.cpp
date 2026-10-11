@@ -15,8 +15,14 @@
 #include "compositor/blur.h"
 #include "compositor/depth.h"
 #include "compositor/psd_carry.h"
+#include "compositor/colormgmt.h"
+#include "compositor/filters.h"
+#include "compositor/render.h"
+#include "compositor/vectorlayer.h"
+#include "compositor/vectormask.h"
 #include <algorithm>
 #include <random>
+#include <set>
 
 using namespace compositor;
 
@@ -67,6 +73,52 @@ AnyImage flattenedNative(const Document& document) {
     return renderNative(document);
 }
 
+/// A shape layer as the plain pixels it shows, at the document's depth and layout: its fill cut by its path, its
+/// stroke over it, softened by its Feather, over all the shape reaches (past the canvas too) and trimmed to it. Its
+/// effects, opacity, blend mode, Fill and pixel mask stay the layer's, so they are left out. None without a path, or
+/// when the shape reaches past the size limits.
+std::optional<std::pair<AnyImage, LayerTransform>> shapeAsPixels(const Document& document, const Layer& layer) {
+    if (!layer.psdCarry || !layer.asset || !layer.asset->image || !layerVectorMask(layer, document)) return std::nullopt;
+    const int pw = layer.pixelWidth(), ph = layer.pixelHeight();
+    const Rect placed = layer.transform.pixelToDocument(pw, ph).mapBounds(Rect(0, 0, pw, ph));
+    // A stroke may sit outside the fill's pixels, and a Feather spreads past both.
+    double pad = 2;
+    if (auto stroke = layerVectorStroke(layer); stroke && stroke->enabled && std::isfinite(stroke->width)) pad += std::clamp(stroke->width, 0.0, 30000.0);
+    if (auto params = parseMaskParameters(layer.psdCarry->maskData); params && params->vectorFeather) pad += 3 * vectorFeatherSigma(std::clamp(*params->vectorFeather, 0.0, 1000.0));
+    const double x0 = std::floor(placed.x - pad), y0 = std::floor(placed.y - pad);
+    const double w = std::ceil(placed.maxX() + pad) - x0, h = std::ceil(placed.maxY() + pad) - y0;
+    if (!(w >= 1 && h >= 1) || w > maxImageSide || h > maxImageSide || w * h > double(Document::pixelBudget)) return std::nullopt;
+    // The layer alone in a copy of the document (its patterns, profile and the canvas its path was stored against),
+    // keeping only the blocks that draw the shape.
+    Document single = document;
+    Layer copy = layer;
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
+    std::erase_if(carry->blocks, [](const PsdBlock& b) {
+        static const std::set<std::string> shape{"vmsk", "vsms", "vstk", "vscg", "vogk", "SoCo", "GdFl", "PtFl"};
+        return !shape.count(b.key);
+    });
+    copy.psdCarry = std::move(carry);
+    single.layers = {copy};
+    single.selection.reset();
+    RenderOptions options;
+    options.region = Rect(x0, y0, w, h);
+    AnyImage drawn;
+    if (document.sampleType == SampleType::F32) {
+        auto out = std::make_shared<ImageF>(int(w), int(h));
+        renderF(single, options, *out);
+        drawn = ImageFPtr(out);
+    } else drawn = renderNative(single, options);
+    if (!drawn) return std::nullopt;
+    LayerTransform trimmed;
+    bool empty = false;
+    AnyImage pixels = trimToPixelsAny(drawn, LayerTransform(Point(x0, y0), Size(w, h)), trimmed, &empty);
+    if (!pixels) return std::nullopt;
+    if (empty) { pixels = drawn; trimmed = LayerTransform(Point(x0, y0), Size(w, h)); }   // nothing shows: kept as the clear pixels it is
+    trimmed.sampling = layer.transform.sampling;
+    return std::make_pair(pixels, trimmed);
+}
+
 } // namespace
 
 // ---- What a tool may paint on -------------------------------------------------------
@@ -95,11 +147,17 @@ std::optional<ToolRefusal> EditorSession::toolRefusal(Tool tool) const {
     if (!layer) return std::nullopt;
     const bool mask = isMaskSelected_ && layer->mask;
     auto refused = [](ToolRefusal::Kind kind, const QString& reason) { return std::optional<ToolRefusal>(ToolRefusal{kind, reason}); };
-    // A group's or an adjustment layer's mask takes a gradient (as beginGradient does); nothing else paints on them.
+    // A group's mask takes a gradient (as beginGradient does); nothing else paints on a group. An adjustment layer's
+    // mask (or a fill layer's) takes what a pixel layer's does; the adjustment itself has no pixels.
     if (layer->isGroup && !(mask && tool == Tool::Gradient)) return refused(ToolRefusal::Refused, tr("The active layer is a group: choose a layer to paint on."));
-    if (layer->adjustment && !(mask && tool == Tool::Gradient)) return refused(ToolRefusal::Refused, tr("The active layer is an adjustment layer: it has no pixels to paint on."));
+    if (layer->adjustment && !mask)
+        return refused(ToolRefusal::Refused, layer->mask ? tr("The active layer is an adjustment layer: target its mask to paint on it.")
+                                                         : tr("The active layer is an adjustment layer without a mask: add a layer mask to paint where it applies."));
     if (mask) {
         if (tool == Tool::SpotHealing || tool == Tool::CloneStamp) return refused(ToolRefusal::Refused, tr("Spot Healing and Clone Stamp work on a layer's pixels, not on its mask."));
+        // Of the Blur / Smudge tool, only Blur softens a mask; Dodge, Burn and Sponge tone pixels.
+        if ((tool == Tool::Smudge && blurMode != BlurToolMode::Blur) || tool == Tool::Dodge)
+            return refused(ToolRefusal::Refused, tr("This tool works on a layer's pixels, not on its mask."));
         return std::nullopt;
     }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return refused(ToolRefusal::Refused, tr("The active layer is hidden."));
@@ -129,18 +187,36 @@ bool EditorSession::rasterizeLayer() {
     if (!canEditLayers() || !layer) return false;
     const Rasterizable what = rasterizable(*layer);
     if (what == Rasterizable::No || what == Rasterizable::DrawnFill) return false;
+    // Rasterize Shape bakes the shape's outline (and stroke) into the pixels, so the vector mask that cut them goes, as
+    // in Photoshop: a shape layer's path is its vector mask (a shape has no other one here).
+    std::optional<std::pair<AnyImage, LayerTransform>> baked;
+    if (what == Rasterizable::Shape && layerVectorMask(*layer, *document_)) {
+        baked = shapeAsPixels(*document_, *layer);
+        if (!baked) { emit error(tr("The shape reaches too far to be rasterized.")); return false; }
+    }
     endOpacityEdit();
     beginEdit(what == Rasterizable::Type ? QT_TRANSLATE_NOOP("History", "Rasterize Type")
               : what == Rasterizable::Shape ? QT_TRANSLATE_NOOP("History", "Rasterize Shape") : QT_TRANSLATE_NOOP("History", "Rasterize Fill Content"));
-    // The pixels stay as they are; the layer stops being anything but them, as a stroke on it would make it. A PSD's
-    // blocks saying what the layer is instead of its pixels go with it (the vector mask stays, as after painting).
+    // Otherwise the pixels stay as they are; the layer stops being anything but them, as a stroke on it would make it.
+    // A PSD's blocks saying what the layer is instead of its pixels go with it (a type or fill layer's vector mask
+    // stays, as after painting).
+    if (baked) {
+        if (layer->mask && !layer->mask->placement) layer->mask->placement = layer->maskTransform();   // the pixel mask stays where it is
+        layer->asset = Asset::makeAny(baked->first, layer->name);
+        if (document_->colorMode != ColorMode::RGB) layer->asset->thumbnail = modeThumbnail(baked->first, document_->colorMode, document_->profile);
+        layer->transform = baked->second;
+    }
     layer->text.reset();
     layer->textImage = AnyImage();
     layer->shape.reset();
     layer->shapeImage = AnyImage();
     if (layer->psdCarry) {
         auto carry = std::make_shared<PsdLayerCarry>(*layer->psdCarry);
-        std::erase_if(carry->blocks, [](const PsdBlock& b) { return PsdLayerCarry::binding(b.key) != PsdLayerCarry::Binding::Always; });
+        const bool shape = what == Rasterizable::Shape;
+        std::erase_if(carry->blocks, [shape](const PsdBlock& b) {
+            if (shape && (b.key == "vmsk" || b.key == "vsms" || b.key == "vstk" || b.key == "vscg")) return true;   // the path and its stroke
+            return PsdLayerCarry::binding(b.key) != PsdLayerCarry::Binding::Always;
+        });
         layer->psdCarry = std::move(carry);
     }
     endEdit();
@@ -161,8 +237,9 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (!document_ || stroke_ || transformEdit_) return false;
     const bool deep = document_->sampleType == SampleType::U16;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment) return false;
+    if (!layer || layer->isGroup) return false;
     bool mask = isMaskSelected_ && layer->mask;
+    if (layer->adjustment && !mask) return false;   // an adjustment layer has only its mask to paint
     if (!mask && smartObjectBlocksPixels(true)) return false;
     bool healing = tool_ == Tool::SpotHealing, cloning = tool_ == Tool::CloneStamp || (healing && spotHealingMode == 3);
     if (healing && spotHealingMode == 4) return false;   // Patch drags the selection instead
@@ -486,7 +563,9 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     if (refusedAtDepth("tool.smudge", tr("Editing pixels"))) return false;
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    // Blur softens a mask (an adjustment layer's too); everything else here works on the layer's pixels.
+    const bool blursMask = layer && isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask;
+    if (!layer || layer->isGroup || (!blursMask && (layer->adjustment || !layer->asset || !layer->asset->image))) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const bool deep = document_->sampleType == SampleType::U16;
     if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.f32()) {

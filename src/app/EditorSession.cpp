@@ -77,6 +77,8 @@ void EditorSession::setActiveLayer(const std::optional<Uuid>& id) {
     activeLayerId_ = id;
     selectedLayerIds_.clear();
     if (id) selectedLayerIds_.insert(*id);
+    // An adjustment layer has nothing to paint but its mask: when it has one, that is the target, as in Photoshop.
+    if (const Layer* active = activeLayer(); active && active->adjustment && active->mask) isMaskSelected_ = true;
 }
 
 bool EditorSession::canEditLayers() const {
@@ -479,7 +481,7 @@ void EditorSession::restore(const DocumentHistory::Snapshot& snapshot) {
     document_ = snapshot.document;
     setActiveLayer(snapshot.activeLayerId);
     const Layer* active = activeLayer();
-    isMaskSelected_ = keepMask && active && active->mask;
+    isMaskSelected_ = (keepMask || (active && active->adjustment)) && active && active->mask;   // an adjustment layer's mask stays its target
     if (active && active->mask && filterMaskLayer_ == activeLayerId_) isMaskSelected_ = true;   // the filter mask's layer paints its mask alone
     if (active && active->mask && isChannelProxy(active->id)) isMaskSelected_ = true;   // likewise the layer an alpha channel is painted through
     if (changedCanvas && document_) { viewport.fit({double(document_->width), double(document_->height)}); emit viewportChanged(); }

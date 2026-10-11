@@ -446,7 +446,11 @@ def remaining_methods(rpc):
     rpc.call("pixels.adjust", kind="Exposure", settings={})
     rpc.call("pixels.invert")
     assert rpc.call("adjustments.defaults", kind="Levels")
-    rpc.call("layers.add", kind="adjustment", adjustmentKind="Exposure")
+    exposure = rpc.call("layers.add", kind="adjustment", adjustmentKind="Exposure")
+    # As in Photoshop, an adjustment layer comes with a layer mask, its target: a stroke paints the mask.
+    assert "mask" in exposure and rpc.call("layers.select", id=exposure["id"])["maskSelected"], exposure
+    rpc.call("brush.stroke", points=[[10, 10], [30, 10]], size=6)
+    assert rpc.call("history.list")["undo"][-1] == "Paint Mask", rpc.call("history.list")["undo"][-3:]
     rpc.call("adjustments.set", settings={})
     rpc.call("layers.select", id=placed["id"])
     before = rpc.call("history.list")["undo"]

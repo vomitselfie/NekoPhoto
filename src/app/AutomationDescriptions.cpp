@@ -159,7 +159,7 @@ const MethodDoc methodDocs[] = {
      "id:layer The layer (the active one when left out); name:string New name; visible:bool Shown; opacity:number 0..1; blend:<blend> Blend mode; sampling:<sampling> How it is resampled when transformed; clipping:bool Clip to the layer beneath; "
      "blendIf:object Blending Options' Blend If: channels (gray, red, green, blue; gray, cyan, magenta, yellow, black; lightness, a, b) each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255 (split handles when low differs from high); channels left out stay; reset true clears the others first; "
      "channels:object Blending Options' Advanced Blending Channels: red, green, blue (cyan, magenta, yellow, black; lightness, a, b) each true to blend it or false to leave it out (the backdrop's value stays); channels left out stay"},
-    {"layers.add", "Add a layer above the active one and make it active.",
+    {"layers.add", "Add a layer above the active one and make it active (an adjustment layer with its mask targeted, white or from the selection, as in Photoshop).",
      "kind:(pixels|group|adjustment|text)=pixels What to add; name:string Its name; below:bool=false Put a pixel layer under the active one instead; "
      "adjustmentKind:<adjustment> For kind adjustment; settings:object For kind adjustment: settings as adjustments.defaults shows them; "
      "text:string For kind text: the content; x:number For kind text: left, default a quarter across; y:number For kind text: top; font:string Font family; size:number Font size in pixels 1..2000; "
