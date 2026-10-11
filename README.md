@@ -7,7 +7,7 @@
 
 <p align="center">
   <b>Bring your work with you.</b><br>
-  A photo editor and painting app for Linux and Windows that opens your Photoshop and Clip Studio files<br>
+  A kawaii photo editor and painting app for Linux and Windows that opens your Photoshop and Clip Studio files<br>
   with their layers, masks and text intact, paints with your own brushes, and saves back to layered PSD.
 </p>
 
@@ -363,7 +363,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
 
 <p align="center">
   <b>作品をそのまま持ってこられます。</b><br>
-  Linux・Windows 向けの写真編集・お絵描きソフトです。Photoshop とクリップスタジオのファイルを<br>
+  Linux・Windows 向けの、かわいい写真編集・お絵描きソフトです。Photoshop とクリップスタジオのファイルを<br>
   レイヤー・マスク・テキストを保ったまま開き、手持ちのブラシで描き、レイヤー付きの PSD に保存し直せます。
 </p>
 
