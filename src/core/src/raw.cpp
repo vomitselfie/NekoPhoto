@@ -1,5 +1,7 @@
 #include "compositor/raw.h"
 #include "compositor/document.h"
+#include "compositor/parallel.h"
+#include "compositor/rawtone.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -70,8 +72,9 @@ std::unique_ptr<LibRaw> openRaw(const std::vector<uint8_t>& bytes, std::string* 
     return raw;
 }
 
-/// Demosaiced with the camera's white balance into sRGB at `bits` (8 or 16); LibRaw's processed image, or null.
-libraw_processed_image_t* process(LibRaw& raw, int bits, const RawDecodeOptions& options, std::string* error) {
+/// Demosaiced with the camera's white balance (or the options' multipliers) into linear ProPhoto RGB at 16 bits, 1 = the
+/// raw white point: the scene light the default tone curve develops (rawtone.h). LibRaw's processed image, or null.
+libraw_processed_image_t* process(LibRaw& raw, const RawDecodeOptions& options, std::string* error) {
     if (options.multipliers) {
         const auto& m = *options.multipliers;
         raw.imgdata.params.use_camera_wb = 0;
@@ -81,8 +84,10 @@ libraw_processed_image_t* process(LibRaw& raw, int bits, const RawDecodeOptions&
     } else {
         raw.imgdata.params.use_camera_wb = 1;
     }
-    raw.imgdata.params.output_color = 1;   // sRGB
-    raw.imgdata.params.output_bps = bits;
+    raw.imgdata.params.output_color = 4;   // ProPhoto RGB
+    raw.imgdata.params.output_bps = 16;
+    raw.imgdata.params.gamm[0] = raw.imgdata.params.gamm[1] = 1;   // linear
+    raw.imgdata.params.no_auto_bright = 1;                         // the raw white point stays 1
     raw.imgdata.params.half_size = options.halfSize ? 1 : 0;
     if (options.cancel) raw.set_progress_handler(cancelCallback, const_cast<std::atomic<bool>*>(options.cancel));
     auto fail = [&](int code) -> libraw_processed_image_t* {
@@ -95,12 +100,52 @@ libraw_processed_image_t* process(LibRaw& raw, int bits, const RawDecodeOptions&
     int code = 0;
     libraw_processed_image_t* developed = raw.dcraw_make_mem_image(&code);
     if (!developed) return fail(code);
-    if (developed->type != LIBRAW_IMAGE_BITMAP || developed->bits != bits || (developed->colors != 3 && developed->colors != 1)) {
+    if (developed->type != LIBRAW_IMAGE_BITMAP || developed->bits != 16 || (developed->colors != 3 && developed->colors != 1)) {
         LibRaw::dcraw_clear_mem(developed);
         setError(error, "The RAW file developed into an unexpected format.");
         return nullptr;
     }
     return developed;
+}
+
+/// LibRaw's linear ProPhoto RGB through the default tone curve into encoded sRGB at 16 bits (0..32768, opaque). A DNG's
+/// BaselineExposure scales the scene light first, as Camera Raw does.
+std::shared_ptr<Image16> developed16(const libraw_processed_image_t& developed, double baselineExposure) {
+    const rawtone::Developer* developer = &rawtone::Developer::shared();
+    std::unique_ptr<rawtone::Developer> scaled;
+    if (std::isfinite(baselineExposure) && baselineExposure != 0) {
+        scaled = std::make_unique<rawtone::Developer>(std::exp2(std::clamp(baselineExposure, -4.0, 4.0)));
+        developer = scaled.get();
+    }
+    auto out = std::make_shared<Image16>(developed.width, developed.height);
+    const int n = developed.colors;
+    parallelRows(0, developed.height, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            const auto* src = reinterpret_cast<const uint16_t*>(developed.data) + size_t(y) * size_t(developed.width) * size_t(n);
+            uint16_t* dst = out->row(y);
+            for (int x = 0; x < developed.width; x++, src += n, dst += 4) {
+                const uint16_t in[3] = {src[0], src[n == 3 ? 1 : 0], src[n == 3 ? 2 : 0]};
+                float encoded[3];
+                developer->develop(in, encoded);
+                for (int c = 0; c < 3; c++) dst[c] = uint16_t(std::lround(std::clamp(double(encoded[c]), 0.0, 1.0) * 32768));
+                dst[3] = 32768;
+            }
+        }
+    });
+    return out;
+}
+
+/// Opens and develops `bytes` into encoded sRGB at 16 bits; null with `error`.
+std::shared_ptr<Image16> decode16(const std::vector<uint8_t>& bytes, const RawDecodeOptions& options, std::string* error) {
+    auto raw = openRaw(bytes, error);
+    if (!raw) return nullptr;
+    libraw_processed_image_t* developed = process(*raw, options, error);
+    if (!developed) return nullptr;
+    const auto& levels = raw->imgdata.color.dng_levels;
+    const double baseline = raw->imgdata.idata.dng_version && (levels.parsedfields & LIBRAW_DNGFM_BASELINEEXPOSURE) ? double(levels.baseline_exposure) : 0.0;
+    auto out = developed16(*developed, baseline);
+    LibRaw::dcraw_clear_mem(developed);
+    return out;
 }
 
 } // namespace
@@ -110,20 +155,14 @@ std::shared_ptr<Image> decodeRaw(const std::string& path, std::string* error) {
 #ifdef COMPOSITOR_HAVE_LIBRAW
     const std::vector<uint8_t> bytes = readRawFileBytes(path, error);
     if (bytes.empty()) return nullptr;
-    auto raw = openRaw(bytes, error);
-    if (!raw) return nullptr;
-    libraw_processed_image_t* developed = process(*raw, 8, {}, error);
-    if (!developed) return nullptr;
-    auto out = std::make_shared<Image>(developed->width, developed->height);
-    const int n = developed->colors;
-    for (int y = 0; y < developed->height; y++) {
-        const uint8_t* src = developed->data + size_t(y) * developed->width * n;
+    auto deep = decode16(bytes, {}, error);
+    if (!deep) return nullptr;
+    auto out = std::make_shared<Image>(deep->width(), deep->height());
+    for (int y = 0; y < deep->height(); y++) {
+        const uint16_t* src = deep->row(y);
         uint8_t* dst = out->row(y);
-        for (int x = 0; x < developed->width; x++, src += n, dst += 4) {
-            dst[0] = src[0]; dst[1] = src[n == 3 ? 1 : 0]; dst[2] = src[n == 3 ? 2 : 0]; dst[3] = 255;
-        }
+        for (int i = 0; i < deep->width() * 4; i++) dst[i] = uint8_t((uint32_t(src[i]) * 255u + 16384u) / 32768u);
     }
-    LibRaw::dcraw_clear_mem(developed);
     return out;
 #else
     (void)path;
@@ -158,23 +197,7 @@ bool readRawInfo(const std::vector<uint8_t>& bytes, RawInfo& info, std::string* 
 
 std::shared_ptr<Image16> decodeRaw16(const std::vector<uint8_t>& bytes, const RawDecodeOptions& options, std::string* error) {
 #ifdef COMPOSITOR_HAVE_LIBRAW
-    auto raw = openRaw(bytes, error);
-    if (!raw) return nullptr;
-    libraw_processed_image_t* developed = process(*raw, 16, options, error);
-    if (!developed) return nullptr;
-    auto out = std::make_shared<Image16>(developed->width, developed->height);
-    const int n = developed->colors;
-    // LibRaw's 0..65535 onto the 15-bit scale, rounded.
-    auto level = [](uint16_t v) { return uint16_t((uint32_t(v) * 32768u + 32767u) / 65535u); };
-    for (int y = 0; y < developed->height; y++) {
-        const auto* src = reinterpret_cast<const uint16_t*>(developed->data) + size_t(y) * size_t(developed->width) * size_t(n);
-        uint16_t* dst = out->row(y);
-        for (int x = 0; x < developed->width; x++, src += n, dst += 4) {
-            dst[0] = level(src[0]); dst[1] = level(src[n == 3 ? 1 : 0]); dst[2] = level(src[n == 3 ? 2 : 0]); dst[3] = 32768;
-        }
-    }
-    LibRaw::dcraw_clear_mem(developed);
-    return out;
+    return decode16(bytes, options, error);
 #else
     (void)bytes; (void)options;
     if (error) *error = "This build of NekoPhoto has no RAW support (LibRaw).";
@@ -223,11 +246,10 @@ bool isPresetMode(CameraRawWhiteBalance mode) {
     return mode != CameraRawWhiteBalance::Custom && mode != CameraRawWhiteBalance::Auto && mode != CameraRawWhiteBalance::AsShot;
 }
 
-// LibRaw's output curve with its default gamma (0.45 with a linear toe of slope 4.5, BT.709's shape), solved as its
-// gamma_curve does: the toe ends at 0.018054 and the offset is 0.099297.
-constexpr double kToe = 0.018054, kOffset = 0.099297, kPower = 0.45, kSlope = 4.5;
-double toLinear(double v) { return v < kToe * kSlope ? v / kSlope : std::pow((v + kOffset) / (1 + kOffset), 1 / kPower); }
-double fromLinear(double l) { return l < kToe ? l * kSlope : (1 + kOffset) * std::pow(l, kPower) - kOffset; }
+/// The scene light a developed pixel comes from, in linear sRGB (the space of LibRaw's camera matrix).
+std::array<double, 3> sceneOf(const uint16_t* p) {
+    return rawtone::srgbFromProPhoto(rawtone::undevelop({p[0] / 32768.0, p[1] / 32768.0, p[2] / 32768.0}));
+}
 
 std::array<double, 3> times(const Matrix3& m, const std::array<double, 3>& v) {
     return {m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2], m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
@@ -373,9 +395,7 @@ std::optional<TemperatureTint> rawAutoWhiteBalance(const Image16& decoded, const
     if (!balance.kelvin) return std::nullopt;
     const auto toCamera = invert(balance.cameraToSrgb);
     if (!toCamera) return std::nullopt;
-    // Gray world over the pixels that are neither clipped nor black, in linear light.
-    std::vector<double> linear(32769);
-    for (size_t i = 0; i < linear.size(); i++) linear[i] = toLinear(double(i) / 32768);
+    // Gray world over the pixels that are neither clipped nor black, in scene light.
     double sum[3] = {0, 0, 0};
     size_t count = 0;
     for (int y = 0; y < decoded.height(); y++) {
@@ -384,7 +404,8 @@ std::optional<TemperatureTint> rawAutoWhiteBalance(const Image16& decoded, const
             if (p[3] == 0) continue;
             const uint16_t hi = std::max({p[0], p[1], p[2]}), lo = std::min({p[0], p[1], p[2]});
             if (hi > 31130 || lo < 160) continue;   // 95 % and 0.5 %
-            for (int c = 0; c < 3; c++) sum[c] += linear[std::min<uint16_t>(p[c], 32768)];
+            const auto scene = sceneOf(p);
+            for (int c = 0; c < 3; c++) sum[c] += scene[size_t(c)];
             count++;
         }
     }
@@ -409,20 +430,16 @@ void rebalanceRawDecode(Image16& image, const RawWhiteBalance& balance, const st
         for (int k = 0; k < 3; k++)
             for (int j = 0; j < 3; j++)
                 a[r][k] += balance.cameraToSrgb[r][j] * ((to[size_t(j)] / toMin) / (from[size_t(j)] / fromMin)) * (*toCamera)[j][k];
-    std::vector<float> linear(32769);
-    for (size_t i = 0; i < linear.size(); i++) linear[i] = float(toLinear(double(i) / 32768));
-    constexpr int encodeSteps = 1 << 16;
-    std::vector<uint16_t> encode(encodeSteps + 1);
-    for (int i = 0; i <= encodeSteps; i++) encode[size_t(i)] = uint16_t(std::lround(std::clamp(fromLinear(double(i) / encodeSteps), 0.0, 1.0) * 32768));
-    for (int y = 0; y < image.height(); y++) {
-        uint16_t* p = image.row(y);
-        for (int x = 0; x < image.width(); x++, p += 4) {
-            const std::array<double, 3> l{linear[std::min<uint16_t>(p[0], 32768)], linear[std::min<uint16_t>(p[1], 32768)],
-                                          linear[std::min<uint16_t>(p[2], 32768)]};
-            const auto o = times(a, l);
-            for (int c = 0; c < 3; c++) p[c] = encode[size_t(std::lround(std::clamp(o[size_t(c)], 0.0, 1.0) * encodeSteps))];
+    // In scene light: back through the default tone curve, rebalanced, and developed again.
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            uint16_t* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const auto o = rawtone::develop(rawtone::proPhotoFromSrgb(times(a, sceneOf(p))));
+                for (int c = 0; c < 3; c++) p[c] = uint16_t(std::lround(std::clamp(o[size_t(c)], 0.0, 1.0) * 32768));
+            }
         }
-    }
+    });
 }
 
 std::string resolveRawWhiteBalance(const std::vector<uint8_t>& bytes, CameraRawSettings& s, bool temperatureGiven, bool tintGiven) {

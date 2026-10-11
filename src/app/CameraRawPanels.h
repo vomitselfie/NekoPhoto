@@ -54,6 +54,9 @@ private:
     QComboBox* choice(QFormLayout* form, const QString& label, const QStringList& items, std::function<int()> get, std::function<void(int)> set);
     void sync();
     void emitChanged();
+    /// Load Preset…: a Camera Raw or Lightroom .xmp preset over the current settings (compositor/camerarawxmp.h); what has
+    /// no counterpart here is listed.
+    void loadPreset();
     /// Reset All's settings: the defaults, As Shot for a RAW file.
     compositor::CameraRawSettings defaults() const;
     /// White Balance in kelvin for a RAW file (Mode::Raw with a colour model).

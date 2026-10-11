@@ -7,6 +7,7 @@
 #include "compositor/depth.h"
 #include "check.h"
 #include "compositor/cameraraw.h"
+#include "compositor/camerarawxmp.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -101,11 +102,13 @@ TEST_CASE(defaults_leave_pixels_and_alpha_alone) {
     CHECK(applyCameraRaw(untouched, broken));   // normalized first, so it runs
 }
 
+// The tone sliders follow Camera Raw's responses fitted to the corpus chart (rawtone.h, docs/camera-raw.md#fitted-responses),
+// so the expected values below are those responses, not upstream's.
 TEST_CASE(exposure_adds_one_stop_and_contrast_pivots_around_mid_gray) {
     CameraRawSettings settings;
     settings.exposure = 1;
     Pixel brighter = pixels(applied(gray(), settings))[0];
-    CHECK(std::abs(brighter[0] - 176) <= 2);
+    CHECK(std::abs(brighter[0] - 182) <= 2);   // one stop of scene light under the default curve
     CHECK(brighter[0] == brighter[1] && brighter[1] == brighter[2]);
     Image translucent = gray(4, 4, 0.5);
     CHECK_EQ(pixels(applied(translucent, settings))[0][3], pixels(translucent)[0][3]);
@@ -114,10 +117,10 @@ TEST_CASE(exposure_adds_one_stop_and_contrast_pivots_around_mid_gray) {
     settings = CameraRawSettings();
     settings.contrast = 100;
     auto pushed = pixels(applied(both, settings));
-    CHECK(pushed[0][0] < 10 && pushed[1][0] > 250);
+    CHECK(pushed[0][0] < 45 && pushed[1][0] > 205);
     settings.contrast = -100;
     auto flat = pixels(applied(both, settings));
-    CHECK(std::abs(flat[0][0] - 128) <= 2 && std::abs(flat[1][0] - 128) <= 2);
+    CHECK(flat[0][0] > 80 && flat[1][0] < 185);
 }
 
 TEST_CASE(tonal_sliders_move_the_end_they_name) {
@@ -126,13 +129,13 @@ TEST_CASE(tonal_sliders_move_the_end_they_name) {
     settings.highlights = -100;
     auto recovered = pixels(applied(brightAndMid, settings));
     CHECK(recovered[0][0] < 200);
-    CHECK(std::abs(recovered[1][0] - 128) <= 2);
+    CHECK(230 - recovered[0][0] > 128 - recovered[1][0] + 20);   // the bright one drops most
 
     settings = CameraRawSettings();
     settings.whites = 100;
     auto clipped = pixels(applied(brightAndMid, settings));
     CHECK_EQ(clipped[0][0], 255);
-    CHECK(std::abs(clipped[1][0] - 128) <= 2);
+    CHECK(clipped[1][0] > 128 && clipped[1][0] < 250);   // on Camera Raw's chart Whites +100 lifts the midtones too
     CameraRawPreview highlightView;
     highlightView.clipping = CameraRawClipping::Highlights;
     auto viz = pixels(applied(brightAndMid, settings, 0, highlightView));
@@ -143,13 +146,13 @@ TEST_CASE(tonal_sliders_move_the_end_they_name) {
     settings.shadows = 100;
     auto opened = pixels(applied(darkAndMid, settings));
     CHECK(opened[0][0] > 50);
-    CHECK(std::abs(opened[1][0] - 128) <= 2);
+    CHECK(opened[0][0] - 20 > opened[1][0] - 128);   // the dark one rises most
 
     settings = CameraRawSettings();
     settings.blacks = -100;
     auto crushed = pixels(applied(darkAndMid, settings));
-    CHECK(crushed[0][0] < 20);
-    CHECK(std::abs(crushed[1][0] - 128) <= 2);
+    CHECK(crushed[0][0] < 5);
+    CHECK(crushed[1][0] > 80);
     CameraRawPreview shadowView;
     shadowView.clipping = CameraRawClipping::Shadows;
     auto shadowViz = pixels(applied(darkAndMid, settings, 0, shadowView));
@@ -187,8 +190,9 @@ TEST_CASE(vibrance_favors_dull_colors_and_protects_skin_while_saturation_does_no
     settings.saturation = 100;
     const double redRatio = double(chroma(pixels(applied(red, settings))[0])) / chroma(pixels(red)[0]);
     const double blueRatio = double(chroma(pixels(applied(blue, settings))[0])) / chroma(pixels(blue)[0]);
-    CHECK_NEAR(redRatio, 2, 0.15);
-    CHECK_NEAR(blueRatio, 2, 0.15);
+    // Saturation +100 doubles the distance from the luminance in linear ProPhoto RGB: about twice the encoded chroma.
+    CHECK(redRatio > 1.6 && redRatio < 2.3);
+    CHECK(blueRatio > 1.6 && blueRatio < 2.3);
 }
 
 TEST_CASE(eyedropper_and_auto_neutralize_a_warm_pixel) {
@@ -248,7 +252,7 @@ TEST_CASE(texture_and_clarity_sharpen_an_edge_and_leave_a_flat_field) {
     settings.clarity = 100;
     Image clarified = applied(edge, settings);
     CHECK_EQ(byteAt(clarified, 0), far);
-    CHECK(byteAt(clarified, 8) != near);   // clarity's wider radius reaches further in
+    CHECK(byteAt(clarified, 11) != atEdge);   // clarity's radius is a share of the image (2% of its long edge)
     settings.clarity = -100;
     Image softened = applied(edge, settings);
     const int hardGap = std::abs(byteAt(edge, 12) - byteAt(edge, 11));
@@ -380,9 +384,13 @@ TEST_CASE(curve_mixer_and_grading_change_only_their_own_tones) {
     Pixel gradedLight = pixels(applied(solid(4, 4, 1, 1, 1), settings))[0];
     CHECK(gradedDark[0] > gradedDark[1] + 5);
     CHECK(std::abs(gradedLight[0] - gradedLight[1]) <= 2);
+    // Balance toward the highlights weakens the shadow wheel on the upper shadows (as Camera Raw's Balance +50 does).
+    Image upper = solid(4, 4, 0.35, 0.35, 0.35);
+    settings.grading.balance = 0;
+    Pixel unbalanced = pixels(applied(upper, settings))[0];
     settings.grading.balance = 100;
-    Pixel balanced = pixels(applied(dark, settings))[0];
-    CHECK(balanced[0] - balanced[1] < gradedDark[0] - gradedDark[1]);   // toward highlights weakens the shadow tint
+    Pixel balanced = pixels(applied(upper, settings))[0];
+    CHECK(balanced[0] - balanced[1] < unbalanced[0] - unbalanced[1]);
 
     settings = CameraRawSettings();
     settings.curve.shadows = 100;
@@ -592,13 +600,17 @@ TEST_CASE(sixteen_bit_agrees_with_eight_bit_on_eight_bit_input) {
         {"Grain 30", [](CameraRawSettings& s) { s.grainAmount = 30; }, 1},
         {"Sharpen 80", [](CameraRawSettings& s) { s.detail.sharpenAmount = 80; s.detail.sharpenMasking = 20; }, 1},
         {"Noise reduction 40/30", [](CameraRawSettings& s) { s.detail.noiseLuminance = 40; s.detail.noiseColor = 30; }, 1},
-        {"Optics", [](CameraRawSettings& s) { s.optics.distortion = 30; s.optics.purpleAmount = 50; s.optics.vignetteAmount = 20; }, 1},
+        {"Optics", [](CameraRawSettings& s) { s.optics.purpleAmount = 50; s.optics.vignetteAmount = 20; }, 1},
+        {"Distortion", [](CameraRawSettings& s) { s.optics.distortion = 30; }, 1},
         {"Chromatic aberration", [](CameraRawSettings& s) { s.optics.removeChromaticAberration = true; }, 1},
         {"Geometry", [](CameraRawSettings& s) { s.geometry.rotate = 5; s.geometry.vertical = 10; }, 1},
         {"Calibration", [](CameraRawSettings& s) { s.calibration.redHue = 30; s.calibration.blueSaturation = -40; s.calibration.shadowTint = 20; }, 1},
         {"Everything at once", [](CameraRawSettings& s) {
              s.exposure = 0.4; s.contrast = 20; s.shadows = 30; s.vibrance = 20; s.clarity = 20; s.curve.rgb = CameraRawCurveSettings::mediumContrast();
-             s.grading.midtones = {30, 20, 0}; s.detail.sharpenAmount = 40; s.vignetteAmount = -20; }, 2},
+             s.grading.midtones = {30, 20, 0}; s.detail.sharpenAmount = 40; s.vignetteAmount = -20; },
+         // The 8-bit grade rounds after the tone, clarity, vignette and sharpening passes, and the fitted curves are steep
+         // in the shadows, so their roundings add up on a few pixels.
+         5},
     };
     bool within = true;
     for (const Case& c : cases) {
@@ -638,6 +650,71 @@ TEST_CASE(sixteen_bit_keeps_sixteen_bit_precision) {
     const auto a = CameraRawSettings::autoBalance(warm), b = CameraRawSettings::autoBalance(*widenImage(warm));
     REQUIRE(a && b);
     CHECK(std::abs((*a)[0] - (*b)[0]) < 0.5 && std::abs((*a)[1] - (*b)[1]) < 0.5);
+}
+
+TEST_CASE(an_xmp_preset_patches_the_settings_and_lists_what_it_cannot) {
+    // A Lightroom-style preset: settings as attributes and as elements, a point curve as a sequence, the name as a
+    // language alternative, and settings this engine has no counterpart for.
+    const std::string xmp = R"(<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal" crs:Version="18.7" crs:ProcessVersion="15.4" crs:UUID="0123"
+    crs:Exposure2012="+0.50" crs:Contrast2012="+20" crs:Temperature="5600" crs:Tint="+8" crs:WhiteBalance="Custom"
+    crs:IncrementalTemperature="+12" crs:HueAdjustmentBlue="-30" crs:SplitToningShadowHue="210"
+    crs:SplitToningShadowSaturation="25" crs:CurveRefineSaturation="50" crs:PerspectiveScale="90"
+    crs:PostCropVignetteStyle="3" crs:ConvertToGrayscale="True" crs:GrayMixerRed="+10" crs:HasCrop="True"
+    crs:EnableCalibration="False" crs:RedHue="+40" crs:Sharpness="0">
+   <crs:Name><rdf:Alt><rdf:li xml:lang="x-default">Warm Look</rdf:li></rdf:Alt></crs:Name>
+   <crs:Clarity2012>+15</crs:Clarity2012>
+   <crs:ToneCurvePV2012><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>128, 140</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012>
+   <crs:Look><rdf:Description crs:Name="Adobe Color"/></crs:Look>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>)";
+    const std::vector<uint8_t> bytes(xmp.begin(), xmp.end());
+    CameraRawSettings base;
+    base.saturation = 7;   // a preset is a patch: what it does not name stays
+    std::string error;
+    auto onPixels = readCameraRawXmp(bytes, base, false, &error);
+    REQUIRE(onPixels);
+    const CameraRawSettings& s = onPixels->settings;
+    CHECK_EQ(onPixels->name, std::string("Warm Look"));
+    CHECK_EQ(s.exposure, 0.5);
+    CHECK_EQ(s.contrast, 20.0);
+    CHECK_EQ(s.saturation, 7.0);
+    CHECK_EQ(s.temperature, 12.0);   // the filter takes the relative temperature, not kelvin
+    CHECK_EQ(s.rawTemperature, 0.0);
+    CHECK_EQ(s.mixer.hue[5], -30.0);
+    CHECK_EQ(s.grading.shadows.hue, 210.0);
+    CHECK_EQ(s.grading.shadows.saturation, 25.0);
+    CHECK_EQ(s.curve.refineSaturation, -50.0);
+    CHECK_EQ(s.geometry.scale, -10.0);
+    CHECK(s.vignetteStyle == CameraRawVignetteStyle::PaintOverlay);
+    CHECK_EQ(s.clarity, 15.0);
+    CHECK_EQ(s.curve.rgb.size(), size_t(3));
+    CHECK_NEAR(s.curve.rgb[1].y, 140 / 255.0, 1e-9);
+    CHECK_EQ(s.calibration.redHue, 0.0);   // EnableCalibration="False" switches the panel off
+    auto listed = [&](const std::string& key) {
+        return std::any_of(onPixels->unsupported.begin(), onPixels->unsupported.end(), [&](const std::string& u) { return u.rfind(key, 0) == 0; });
+    };
+    CHECK(listed("ConvertToGrayscale=True"));
+    CHECK(listed("GrayMixerRed"));
+    CHECK(listed("HasCrop=True"));
+    CHECK(listed("Look"));
+    CHECK(listed("Temperature=5600"));   // kelvin has no meaning on pixels
+    CHECK(!listed("Sharpness"));          // 0 changes nothing
+    CHECK(!listed("UUID") && !listed("PresetType"));
+
+    auto onRaw = readCameraRawXmp(bytes, base, true, &error);
+    REQUIRE(onRaw);
+    CHECK_EQ(onRaw->settings.rawTemperature, 5600.0);
+    CHECK_EQ(onRaw->settings.rawTint, 8.0);
+    CHECK(onRaw->settings.whiteBalance == CameraRawWhiteBalance::Custom);
+    CHECK(std::any_of(onRaw->unsupported.begin(), onRaw->unsupported.end(), [](const std::string& u) { return u.rfind("IncrementalTemperature", 0) == 0; }));
+
+    const std::string junk = "not xml";
+    CHECK(!readCameraRawXmp(std::vector<uint8_t>(junk.begin(), junk.end()), base, false, &error));
+    CHECK(!error.empty());
 }
 
 TEST_MAIN()

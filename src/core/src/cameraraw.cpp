@@ -4,6 +4,7 @@
 // CameraRawGeometryCalibration.swift. Upstream warps Geometry with Core Image's CIPerspectiveTransform;
 // here the same corners drive a homography resampled bilinearly.
 #include "compositor/cameraraw.h"
+#include "compositor/rawtone.h"
 #include "compositor/whitebalance.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
@@ -14,6 +15,7 @@
 #include <cmath>
 #include <functional>
 #include <map>
+#include <type_traits>
 
 extern "C" {
 #include "AdjustPixels.h"
@@ -102,20 +104,16 @@ bool CameraRawCurveSettings::adjusts() const {
 }
 
 double CameraRawCurveSettings::parametric(double tone) const {
-    const double shadow = shadowSplit / 100, dark = darkSplit / 100, light = lightSplit / 100;
-    double amount, lo, hi;
-    if (tone < shadow) { amount = shadows; lo = 0; hi = shadow; }
-    else if (tone < dark) { amount = darks; lo = shadow; hi = dark; }
-    else if (tone < light) { amount = lights; lo = dark; hi = light; }
-    else { amount = highlights; lo = light; hi = 1; }
-    const double span = std::max(0.02, hi - lo);
-    const double weight = 1 - std::fabs(tone - (lo + hi) / 2) / (span / 2);
-    return std::min(1.0, std::max(0.0, tone + (amount / 100) * std::max(0.0, weight) * 0.22));
+    const auto table = rawtone::parametricTable(*this);
+    const double x = std::clamp(tone, 0.0, 1.0) * 4096;
+    const size_t i = std::min(size_t(x), size_t(4095));
+    return table[i] + (table[i + 1] - table[i]) * (x - double(i));
 }
 
 std::vector<float> CameraRawCurveSettings::lumaTable() const {
+    const auto parametric = rawtone::parametricTable(*this);
     std::vector<float> table(256);
-    for (int i = 0; i < 256; i++) table[size_t(i)] = float(curveAt(parametric(i / 255.0), rgb));
+    for (int i = 0; i < 256; i++) table[size_t(i)] = float(curveAt(parametric[size_t(i) * 4096 / 255], rgb));
     return table;
 }
 
@@ -301,17 +299,30 @@ std::array<std::array<double, 2>, 4> CameraRawGeometrySettings::outputCorners(in
             vert += guidedVertical; horiz += guidedHorizontal; rot += guidedRotate;
         }
     }
-    // Upstream's corners, in Core Image's y-up space.
+    // The corners in Core Image's y-up space, as upstream, with the sliders fitted to Camera Raw's renders of the corpus
+    // chart (docs/camera-raw.md#fitted-responses): Vertical and Horizontal as a perspective (below), Rotate clockwise,
+    // Aspect narrowing by 2^(-0.1406 per 100) and stretching the height to match, X and Y Offset moving the image by 0.75
+    // of its size per 100.
     const double w = width, h = height;
     const double strength = projection == CameraRawProjection::Perspective ? 1.0 : 0.55;
-    const double v = vert / 100 * w * 0.18 * strength;
-    const double hz = horiz / 100 * h * 0.18 * strength;
-    const double aspectScale = 1 + aspect / 200;
+    const double aspectScale = std::exp2(-0.1406 * aspect / 100);
     const double zoom = 1 + scale / 100;
-    const double shiftX = offsetX / 100 * w * 0.15, shiftY = offsetY / 100 * h * 0.15;
-    std::array<std::array<double, 2>, 4> c{{{-v + shiftX, h + shiftY}, {w + v + shiftX, h + shiftY}, {w + hz + shiftX, -shiftY}, {-hz + shiftX, -shiftY}}};
+    const double shiftX = offsetX / 100 * w * 0.75, shiftY = offsetY / 100 * h * 0.75;
+    std::array<std::array<double, 2>, 4> c{{{shiftX, h + shiftY}, {w + shiftX, h + shiftY}, {w + shiftX, shiftY}, {shiftX, shiftY}}};
+    if (horiz != 0 || vert != 0) {
+        // Vertical and Horizontal turn the picture plane: each corner, in units of the long edge from the middle, divided by
+        // 1 - 0.95 (h x - v y) and enlarged by 1 + 0.04 |(h, v)|, h and v the sliders / 100.
+        const double qh = horiz / 100 * strength, qv = -vert / 100 * strength;
+        const double enlarge = 1 + 0.04 * std::hypot(qh, qv);
+        const double longEdge = std::max(w, h);
+        for (auto& p : c) {
+            const double x = (p[0] - shiftX - w / 2) / longEdge, y = (p[1] - shiftY - h / 2) / longEdge;
+            const double q = 1 - 0.95 * (qh * x + qv * y);
+            p = {w / 2 + shiftX + enlarge * x / q * longEdge, h / 2 + shiftY + enlarge * y / q * longEdge};
+        }
+    }
     const double cx = w / 2 + shiftX, cy = h / 2 + shiftY;
-    const double radians = rot * M_PI / 180, cosine = std::cos(radians), sine = std::sin(radians);
+    const double radians = -rot * M_PI / 180, cosine = std::cos(radians), sine = std::sin(radians);
     for (auto& p : c) {
         const double dx = p[0] - cx, dy = p[1] - cy;
         p = {cx + dx * cosine - dy * sine, cy + dx * sine + dy * cosine};
@@ -324,9 +335,22 @@ std::array<std::array<double, 2>, 4> CameraRawGeometrySettings::outputCorners(in
 
 namespace {
 
+/// Lens Corrections' manual Distortion (-100..100) as a map from an output position to the position it samples, in pixels:
+/// radial about the middle, the corners fixed (r = 1 there), an output radius r sampling r * (1 + k * (1 - r^2)). Positive
+/// amounts shrink the middle (correcting barrel distortion), negative ones enlarge it. k per unit amount is fitted to
+/// Camera Raw's renders of the corpus chart.
+Point manualDistortion(Point p, double width, double height, double amount) {
+    if (amount == 0) return p;
+    const double k = amount / 100 * (amount > 0 ? 0.4 : 0.5);
+    const double cx = width / 2, cy = height / 2, dx = p.x - cx, dy = p.y - cy;
+    const double r2 = (dx * dx + dy * dy) / (cx * cx + cy * cy);
+    const double scale = 1 + k * (1 - r2);
+    return Point(cx + dx * scale, cy + dy * scale);
+}
+
 template <typename ImageType>
-ImageType warpGeometry(const CameraRawGeometrySettings& s, const ImageType& image) {
-    if (!s.adjusts() || image.isEmpty()) return image;
+ImageType warpGeometry(const CameraRawGeometrySettings& s, double distortion, const ImageType& image) {
+    if ((!s.adjusts() && distortion == 0) || image.isEmpty()) return image;
     const int width = image.width(), height = image.height();
     const auto c = s.outputCorners(width, height);
     Corners corners{Point(c[0][0], c[0][1]), Point(c[1][0], c[1][1]), Point(c[2][0], c[2][1]), Point(c[3][0], c[3][1])};
@@ -338,7 +362,9 @@ ImageType warpGeometry(const CameraRawGeometrySettings& s, const ImageType& imag
             for (int x = 0; x < width; x++) {
                 const Point unit = inverse.map(Point(x + 0.5, y + 0.5));
                 if (!(unit.x >= 0 && unit.x <= 1 && unit.y >= 0 && unit.y <= 1)) continue;
-                sampleBilinear(image, unit.x * width, unit.y * height, row + x * 4);
+                const Point source = manualDistortion(Point(unit.x * width, unit.y * height), width, height, distortion);
+                if (!(source.x >= 0 && source.x <= width && source.y >= 0 && source.y <= height)) continue;
+                sampleBilinear(image, source.x, source.y, row + x * 4);
             }
         }
     });
@@ -367,8 +393,8 @@ ImageType warpGeometry(const CameraRawGeometrySettings& s, const ImageType& imag
 
 } // namespace
 
-Image CameraRawGeometrySettings::apply(const Image& image) const { return warpGeometry(normalized(), image); }
-Image16 CameraRawGeometrySettings::apply(const Image16& image) const { return warpGeometry(normalized(), image); }
+Image CameraRawGeometrySettings::apply(const Image& image) const { return warpGeometry(normalized(), 0, image); }
+Image16 CameraRawGeometrySettings::apply(const Image16& image) const { return warpGeometry(normalized(), 0, image); }
 
 bool CameraRawCalibrationSettings::adjusts() const {
     return shadowTint != 0 || redHue != 0 || redSaturation != 0 || greenHue != 0 || greenSaturation != 0 || blueHue != 0 || blueSaturation != 0;
@@ -580,13 +606,120 @@ struct FloatKernels {
     }
 };
 
+/// The tone stage (rawtone.h) over premultiplied pixels on the kernels' 0..255 scale, unpremultiplied as they are.
+template <typename Pixel>
+void applyToneStage(Pixel* rows, size_t width, size_t count, size_t stride, const rawtone::ToneStage& stage) {
+    for (size_t y = 0; y < count; ++y) {
+        Pixel* row = rows + y * stride;
+        for (size_t x = 0; x < width; ++x) {
+            Pixel* p = row + x * 4;
+            const double alpha = p[3];
+            if (!(alpha > 0)) continue;
+            float c[3];
+            for (int i = 0; i < 3; i++) c[i] = float(std::min(255.0, p[i] * 255.0 / alpha) / 255.0);
+            stage.apply(c);
+            for (int i = 0; i < 3; i++) {
+                double v = double(c[i]) * alpha;
+                if constexpr (std::is_integral_v<Pixel>) v = std::round(v);
+                p[i] = Pixel(std::min(alpha, std::max(0.0, v)));
+            }
+        }
+    }
+}
+
+/// `body(x, y, rgb)` on every covered pixel's unpremultiplied encoded colour (0..1), with the pixel's centre.
+template <typename Kernels, typename Body>
+void perPixel(Kernels& k, Body&& body) {
+    using Pixel = typename Kernels::Pixel;
+    parallelRows(0, k.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            Pixel* row = k.row(y);
+            for (int x = 0; x < k.width(); x++) {
+                Pixel* p = row + size_t(x) * 4;
+                const double alpha = p[3];
+                if (!(alpha > 0)) continue;
+                float c[3];
+                for (int i = 0; i < 3; i++) c[i] = float(std::min(255.0, p[i] * 255.0 / alpha) / 255.0);
+                body(x + 0.5, y + 0.5, c);
+                for (int i = 0; i < 3; i++) {
+                    double v = double(std::clamp(c[i], 0.0f, 1.0f)) * alpha;
+                    if constexpr (std::is_integral_v<Pixel>) v = std::round(v);
+                    p[i] = Pixel(std::min(alpha, std::max(0.0, v)));
+                }
+            }
+        }
+    });
+}
+
+/// A box blur of a plane, `passes` times (three approach a Gaussian), edges clamped.
+void boxBlur(std::vector<float>& plane, int width, int height, int radius, int passes) {
+    if (radius < 1 || width < 1 || height < 1) return;
+    std::vector<float> temp(plane.size());
+    const double window = 2 * radius + 1;
+    for (int pass = 0; pass < passes; pass++) {
+        parallelRows(0, height, [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++) {
+                const float* in = plane.data() + size_t(y) * size_t(width);
+                float* out = temp.data() + size_t(y) * size_t(width);
+                double sum = 0;
+                for (int i = -radius; i <= radius; i++) sum += in[std::clamp(i, 0, width - 1)];
+                for (int x = 0; x < width; x++) {
+                    out[x] = float(sum / window);
+                    sum += in[std::min(x + radius + 1, width - 1)] - in[std::max(x - radius, 0)];
+                }
+            }
+        });
+        parallelRows(0, width, [&](int x0, int x1) {
+            for (int x = x0; x < x1; x++) {
+                double sum = 0;
+                for (int i = -radius; i <= radius; i++) sum += temp[size_t(std::clamp(i, 0, height - 1)) * size_t(width) + size_t(x)];
+                for (int y = 0; y < height; y++) {
+                    plane[size_t(y) * size_t(width) + size_t(x)] = float(sum / window);
+                    sum += temp[size_t(std::min(y + radius + 1, height - 1)) * size_t(width) + size_t(x)]
+                         - temp[size_t(std::max(y - radius, 0)) * size_t(width) + size_t(x)];
+                }
+            }
+        });
+    }
+}
+
+double srgbDecodeValue(double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); }
+double srgbEncodeValue(double l) { return l <= 0.0031308 ? l * 12.92 : 1.055 * std::pow(l, 1 / 2.4) - 0.055; }
+
+/// Clarity as a local contrast of log luminance at a wide radius (a share of the image's long edge), fitted to Camera
+/// Raw's renders of the corpus chart: each pixel's light is scaled by 2^(strength * amount / 100 * (L - blur(L))).
+template <typename Kernels>
+void clarityPass(Kernels& k, double amount, double pixelScale) {
+    const int width = k.width(), height = k.height();
+    const double radiusShare = 0.02;
+    const double strength = 0.35;
+    const double strengthNeg = 0.2;
+    (void)pixelScale;
+    std::vector<float> log(size_t(width) * size_t(height), 0.0f);
+    perPixel(k, [&](double x, double y, float c[3]) {
+        const double lum = 0.2126 * srgbDecodeValue(c[0]) + 0.7152 * srgbDecodeValue(c[1]) + 0.0722 * srgbDecodeValue(c[2]);
+        log[size_t(y) * size_t(width) + size_t(x)] = float(std::log2(std::max(lum, 1e-5)));
+    });
+    std::vector<float> blurred = log;
+    boxBlur(blurred, width, height, std::max(1, int(std::lround(radiusShare * std::max(width, height) / std::sqrt(3.0)))), 3);
+    const double gain = (amount > 0 ? strength : strengthNeg) * amount / 100;
+    perPixel(k, [&](double x, double y, float c[3]) {
+        const size_t i = size_t(y) * size_t(width) + size_t(x);
+        const double g = std::exp2(gain * (log[i] - blurred[i]));
+        for (int j = 0; j < 3; j++) c[j] = float(srgbEncodeValue(std::clamp(srgbDecodeValue(c[j]) * g, 0.0, 1.0)));
+    });
+}
+
 template <typename Kernels>
 void runCameraRaw(Kernels& k, const CameraRawSettings& s, double pixelScale, uint32_t seed, const CameraRawPreview& preview) {
     const bool clipping = preview.clipping != CameraRawClipping::None;
     const bool sharpenMask = preview.sharpenMask;
     const int visualize = preview.visualizePointColor;
     const bool indicators = preview.shadowClipIndicator || preview.highlightClipIndicator;
-    const bool paintColor = !clipping && !sharpenMask && (s.curve.adjusts() || s.mixer.adjusts() || s.grading.adjusts() || visualize >= 0);
+    const bool pointColors = std::any_of(s.mixer.points.begin(), s.mixer.points.end(), [](const auto& p) {
+        return p.hueShift != 0 || p.saturationShift != 0 || p.luminanceShift != 0;
+    });
+    const bool paintColor = !clipping && !sharpenMask && (pointColors || visualize >= 0);
     const bool paintEffects = !clipping && !sharpenMask && s.adjustsEffects();
     const bool paintDetailOptics = !clipping && (s.detail.adjusts() || s.optics.adjusts() || sharpenMask);
     const size_t width = size_t(k.width()), height = size_t(k.height()), stride = k.stride();
@@ -595,48 +728,49 @@ void runCameraRaw(Kernels& k, const CameraRawSettings& s, double pixelScale, uin
         parallelRows(0, k.height(), [&](int y0, int y1) { body(k.row(y0), size_t(y1 - y0)); });
     };
 
-    if (!clipping && !sharpenMask && s.calibration.adjusts()) {
-        const auto& c = s.calibration;
-        perRows([&](Pixel* rows, size_t count) {
-            k.calibration(rows, width, count, stride, c.shadowTint, c.redHue, c.redSaturation, c.greenHue, c.greenSaturation,
-                          c.blueHue, c.blueSaturation, c.process);
-        });
+    // White balance, Camera Calibration, Exposure, the tone sliders, Dehaze's tone, the Tone Curve, Vibrance and
+    // Saturation, the colour mixer and Colour Grading: the fitted responses of rawtone.h. The clipping views show the result.
+    if (!sharpenMask && (s.adjustsLight() || s.adjustsColor() || s.dehaze != 0 || s.curve.adjusts() || s.mixer.adjusts() || s.grading.adjusts()
+                         || (!clipping && s.calibration.adjusts()))) {
+        const rawtone::ToneStage tone(s);
+        if (!tone.identity()) perRows([&](Pixel* rows, size_t count) { applyToneStage(rows, width, count, stride, tone); });
     }
-    if (s.adjustsLight() || s.adjustsColor() || clipping) {
-        const auto gains = s.gains();
-        perRows([&](Pixel* rows, size_t count) {
-            k.light(rows, width, count, stride, gains[0], gains[1], gains[2], s.exposure, s.contrast, s.highlights, s.shadows,
-                    s.whites, s.blacks, s.vibrance, s.saturation, int(preview.clipping));
-        });
+    if (clipping) {
+        perRows([&](Pixel* rows, size_t count) { k.light(rows, width, count, stride, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, int(preview.clipping)); });
     }
     if (paintColor) {
-        const auto luma = s.curve.lumaTable(), red = s.curve.channelTable(s.curve.red), green = s.curve.channelTable(s.curve.green),
-                   blue = s.curve.channelTable(s.curve.blue);
-        std::vector<float> mixer;
-        for (const auto* family : {&s.mixer.hue, &s.mixer.saturation, &s.mixer.luminance}) for (double v : *family) mixer.push_back(float(v / 100));
+        // Point colours (and their Visualize view) after the tone stage; the bands and the wheels are done above.
+        const auto luma = CameraRawCurveSettings{}.channelTable(CameraRawCurveSettings::linear());
+        const auto& red = luma;
+        const auto& green = luma;
+        const auto& blue = luma;
+        const std::vector<float> mixer(24, 0.0f), grade(12, 0.0f);
         std::vector<float> points;
         for (const auto& p : s.mixer.points)
             for (double v : {p.hue / 360, p.saturation, p.luminance, p.hueShift / 100, p.saturationShift / 100, p.luminanceShift / 100,
                              p.hueRange / 360, p.saturationRange, p.luminanceRange})
                 points.push_back(float(v));
         points.push_back(0);   // never an empty vector's null data
-        std::vector<float> grade;
-        for (const auto* w : {&s.grading.shadows, &s.grading.midtones, &s.grading.highlights, &s.grading.global}) {
-            grade.push_back(float(w->hue / 360));
-            grade.push_back(float(w->saturation / 100));
-            grade.push_back(float(w->luminance / 100));
-        }
         const int pointCount = int(s.mixer.points.size());
         perRows([&](Pixel* rows, size_t count) {
-            k.curveColor(rows, width, count, stride, luma.data(), red.data(), green.data(), blue.data(), s.curve.refineSaturation / 100,
+            k.curveColor(rows, width, count, stride, luma.data(), red.data(), green.data(), blue.data(), 0.0,
                          mixer.data(), pointCount, points.data(), grade.data(), s.grading.blending / 100, s.grading.balance / 100, visualize);
         });
     }
     if (paintEffects) {
-        if (s.texture != 0 || s.clarity != 0 || s.dehaze != 0 || s.glow != 0 || s.vignetteAmount != 0)
-            k.effects(k.data(), width, height, stride, s.texture, s.clarity, s.dehaze, s.glow, int(s.glowStyle), s.glowRange, s.glowSpread,
-                      s.glowWarmth, s.vignetteAmount, s.vignetteMidpoint, s.vignetteRoundness, s.vignetteFeather, s.vignetteHighlights,
+        if (s.clarity != 0) clarityPass(k, s.clarity, pixelScale);
+        if (s.texture != 0 || s.glow != 0)
+            k.effects(k.data(), width, height, stride, s.texture, 0.0, 0.0, s.glow, int(s.glowStyle), s.glowRange, s.glowSpread,
+                      s.glowWarmth, 0.0, s.vignetteMidpoint, s.vignetteRoundness, s.vignetteFeather, s.vignetteHighlights,
                       int(s.vignetteStyle), pixelScale);
+        if (s.vignetteAmount != 0) {
+            // The post-crop vignette as fitted to Camera Raw (rawtone.h).
+            const double w = k.width(), h = k.height();
+            perPixel(k, [&](double x, double y, float c[3]) {
+                rawtone::vignette(c, rawtone::vignetteMask(x, y, w, h, s.vignetteMidpoint, s.vignetteFeather, s.vignetteRoundness), s.vignetteAmount,
+                                  int(s.vignetteStyle), s.vignetteHighlights);
+            });
+        }
         if (s.grainAmount > 0) k.grain(s.grainAmount, s.grainKernelSize(), s.grainRoughness, seed, 1 / pixelScale);
     }
     if (paintDetailOptics) {
@@ -646,10 +780,24 @@ void runCameraRaw(Kernels& k, const CameraRawSettings& s, double pixelScale, uin
             k.sharpenMask(k.data(), width, height, stride, d.sharpenRadius, d.sharpenDetail, d.sharpenMasking, pixelScale);
             return;
         }
+        if (o.vignetteAmount != 0) {
+            // Manual lens vignetting as fitted to Camera Raw: a gain in display light (rawtone.h).
+            const double w = k.width(), h = k.height();
+            perPixel(k, [&](double x, double y, float c[3]) {
+                const double gain = rawtone::lensVignetteGain(x, y, w, h, o.vignetteAmount, o.vignetteMidpoint);
+                for (int i = 0; i < 3; i++) {
+                    const double v = c[i];
+                    const double lin = (v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4)) * gain;
+                    c[i] = float(lin >= 1 ? 1 : lin <= 0.0031308 ? lin * 12.92 : 1.055 * std::pow(lin, 1 / 2.4) - 0.055);
+                }
+            });
+        }
+        CameraRawOpticsSettings profileOnly = o;   // manual Distortion went with the geometry
+        profileOnly.distortion = 0;
         if (o.adjusts())
             k.optics(k.data(), width, height, stride, o.removeChromaticAberration ? 1 : 0, o.enableLensProfile ? 1 : 0, o.profileDistortion,
-                     o.profileVignetting, o.distortionK(lensStrength), o.purpleAmount, o.purpleHueLow, o.purpleHueHigh, o.greenAmount,
-                     o.greenHueLow, o.greenHueHigh, o.vignetteAmount, o.vignetteMidpoint, pixelScale);
+                     o.profileVignetting, profileOnly.distortionK(lensStrength), o.purpleAmount, o.purpleHueLow, o.purpleHueHigh, o.greenAmount,
+                     o.greenHueLow, o.greenHueHigh, 0.0, o.vignetteMidpoint, pixelScale);
         if (d.adjusts())
             k.detail(k.data(), width, height, stride, d.sharpenAmount, d.sharpenRadius, d.sharpenDetail, d.sharpenMasking, d.noiseLuminance,
                      d.noiseLuminanceDetail, d.noiseLuminanceContrast, d.noiseColor, d.noiseColorDetail, d.noiseColorSmoothness, pixelScale);
@@ -669,7 +817,8 @@ std::optional<bool> prepareCameraRaw(ImageType& image, const CameraRawSettings& 
     if (s.isIdentity() && !clipping && preview.visualizePointColor < 0 && !preview.sharpenMask && !indicators) return true;
     if (!s.isValid()) return false;
     if (image.isEmpty()) return true;
-    if (!clipping && !preview.sharpenMask && preview.visualizePointColor < 0 && s.geometry.adjusts()) image = s.geometry.apply(image);
+    if (!clipping && !preview.sharpenMask && preview.visualizePointColor < 0 && (s.geometry.adjusts() || s.optics.distortion != 0))
+        image = warpGeometry(s.geometry, s.optics.distortion, image);   // manual Distortion first, then the Transform sliders
     return std::nullopt;
 }
 

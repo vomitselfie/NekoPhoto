@@ -356,6 +356,14 @@ target_compile_definitions(raw_tests PRIVATE RAW_FIXTURE="${CMAKE_CURRENT_SOURCE
                                              RAW_DUAL_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/raw/synthetic-dual.dng")
 add_test(NAME raw_tests COMMAND raw_tests)
 
+# Camera Raw parity on RAWmakase's synthetic chart (MIT, tests/fixtures/camera-raw-parity), held to
+# tests/camera_raw_parity_baseline.txt (COMPOSITOR_BLESS_CAMERA_RAW_PARITY=1 rewrites it; docs/camera-raw.md).
+add_executable(camera_raw_parity camera_raw_parity.cpp)
+target_link_libraries(camera_raw_parity PRIVATE compositor::core compositor_warnings)
+target_compile_definitions(camera_raw_parity PRIVATE CAMERA_RAW_PARITY_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/camera-raw-parity"
+                                                     CAMERA_RAW_PARITY_BASELINE="${CMAKE_CURRENT_SOURCE_DIR}/camera_raw_parity_baseline.txt")
+add_test(NAME camera_raw_parity COMMAND camera_raw_parity)
+
 add_executable(vectorlayer_tests vectorlayer_tests.cpp)
 target_link_libraries(vectorlayer_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME vectorlayer_tests COMMAND vectorlayer_tests)

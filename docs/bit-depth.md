@@ -42,8 +42,8 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
   filter rounds to a byte after each), and the result is rounded to 16 bits once, so a smooth 16-bit gradient keeps its
   steps through Exposure and the curves. Defringe decides which pixels are fringe on their colour rounded to 8 bits, so
   a colour at the edge of a hue window is treated as at 8 bits. On an 8-bit image converted to 16 bits, each panel lands
-  within a level of the 8-bit filter; every panel at once lands two levels off on 0.19% of samples, the 8-bit
-  filter's own rounding after each of its steps.
+  within a level of the 8-bit filter; every panel at once lands up to five levels off on 0.4% of samples, the 8-bit
+  filter's own rounding after each of its steps, which the fitted tone curves (steep in the shadows) magnify.
 - **G'MIC**: G'MIC works in float on a 0..255 scale, so a 16-bit layer goes to it as float colour on that scale and
   comes back at 16 bits, in-process through libgmic or through a float file for the `gmic` program; nothing is
   reduced to 8 bits on the way. On an 8-bit image converted to 16 bits, blur, unsharp, sepia and sharpen land within
@@ -398,7 +398,7 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
   丸めます)、最後に 1 回だけ 16 bit に丸めるので、滑らかな 16 bit のグラデーションは露光量やカーブを通しても滑らかな
   ままです。フリンジ除去はどのピクセルがフリンジかを 8 bit に丸めた色で決めるため、色相の範囲の境目にある色は 8 bit と
   同じ扱いになります。8 bit から変換した画像では各パネルとも 8 bit 版と 1 段階以内、すべてのパネルを同時に使うと
-  0.19% のサンプルで 2 段階ずれます(8 bit 版が段階ごとに丸めるため)。
+  0.4% のサンプルで最大 5 段階ずれます(8 bit 版が段階ごとに丸め、シャドウで急なフィットしたトーンカーブがその差を広げるため)。
 - **G'MIC**:G'MIC は 0〜255 の尺度の浮動小数点で処理するので、16 bit のレイヤーはその尺度の浮動小数点の色として渡し、
   16 bit で受け取ります(libgmic によるプロセス内の実行でも、`gmic` プログラムへの浮動小数点ファイル経由でも)。途中で
   8 bit には落としません。8 bit から変換した画像では、blur・unsharp・sepia・sharpen は 8 bit の結果と 1 段階以内です。

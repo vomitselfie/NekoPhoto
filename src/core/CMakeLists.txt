@@ -183,6 +183,8 @@ add_library(compositor_core STATIC
     src/toning.cpp
     src/bucket_modes.cpp
     src/raw.cpp
+    src/rawtone.cpp
+    src/camerarawxmp.cpp
     src/whitebalance.cpp
     src/vectorlayer.cpp
     src/supports.cpp

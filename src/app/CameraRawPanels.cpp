@@ -4,10 +4,17 @@
 #include "CameraRawPanels.h"
 #include "Names.h"
 #include "Style.h"
+#include "compositor/camerarawxmp.h"
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDir>
 #include <QDoubleSpinBox>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
+#include <QMessageBox>
+#include <QSettings>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -89,6 +96,10 @@ CameraRawPanels::CameraRawPanels(Mode mode, const CameraRawSettings& settings, Q
     reset->setToolTip(tr("Put every panel back to its defaults"));
     connect(reset, &QPushButton::clicked, this, [this] { settings_ = defaults(); sync(); emitChanged(); });
     resetRow->addWidget(reset);
+    auto* load = new QPushButton(tr("Load Preset…"));
+    load->setToolTip(tr("Apply a Camera Raw or Lightroom preset (.xmp) over the current settings"));
+    connect(load, &QPushButton::clicked, this, [this] { loadPreset(); });
+    resetRow->addWidget(load);
     resetRow->addStretch(1);
     layout->addLayout(resetRow);
     sync();
@@ -107,6 +118,60 @@ CameraRawSettings CameraRawPanels::defaults() const {
 void CameraRawPanels::setSettings(const CameraRawSettings& settings) {
     settings_ = settings;
     sync();
+}
+
+void CameraRawPanels::loadPreset() {
+    QSettings store;
+    const QString path = QFileDialog::getOpenFileName(this, tr("Load Camera Raw Preset"), store.value("cameraRaw/presetDir", QDir::homePath()).toString(),
+                                                      tr("Camera Raw presets (*.xmp *.XMP)"));
+    if (path.isEmpty()) return;
+    store.setValue("cameraRaw/presetDir", QFileInfo(path).absolutePath());
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || file.size() > 16 * 1024 * 1024) {
+        QMessageBox::warning(this, tr("Load Preset"), tr("That file could not be read."));
+        return;
+    }
+    const QByteArray data = file.readAll();
+    const std::vector<uint8_t> bytes(data.begin(), data.end());
+    const bool kelvin = mode_ == Mode::Raw && raw_ && raw_->kelvin;
+    std::string error;
+    auto preset = readCameraRawXmp(bytes, settings_, kelvin, &error);
+    if (!preset) {
+        QMessageBox::warning(this, tr("Load Preset"), tr("That is not a Camera Raw preset: %1").arg(QString::fromStdString(error)));
+        return;
+    }
+    CameraRawSettings s = preset->settings;
+    std::vector<std::string> unsupported = preset->unsupported;
+    if (kelvin) {
+        // A preset that names a white balance takes this file's own values for it, as Camera Raw does.
+        if (s.whiteBalance == CameraRawWhiteBalance::AsShot) {
+            s.rawTemperature = raw_->asShotValue.temperature;
+            s.rawTint = raw_->asShotValue.tint;
+        } else if (s.whiteBalance == CameraRawWhiteBalance::Auto && autoBalance) {
+            if (const auto solved = autoBalance()) { s.rawTemperature = (*solved)[0]; s.rawTint = (*solved)[1]; }
+        } else if (s.whiteBalance != CameraRawWhiteBalance::Custom) {
+            if (const auto* p = raw_->preset(s.whiteBalance)) {
+                s.rawTemperature = p->value.temperature;
+                s.rawTint = p->value.tint;
+            } else {
+                unsupported.push_back(std::string("WhiteBalance=") + cameraRawName(s.whiteBalance) + " (not recorded in this file)");
+                s.whiteBalance = settings_.whiteBalance;
+                s.rawTemperature = settings_.rawTemperature;
+                s.rawTint = settings_.rawTint;
+            }
+        }
+    } else if (s.whiteBalance == CameraRawWhiteBalance::Auto && autoBalance) {
+        if (const auto solved = autoBalance()) { s.temperature = (*solved)[0]; s.tint = (*solved)[1]; }
+    }
+    setSettings(s.normalized());
+    emitChanged();
+    if (!unsupported.empty()) {
+        QStringList names;
+        for (const auto& u : unsupported) names << QString::fromStdString(u);
+        const QString title = preset->name.empty() ? QFileInfo(path).completeBaseName() : QString::fromStdString(preset->name);
+        QMessageBox::information(this, tr("Load Preset"),
+                                 tr("%1 is applied. These settings have no counterpart here and were left out:\n\n%2").arg(title, names.join(QStringLiteral("\n"))));
+    }
 }
 
 // ---- controls ---------------------------------------------------------------------------------------

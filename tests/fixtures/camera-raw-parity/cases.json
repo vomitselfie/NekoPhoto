@@ -1,0 +1,2743 @@
+{
+ "about": "Settings rendered on the synthetic charts, by RAWmakase in tests/color and by Camera Raw in scripts/corpus/camera-raw-charts.py. `base` applies to every case. A case runs on synthetic-d65 unless `charts` lists other charts ('*' = every chart). Cases marked `photos` also run on the private real photos (scripts/corpus/camera-raw-photos.py).",
+ "base": {
+  "ProcessVersion": "15.4",
+  "WhiteBalance": "As Shot",
+  "Sharpness": "0",
+  "LuminanceSmoothing": "0",
+  "ColorNoiseReduction": "0",
+  "LensProfileEnable": "0",
+  "AutoLateralCA": "0"
+ },
+ "cases": [
+  {
+   "name": "default",
+   "settings": {},
+   "charts": [
+    "*"
+   ],
+   "photos": true
+  },
+  {
+   "name": "exposure-1.00",
+   "settings": {
+    "Exposure2012": "-1.00"
+   }
+  },
+  {
+   "name": "exposure+1.00",
+   "settings": {
+    "Exposure2012": "+1.00"
+   },
+   "photos": true
+  },
+  {
+   "name": "contrast-50",
+   "settings": {
+    "Contrast2012": "-50"
+   }
+  },
+  {
+   "name": "contrast+50",
+   "settings": {
+    "Contrast2012": "+50"
+   },
+   "photos": true
+  },
+  {
+   "name": "contrast+100",
+   "settings": {
+    "Contrast2012": "+100"
+   }
+  },
+  {
+   "name": "highlights-60",
+   "settings": {
+    "Highlights2012": "-60"
+   }
+  },
+  {
+   "name": "highlights+60",
+   "settings": {
+    "Highlights2012": "+60"
+   }
+  },
+  {
+   "name": "shadows-60",
+   "settings": {
+    "Shadows2012": "-60"
+   }
+  },
+  {
+   "name": "shadows+60",
+   "settings": {
+    "Shadows2012": "+60"
+   },
+   "photos": true
+  },
+  {
+   "name": "whites-50",
+   "settings": {
+    "Whites2012": "-50"
+   }
+  },
+  {
+   "name": "whites+50",
+   "settings": {
+    "Whites2012": "+50"
+   }
+  },
+  {
+   "name": "whites+25",
+   "settings": {
+    "Whites2012": "+25"
+   }
+  },
+  {
+   "name": "pair-exposure-1.5-whites+50",
+   "settings": {
+    "Exposure2012": "-1.50",
+    "Whites2012": "+50"
+   }
+  },
+  {
+   "name": "pair-exposure-1.5-whites+100",
+   "settings": {
+    "Exposure2012": "-1.50",
+    "Whites2012": "+100"
+   }
+  },
+  {
+   "name": "pair-exposure+0.75-whites+100",
+   "settings": {
+    "Exposure2012": "+0.75",
+    "Whites2012": "+100"
+   }
+  },
+  {
+   "name": "blacks-50",
+   "settings": {
+    "Blacks2012": "-50"
+   }
+  },
+  {
+   "name": "blacks+50",
+   "settings": {
+    "Blacks2012": "+50"
+   }
+  },
+  {
+   "name": "temperature-3200",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "3200",
+    "Tint": "0"
+   },
+   "charts": [
+    "synthetic-d65",
+    "synthetic-a"
+   ],
+   "photos": true
+  },
+  {
+   "name": "temperature-5000",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "5000",
+    "Tint": "0"
+   },
+   "charts": [
+    "synthetic-d65",
+    "synthetic-a"
+   ]
+  },
+  {
+   "name": "temperature-8000",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "8000",
+    "Tint": "0"
+   },
+   "charts": [
+    "synthetic-d65",
+    "synthetic-a"
+   ]
+  },
+  {
+   "name": "tint-30",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "6500",
+    "Tint": "-30"
+   }
+  },
+  {
+   "name": "tint+30",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "6500",
+    "Tint": "+30"
+   }
+  },
+  {
+   "name": "vibrance-50",
+   "settings": {
+    "Vibrance": "-50"
+   }
+  },
+  {
+   "name": "vibrance+50",
+   "settings": {
+    "Vibrance": "+50"
+   }
+  },
+  {
+   "name": "saturation-50",
+   "settings": {
+    "Saturation": "-50"
+   }
+  },
+  {
+   "name": "saturation+50",
+   "settings": {
+    "Saturation": "+50"
+   },
+   "photos": true
+  },
+  {
+   "name": "hue-red-100",
+   "settings": {
+    "HueAdjustmentRed": "-100"
+   }
+  },
+  {
+   "name": "hue-red+100",
+   "settings": {
+    "HueAdjustmentRed": "+100"
+   },
+   "photos": true
+  },
+  {
+   "name": "saturation-red-100",
+   "settings": {
+    "SaturationAdjustmentRed": "-100"
+   }
+  },
+  {
+   "name": "saturation-red+100",
+   "settings": {
+    "SaturationAdjustmentRed": "+100"
+   }
+  },
+  {
+   "name": "luminance-red-100",
+   "settings": {
+    "LuminanceAdjustmentRed": "-100"
+   }
+  },
+  {
+   "name": "luminance-red+100",
+   "settings": {
+    "LuminanceAdjustmentRed": "+100"
+   }
+  },
+  {
+   "name": "hue-orange-100",
+   "settings": {
+    "HueAdjustmentOrange": "-100"
+   }
+  },
+  {
+   "name": "hue-orange+100",
+   "settings": {
+    "HueAdjustmentOrange": "+100"
+   }
+  },
+  {
+   "name": "saturation-orange-100",
+   "settings": {
+    "SaturationAdjustmentOrange": "-100"
+   }
+  },
+  {
+   "name": "saturation-orange+100",
+   "settings": {
+    "SaturationAdjustmentOrange": "+100"
+   }
+  },
+  {
+   "name": "luminance-orange-100",
+   "settings": {
+    "LuminanceAdjustmentOrange": "-100"
+   }
+  },
+  {
+   "name": "luminance-orange+100",
+   "settings": {
+    "LuminanceAdjustmentOrange": "+100"
+   }
+  },
+  {
+   "name": "hue-yellow-100",
+   "settings": {
+    "HueAdjustmentYellow": "-100"
+   }
+  },
+  {
+   "name": "hue-yellow+100",
+   "settings": {
+    "HueAdjustmentYellow": "+100"
+   }
+  },
+  {
+   "name": "saturation-yellow-100",
+   "settings": {
+    "SaturationAdjustmentYellow": "-100"
+   }
+  },
+  {
+   "name": "saturation-yellow+100",
+   "settings": {
+    "SaturationAdjustmentYellow": "+100"
+   }
+  },
+  {
+   "name": "luminance-yellow-100",
+   "settings": {
+    "LuminanceAdjustmentYellow": "-100"
+   }
+  },
+  {
+   "name": "luminance-yellow+100",
+   "settings": {
+    "LuminanceAdjustmentYellow": "+100"
+   }
+  },
+  {
+   "name": "hue-green-100",
+   "settings": {
+    "HueAdjustmentGreen": "-100"
+   }
+  },
+  {
+   "name": "hue-green+100",
+   "settings": {
+    "HueAdjustmentGreen": "+100"
+   }
+  },
+  {
+   "name": "saturation-green-100",
+   "settings": {
+    "SaturationAdjustmentGreen": "-100"
+   }
+  },
+  {
+   "name": "saturation-green+100",
+   "settings": {
+    "SaturationAdjustmentGreen": "+100"
+   }
+  },
+  {
+   "name": "luminance-green-100",
+   "settings": {
+    "LuminanceAdjustmentGreen": "-100"
+   }
+  },
+  {
+   "name": "luminance-green+100",
+   "settings": {
+    "LuminanceAdjustmentGreen": "+100"
+   }
+  },
+  {
+   "name": "hue-aqua-100",
+   "settings": {
+    "HueAdjustmentAqua": "-100"
+   }
+  },
+  {
+   "name": "hue-aqua+100",
+   "settings": {
+    "HueAdjustmentAqua": "+100"
+   }
+  },
+  {
+   "name": "saturation-aqua-100",
+   "settings": {
+    "SaturationAdjustmentAqua": "-100"
+   }
+  },
+  {
+   "name": "saturation-aqua+100",
+   "settings": {
+    "SaturationAdjustmentAqua": "+100"
+   }
+  },
+  {
+   "name": "luminance-aqua-100",
+   "settings": {
+    "LuminanceAdjustmentAqua": "-100"
+   }
+  },
+  {
+   "name": "luminance-aqua+100",
+   "settings": {
+    "LuminanceAdjustmentAqua": "+100"
+   }
+  },
+  {
+   "name": "hue-blue-100",
+   "settings": {
+    "HueAdjustmentBlue": "-100"
+   }
+  },
+  {
+   "name": "hue-blue+100",
+   "settings": {
+    "HueAdjustmentBlue": "+100"
+   }
+  },
+  {
+   "name": "saturation-blue-100",
+   "settings": {
+    "SaturationAdjustmentBlue": "-100"
+   }
+  },
+  {
+   "name": "saturation-blue+100",
+   "settings": {
+    "SaturationAdjustmentBlue": "+100"
+   }
+  },
+  {
+   "name": "luminance-blue-100",
+   "settings": {
+    "LuminanceAdjustmentBlue": "-100"
+   }
+  },
+  {
+   "name": "luminance-blue+100",
+   "settings": {
+    "LuminanceAdjustmentBlue": "+100"
+   }
+  },
+  {
+   "name": "hue-purple-100",
+   "settings": {
+    "HueAdjustmentPurple": "-100"
+   }
+  },
+  {
+   "name": "hue-purple+100",
+   "settings": {
+    "HueAdjustmentPurple": "+100"
+   }
+  },
+  {
+   "name": "saturation-purple-100",
+   "settings": {
+    "SaturationAdjustmentPurple": "-100"
+   }
+  },
+  {
+   "name": "saturation-purple+100",
+   "settings": {
+    "SaturationAdjustmentPurple": "+100"
+   }
+  },
+  {
+   "name": "luminance-purple-100",
+   "settings": {
+    "LuminanceAdjustmentPurple": "-100"
+   }
+  },
+  {
+   "name": "luminance-purple+100",
+   "settings": {
+    "LuminanceAdjustmentPurple": "+100"
+   }
+  },
+  {
+   "name": "hue-magenta-100",
+   "settings": {
+    "HueAdjustmentMagenta": "-100"
+   }
+  },
+  {
+   "name": "hue-magenta+100",
+   "settings": {
+    "HueAdjustmentMagenta": "+100"
+   }
+  },
+  {
+   "name": "saturation-magenta-100",
+   "settings": {
+    "SaturationAdjustmentMagenta": "-100"
+   }
+  },
+  {
+   "name": "saturation-magenta+100",
+   "settings": {
+    "SaturationAdjustmentMagenta": "+100"
+   }
+  },
+  {
+   "name": "luminance-magenta-100",
+   "settings": {
+    "LuminanceAdjustmentMagenta": "-100"
+   }
+  },
+  {
+   "name": "luminance-magenta+100",
+   "settings": {
+    "LuminanceAdjustmentMagenta": "+100"
+   }
+  },
+  {
+   "name": "grading-shadows-h30",
+   "settings": {
+    "SplitToningShadowHue": "30",
+    "SplitToningShadowSaturation": "50"
+   }
+  },
+  {
+   "name": "grading-shadows-h210",
+   "settings": {
+    "SplitToningShadowHue": "210",
+    "SplitToningShadowSaturation": "50"
+   }
+  },
+  {
+   "name": "grading-midtones-h30",
+   "settings": {
+    "ColorGradeMidtoneHue": "30",
+    "ColorGradeMidtoneSat": "50"
+   }
+  },
+  {
+   "name": "grading-midtones-h210",
+   "settings": {
+    "ColorGradeMidtoneHue": "210",
+    "ColorGradeMidtoneSat": "50"
+   }
+  },
+  {
+   "name": "grading-highlights-h30",
+   "settings": {
+    "SplitToningHighlightHue": "30",
+    "SplitToningHighlightSaturation": "50"
+   }
+  },
+  {
+   "name": "grading-highlights-h210",
+   "settings": {
+    "SplitToningHighlightHue": "210",
+    "SplitToningHighlightSaturation": "50"
+   }
+  },
+  {
+   "name": "grading-blending-100",
+   "settings": {
+    "SplitToningShadowHue": "210",
+    "SplitToningShadowSaturation": "50",
+    "SplitToningHighlightHue": "40",
+    "SplitToningHighlightSaturation": "50",
+    "ColorGradeBlending": "100"
+   }
+  },
+  {
+   "name": "grading-balance-50",
+   "settings": {
+    "SplitToningShadowHue": "210",
+    "SplitToningShadowSaturation": "50",
+    "SplitToningHighlightHue": "40",
+    "SplitToningHighlightSaturation": "50",
+    "SplitToningBalance": "+50"
+   }
+  },
+  {
+   "name": "parametric-shadows-50",
+   "settings": {
+    "ParametricShadows": "-50"
+   }
+  },
+  {
+   "name": "parametric-shadows+50",
+   "settings": {
+    "ParametricShadows": "+50"
+   }
+  },
+  {
+   "name": "parametric-darks-50",
+   "settings": {
+    "ParametricDarks": "-50"
+   }
+  },
+  {
+   "name": "parametric-darks+50",
+   "settings": {
+    "ParametricDarks": "+50"
+   }
+  },
+  {
+   "name": "parametric-lights-50",
+   "settings": {
+    "ParametricLights": "-50"
+   }
+  },
+  {
+   "name": "parametric-lights+50",
+   "settings": {
+    "ParametricLights": "+50"
+   }
+  },
+  {
+   "name": "parametric-highlights-50",
+   "settings": {
+    "ParametricHighlights": "-50"
+   }
+  },
+  {
+   "name": "parametric-highlights+50",
+   "settings": {
+    "ParametricHighlights": "+50"
+   }
+  },
+  {
+   "name": "parametric-shadows-100",
+   "settings": {
+    "ParametricShadows": "-100"
+   }
+  },
+  {
+   "name": "parametric-shadows+100",
+   "settings": {
+    "ParametricShadows": "+100"
+   }
+  },
+  {
+   "name": "parametric-darks-100",
+   "settings": {
+    "ParametricDarks": "-100"
+   }
+  },
+  {
+   "name": "parametric-darks+100",
+   "settings": {
+    "ParametricDarks": "+100"
+   }
+  },
+  {
+   "name": "parametric-lights-100",
+   "settings": {
+    "ParametricLights": "-100"
+   }
+  },
+  {
+   "name": "parametric-lights+100",
+   "settings": {
+    "ParametricLights": "+100"
+   }
+  },
+  {
+   "name": "parametric-highlights-100",
+   "settings": {
+    "ParametricHighlights": "-100"
+   }
+  },
+  {
+   "name": "parametric-highlights+100",
+   "settings": {
+    "ParametricHighlights": "+100"
+   }
+  },
+  {
+   "name": "parametric-shadows+50-splits-10-50-75",
+   "settings": {
+    "ParametricShadows": "+50",
+    "ParametricShadowSplit": "10",
+    "ParametricMidtoneSplit": "50",
+    "ParametricHighlightSplit": "75"
+   }
+  },
+  {
+   "name": "parametric-darks-50-splits-25-65-75",
+   "settings": {
+    "ParametricDarks": "-50",
+    "ParametricShadowSplit": "25",
+    "ParametricMidtoneSplit": "65",
+    "ParametricHighlightSplit": "75"
+   }
+  },
+  {
+   "name": "parametric-lights+50-splits-25-35-75",
+   "settings": {
+    "ParametricLights": "+50",
+    "ParametricShadowSplit": "25",
+    "ParametricMidtoneSplit": "35",
+    "ParametricHighlightSplit": "75"
+   }
+  },
+  {
+   "name": "parametric-highlights-50-splits-25-50-90",
+   "settings": {
+    "ParametricHighlights": "-50",
+    "ParametricShadowSplit": "25",
+    "ParametricMidtoneSplit": "50",
+    "ParametricHighlightSplit": "90"
+   }
+  },
+  {
+   "name": "parametric-s-curve",
+   "settings": {
+    "ParametricShadows": "-30",
+    "ParametricDarks": "-40",
+    "ParametricLights": "+40",
+    "ParametricHighlights": "+30"
+   }
+  },
+  {
+   "name": "parametric-fade",
+   "settings": {
+    "ParametricShadows": "+60",
+    "ParametricDarks": "+20",
+    "ParametricLights": "-20",
+    "ParametricHighlights": "-60"
+   }
+  },
+  {
+   "name": "parametric-all+50",
+   "settings": {
+    "ParametricShadows": "+50",
+    "ParametricDarks": "+50",
+    "ParametricLights": "+50",
+    "ParametricHighlights": "+50"
+   }
+  },
+  {
+   "name": "parametric-darks-50-lights+100",
+   "settings": {
+    "ParametricDarks": "-50",
+    "ParametricLights": "+100"
+   }
+  },
+  {
+   "name": "curve-s",
+   "settings": {},
+   "curves": {
+    "ToneCurvePV2012": [
+     "0, 0",
+     "64, 48",
+     "128, 128",
+     "192, 208",
+     "255, 255"
+    ]
+   }
+  },
+  {
+   "name": "curve-red",
+   "settings": {},
+   "curves": {
+    "ToneCurvePV2012": [
+     "0, 0",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Red": [
+     "0, 0",
+     "128, 150",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Green": [
+     "0, 0",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Blue": [
+     "0, 0",
+     "255, 255"
+    ]
+   }
+  },
+  {
+   "name": "curve-green-blue",
+   "settings": {},
+   "curves": {
+    "ToneCurvePV2012": [
+     "0, 0",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Red": [
+     "0, 0",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Green": [
+     "0, 0",
+     "96, 80",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Blue": [
+     "0, 20",
+     "128, 150",
+     "255, 235"
+    ]
+   }
+  },
+  {
+   "name": "curve-s-red",
+   "settings": {},
+   "curves": {
+    "ToneCurvePV2012": [
+     "0, 0",
+     "64, 48",
+     "128, 128",
+     "192, 208",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Red": [
+     "0, 0",
+     "128, 150",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Green": [
+     "0, 0",
+     "255, 255"
+    ],
+    "ToneCurvePV2012Blue": [
+     "0, 0",
+     "255, 255"
+    ]
+   }
+  },
+  {
+   "name": "curve-s-refine-saturation-0",
+   "settings": {
+    "CurveRefineSaturation": "0"
+   },
+   "curves": {
+    "ToneCurvePV2012": [
+     "0, 0",
+     "64, 48",
+     "128, 128",
+     "192, 208",
+     "255, 255"
+    ]
+   }
+  },
+  {
+   "name": "curve-s-refine-saturation-50",
+   "settings": {
+    "CurveRefineSaturation": "50"
+   },
+   "curves": {
+    "ToneCurvePV2012": [
+     "0, 0",
+     "64, 48",
+     "128, 128",
+     "192, 208",
+     "255, 255"
+    ]
+   }
+  },
+  {
+   "name": "curve-lift-refine-saturation-0",
+   "settings": {
+    "CurveRefineSaturation": "0"
+   },
+   "curves": {
+    "ToneCurvePV2012": [
+     "0, 0",
+     "128, 170",
+     "255, 255"
+    ]
+   }
+  },
+  {
+   "name": "lens-manual-distortion+50",
+   "settings": {
+    "LensManualDistortionAmount": "+50"
+   }
+  },
+  {
+   "name": "lens-manual-distortion-50",
+   "settings": {
+    "LensManualDistortionAmount": "-50"
+   }
+  },
+  {
+   "name": "lens-manual-distortion+50-vertical+30",
+   "settings": {
+    "LensManualDistortionAmount": "+50",
+    "PerspectiveVertical": "+30"
+   }
+  },
+  {
+   "name": "calibration-red-hue+50",
+   "settings": {
+    "RedHue": "+50"
+   }
+  },
+  {
+   "name": "calibration-green-saturation+50",
+   "settings": {
+    "GreenSaturation": "+50"
+   }
+  },
+  {
+   "name": "calibration-blue-hue-50",
+   "settings": {
+    "BlueHue": "-50"
+   }
+  },
+  {
+   "name": "calibration-blue-saturation+50",
+   "settings": {
+    "BlueSaturation": "+50"
+   }
+  },
+  {
+   "name": "calibration-shadow-tint+30",
+   "settings": {
+    "ShadowTint": "+30"
+   }
+  },
+  {
+   "name": "pair-contrast+50-saturation+50",
+   "settings": {
+    "Contrast2012": "+50",
+    "Saturation": "+50"
+   }
+  },
+  {
+   "name": "pair-exposure+1-hue-red+50",
+   "settings": {
+    "Exposure2012": "+1.00",
+    "HueAdjustmentRed": "+50"
+   }
+  },
+  {
+   "name": "pair-temperature-4000-saturation-blue+50",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "4000",
+    "Tint": "0",
+    "SaturationAdjustmentBlue": "+50"
+   }
+  },
+  {
+   "name": "pair-hue-orange+50-hue-yellow-50",
+   "settings": {
+    "HueAdjustmentOrange": "+50",
+    "HueAdjustmentYellow": "-50"
+   }
+  },
+  {
+   "name": "pair-saturation-red-50-luminance-red+50",
+   "settings": {
+    "SaturationAdjustmentRed": "-50",
+    "LuminanceAdjustmentRed": "+50"
+   }
+  },
+  {
+   "name": "pair-parametric-lights+50-vibrance+50",
+   "settings": {
+    "ParametricLights": "+50",
+    "Vibrance": "+50"
+   }
+  },
+  {
+   "name": "pair-grading-shadows-contrast+50",
+   "settings": {
+    "SplitToningShadowHue": "210",
+    "SplitToningShadowSaturation": "50",
+    "Contrast2012": "+50"
+   }
+  },
+  {
+   "name": "pair-highlights-60-whites+50",
+   "settings": {
+    "Highlights2012": "-60",
+    "Whites2012": "+50"
+   }
+  },
+  {
+   "name": "pair-shadows+60-blacks-50",
+   "settings": {
+    "Shadows2012": "+60",
+    "Blacks2012": "-50"
+   }
+  },
+  {
+   "name": "pair-exposure-1-contrast+50",
+   "settings": {
+    "Exposure2012": "-1.00",
+    "Contrast2012": "+50"
+   }
+  },
+  {
+   "name": "pair-contrast+50-blacks-50",
+   "settings": {
+    "Contrast2012": "+50",
+    "Blacks2012": "-50"
+   }
+  },
+  {
+   "name": "pair-contrast-50-blacks-50",
+   "settings": {
+    "Contrast2012": "-50",
+    "Blacks2012": "-50"
+   }
+  },
+  {
+   "name": "pair-contrast+100-blacks+50",
+   "settings": {
+    "Contrast2012": "+100",
+    "Blacks2012": "+50"
+   }
+  },
+  {
+   "name": "pair-contrast+50-whites+50",
+   "settings": {
+    "Contrast2012": "+50",
+    "Whites2012": "+50"
+   }
+  },
+  {
+   "name": "pair-contrast-50-whites-50",
+   "settings": {
+    "Contrast2012": "-50",
+    "Whites2012": "-50"
+   }
+  },
+  {
+   "name": "pair-whites+50-blacks-50",
+   "settings": {
+    "Whites2012": "+50",
+    "Blacks2012": "-50"
+   }
+  },
+  {
+   "name": "pair-whites-50-blacks+50",
+   "settings": {
+    "Whites2012": "-50",
+    "Blacks2012": "+50"
+   }
+  },
+  {
+   "name": "pair-vibrance+50-saturation-50",
+   "settings": {
+    "Vibrance": "+50",
+    "Saturation": "-50"
+   }
+  },
+  {
+   "name": "pair-calibration-red-hue+50-hue-red-50",
+   "settings": {
+    "RedHue": "+50",
+    "HueAdjustmentRed": "-50"
+   }
+  },
+  {
+   "name": "look-warm-contrast",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "7000",
+    "Tint": "+10",
+    "Exposure2012": "+0.30",
+    "Contrast2012": "+25",
+    "Highlights2012": "-40",
+    "Shadows2012": "+30",
+    "Vibrance": "+20",
+    "SaturationAdjustmentBlue": "-20",
+    "SplitToningHighlightHue": "45",
+    "SplitToningHighlightSaturation": "20"
+   }
+  },
+  {
+   "name": "vignette-highlight-60",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "1"
+   }
+  },
+  {
+   "name": "vignette-highlight+60",
+   "settings": {
+    "PostCropVignetteAmount": "+60",
+    "PostCropVignetteStyle": "1"
+   }
+  },
+  {
+   "name": "vignette-color-60",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "2"
+   }
+  },
+  {
+   "name": "vignette-color+60",
+   "settings": {
+    "PostCropVignetteAmount": "+60",
+    "PostCropVignetteStyle": "2"
+   }
+  },
+  {
+   "name": "vignette-paint-60",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "3"
+   }
+  },
+  {
+   "name": "vignette-paint+60",
+   "settings": {
+    "PostCropVignetteAmount": "+60",
+    "PostCropVignetteStyle": "3"
+   }
+  },
+  {
+   "name": "vignette-highlight-60-highlights80",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "1",
+    "PostCropVignetteHighlightContrast": "80"
+   }
+  },
+  {
+   "name": "vignette-color-60-highlights80",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "2",
+    "PostCropVignetteHighlightContrast": "80"
+   }
+  },
+  {
+   "name": "vignette-unset-60",
+   "settings": {
+    "PostCropVignetteAmount": "-60"
+   }
+  },
+  {
+   "name": "vignette-highlight-100",
+   "settings": {
+    "PostCropVignetteAmount": "-100",
+    "PostCropVignetteStyle": "1"
+   }
+  },
+  {
+   "name": "vignette-color+100",
+   "settings": {
+    "PostCropVignetteAmount": "+100",
+    "PostCropVignetteStyle": "2"
+   }
+  },
+  {
+   "name": "vignette-highlight-60-midpoint20",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "1",
+    "PostCropVignetteMidpoint": "20",
+    "PostCropVignetteFeather": "50"
+   }
+  },
+  {
+   "name": "vignette-highlight-60-midpoint80",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "1",
+    "PostCropVignetteMidpoint": "80",
+    "PostCropVignetteFeather": "50"
+   }
+  },
+  {
+   "name": "vignette-paint-60-midpoint20-feather80",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "3",
+    "PostCropVignetteMidpoint": "20",
+    "PostCropVignetteFeather": "80"
+   }
+  },
+  {
+   "name": "vignette-paint-60-roundness-50",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "3",
+    "PostCropVignetteRoundness": "-50"
+   }
+  },
+  {
+   "name": "vignette-paint-60-roundness+100",
+   "settings": {
+    "PostCropVignetteAmount": "-60",
+    "PostCropVignetteStyle": "3",
+    "PostCropVignetteRoundness": "+100"
+   }
+  },
+  {
+   "name": "amount-look-0",
+   "look": {
+    "file": "synthetic-look.xmp",
+    "amount": 0
+   }
+  },
+  {
+   "name": "amount-look-50",
+   "look": {
+    "file": "synthetic-look.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "amount-look-100",
+   "look": {
+    "file": "synthetic-look.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "amount-look-150",
+   "look": {
+    "file": "synthetic-look.xmp",
+    "amount": 1.5
+   }
+  },
+  {
+   "name": "amount-look-200",
+   "look": {
+    "file": "synthetic-look.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "amount-mono-0",
+   "look": {
+    "file": "synthetic-mono.xmp",
+    "amount": 0
+   }
+  },
+  {
+   "name": "amount-mono-50",
+   "look": {
+    "file": "synthetic-mono.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "amount-mono-100",
+   "look": {
+    "file": "synthetic-mono.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "amount-mono-200",
+   "look": {
+    "file": "synthetic-mono.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "amount-table-50",
+   "look": {
+    "file": "synthetic-table.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "amount-table-200",
+   "look": {
+    "file": "synthetic-table.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "amount-curve-50",
+   "look": {
+    "file": "synthetic-curve.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "amount-curve-200",
+   "look": {
+    "file": "synthetic-curve.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "amount-tones-50",
+   "look": {
+    "file": "synthetic-tones.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "amount-tones-200",
+   "look": {
+    "file": "synthetic-tones.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "amount-contrast-50",
+   "look": {
+    "file": "synthetic-contrast.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "amount-contrast-200",
+   "look": {
+    "file": "synthetic-contrast.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "amount-table-v1-50",
+   "look": {
+    "file": "synthetic-table-v1.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "amount-table-v1-200",
+   "look": {
+    "file": "synthetic-table-v1.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "rgb-table-50",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "rgb-table-100",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "rgb-table-200",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "rgb-half-50",
+   "look": {
+    "file": "synthetic-rgb-half.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "rgb-half-100",
+   "look": {
+    "file": "synthetic-rgb-half.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "rgb-half-200",
+   "look": {
+    "file": "synthetic-rgb-half.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "rgb-bounds-0",
+   "look": {
+    "file": "synthetic-rgb-bounds.xmp",
+    "amount": 0
+   }
+  },
+  {
+   "name": "rgb-bounds-200",
+   "look": {
+    "file": "synthetic-rgb-bounds.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "rgb-srgb-100",
+   "look": {
+    "file": "synthetic-rgb-srgb.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "rgb-linear-100",
+   "look": {
+    "file": "synthetic-rgb-linear.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "rgb-extend-100",
+   "look": {
+    "file": "synthetic-rgb-extend.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "rgb-flag-100",
+   "look": {
+    "file": "synthetic-rgb-flag.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "rgb-1d-100",
+   "look": {
+    "file": "synthetic-rgb-1d.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "rgb-look-50",
+   "look": {
+    "file": "synthetic-rgb-look.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "rgb-look-100",
+   "look": {
+    "file": "synthetic-rgb-look.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "rgb-table-exposure+1",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "Exposure2012": "+1.00"
+   }
+  },
+  {
+   "name": "rgb-table-contrast+50",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "Contrast2012": "+50"
+   }
+  },
+  {
+   "name": "rgb-table-saturation+50",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "Saturation": "+50"
+   }
+  },
+  {
+   "name": "rgb-table-point-curve",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 1
+   },
+   "curves": {
+    "ToneCurvePV2012": [
+     "0, 0",
+     "64, 48",
+     "128, 128",
+     "192, 208",
+     "255, 255"
+    ]
+   }
+  },
+  {
+   "name": "rgb-table-grading-shadows-h210",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "SplitToningShadowHue": "210",
+    "SplitToningShadowSaturation": "50"
+   }
+  },
+  {
+   "name": "rgb-table-hue-red+100",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "HueAdjustmentRed": "+100"
+   }
+  },
+  {
+   "name": "rgb-table-grading-midtones-h30",
+   "look": {
+    "file": "synthetic-rgb.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "ColorGradeMidtoneHue": "30",
+    "ColorGradeMidtoneSat": "50"
+   }
+  },
+  {
+   "name": "bw-mix-zero",
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "0",
+    "GrayMixerOrange": "0",
+    "GrayMixerYellow": "0",
+    "GrayMixerGreen": "0",
+    "GrayMixerAqua": "0",
+    "GrayMixerBlue": "0",
+    "GrayMixerPurple": "0",
+    "GrayMixerMagenta": "0"
+   }
+  },
+  {
+   "name": "bw-mix-auto",
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "-9",
+    "GrayMixerOrange": "-19",
+    "GrayMixerYellow": "-23",
+    "GrayMixerGreen": "-27",
+    "GrayMixerAqua": "-18",
+    "GrayMixerBlue": "+11",
+    "GrayMixerPurple": "+16",
+    "GrayMixerMagenta": "+4"
+   }
+  },
+  {
+   "name": "bw-red+60",
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "+60",
+    "GrayMixerOrange": "0",
+    "GrayMixerYellow": "0",
+    "GrayMixerGreen": "0",
+    "GrayMixerAqua": "0",
+    "GrayMixerBlue": "0",
+    "GrayMixerPurple": "0",
+    "GrayMixerMagenta": "0"
+   }
+  },
+  {
+   "name": "bw-yellow-60",
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "0",
+    "GrayMixerOrange": "0",
+    "GrayMixerYellow": "-60",
+    "GrayMixerGreen": "0",
+    "GrayMixerAqua": "0",
+    "GrayMixerBlue": "0",
+    "GrayMixerPurple": "0",
+    "GrayMixerMagenta": "0"
+   }
+  },
+  {
+   "name": "bw-green+60",
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "0",
+    "GrayMixerOrange": "0",
+    "GrayMixerYellow": "0",
+    "GrayMixerGreen": "+60",
+    "GrayMixerAqua": "0",
+    "GrayMixerBlue": "0",
+    "GrayMixerPurple": "0",
+    "GrayMixerMagenta": "0"
+   }
+  },
+  {
+   "name": "bw-blue-60",
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "0",
+    "GrayMixerOrange": "0",
+    "GrayMixerYellow": "0",
+    "GrayMixerGreen": "0",
+    "GrayMixerAqua": "0",
+    "GrayMixerBlue": "-60",
+    "GrayMixerPurple": "0",
+    "GrayMixerMagenta": "0"
+   }
+  },
+  {
+   "name": "bw-orange+100",
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "0",
+    "GrayMixerOrange": "+100",
+    "GrayMixerYellow": "0",
+    "GrayMixerGreen": "0",
+    "GrayMixerAqua": "0",
+    "GrayMixerBlue": "0",
+    "GrayMixerPurple": "0",
+    "GrayMixerMagenta": "0"
+   }
+  },
+  {
+   "name": "bw-purple+60",
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "0",
+    "GrayMixerOrange": "0",
+    "GrayMixerYellow": "0",
+    "GrayMixerGreen": "0",
+    "GrayMixerAqua": "0",
+    "GrayMixerBlue": "0",
+    "GrayMixerPurple": "+60",
+    "GrayMixerMagenta": "0"
+   }
+  },
+  {
+   "name": "saturation-100",
+   "settings": {
+    "Saturation": "-100"
+   }
+  },
+  {
+   "name": "look-color-50",
+   "look": {
+    "file": "synthetic-color.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "look-color-100",
+   "look": {
+    "file": "synthetic-color.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "look-color-200",
+   "look": {
+    "file": "synthetic-color.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "look-split-50",
+   "look": {
+    "file": "synthetic-split.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "look-split-100",
+   "look": {
+    "file": "synthetic-split.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "look-split-200",
+   "look": {
+    "file": "synthetic-split.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "look-parametric-50",
+   "look": {
+    "file": "synthetic-parametric.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "look-parametric-100",
+   "look": {
+    "file": "synthetic-parametric.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "look-parametric-200",
+   "look": {
+    "file": "synthetic-parametric.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "look-exposure-50",
+   "look": {
+    "file": "synthetic-exposure.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "look-exposure-100",
+   "look": {
+    "file": "synthetic-exposure.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "look-exposure-200",
+   "look": {
+    "file": "synthetic-exposure.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "look-vignette-50",
+   "look": {
+    "file": "synthetic-vignette.xmp",
+    "amount": 0.5
+   }
+  },
+  {
+   "name": "look-vignette-100",
+   "look": {
+    "file": "synthetic-vignette.xmp",
+    "amount": 1
+   }
+  },
+  {
+   "name": "look-vignette-200",
+   "look": {
+    "file": "synthetic-vignette.xmp",
+    "amount": 2
+   }
+  },
+  {
+   "name": "look-color-saturation+30",
+   "look": {
+    "file": "synthetic-color.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "Saturation": "+30",
+    "SaturationAdjustmentOrange": "+20"
+   }
+  },
+  {
+   "name": "look-split-grading-shadows-h30",
+   "look": {
+    "file": "synthetic-split.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "SplitToningShadowHue": "30",
+    "SplitToningShadowSaturation": "50"
+   }
+  },
+  {
+   "name": "look-parametric-darks+30",
+   "look": {
+    "file": "synthetic-parametric.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "ParametricDarks": "+30"
+   }
+  },
+  {
+   "name": "look-vignette-user-20",
+   "look": {
+    "file": "synthetic-vignette.xmp",
+    "amount": 1
+   },
+   "settings": {
+    "PostCropVignetteAmount": "-20",
+    "PostCropVignetteStyle": "1"
+   }
+  },
+  {
+   "name": "pc-orange-hue+50",
+   "curves": {
+    "PointColors": [
+     "0.425300, 0.729800, 0.603400, 0.500000, 0.000000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.549800, 0.909800, 1.000000, 0.069748, 0.619748, 0.979748, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-orange-sat-80",
+   "curves": {
+    "PointColors": [
+     "0.425300, 0.729800, 0.603400, 0.000000, -0.800000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.549800, 0.909800, 1.000000, 0.069748, 0.619748, 0.979748, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-orange-lum+50",
+   "curves": {
+    "PointColors": [
+     "0.425300, 0.729800, 0.603400, 0.000000, 0.000000, 0.500000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.549800, 0.909800, 1.000000, 0.069748, 0.619748, 0.979748, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-blue-lum-60",
+   "curves": {
+    "PointColors": [
+     "3.918500, 0.719100, 0.372600, 0.000000, 0.000000, -0.600000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.539100, 0.899100, 1.000000, 0.000000, 0.464204, 0.824204, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-green-variance-80",
+   "curves": {
+    "PointColors": [
+     "1.855800, 0.457900, 0.541100, 0.200000, 0.000000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.277900, 0.637900, 1.000000, 0.031804, 0.581804, 0.941804, 1.000000"
+    ],
+    "ColorVariance": [
+     "-0.800000"
+    ]
+   }
+  },
+  {
+   "name": "pc-green-variance+60",
+   "curves": {
+    "PointColors": [
+     "1.855800, 0.457900, 0.541100, 0.000000, 0.000000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.277900, 0.637900, 1.000000, 0.031804, 0.581804, 0.941804, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.600000"
+    ]
+   }
+  },
+  {
+   "name": "pc-skin-sat+60-range0",
+   "curves": {
+    "PointColors": [
+     "0.546500, 0.389000, 0.674700, 0.000000, 0.600000, 0.000000, 0.000000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.209000, 0.569000, 1.000000, 0.110465, 0.660465, 1.000000, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-skin-sat+60-range100",
+   "curves": {
+    "PointColors": [
+     "0.546500, 0.389000, 0.674700, 0.000000, 0.600000, 0.000000, 1.000000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.209000, 0.569000, 1.000000, 0.110465, 0.660465, 1.000000, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-red-wrap-hue+50",
+   "curves": {
+    "PointColors": [
+     "5.950000, 0.550000, 0.450000, 0.500000, 0.300000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.370000, 0.730000, 1.000000, 0.000000, 0.521411, 0.881411, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-narrow-ranges",
+   "curves": {
+    "PointColors": [
+     "0.425300, 0.729800, 0.603400, -0.600000, 0.000000, -0.300000, 0.500000, 0.300000, 0.450000, 0.550000, 0.700000, 0.550000, 0.650000, 0.800000, 0.900000, 0.600000, 0.750000, 0.850000, 0.950000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-overlap",
+   "curves": {
+    "PointColors": [
+     "0.425300, 0.729800, 0.603400, 0.400000, 0.000000, -0.300000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.549800, 0.909800, 1.000000, 0.069748, 0.619748, 0.979748, 1.000000",
+     "0.575900, 0.705300, 0.563100, -0.300000, 0.400000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.525300, 0.885300, 1.000000, 0.045481, 0.595481, 0.955481, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000",
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-neutral-swatch",
+   "curves": {
+    "PointColors": [
+     "5.715800, 0.109000, 0.439200, 1.000000, 1.000000, 0.500000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.000000, 0.289000, 0.839000, 0.000000, 0.513793, 0.873793, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-saturated-sat+100",
+   "curves": {
+    "PointColors": [
+     "4.769800, 0.764400, 0.799900, 0.000000, 1.000000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.034400, 0.584400, 0.944400, 1.000000, 0.176282, 0.726282, 1.000000, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   }
+  },
+  {
+   "name": "pc-combined",
+   "curves": {
+    "PointColors": [
+     "0.425300, 0.729800, 0.603400, 0.300000, -0.300000, 0.200000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.549800, 0.909800, 1.000000, 0.069748, 0.619748, 0.979748, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000"
+    ]
+   },
+   "settings": {
+    "HueAdjustmentOrange": "+40",
+    "SaturationAdjustmentOrange": "+30",
+    "LuminanceAdjustmentBlue": "-30",
+    "ColorGradeMidtoneHue": "200",
+    "ColorGradeMidtoneSat": "30",
+    "ColorGradeBlending": "50"
+   }
+  },
+  {
+   "name": "pc-eight",
+   "curves": {
+    "PointColors": [
+     "0.425300, 0.729800, 0.603400, 0.200000, 0.000000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.549800, 0.909800, 1.000000, 0.069748, 0.619748, 0.979748, 1.000000",
+     "3.918500, 0.719100, 0.372600, 0.000000, 0.400000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.539100, 0.899100, 1.000000, 0.000000, 0.464204, 0.824204, 1.000000",
+     "1.855800, 0.457900, 0.541100, 0.000000, 0.000000, -0.300000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.277900, 0.637900, 1.000000, 0.031804, 0.581804, 0.941804, 1.000000",
+     "0.546500, 0.389000, 0.674700, 0.000000, -0.300000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.209000, 0.569000, 1.000000, 0.110465, 0.660465, 1.000000, 1.000000",
+     "4.769800, 0.764400, 0.799900, -0.400000, 0.000000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.034400, 0.584400, 0.944400, 1.000000, 0.176282, 0.726282, 1.000000, 1.000000",
+     "3.148400, 0.325900, 0.541700, 0.000000, 0.500000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.145900, 0.505900, 1.000000, 0.032182, 0.582182, 0.942182, 1.000000",
+     "4.177700, 0.861500, 0.560900, 0.000000, 0.000000, 0.400000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.131500, 0.681500, 1.000000, 1.000000, 0.044128, 0.594128, 0.954128, 1.000000",
+     "1.298800, 0.642600, 0.508100, 0.600000, -0.200000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.462600, 0.822600, 1.000000, 0.010667, 0.560667, 0.920667, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.200000",
+     "0.000000",
+     "-0.300000",
+     "0.000000",
+     "0.400000",
+     "0.000000",
+     "0.000000",
+     "-0.500000"
+    ]
+   }
+  },
+  {
+   "name": "pc-bw-lum",
+   "curves": {
+    "PointColors": [
+     "0.425300, 0.729800, 0.603400, 0.000000, 0.000000, -0.800000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.549800, 0.909800, 1.000000, 0.069748, 0.619748, 0.979748, 1.000000",
+     "3.918500, 0.719100, 0.372600, 0.000000, 0.000000, 0.800000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.000000, 0.539100, 0.899100, 1.000000, 0.000000, 0.464204, 0.824204, 1.000000"
+    ],
+    "ColorVariance": [
+     "0.000000",
+     "0.000000"
+    ]
+   },
+   "settings": {
+    "ConvertToGrayscale": "True",
+    "AutoGrayscaleMix": "False",
+    "GrayMixerRed": "0",
+    "GrayMixerOrange": "0",
+    "GrayMixerYellow": "0",
+    "GrayMixerGreen": "0",
+    "GrayMixerAqua": "0",
+    "GrayMixerBlue": "0",
+    "GrayMixerPurple": "0",
+    "GrayMixerMagenta": "0"
+   }
+  },
+  {
+   "name": "exposure-2.00",
+   "settings": {
+    "Exposure2012": "-2.00"
+   }
+  },
+  {
+   "name": "exposure+2.00",
+   "settings": {
+    "Exposure2012": "+2.00"
+   }
+  },
+  {
+   "name": "exposure+3.00",
+   "settings": {
+    "Exposure2012": "+3.00"
+   }
+  },
+  {
+   "name": "contrast-100",
+   "settings": {
+    "Contrast2012": "-100"
+   }
+  },
+  {
+   "name": "highlights-100",
+   "settings": {
+    "Highlights2012": "-100"
+   }
+  },
+  {
+   "name": "highlights+100",
+   "settings": {
+    "Highlights2012": "+100"
+   }
+  },
+  {
+   "name": "shadows-100",
+   "settings": {
+    "Shadows2012": "-100"
+   }
+  },
+  {
+   "name": "shadows+100",
+   "settings": {
+    "Shadows2012": "+100"
+   }
+  },
+  {
+   "name": "whites-100",
+   "settings": {
+    "Whites2012": "-100"
+   }
+  },
+  {
+   "name": "whites+100",
+   "settings": {
+    "Whites2012": "+100"
+   }
+  },
+  {
+   "name": "blacks-100",
+   "settings": {
+    "Blacks2012": "-100"
+   }
+  },
+  {
+   "name": "blacks+100",
+   "settings": {
+    "Blacks2012": "+100"
+   }
+  },
+  {
+   "name": "vibrance-100",
+   "settings": {
+    "Vibrance": "-100"
+   }
+  },
+  {
+   "name": "vibrance+100",
+   "settings": {
+    "Vibrance": "+100"
+   }
+  },
+  {
+   "name": "saturation+100",
+   "settings": {
+    "Saturation": "+100"
+   }
+  },
+  {
+   "name": "temperature-2500",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "2500",
+    "Tint": "0"
+   },
+   "charts": [
+    "synthetic-d65",
+    "synthetic-a"
+   ]
+  },
+  {
+   "name": "temperature-12000",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "12000",
+    "Tint": "0"
+   },
+   "charts": [
+    "synthetic-d65",
+    "synthetic-a"
+   ]
+  },
+  {
+   "name": "tint-80",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "6500",
+    "Tint": "-80"
+   }
+  },
+  {
+   "name": "tint+80",
+   "settings": {
+    "WhiteBalance": "Custom",
+    "Temperature": "6500",
+    "Tint": "+80"
+   }
+  },
+  {
+   "name": "clarity-100",
+   "settings": {
+    "Clarity2012": "-100"
+   }
+  },
+  {
+   "name": "clarity-50",
+   "settings": {
+    "Clarity2012": "-50"
+   }
+  },
+  {
+   "name": "clarity+50",
+   "settings": {
+    "Clarity2012": "+50"
+   }
+  },
+  {
+   "name": "clarity+100",
+   "settings": {
+    "Clarity2012": "+100"
+   }
+  },
+  {
+   "name": "texture-100",
+   "settings": {
+    "Texture": "-100"
+   }
+  },
+  {
+   "name": "texture-50",
+   "settings": {
+    "Texture": "-50"
+   }
+  },
+  {
+   "name": "texture+50",
+   "settings": {
+    "Texture": "+50"
+   }
+  },
+  {
+   "name": "texture+100",
+   "settings": {
+    "Texture": "+100"
+   }
+  },
+  {
+   "name": "dehaze-100",
+   "settings": {
+    "Dehaze": "-100"
+   }
+  },
+  {
+   "name": "dehaze-50",
+   "settings": {
+    "Dehaze": "-50"
+   }
+  },
+  {
+   "name": "dehaze+50",
+   "settings": {
+    "Dehaze": "+50"
+   }
+  },
+  {
+   "name": "dehaze+100",
+   "settings": {
+    "Dehaze": "+100"
+   }
+  },
+  {
+   "name": "grading-global-h30",
+   "settings": {
+    "ColorGradeGlobalHue": "30",
+    "ColorGradeGlobalSat": "50"
+   }
+  },
+  {
+   "name": "grading-global-h210",
+   "settings": {
+    "ColorGradeGlobalHue": "210",
+    "ColorGradeGlobalSat": "50"
+   }
+  },
+  {
+   "name": "grading-shadow-lum-50",
+   "settings": {
+    "ColorGradeShadowLum": "-50"
+   }
+  },
+  {
+   "name": "grading-shadow-lum+50",
+   "settings": {
+    "ColorGradeShadowLum": "+50"
+   }
+  },
+  {
+   "name": "grading-midtone-lum-50",
+   "settings": {
+    "ColorGradeMidtoneLum": "-50"
+   }
+  },
+  {
+   "name": "grading-midtone-lum+50",
+   "settings": {
+    "ColorGradeMidtoneLum": "+50"
+   }
+  },
+  {
+   "name": "grading-highlight-lum-50",
+   "settings": {
+    "ColorGradeHighlightLum": "-50"
+   }
+  },
+  {
+   "name": "grading-highlight-lum+50",
+   "settings": {
+    "ColorGradeHighlightLum": "+50"
+   }
+  },
+  {
+   "name": "grading-global-lum-50",
+   "settings": {
+    "ColorGradeGlobalLum": "-50"
+   }
+  },
+  {
+   "name": "grading-global-lum+50",
+   "settings": {
+    "ColorGradeGlobalLum": "+50"
+   }
+  },
+  {
+   "name": "grading-shadows-h30-s100",
+   "settings": {
+    "SplitToningShadowHue": "30",
+    "SplitToningShadowSaturation": "100"
+   }
+  },
+  {
+   "name": "grading-highlights-h210-s100",
+   "settings": {
+    "SplitToningHighlightHue": "210",
+    "SplitToningHighlightSaturation": "100"
+   }
+  },
+  {
+   "name": "calibration-red-saturation+50",
+   "settings": {
+    "RedSaturation": "+50"
+   }
+  },
+  {
+   "name": "calibration-green-hue-50",
+   "settings": {
+    "GreenHue": "-50"
+   }
+  },
+  {
+   "name": "calibration-red-hue-100",
+   "settings": {
+    "RedHue": "-100"
+   }
+  },
+  {
+   "name": "calibration-shadow-tint-60",
+   "settings": {
+    "ShadowTint": "-60"
+   }
+  },
+  {
+   "name": "lens-vignetting-50",
+   "settings": {
+    "VignetteAmount": "-50"
+   }
+  },
+  {
+   "name": "lens-vignetting+50",
+   "settings": {
+    "VignetteAmount": "+50"
+   }
+  },
+  {
+   "name": "lens-vignetting-50-midpoint20",
+   "settings": {
+    "VignetteAmount": "-50",
+    "VignetteMidpoint": "20"
+   }
+  },
+  {
+   "name": "transform-horizontal+30",
+   "settings": {
+    "PerspectiveHorizontal": "+30"
+   }
+  },
+  {
+   "name": "transform-rotate+5",
+   "settings": {
+    "PerspectiveRotate": "+5.0"
+   }
+  },
+  {
+   "name": "transform-scale80",
+   "settings": {
+    "PerspectiveScale": "80"
+   }
+  },
+  {
+   "name": "transform-aspect+50",
+   "settings": {
+    "PerspectiveAspect": "+50"
+   }
+  },
+  {
+   "name": "transform-offset-x+10",
+   "settings": {
+    "PerspectiveX": "+10.0"
+   }
+  },
+  {
+   "name": "sharpening-40",
+   "settings": {
+    "Sharpness": "40"
+   }
+  },
+  {
+   "name": "sharpening-150-radius2",
+   "settings": {
+    "Sharpness": "150",
+    "SharpenRadius": "+2.0"
+   }
+  },
+  {
+   "name": "noise-luminance+50",
+   "settings": {
+    "LuminanceSmoothing": "50"
+   }
+  },
+  {
+   "name": "noise-color+25",
+   "settings": {
+    "ColorNoiseReduction": "25"
+   }
+  },
+  {
+   "name": "grain-50",
+   "settings": {
+    "GrainAmount": "50",
+    "GrainSize": "25",
+    "GrainFrequency": "50"
+   }
+  },
+  {
+   "name": "pair-clarity+50-contrast+50",
+   "settings": {
+    "Clarity2012": "+50",
+    "Contrast2012": "+50"
+   }
+  },
+  {
+   "name": "pair-dehaze+50-saturation-30",
+   "settings": {
+    "Dehaze": "+50",
+    "Saturation": "-30"
+   }
+  },
+  {
+   "name": "hue-red-50",
+   "settings": {
+    "HueAdjustmentRed": "-50"
+   }
+  },
+  {
+   "name": "hue-red+50",
+   "settings": {
+    "HueAdjustmentRed": "+50"
+   }
+  },
+  {
+   "name": "hue-orange-50",
+   "settings": {
+    "HueAdjustmentOrange": "-50"
+   }
+  },
+  {
+   "name": "hue-orange+50",
+   "settings": {
+    "HueAdjustmentOrange": "+50"
+   }
+  },
+  {
+   "name": "hue-yellow-50",
+   "settings": {
+    "HueAdjustmentYellow": "-50"
+   }
+  },
+  {
+   "name": "hue-yellow+50",
+   "settings": {
+    "HueAdjustmentYellow": "+50"
+   }
+  },
+  {
+   "name": "hue-green-50",
+   "settings": {
+    "HueAdjustmentGreen": "-50"
+   }
+  },
+  {
+   "name": "hue-green+50",
+   "settings": {
+    "HueAdjustmentGreen": "+50"
+   }
+  },
+  {
+   "name": "hue-aqua-50",
+   "settings": {
+    "HueAdjustmentAqua": "-50"
+   }
+  },
+  {
+   "name": "hue-aqua+50",
+   "settings": {
+    "HueAdjustmentAqua": "+50"
+   }
+  },
+  {
+   "name": "hue-blue-50",
+   "settings": {
+    "HueAdjustmentBlue": "-50"
+   }
+  },
+  {
+   "name": "hue-blue+50",
+   "settings": {
+    "HueAdjustmentBlue": "+50"
+   }
+  },
+  {
+   "name": "hue-purple-50",
+   "settings": {
+    "HueAdjustmentPurple": "-50"
+   }
+  },
+  {
+   "name": "hue-purple+50",
+   "settings": {
+    "HueAdjustmentPurple": "+50"
+   }
+  },
+  {
+   "name": "hue-magenta-50",
+   "settings": {
+    "HueAdjustmentMagenta": "-50"
+   }
+  },
+  {
+   "name": "hue-magenta+50",
+   "settings": {
+    "HueAdjustmentMagenta": "+50"
+   }
+  },
+  {
+   "name": "saturation-red-50",
+   "settings": {
+    "SaturationAdjustmentRed": "-50"
+   }
+  },
+  {
+   "name": "saturation-red+50",
+   "settings": {
+    "SaturationAdjustmentRed": "+50"
+   }
+  },
+  {
+   "name": "saturation-orange-50",
+   "settings": {
+    "SaturationAdjustmentOrange": "-50"
+   }
+  },
+  {
+   "name": "saturation-orange+50",
+   "settings": {
+    "SaturationAdjustmentOrange": "+50"
+   }
+  },
+  {
+   "name": "saturation-yellow-50",
+   "settings": {
+    "SaturationAdjustmentYellow": "-50"
+   }
+  },
+  {
+   "name": "saturation-yellow+50",
+   "settings": {
+    "SaturationAdjustmentYellow": "+50"
+   }
+  },
+  {
+   "name": "saturation-green-50",
+   "settings": {
+    "SaturationAdjustmentGreen": "-50"
+   }
+  },
+  {
+   "name": "saturation-green+50",
+   "settings": {
+    "SaturationAdjustmentGreen": "+50"
+   }
+  },
+  {
+   "name": "saturation-aqua-50",
+   "settings": {
+    "SaturationAdjustmentAqua": "-50"
+   }
+  },
+  {
+   "name": "saturation-aqua+50",
+   "settings": {
+    "SaturationAdjustmentAqua": "+50"
+   }
+  },
+  {
+   "name": "saturation-blue-50",
+   "settings": {
+    "SaturationAdjustmentBlue": "-50"
+   }
+  },
+  {
+   "name": "saturation-blue+50",
+   "settings": {
+    "SaturationAdjustmentBlue": "+50"
+   }
+  },
+  {
+   "name": "saturation-purple-50",
+   "settings": {
+    "SaturationAdjustmentPurple": "-50"
+   }
+  },
+  {
+   "name": "saturation-purple+50",
+   "settings": {
+    "SaturationAdjustmentPurple": "+50"
+   }
+  },
+  {
+   "name": "saturation-magenta-50",
+   "settings": {
+    "SaturationAdjustmentMagenta": "-50"
+   }
+  },
+  {
+   "name": "saturation-magenta+50",
+   "settings": {
+    "SaturationAdjustmentMagenta": "+50"
+   }
+  },
+  {
+   "name": "luminance-red-50",
+   "settings": {
+    "LuminanceAdjustmentRed": "-50"
+   }
+  },
+  {
+   "name": "luminance-red+50",
+   "settings": {
+    "LuminanceAdjustmentRed": "+50"
+   }
+  },
+  {
+   "name": "luminance-orange-50",
+   "settings": {
+    "LuminanceAdjustmentOrange": "-50"
+   }
+  },
+  {
+   "name": "luminance-orange+50",
+   "settings": {
+    "LuminanceAdjustmentOrange": "+50"
+   }
+  },
+  {
+   "name": "luminance-yellow-50",
+   "settings": {
+    "LuminanceAdjustmentYellow": "-50"
+   }
+  },
+  {
+   "name": "luminance-yellow+50",
+   "settings": {
+    "LuminanceAdjustmentYellow": "+50"
+   }
+  },
+  {
+   "name": "luminance-green-50",
+   "settings": {
+    "LuminanceAdjustmentGreen": "-50"
+   }
+  },
+  {
+   "name": "luminance-green+50",
+   "settings": {
+    "LuminanceAdjustmentGreen": "+50"
+   }
+  },
+  {
+   "name": "luminance-aqua-50",
+   "settings": {
+    "LuminanceAdjustmentAqua": "-50"
+   }
+  },
+  {
+   "name": "luminance-aqua+50",
+   "settings": {
+    "LuminanceAdjustmentAqua": "+50"
+   }
+  },
+  {
+   "name": "luminance-blue-50",
+   "settings": {
+    "LuminanceAdjustmentBlue": "-50"
+   }
+  },
+  {
+   "name": "luminance-blue+50",
+   "settings": {
+    "LuminanceAdjustmentBlue": "+50"
+   }
+  },
+  {
+   "name": "luminance-purple-50",
+   "settings": {
+    "LuminanceAdjustmentPurple": "-50"
+   }
+  },
+  {
+   "name": "luminance-purple+50",
+   "settings": {
+    "LuminanceAdjustmentPurple": "+50"
+   }
+  },
+  {
+   "name": "luminance-magenta-50",
+   "settings": {
+    "LuminanceAdjustmentMagenta": "-50"
+   }
+  },
+  {
+   "name": "luminance-magenta+50",
+   "settings": {
+    "LuminanceAdjustmentMagenta": "+50"
+   }
+  },
+  {
+   "name": "mixer-all-hue+50",
+   "settings": {
+    "HueAdjustmentRed": "+50",
+    "HueAdjustmentOrange": "+50",
+    "HueAdjustmentYellow": "+50",
+    "HueAdjustmentGreen": "+50",
+    "HueAdjustmentAqua": "+50",
+    "HueAdjustmentBlue": "+50",
+    "HueAdjustmentPurple": "+50",
+    "HueAdjustmentMagenta": "+50"
+   }
+  },
+  {
+   "name": "mixer-all-saturation-50",
+   "settings": {
+    "SaturationAdjustmentRed": "-50",
+    "SaturationAdjustmentOrange": "-50",
+    "SaturationAdjustmentYellow": "-50",
+    "SaturationAdjustmentGreen": "-50",
+    "SaturationAdjustmentAqua": "-50",
+    "SaturationAdjustmentBlue": "-50",
+    "SaturationAdjustmentPurple": "-50",
+    "SaturationAdjustmentMagenta": "-50"
+   }
+  },
+  {
+   "name": "mixer-all-luminance+50",
+   "settings": {
+    "LuminanceAdjustmentRed": "+50",
+    "LuminanceAdjustmentOrange": "+50",
+    "LuminanceAdjustmentYellow": "+50",
+    "LuminanceAdjustmentGreen": "+50",
+    "LuminanceAdjustmentAqua": "+50",
+    "LuminanceAdjustmentBlue": "+50",
+    "LuminanceAdjustmentPurple": "+50",
+    "LuminanceAdjustmentMagenta": "+50"
+   }
+  },
+  {
+   "name": "mixer-alternate-luminance",
+   "settings": {
+    "LuminanceAdjustmentRed": "-60",
+    "LuminanceAdjustmentOrange": "+60",
+    "LuminanceAdjustmentYellow": "-60",
+    "LuminanceAdjustmentGreen": "+60",
+    "LuminanceAdjustmentAqua": "-60",
+    "LuminanceAdjustmentBlue": "+60",
+    "LuminanceAdjustmentPurple": "-60",
+    "LuminanceAdjustmentMagenta": "+60"
+   }
+  },
+  {
+   "name": "mixer-neighbours-saturation+100",
+   "settings": {
+    "SaturationAdjustmentOrange": "+100",
+    "SaturationAdjustmentYellow": "+100"
+   }
+  },
+  {
+   "name": "mixer-hue-sat-lum-blue",
+   "settings": {
+    "HueAdjustmentBlue": "-40",
+    "SaturationAdjustmentBlue": "+40",
+    "LuminanceAdjustmentBlue": "-40"
+   }
+  },
+  {
+   "name": "mixer-skin",
+   "settings": {
+    "HueAdjustmentOrange": "+10",
+    "SaturationAdjustmentOrange": "-20",
+    "LuminanceAdjustmentOrange": "+20",
+    "HueAdjustmentRed": "+10",
+    "SaturationAdjustmentRed": "-10"
+   }
+  }
+ ]
+}
