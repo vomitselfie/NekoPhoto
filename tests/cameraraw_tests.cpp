@@ -7,6 +7,7 @@
 #include "compositor/depth.h"
 #include "check.h"
 #include "compositor/cameraraw.h"
+#include "compositor/camerarawxmp.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -649,6 +650,71 @@ TEST_CASE(sixteen_bit_keeps_sixteen_bit_precision) {
     const auto a = CameraRawSettings::autoBalance(warm), b = CameraRawSettings::autoBalance(*widenImage(warm));
     REQUIRE(a && b);
     CHECK(std::abs((*a)[0] - (*b)[0]) < 0.5 && std::abs((*a)[1] - (*b)[1]) < 0.5);
+}
+
+TEST_CASE(an_xmp_preset_patches_the_settings_and_lists_what_it_cannot) {
+    // A Lightroom-style preset: settings as attributes and as elements, a point curve as a sequence, the name as a
+    // language alternative, and settings this engine has no counterpart for.
+    const std::string xmp = R"(<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal" crs:Version="18.7" crs:ProcessVersion="15.4" crs:UUID="0123"
+    crs:Exposure2012="+0.50" crs:Contrast2012="+20" crs:Temperature="5600" crs:Tint="+8" crs:WhiteBalance="Custom"
+    crs:IncrementalTemperature="+12" crs:HueAdjustmentBlue="-30" crs:SplitToningShadowHue="210"
+    crs:SplitToningShadowSaturation="25" crs:CurveRefineSaturation="50" crs:PerspectiveScale="90"
+    crs:PostCropVignetteStyle="3" crs:ConvertToGrayscale="True" crs:GrayMixerRed="+10" crs:HasCrop="True"
+    crs:EnableCalibration="False" crs:RedHue="+40" crs:Sharpness="0">
+   <crs:Name><rdf:Alt><rdf:li xml:lang="x-default">Warm Look</rdf:li></rdf:Alt></crs:Name>
+   <crs:Clarity2012>+15</crs:Clarity2012>
+   <crs:ToneCurvePV2012><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>128, 140</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012>
+   <crs:Look><rdf:Description crs:Name="Adobe Color"/></crs:Look>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>)";
+    const std::vector<uint8_t> bytes(xmp.begin(), xmp.end());
+    CameraRawSettings base;
+    base.saturation = 7;   // a preset is a patch: what it does not name stays
+    std::string error;
+    auto onPixels = readCameraRawXmp(bytes, base, false, &error);
+    REQUIRE(onPixels);
+    const CameraRawSettings& s = onPixels->settings;
+    CHECK_EQ(onPixels->name, std::string("Warm Look"));
+    CHECK_EQ(s.exposure, 0.5);
+    CHECK_EQ(s.contrast, 20.0);
+    CHECK_EQ(s.saturation, 7.0);
+    CHECK_EQ(s.temperature, 12.0);   // the filter takes the relative temperature, not kelvin
+    CHECK_EQ(s.rawTemperature, 0.0);
+    CHECK_EQ(s.mixer.hue[5], -30.0);
+    CHECK_EQ(s.grading.shadows.hue, 210.0);
+    CHECK_EQ(s.grading.shadows.saturation, 25.0);
+    CHECK_EQ(s.curve.refineSaturation, -50.0);
+    CHECK_EQ(s.geometry.scale, -10.0);
+    CHECK(s.vignetteStyle == CameraRawVignetteStyle::PaintOverlay);
+    CHECK_EQ(s.clarity, 15.0);
+    CHECK_EQ(s.curve.rgb.size(), size_t(3));
+    CHECK_NEAR(s.curve.rgb[1].y, 140 / 255.0, 1e-9);
+    CHECK_EQ(s.calibration.redHue, 0.0);   // EnableCalibration="False" switches the panel off
+    auto listed = [&](const std::string& key) {
+        return std::any_of(onPixels->unsupported.begin(), onPixels->unsupported.end(), [&](const std::string& u) { return u.rfind(key, 0) == 0; });
+    };
+    CHECK(listed("ConvertToGrayscale=True"));
+    CHECK(listed("GrayMixerRed"));
+    CHECK(listed("HasCrop=True"));
+    CHECK(listed("Look"));
+    CHECK(listed("Temperature=5600"));   // kelvin has no meaning on pixels
+    CHECK(!listed("Sharpness"));          // 0 changes nothing
+    CHECK(!listed("UUID") && !listed("PresetType"));
+
+    auto onRaw = readCameraRawXmp(bytes, base, true, &error);
+    REQUIRE(onRaw);
+    CHECK_EQ(onRaw->settings.rawTemperature, 5600.0);
+    CHECK_EQ(onRaw->settings.rawTint, 8.0);
+    CHECK(onRaw->settings.whiteBalance == CameraRawWhiteBalance::Custom);
+    CHECK(std::any_of(onRaw->unsupported.begin(), onRaw->unsupported.end(), [](const std::string& u) { return u.rfind("IncrementalTemperature", 0) == 0; }));
+
+    const std::string junk = "not xml";
+    CHECK(!readCameraRawXmp(std::vector<uint8_t>(junk.begin(), junk.end()), base, false, &error));
+    CHECK(!error.empty());
 }
 
 TEST_MAIN()

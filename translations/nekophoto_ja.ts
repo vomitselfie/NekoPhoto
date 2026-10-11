@@ -3986,6 +3986,42 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <translation>色温度</translation>
     </message>
     <message>
+        <source>Load Preset…</source>
+        <translation>プリセットを読み込む…</translation>
+    </message>
+    <message>
+        <source>Apply a Camera Raw or Lightroom preset (.xmp) over the current settings</source>
+        <translation>Camera Raw または Lightroom のプリセット(.xmp)を現在の設定に適用します</translation>
+    </message>
+    <message>
+        <source>Load Camera Raw Preset</source>
+        <translation>Camera Raw プリセットを読み込む</translation>
+    </message>
+    <message>
+        <source>Camera Raw presets (*.xmp *.XMP)</source>
+        <translation>Camera Raw プリセット (*.xmp *.XMP)</translation>
+    </message>
+    <message>
+        <source>Load Preset</source>
+        <translation>プリセットを読み込む</translation>
+    </message>
+    <message>
+        <source>That file could not be read.</source>
+        <translation>ファイルを読み込めませんでした。</translation>
+    </message>
+    <message>
+        <source>That is not a Camera Raw preset: %1</source>
+        <translation>Camera Raw のプリセットではありません:%1</translation>
+    </message>
+    <message>
+        <source>%1 is applied. These settings have no counterpart here and were left out:
+
+%2</source>
+        <translation>「%1」を適用しました。次の設定はここに対応するものがないため適用していません:
+
+%2</translation>
+    </message>
+    <message>
         <source> K</source>
         <translation> K</translation>
     </message>

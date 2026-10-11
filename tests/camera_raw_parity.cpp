@@ -11,6 +11,7 @@
 // COMPOSITOR_CAMERA_RAW_PARITY_ONLY=<text> runs only the cases whose name contains it, and
 // COMPOSITOR_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>" patches one case's settings, to try a mapping by hand.
 #include "check.h"
+#include "compositor/camerarawxmp.h"
 #include "compositor/raw.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -142,7 +143,6 @@ std::string controlOf(const std::string& key) {
     return {};
 }
 
-const std::array<const char*, 8> mixerBands{"Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta"};
 
 struct MappedCase {
     CameraRawSettings settings;
@@ -150,133 +150,32 @@ struct MappedCase {
     std::vector<std::string> unsupported;
 };
 
-std::vector<CameraRawCurvePoint> curvePoints(const json& list) {
-    std::vector<CameraRawCurvePoint> points;
-    for (const auto& item : list) {
-        double x = 0, y = 0;
-        if (std::sscanf(item.get<std::string>().c_str(), "%lf, %lf", &x, &y) == 2) points.push_back({x / 255, y / 255});
-    }
-    return points;
-}
-
-/// A case's attributes (with the corpus's base settings under them) as this engine's settings; what it has no control
-/// for is listed in `unsupported`.
+/// A case's attributes (with the corpus's base settings under them) as this engine's settings, through the same mapping
+/// the Camera Raw dialog loads XMP presets with (camerarawxmp.h), over Camera Raw's defaults for a RAW file; what it has
+/// no control for is listed in `unsupported`.
 MappedCase mapCase(const json& base, const json& entry) {
     MappedCase m;
-    CameraRawSettings& s = m.settings;
-    s.whiteBalance = CameraRawWhiteBalance::AsShot;
-    if (entry.contains("look")) m.unsupported.push_back("look profile " + entry["look"]["file"].get<std::string>());
     std::map<std::string, std::string> attributes;
     for (auto it = base.begin(); it != base.end(); ++it) attributes[it.key()] = it.value().get<std::string>();
     if (entry.contains("settings"))
         for (auto it = entry["settings"].begin(); it != entry["settings"].end(); ++it) attributes[it.key()] = it.value().get<std::string>();
-    bool sharpening = false, radiusGiven = false;
-    std::optional<double> temperature, tint;
+    std::map<std::string, std::vector<std::string>> sequences;
+    if (entry.contains("curves"))
+        for (auto it = entry["curves"].begin(); it != entry["curves"].end(); ++it) sequences[it.key()] = it.value().get<std::vector<std::string>>();
+    CameraRawSettings defaults;
+    defaults.whiteBalance = CameraRawWhiteBalance::AsShot;
+    defaults.detail.sharpenRadius = 20;   // Camera Raw's default radius, 1.0 pixel
+    const CameraRawXmp xmp = cameraRawFromXmpAttributes(attributes, sequences, defaults, true);
+    m.settings = xmp.settings;
+    m.unsupported = xmp.unsupported;
+    if (entry.contains("look")) m.unsupported.insert(m.unsupported.begin(), "look profile " + entry["look"]["file"].get<std::string>());
     for (const auto& [key, text] : attributes) {
-        const double v = std::atof(text.c_str());
         const std::string control = controlOf(key);
-        bool handled = true;
-        if (key == "ProcessVersion" || key == "LensProfileEnable" || key == "AutoLateralCA") handled = text == "15.4" || v == 0;
-        else if (key == "ConvertToGrayscale" || key == "AutoGrayscaleMix") handled = text == "False";
-        else if (key == "WhiteBalance") { if (text == "Custom") s.whiteBalance = CameraRawWhiteBalance::Custom; else handled = text == "As Shot"; }
-        else if (key == "Temperature") temperature = v;
-        else if (key == "Tint") tint = v;
-        else if (key == "Exposure2012") s.exposure = v;
-        else if (key == "Contrast2012") s.contrast = v;
-        else if (key == "Highlights2012") s.highlights = v;
-        else if (key == "Shadows2012") s.shadows = v;
-        else if (key == "Whites2012") s.whites = v;
-        else if (key == "Blacks2012") s.blacks = v;
-        else if (key == "Texture") s.texture = v;
-        else if (key == "Clarity2012") s.clarity = v;
-        else if (key == "Dehaze") s.dehaze = v;
-        else if (key == "Vibrance") s.vibrance = v;
-        else if (key == "Saturation") s.saturation = v;
-        else if (key == "ParametricShadows") s.curve.shadows = v;
-        else if (key == "ParametricDarks") s.curve.darks = v;
-        else if (key == "ParametricLights") s.curve.lights = v;
-        else if (key == "ParametricHighlights") s.curve.highlights = v;
-        else if (key == "ParametricShadowSplit") s.curve.shadowSplit = v;
-        else if (key == "ParametricMidtoneSplit") s.curve.darkSplit = v;
-        else if (key == "ParametricHighlightSplit") s.curve.lightSplit = v;
-        // Lightroom's Refine Saturation is 0..200 with 100 the plain curve; this engine's is -100..100 around 0.
-        else if (key == "CurveRefineSaturation") s.curve.refineSaturation = v - 100;
-        else if (key == "SplitToningShadowHue") s.grading.shadows.hue = v;
-        else if (key == "SplitToningShadowSaturation") s.grading.shadows.saturation = v;
-        else if (key == "SplitToningHighlightHue") s.grading.highlights.hue = v;
-        else if (key == "SplitToningHighlightSaturation") s.grading.highlights.saturation = v;
-        else if (key == "SplitToningBalance") s.grading.balance = v;
-        else if (key == "ColorGradeMidtoneHue") s.grading.midtones.hue = v;
-        else if (key == "ColorGradeMidtoneSat") s.grading.midtones.saturation = v;
-        else if (key == "ColorGradeGlobalHue") s.grading.global.hue = v;
-        else if (key == "ColorGradeGlobalSat") s.grading.global.saturation = v;
-        else if (key == "ColorGradeShadowLum") s.grading.shadows.luminance = v;
-        else if (key == "ColorGradeMidtoneLum") s.grading.midtones.luminance = v;
-        else if (key == "ColorGradeHighlightLum") s.grading.highlights.luminance = v;
-        else if (key == "ColorGradeGlobalLum") s.grading.global.luminance = v;
-        else if (key == "ColorGradeBlending") s.grading.blending = v;
-        else if (key == "ShadowTint") s.calibration.shadowTint = v;
-        else if (key == "RedHue") s.calibration.redHue = v;
-        else if (key == "RedSaturation") s.calibration.redSaturation = v;
-        else if (key == "GreenHue") s.calibration.greenHue = v;
-        else if (key == "GreenSaturation") s.calibration.greenSaturation = v;
-        else if (key == "BlueHue") s.calibration.blueHue = v;
-        else if (key == "BlueSaturation") s.calibration.blueSaturation = v;
-        else if (key == "PostCropVignetteAmount") s.vignetteAmount = v;
-        else if (key == "PostCropVignetteMidpoint") s.vignetteMidpoint = v;
-        else if (key == "PostCropVignetteFeather") s.vignetteFeather = v;
-        else if (key == "PostCropVignetteRoundness") s.vignetteRoundness = v;
-        else if (key == "PostCropVignetteHighlightContrast") s.vignetteHighlights = v;
-        else if (key == "PostCropVignetteStyle")
-            s.vignetteStyle = v == 2 ? CameraRawVignetteStyle::ColorPriority : v == 3 ? CameraRawVignetteStyle::PaintOverlay : CameraRawVignetteStyle::HighlightPriority;
-        else if (key == "VignetteAmount") s.optics.vignetteAmount = v;
-        else if (key == "VignetteMidpoint") s.optics.vignetteMidpoint = v;
-        else if (key == "LensManualDistortionAmount") s.optics.distortion = v;
-        else if (key == "PerspectiveVertical") s.geometry.vertical = v;
-        else if (key == "PerspectiveHorizontal") s.geometry.horizontal = v;
-        else if (key == "PerspectiveRotate") s.geometry.rotate = v;
-        else if (key == "PerspectiveAspect") s.geometry.aspect = v;
-        else if (key == "PerspectiveScale") s.geometry.scale = v - 100;   // Camera Raw's is 50..150 around 100
-        else if (key == "PerspectiveX") s.geometry.offsetX = v;
-        else if (key == "PerspectiveY") s.geometry.offsetY = v;
-        else if (key == "GrainAmount") s.grainAmount = v;
-        else if (key == "GrainSize") s.grainSize = v;
-        else if (key == "GrainFrequency") s.grainRoughness = v;
-        else if (key == "Sharpness") { s.detail.sharpenAmount = v; sharpening = v != 0; }
-        // Camera Raw's radius is 0.5..3 pixels; detail_radius is 0.5 + slider / 100 * 2.5.
-        else if (key == "SharpenRadius") { s.detail.sharpenRadius = (v - 0.5) / 2.5 * 100; radiusGiven = true; }
-        else if (key == "LuminanceSmoothing") s.detail.noiseLuminance = v;
-        else if (key == "ColorNoiseReduction") s.detail.noiseColor = v;
-        else {
-            handled = false;
-            for (size_t band = 0; band < 8; band++) {
-                const std::string name = mixerBands[band];
-                if (key == "HueAdjustment" + name) { s.mixer.hue[band] = v; handled = true; }
-                else if (key == "SaturationAdjustment" + name) { s.mixer.saturation[band] = v; handled = true; }
-                else if (key == "LuminanceAdjustment" + name) { s.mixer.luminance[band] = v; handled = true; }
-            }
-        }
-        if (!handled) m.unsupported.push_back(key + "=" + text);
-        else if (!control.empty() && !(control == "White balance" && text == "As Shot") && v != 0 && key != "ProcessVersion") m.controls.insert(control);
-        else if (key == "WhiteBalance" && text == "Custom") m.controls.insert(control);
+        if (control.empty() || key == "ProcessVersion") continue;
+        if (control == "White balance" ? text != "As Shot" : std::atof(text.c_str()) != 0) m.controls.insert(control);
     }
-    if (sharpening && !radiusGiven) s.detail.sharpenRadius = 20;   // Camera Raw's default 1.0 pixel
-    if (temperature) {
-        s.rawTemperature = *temperature;
-        s.rawTint = tint.value_or(0);
-    }
-    if (entry.contains("curves")) {
-        const json& curves = entry["curves"];
-        for (auto it = curves.begin(); it != curves.end(); ++it) {
-            const std::string key = it.key();
-            if (key == "ToneCurvePV2012") s.curve.rgb = curvePoints(it.value());
-            else if (key == "ToneCurvePV2012Red") s.curve.red = curvePoints(it.value());
-            else if (key == "ToneCurvePV2012Green") s.curve.green = curvePoints(it.value());
-            else if (key == "ToneCurvePV2012Blue") s.curve.blue = curvePoints(it.value());
-            else { m.unsupported.push_back(key); continue; }
-            m.controls.insert("Point curve");
-        }
-    }
+    for (const auto& item : sequences)
+        if (item.first.rfind("ToneCurve", 0) == 0) m.controls.insert("Point curve");
     return m;
 }
 

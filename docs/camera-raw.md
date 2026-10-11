@@ -289,6 +289,29 @@ What does not match yet:
 - **White balance** at 2500 and 3200 K is 2–3.3 ΔE00 off (the other temperatures and tints 0.3–0.9).
 - Colour mixer bands combine by adding their changes, so alternating luminance (`mixer-alternate-luminance`, 3.8) is off.
 
+## XMP presets
+
+**Load Preset…** (beside Reset All, in the filter and in the dialog a RAW file opens in) applies a Camera Raw or Lightroom
+preset, or a sidecar, as Photoshop's Camera Raw loads `.xmp` presets: the `crs:` settings it names replace the current
+ones and the rest stay (`compositor/camerarawxmp.h`; the parity test maps its cases through the same code). The preset's
+settings are read as attributes or elements, the point curves as sequences.
+
+- Read: Exposure2012, Contrast2012, Highlights2012, Shadows2012, Whites2012, Blacks2012, Texture, Clarity2012, Dehaze,
+  Vibrance, Saturation; the Parametric* regions and splits; ToneCurvePV2012 (and Red, Green, Blue) and
+  CurveRefineSaturation (stored less 100); Hue/Saturation/LuminanceAdjustment for the eight bands; SplitToning* and
+  ColorGrade* (wheels, Luminance, Blending, Balance); ShadowTint and the Red/Green/Blue Hue and Saturation; PostCropVignette*
+  (style codes 1 Highlight Priority, 2 Color Priority, 3 Paint Overlay); Grain*; VignetteAmount and VignetteMidpoint;
+  LensManualDistortionAmount, LensProfileEnable with its distortion and vignetting scales, AutoLateralCA and the Defringe*
+  settings; Perspective* (Scale less 100); Sharpness, SharpenRadius (0.5–3 px onto the slider), SharpenDetail,
+  SharpenEdgeMasking and the noise reduction settings; the Enable* panel switches (off resets that panel).
+- White balance: on a RAW file Temperature and Tint in kelvin, and WhiteBalance As Shot, Auto or a preset the file
+  records (from the file); on pixels IncrementalTemperature and IncrementalTint, the relative ones the Camera Raw Filter
+  saves.
+- Descriptive attributes (name, group, UUID, version, the Supports* flags, lens profile names) are skipped.
+- Everything else is listed when the preset is loaded and left out: a camera profile or look, Convert to Black & White
+  and its mix, Point Color, a crop, Upright analysis, the 2010 process's sliders, masks and retouching, and any setting at
+  a value this engine has no control for. A setting at the value that changes nothing is not listed.
+
 ## Automation
 
 `pixels.cameraRaw` takes `settings`, an object with the model's keys. Nested objects hold `curve`, `mixer`,
