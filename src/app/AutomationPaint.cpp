@@ -202,6 +202,7 @@ void AutomationServer::registerPaintHandlers() {
         BrushSettings previousBrush = s->brushSettings;
         bool previousErase = s->brushErase, previousMask = s->isMaskSelected();
         QColor previousColor = s->foregroundColor;
+        const QColor previousBackground = s->backgroundColor;
         BlurToolMode previousBlur = s->blurMode;
         const ToningSettings previousToning = s->toning;
         const int previousHealing = s->spotHealingMode;
@@ -211,7 +212,7 @@ void AutomationServer::registerPaintHandlers() {
         const BrushSmoothing previousSmoothing = s->brushSmoothing;
         auto restore = [&] {
             s->brushSmoothing = previousSmoothing;
-            s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->blurMode = previousBlur; s->toning = previousToning; s->spotHealingMode = previousHealing; s->cloneSource = previousClone;
+            s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->backgroundColor = previousBackground; s->blurMode = previousBlur; s->toning = previousToning; s->spotHealingMode = previousHealing; s->cloneSource = previousClone;
             s->brushPreset = previousPreset;
             s->brushSeed.reset();
             if (previousActive && s->document() && s->document()->find(*previousActive)) s->selectLayer(previousActive, previousMask);
@@ -270,7 +271,17 @@ void AutomationServer::registerPaintHandlers() {
         s->brushSmoothing = smoothing;
         if (has(p, "seed")) s->brushSeed = uint32_t(std::clamp(num(p, "seed"), 0.0, 4294967295.0));
         bool warp = false;
-        if (tool == "brush" || tool == "eraser") { s->selectTool(Tool::Brush); s->brushErase = tool == "eraser" || flag(p, "erase", false); }
+        if (tool == "brush" || tool == "eraser") {
+            s->selectTool(Tool::Brush);
+            s->brushErase = tool == "eraser" || flag(p, "erase", false);
+            // On a mask the brush paints the foreground's grey and the eraser the background's (Photoshop's model).
+            // A stroke sent without a colour paints white, or erases to black: D's colours on a mask, whatever the
+            // swatches hold, as a mask stroke always did here. The eraser's colour is the one it erases to.
+            if (s->paintsMask()) {
+                if (!has(p, "color")) { s->foregroundColor = Qt::white; s->backgroundColor = Qt::black; }
+                else if (s->brushErase) s->backgroundColor = s->foregroundColor;
+            }
+        }
         else if (tool == "healing") { s->selectTool(Tool::SpotHealing); if (s->spotHealingMode > 2) s->spotHealingMode = 0; }
         else if (tool == "healingbrush") {
             s->selectTool(Tool::SpotHealing);

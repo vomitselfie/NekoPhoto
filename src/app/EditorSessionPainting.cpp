@@ -305,9 +305,9 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     settings.healing = healing;
     settings.healingMode = spotHealingMode;
     settings.healingSeed = uint32_t(std::random_device{}());
-    if (mask) settings.maskValue = (maskPaintWhite != brushErase) ? 1 : 0;
-    if (mask && paintsQuickMask()) settings.maskValue = 1 - settings.maskValue;   // white selects: the Quick Mask holds the inverse
-    else { settings.red = foregroundColor.redF(); settings.green = foregroundColor.greenF(); settings.blue = foregroundColor.blueF(); }
+    // On a mask the brush paints the foreground's grey and the eraser erases to the background's, as in Photoshop.
+    if (mask) settings.maskValue = maskPaintValue(tool_ == Tool::Brush && brushErase ? backgroundColor : foregroundColor);
+    if (!mask || !paintsQuickMask()) { settings.red = foregroundColor.redF(); settings.green = foregroundColor.greenF(); settings.blue = foregroundColor.blueF(); }
     stroke_ = strokeAtDepth(*document_, *layer, mask, settings);
     if (!stroke_) return false; // an explicit empty selection: touch nothing
     if (!stroke_->isValid()) { emit error(QString::fromStdString(stroke_->error())); stroke_.reset(); return false; }
@@ -844,10 +844,9 @@ void EditorSession::refreshGradient() {
         if (const GradientPreset* preset = gradientSettings.preset.isEmpty() ? nullptr : PresetLibrary::instance().findGradient(gradientSettings.preset)) {
             const float f[3] = {float(fg.redF()), float(fg.greenF()), float(fg.blueF())}, g[3] = {float(bg.redF()), float(bg.greenF()), float(bg.blueF())};
             GradientStops stops = preset->stops(f, g);
-            if (gradient_->mask)   // a mask takes each stop's lightness
+            if (gradient_->mask)   // a mask takes each stop's grey
                 for (auto& s : stops.colors) {
-                    float v = 0.299f * s.rgb[0] + 0.587f * s.rgb[1] + 0.114f * s.rgb[2];
-                    if (paintsQuickMask()) v = 1 - v;
+                    const float v = float(maskPaintValue(QColor::fromRgbF(s.rgb[0], s.rgb[1], s.rgb[2])));
                     s.rgb[0] = s.rgb[1] = s.rgb[2] = v;
                 }
             if (gradientSettings.reversed) stops.reverse();
@@ -859,8 +858,7 @@ void EditorSession::refreshGradient() {
         }
         float start[4], end[4];
         if (gradient_->mask) {
-            float f = fg.lightnessF() >= 0.5 ? 1 : 0, g = bg.lightnessF() >= 0.5 ? 1 : 0;
-            if (paintsQuickMask()) { f = 1 - f; g = 1 - g; }
+            const float f = float(maskPaintValue(fg)), g = float(maskPaintValue(bg));   // their greys
             start[0] = start[1] = start[2] = f; start[3] = 1;
             end[0] = end[1] = end[2] = gradientSettings.style == GradientStyle::ForegroundToBackground ? g : f;
             end[3] = gradientSettings.style == GradientStyle::ForegroundToBackground ? 1 : 0;

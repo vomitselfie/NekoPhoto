@@ -6,6 +6,7 @@
 // bakes the outline and drops the vector mask, the composite unchanged (on Patchy's Photoshop shapes too).
 #include "SelfTest.h"
 #include "CanvasWidget.h"
+#include "ColorSwatches.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "Theme.h"
@@ -136,15 +137,16 @@ int forbiddenCursor(MainWindow& w) {
         const size_t steps = s.undoNames().size();
         const Tool tool = s.tool();
         const BrushSettings brush = s.brushSettings;
-        const bool white = s.maskPaintWhite, erase = s.brushErase;
+        const QColor foreground = s.foregroundColor;
+        const bool erase = s.brushErase;
         s.selectTool(Tool::Brush);
         s.brushSettings.diameter = 12; s.brushSettings.hardness = 1; s.brushSettings.opacity = 1;
-        s.maskPaintWhite = false; s.brushErase = false;   // black: the adjustment is hidden under the stroke
+        s.foregroundColor = Qt::black; s.brushErase = false;   // black: the adjustment is hidden under the stroke
         const double cy = doc.height / 2.0, x0 = doc.width / 4.0, x1 = doc.width / 2.0;
         const bool began = s.beginBrush(QPointF(x0, cy), false);
         expect(began, "the brush did not start on the adjustment layer's mask");
         if (began) { s.continueBrush(QPointF(x1, cy)); s.endBrush(); }
-        s.brushSettings = brush; s.maskPaintWhite = white; s.brushErase = erase;
+        s.brushSettings = brush; s.foregroundColor = foreground; s.brushErase = erase;
         s.selectTool(tool);
         expect(s.undoNames().size() == steps + 1 && s.undoNames().back() == "Paint Mask", "painting the adjustment layer's mask was not one Paint Mask step");
         const auto after = renderFlattened(*s.document());
@@ -212,6 +214,72 @@ int forbiddenCursor(MainWindow& w) {
         call("history.undo");
         call("selection.none");
         if (maskedId) s.selectLayer(*maskedId, false);
+    }
+
+    // Painting a mask, as in Photoshop: the colours paint their grey (0.30 R + 0.59 G + 0.11 B), the brush the
+    // foreground's, the eraser the background's, the Gradient tool both, the Paint Bucket and Fill the colour asked
+    // for; the swatches show the greys while the mask is the target, and D makes them white on black there.
+    {
+        expect(call("layers.add", {{"kind", "pixels"}, {"name", "Grey mask"}}).has_value(), "could not add a layer for the grey mask");
+        const auto greyId = s.activeLayerId();
+        call("pixels.fill", {{"color", "#2040c0"}});
+        call("layers.mask", {{"action", "add"}, {"mode", "revealAll"}});
+        const Document& doc = *s.document();
+        const double y = doc.height * 0.5;
+        auto mask = [&](double x) { const Layer* l = greyId ? s.document()->find(*greyId) : nullptr; return l ? maskAt(*l, x, y) : -1; };
+        auto near = [](int v, int want) { return std::abs(v - want) <= 1; };
+        const QColor red(255, 0, 0), green(0, 255, 0), blue(0, 0, 255);
+        const int redGrey = 77, greenGrey = 150, blueGrey = 28;   // 0.30, 0.59, 0.11 of 255
+        expect(s.paintsMask(), "adding a mask did not target it");
+        const QColor foreground = s.foregroundColor, background = s.backgroundColor;
+        const Tool tool = s.tool();
+        const BrushSettings brush = s.brushSettings;
+        const bool erase = s.brushErase;
+        s.selectTool(Tool::Brush);
+        s.brushSettings.diameter = 9; s.brushSettings.hardness = 1; s.brushSettings.opacity = 1;
+        auto stroke = [&](double x) {
+            if (s.beginBrush(QPointF(x, y), false)) { s.continueBrush(QPointF(x + 1, y)); s.endBrush(); }
+        };
+        // The swatches: greys on the mask, the colours themselves elsewhere.
+        s.foregroundColor = red; s.backgroundColor = blue;
+        emit s.toolChanged();
+        auto* swatches = w.findChild<ColorSwatches*>();
+        auto grey = [](const QColor& c) { const int v = c.red(); return c.green() == v && c.blue() == v ? v : -1; };
+        expect(swatches && near(grey(swatches->foreground()), redGrey) && near(grey(swatches->background()), blueGrey),
+               "the swatches did not show the colours' greys on a mask");
+        const double x0 = doc.width * 0.2, x1 = doc.width * 0.4, x2 = doc.width * 0.6, x3 = doc.width * 0.8;
+        stroke(x0);
+        expect(near(mask(x0), redGrey), "the brush did not paint the foreground's grey on the mask");
+        s.brushErase = true;
+        stroke(x1);
+        expect(near(mask(x1), blueGrey), "the eraser did not erase the mask to the background's grey");
+        s.brushErase = false;
+        s.foregroundColor = green;
+        call("selection.rect", {{"x", x2 - 4}, {"y", y - 4}, {"width", 8}, {"height", 8}});
+        s.fillSelection(s.foregroundColor);
+        expect(near(mask(x2), greenGrey), "Fill did not fill the mask with the colour's grey");
+        call("selection.none");
+        call("pixels.bucket", {{"x", x3}, {"y", 2}, {"color", "#ff0000"}, {"antialias", false}});
+        expect(near(mask(x3), redGrey), "the Paint Bucket did not fill the mask with the colour's grey");
+        call("gradient.draw", {{"x0", x1}, {"y0", 0}, {"x1", x2}, {"y1", 0}, {"foreground", "#ff0000"}, {"background", "#00ff00"}, {"style", "foreground-to-background"}});
+        expect(near(mask(x0), redGrey) && near(mask(x3), greenGrey), "the Gradient tool did not draw from the foreground's grey to the background's on the mask");
+        // D on a mask: white on black, as in Photoshop; elsewhere black on white.
+        QAction* defaults = nullptr;
+        for (QAction* a : w.findChildren<QAction*>()) if (a->objectName() == QLatin1String("command.colors.default")) defaults = a;
+        expect(defaults != nullptr, "no Default Colours command");
+        if (defaults) {
+            defaults->trigger();
+            expect(s.foregroundColor == QColor(Qt::white) && s.backgroundColor == QColor(Qt::black), "D on a mask did not make white the foreground and black the background");
+            if (greyId) s.selectLayer(*greyId, false);
+            settle(5);
+            expect(swatches && swatches->foreground() == QColor(Qt::white), "the swatches did not show the colours again off the mask");
+            defaults->trigger();
+            expect(s.foregroundColor == QColor(Qt::black) && s.backgroundColor == QColor(Qt::white), "D off a mask did not make black the foreground");
+        }
+        s.foregroundColor = foreground; s.backgroundColor = background;
+        s.brushSettings = brush; s.brushErase = erase;
+        s.selectTool(tool);
+        emit s.toolChanged();
     }
 
     // A type layer: rasterize first. Rasterized, the brush works; undone, it is type again.

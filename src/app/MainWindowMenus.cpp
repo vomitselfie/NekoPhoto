@@ -248,7 +248,11 @@ void MainWindow::buildToolRail() {
     swap->setObjectName("command.colors.swap");
     connect(swatches_, &ColorSwatches::swapRequested, swap, &QAction::trigger);
     QAction* defaults = commands_->add(nullptr, Spec("colors.default", tr("Default colours"), {QKeySequence("D")})
-                                                    .runs([this] { setColors(Qt::black, Qt::white); }, "colors.set").command);
+                                                    .runs([this] {
+                                                        // On a mask, white paints and black is the background, as in Photoshop.
+                                                        if (session_->paintsMask()) setColors(Qt::white, Qt::black);
+                                                        else setColors(Qt::black, Qt::white);
+                                                    }, "colors.set").command);
     defaults->setObjectName("command.colors.default");
     connect(swatches_, &ColorSwatches::defaultsRequested, defaults, &QAction::trigger);
     rail->addWidget(swatches_);
@@ -310,6 +314,12 @@ void MainWindow::buildToolRail() {
 void MainWindow::updateColorSwatches() {
     // Document values, shown through the monitor profile (the identity when none is known).
     const compositor::ColorProfile profile = session_->hasDocument() ? session_->document()->profile : compositor::ColorProfile{};
+    // On a mask they paint their greys, which Photoshop's swatches show there (the colours themselves are kept).
+    if (session_->paintsMask()) {
+        auto grey = [](const QColor& c) { const double g = EditorSession::maskGrey(c); return QColor::fromRgbF(float(g), float(g), float(g)); };
+        swatches_->setColors(grey(session_->foregroundColor), grey(session_->backgroundColor));
+        return;
+    }
     swatches_->setColors(color::displayColor(session_->foregroundColor, profile), color::displayColor(session_->backgroundColor, profile));
 }
 

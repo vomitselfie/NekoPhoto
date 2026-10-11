@@ -239,6 +239,13 @@ public:
     const std::set<compositor::Uuid>& selectedLayerIds() const { return selectedLayerIds_; }
     const compositor::Layer* activeLayer() const;
     bool isMaskSelected() const { return isMaskSelected_; }
+    /// Whether painting now goes into a mask: a layer's (an adjustment's, a group's), the Quick Mask or an alpha channel.
+    bool paintsMask() const;
+    /// The grey a colour paints on a mask, 0..1: Photoshop's luminosity, 0.30 R + 0.59 G + 0.11 B.
+    static double maskGrey(const QColor& color);
+    /// What `color` puts into the mask being painted: its grey, the inverse on the Quick Mask and an alpha channel
+    /// (their layers' masks hold the inverse of what they select).
+    double maskPaintValue(const QColor& color) const;
     void selectLayer(const std::optional<compositor::Uuid>& id, bool mask = false);
     void selectLayers(const std::set<compositor::Uuid>& ids, const std::optional<compositor::Uuid>& primary);
     std::set<compositor::Uuid> collapsedGroupIds;
@@ -559,9 +566,11 @@ public:
     std::function<void(QPointF, QPointF)> canvasDragHook;
     std::function<void()> canvasReleaseHook;
     bool brushErase = false;
+    /// The colours stay what they were picked as; on a mask (paintsMask) they paint their grey, as Photoshop's swatches
+    /// show them there: the brush, the Gradient tool, the Paint Bucket and Edit > Fill the foreground's (or the
+    /// colour asked for), the eraser the background's.
     QColor foregroundColor{Qt::black};
     QColor backgroundColor{Qt::white};
-    bool maskPaintWhite = true;
     bool brushActive() const { return stroke_ != nullptr; }
     bool beginBrush(QPointF documentPoint, bool straightFromLast);
     void continueBrush(QPointF documentPoint);

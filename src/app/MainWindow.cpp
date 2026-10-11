@@ -561,6 +561,9 @@ void MainWindow::connectSession() {
     sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, [this] { emit automationEvent("view"); }));
     emit automationEvent("tabs");
     sessionConnections_.push_back(connect(session_, &EditorSession::layersChanged, this, &MainWindow::refreshActions));
+    // The swatches show greys while a mask is the target (selecting it, Quick Mask, an alpha channel, an undo).
+    sessionConnections_.push_back(connect(session_, &EditorSession::layersChanged, this, &MainWindow::updateColorSwatches));
+    sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, &MainWindow::updateColorSwatches));
     sessionConnections_.push_back(connect(session_, &EditorSession::toolChanged, this, [this] {
         if (toolActions_.contains(session_->tool())) toolActions_[session_->tool()]->setChecked(true);
         eraserAction_->setChecked(session_->tool() == Tool::Brush && session_->brushErase);

@@ -403,8 +403,7 @@ bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection,
     BrushSettings settings;
     settings.diameter = 1;
     settings.red = color.redF(); settings.green = color.greenF(); settings.blue = color.blueF();
-    if (mask) settings.maskValue = color.lightnessF() >= 0.5 ? 1 : 0;
-    if (mask && paintsQuickMask()) settings.maskValue = 1 - settings.maskValue;
+    if (mask) settings.maskValue = maskPaintValue(color);   // the colour's grey
     BrushStroke stroke(*layer, mask, settings, document_->size(), selection);
     if (!stroke.isValid()) return false;
     // Direct fill over the working image rather than dabbing.
@@ -466,8 +465,7 @@ bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, 
     if (mask) {
         if (!layer->mask->asset.image.u16()) return false;
         auto out = std::make_shared<Gray16>(*layer->mask->asset.image.u16());
-        const bool white = color.lightnessF() >= 0.5;
-        const uint32_t value = (paintsQuickMask() ? !white : white) ? one16 : 0;
+        const uint32_t value = uint32_t(std::lround(maskPaintValue(color) * one16));   // the colour's grey
         const Affine toDoc = layer->maskTransform().pixelToDocument(out->width(), out->height());
         for (int py = 0; py < out->height(); py++)
             for (int px = 0; px < out->width(); px++) {

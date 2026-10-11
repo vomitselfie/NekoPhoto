@@ -1402,6 +1402,23 @@ def mask_parity(rpc):
         rpc.call("history.undo")
         rpc.call("selection.none")
     expect_refused(rpc, "mode must be", "layers.mask", id=red, action="add", mode="revealEverything")
+
+    # Painting a mask paints the colour's grey (0.30 R + 0.59 G + 0.11 B): red over white shows 255 - grey in green.
+    # Without a colour the brush paints white and the eraser black (D's colours on a mask); the eraser's colour is
+    # the background it erases to.
+    def green_at(x):
+        return int(rpc.call("color.sample", x=x, y=8)["color"][3:5], 16)
+
+    rpc.call("layers.mask", id=red, action="add")
+    rpc.call("brush.stroke", points=[[8, 8], [9, 8]], size=6, hardness=1, mask=True, color="#ff0000")
+    assert abs(green_at(8) - 178) <= 2, green_at(8)
+    rpc.call("brush.stroke", tool="eraser", points=[[24, 8], [25, 8]], size=6, hardness=1, mask=True)
+    assert rpc.call("color.sample", x=24, y=8)["color"] == "#ffffff"
+    rpc.call("brush.stroke", points=[[24, 8], [25, 8]], size=6, hardness=1, mask=True)
+    assert rpc.call("color.sample", x=24, y=8)["color"] == "#ff0000"
+    rpc.call("brush.stroke", tool="eraser", points=[[40, 8], [41, 8]], size=6, hardness=1, mask=True, color="#0000ff")
+    assert abs(green_at(40) - 227) <= 2, green_at(40)
+    assert rpc.call("history.info")["undo"] == "Paint Mask"
     rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
     rpc.call("tabs.close", index=tab["index"], discard=True)
