@@ -362,6 +362,7 @@ struct Record {
     std::vector<uint8_t> rawMask;          // the mask section as stored; its channels are in `channels`
     uint8_t fill = 255;                    // written as 'iOpa' below 255
     uint32_t layerId = 0;                  // 'lyid': assigned for every record
+    bool carriedPixels = false;            // the channels are the file's own, as read (PsdLayerCarry::planes)
 };
 
 class Writer {
@@ -566,8 +567,13 @@ private:
         // (a PSB's RLE rows count in 32 bits).
         // A smart object's carried raster goes back with its own bounds, as long as the instance has not moved.
         const bool smartRaster = c.planesRect && l.smartObject && l.isLiveSmartObject();
-        if ((deep_ || float_ || native_) && !options_.large && (sameContent || smartRaster) && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset
-            && (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8)))) {
+        // An 8-bit RGB smart object carries planes only for its Smart Filters' mask applied on import: Photoshop's
+        // unmasked raster goes back, as Photoshop stores it (applySmartFilterMask).
+        const bool eightBitSmart = !deep_ && !float_ && !native_ && smartRaster && l.asset && l.asset->image.u8();
+        if ((deep_ || float_ || native_ || eightBitSmart) && !options_.large && (sameContent || smartRaster) && placementKept && !c.planes.empty()
+            && c.planesHash == contentNow && l.asset
+            && (eightBitSmart || (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8))))) {
+            r.carriedPixels = true;
             if (smartRaster) { r.left = (*c.planesRect)[0]; r.top = (*c.planesRect)[1]; r.right = (*c.planesRect)[2]; r.bottom = (*c.planesRect)[3]; }
             std::vector<std::pair<int, std::vector<uint8_t>>> channels;
             for (const auto& plane : c.planes) channels.push_back({plane.id, plane.data});
@@ -620,6 +626,29 @@ public:
     std::vector<std::pair<std::string, std::vector<uint8_t>>> filterRecords_;
 
 private:
+
+    /// A filtered instance whose pixels here have its Smart Filters' mask applied (applySmartFilterMask) goes out as
+    /// Photoshop stores one: the filters' result before the mask, which Photoshop applies itself. Photoshop's own raster
+    /// when it went back as read; else the filters drawn here without the mask; a stack not drawn here keeps the masked
+    /// pixels, with a note.
+    void unmaskFilteredPixels(Record& r, const Layer& l, const std::array<double, 8>& quad) {
+        const SmartObjectInstance& so = *l.smartObject;
+        if (r.carriedPixels || !doc_.psdCarry || !smartFilterMaskApplies(doc_.psdCarry->globals, so, doc_)) return;
+        auto source = doc_.smartObjects.find(so.sourceId);
+        std::optional<AnyPlacedRaster> drawn;
+        if (!so.locked() && source != doc_.smartObjects.end() && source->second->image)
+            drawn = drawSmartObjectRaster(doc_.psdCarry->globals, so, *source->second, quad, SmartObjectTarget(SampleType::U8), SmartObjectDraw::FilteredUnmasked);
+        if (!drawn || !drawn->image.u8()) {
+            summary_.notes.push_back("Layer \"" + l.name + "\": its Smart Filters are written with their mask applied, so Photoshop applies the mask twice.");
+            return;
+        }
+        // The colour and transparency channels anew; the mask's (-2, -3) stay, after them.
+        std::vector<std::pair<int, std::vector<uint8_t>>> masks;
+        for (auto& ch : r.channels) if (ch.first < -1) masks.push_back(std::move(ch));
+        r.channels.clear();
+        setPixels(r, *drawn->image.u8(), drawn->x, drawn->y);
+        for (auto& ch : masks) r.channels.push_back(std::move(ch));
+    }
 
     /// A smart object still placed by the layer: its Photoshop blocks, the quad following the layer's transform.
     void applySmartObject(Record& r, const Layer& l, int imageWidth, int imageHeight) {
@@ -674,6 +703,7 @@ private:
                 auto patched = patchPsdPlacement(b.key, b.data, quad);
                 if (patched) r.carried.push_back({b.key, std::move(*patched)});
             }
+            unmaskFilteredPixels(r, l, quad);
             summary_.smartObjects++;
             return;
         }
@@ -697,6 +727,7 @@ private:
             auto patched = patchPsdPlacement(b.key, b.data, quad, placed);
             if (patched) r.carried.push_back({b.key, std::move(*patched)});
         }
+        if (filtered) unmaskFilteredPixels(r, l, quad);
         summary_.smartObjects++;
     }
 

@@ -121,6 +121,14 @@ come from the test corpus of [RAWmakase](https://github.com/pch/rawmakase) (`tes
 RAWmakase contributors, MIT ([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)). The Camera Raw look fitted to those renders
 (`tools/camera_raw_fit.py`, `src/core/src/rawtone_tables.inc`) is fitted here; no RAWmakase code or table is used.
 
+The Photoshop oracle (`tests/psd_composite_oracle.cpp`) judges files with a Dissolve layer by the rule of
+[PhotoCraft](https://github.com/storytold/photocraft)'s `crates/io/tests/corpus.rs` (`dissolve_matches`) at commit
+88ffd89e9fe2b774023016c0f9024d3a2f6728b4 (dual MIT / Apache-2.0, used under MIT,
+[PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt)): outside the Dissolve layers per pixel, inside them 16 x 16 block
+means within 0.1. It measures against [photocraft-corpus](https://github.com/storytold/photocraft-corpus) (MIT OR
+Apache-2.0) and psd-tools' test files ([psd-tools](https://github.com/psd-tools/psd-tools), MIT) read from local
+checkouts; none of their files is distributed.
+
 Blend If (`src/core/src/blendif.cpp`): the inclusive split-handle ramp, the Gray weights and the transparency rule
 follow Patchy's calibration notes (`docs/layer-effects-render.md`, MIT, above), checked against its Photoshop fixture.
 

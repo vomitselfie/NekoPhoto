@@ -164,7 +164,18 @@ Drawing: the contents placed on the quad (through the warp, if any) on the docum
 filter over the result so far with its opacity and blend (Normal at 100% replaces), then the mask between the
 unfiltered and the filtered pixels.
 
-Writing: while an instance and its contents are as they were read, its blocks and the cache go back byte for byte.
+The filter mask on import: Photoshop stores a filtered instance's layer pixels as the filters' result *before* the
+filter mask, and applies the mask when it composites (its merged image, and what it shows). Opening an 8-bit RGB
+file, NekoPhoto does the same once: where the record's mask is not white, the stored pixels are weighed against the
+unfiltered instance the record caches (`applySmartFilterMask`). No filter runs, so this works for a preview-locked
+stack too. Against Photoshop's merged images in photocraft-corpus, `sf-filter-mask-hard`, `sf-filter-mask-gradient`
+and `sf-stack-blend-and-mask` went from 169, 161 and 233 levels off to 0, 2 and 1 (`psd_composite_oracle`). The
+mask's density and feather (Photoshop's filter mask options) are not read: none of these files sets them. 16-bit,
+grayscale, CMYK and Lab files still show the stored pixels, unmasked.
+
+Writing: while an instance and its contents are as they were read, its blocks and the cache go back byte for byte,
+and so do Photoshop's own unmasked pixels for a masked one. One drawn here with a mask is written as Photoshop stores
+it, the filters without the mask, so Photoshop and NekoPhoto apply the mask once on reopening.
 Moved, or with new contents, its cache record is written anew in Photoshop 2026's shape (Patchy's authoring shape:
 record version 1, the unfiltered instance over the whole canvas as PackBits RGB and alpha, the mask as an explicit
 plane), the other records untouched, and its placement patched. Plastic Wrap and Add Noise are Patchy's own
@@ -179,9 +190,10 @@ Where Photoshop's own previews in Patchy's fixtures disagreed with Patchy's docu
 - Emboss works per channel: half the height either side along the angle, the side toward the light lit, the
   difference times the amount about middle grey (Patchy's grey relief was 46 levels off; now 0.29).
 
-Every other drawn filter matches Photoshop's preview exactly or within half a level, except two Gaussian layers with
-a five-tone filter mask, whose previews ignore the mask entirely (probably stale; a hard mask on the same stack
-matches exactly), Radial Blur (2.3) and the two above. Radial Blur's Zoom, which Patchy keeps preview-locked, is
+Every other drawn filter matches Photoshop's preview exactly or within half a level, except Radial Blur (2.3) and
+the two above. Photoshop's previews (the stored layer pixels) are always the filters before the mask: the two
+Gaussian layers with a five-tone filter mask match the stack drawn without it exactly, and a hard mask on the same
+stack matches either way because it is black only where the layer is clear (see the filter mask on import, above). Radial Blur's Zoom, which Patchy keeps preview-locked, is
 NekoPhoto's own: samples along the line through the centre over amount / 200 of the pixel's distance, centred on the
 pixel, fitted to Photoshop's preview in `photoshop-smart-filter-radial-blur-zoom.psd` (Zoom 25, Best: mean 0.22
 levels, at most 4 off; `radial_blur_zoom_against_photoshop`). That file opens with Photoshop's own pixels, now

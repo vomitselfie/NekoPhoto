@@ -1,3 +1,22 @@
+# Patchy's PSD fixtures (CONTRIBUTING.md): beside the main checkout, found through git's common directory so a linked
+# worktree (.claude/worktrees/..., git worktree add) finds the same checkout as the main one; PATCHY_FIXTURES in the
+# environment overrides it. The tests that need them say SKIPPED when they are missing.
+set(COMPOSITOR_MAIN_CHECKOUT "${CMAKE_SOURCE_DIR}")
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --path-format=absolute --git-common-dir
+                    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE _common_dir RESULT_VARIABLE _common_result
+                    OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(_common_result EQUAL 0 AND IS_DIRECTORY "${_common_dir}" AND _common_dir MATCHES "/\\.git$")
+        get_filename_component(COMPOSITOR_MAIN_CHECKOUT "${_common_dir}" DIRECTORY)
+    endif()
+endif()
+get_filename_component(COMPOSITOR_PATCHY_FIXTURES "${COMPOSITOR_MAIN_CHECKOUT}/../Patchy/test-fixtures/psd" ABSOLUTE)
+if(NOT IS_DIRECTORY "${COMPOSITOR_PATCHY_FIXTURES}")
+    message(STATUS "Patchy's fixtures are not at ${COMPOSITOR_PATCHY_FIXTURES}: the Photoshop oracle tests will say SKIPPED "
+                   "unless PATCHY_FIXTURES names them")
+endif()
+
 add_executable(pixels_tests pixels_tests.cpp)
 target_link_libraries(pixels_tests PRIVATE compositor::pixels compositor_warnings)
 add_test(NAME pixels_tests COMMAND pixels_tests)
@@ -205,16 +224,19 @@ target_link_libraries(psd_writer_tests PRIVATE compositor::core compositor_warni
 add_test(NAME psd_writer_tests COMMAND psd_writer_tests)
 add_executable(psd_modes_tests psd_modes_tests.cpp)
 target_link_libraries(psd_modes_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
-# Patchy beside this checkout (CONTRIBUTING.md); PATCHY_FIXTURES in the environment overrides it.
-target_compile_definitions(psd_modes_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+# Patchy beside the main checkout (COMPOSITOR_PATCHY_FIXTURES above); PATCHY_FIXTURES in the environment overrides it.
+target_compile_definitions(psd_modes_tests PRIVATE PATCHY_FIXTURES="${COMPOSITOR_PATCHY_FIXTURES}")
 add_test(NAME psd_modes_tests COMMAND psd_modes_tests)
-# Photoshop's merged image as the oracle over Patchy's fixtures (skipped without them); the floor and the fixture pin are
-# tests/psd_oracle.txt and tests/patchy-manifest.txt.
+# Photoshop's merged image as the oracle over three corpora of Photoshop's files, none in this repository: Patchy's
+# fixtures, photocraft-corpus ($PHOTOSHOP_CORPUS) and psd-tools' test files ($PSD_TOOLS_CORPUS). Each is SKIPPED (exit
+# 77) when it is not there; the expectations are tests/psd_oracle*.txt (docs/compatibility.md).
 add_executable(psd_composite_oracle psd_composite_oracle.cpp)
 target_link_libraries(psd_composite_oracle PRIVATE compositor::core compositor_warnings)
-target_compile_definitions(psd_composite_oracle PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd"
-                           ORACLE_FILE="${CMAKE_SOURCE_DIR}/tests/psd_oracle.txt" MANIFEST_FILE="${CMAKE_SOURCE_DIR}/tests/patchy-manifest.txt")
-add_test(NAME psd_composite_oracle COMMAND psd_composite_oracle)
+target_compile_definitions(psd_composite_oracle PRIVATE PATCHY_FIXTURES="${COMPOSITOR_PATCHY_FIXTURES}" TESTS_DIR="${CMAKE_SOURCE_DIR}/tests")
+add_test(NAME psd_composite_oracle COMMAND psd_composite_oracle --corpus patchy)
+add_test(NAME psd_oracle_photocraft COMMAND psd_composite_oracle --corpus photocraft)
+add_test(NAME psd_oracle_psdtools COMMAND psd_composite_oracle --corpus psd-tools)
+set_tests_properties(psd_composite_oracle psd_oracle_photocraft psd_oracle_psdtools PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1800)
 
 # Offline background-removal harness: runs the pipeline on a PNG and dumps every stage, or scores a
 # directory of image/alpha pairs (SAD, MSE, MAD, Grad, Conn). Not a test.
@@ -326,13 +348,13 @@ add_test(NAME smartobject_tests COMMAND smartobject_tests)
 
 add_executable(smartfilter_tests smartfilter_tests.cpp)
 target_link_libraries(smartfilter_tests PRIVATE compositor::core compositor_warnings)
-# Patchy beside this checkout for Photoshop's Radial Blur Zoom preview; PATCHY_FIXTURES in the environment overrides it.
-target_compile_definitions(smartfilter_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+# Patchy beside the main checkout for Photoshop's Radial Blur Zoom preview; PATCHY_FIXTURES in the environment overrides it.
+target_compile_definitions(smartfilter_tests PRIVATE PATCHY_FIXTURES="${COMPOSITOR_PATCHY_FIXTURES}")
 add_test(NAME smartfilter_tests COMMAND smartfilter_tests)
 
 add_executable(vectormask_tests vectormask_tests.cpp)
 target_link_libraries(vectormask_tests PRIVATE compositor::core compositor_warnings)
-target_compile_definitions(vectormask_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+target_compile_definitions(vectormask_tests PRIVATE PATCHY_FIXTURES="${COMPOSITOR_PATCHY_FIXTURES}")
 add_test(NAME vectormask_tests COMMAND vectormask_tests)
 
 add_executable(cameraraw_tests cameraraw_tests.cpp)
@@ -494,8 +516,8 @@ endif()
 
 add_executable(blendif_tests blendif_tests.cpp)
 target_link_libraries(blendif_tests PRIVATE compositor::core compositor_warnings)
-# Patchy beside this checkout (CONTRIBUTING.md); PATCHY_FIXTURES in the environment overrides it.
-target_compile_definitions(blendif_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+# Patchy beside the main checkout (COMPOSITOR_PATCHY_FIXTURES above); PATCHY_FIXTURES in the environment overrides it.
+target_compile_definitions(blendif_tests PRIVATE PATCHY_FIXTURES="${COMPOSITOR_PATCHY_FIXTURES}")
 add_test(NAME blendif_tests COMMAND blendif_tests)
 
 # Fill in Photoshop's special eight blend modes against Photoshop's measured composites. NekoPhoto still takes Fill
@@ -512,7 +534,7 @@ add_test(NAME fill_opacity_cmyk COMMAND fill_opacity_tests special_fill_in_cmyk)
 
 add_executable(photoshop_adjustment_tests photoshop_adjustment_tests.cpp)
 target_link_libraries(photoshop_adjustment_tests PRIVATE compositor::core compositor_warnings)
-target_compile_definitions(photoshop_adjustment_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+target_compile_definitions(photoshop_adjustment_tests PRIVATE PATCHY_FIXTURES="${COMPOSITOR_PATCHY_FIXTURES}")
 add_test(NAME photoshop_adjustment_tests COMMAND photoshop_adjustment_tests)
 
 add_executable(gradient_method_tests gradient_method_tests.cpp)

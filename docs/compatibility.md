@@ -14,11 +14,13 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 <!-- BEGIN GENERATED at-a-glance: tools/compat_table.py --write; do not edit by hand -->
 | Check | Result | How to rerun |
 |---|---|---|
-| Photoshop as the oracle | **58 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
+| Photoshop as the oracle | **58 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest, each file's status in `tests/psd_oracle.txt` | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
+| Photoshop as the oracle: photocraft-corpus | **165 of 258** files within the same bar, compared in each file's own mode and depth (9/15 cmyk16, 9/15 cmyk8, 4/20 f32, 6/12 lab16, 7/12 lab8, 18/29 rgb16, 112/155 rgb8); each file's status in `tests/psd_oracle_photocraft.txt` | `PHOTOSHOP_CORPUS=<checkout> ctest -R psd_oracle_photocraft` |
+| Photoshop as the oracle: psd-tools | **154 of 285** files within the same bar, compared in each file's own mode and depth (0/2 cmyk16, 9/13 cmyk8, 6/17 f32, 0/1 lab16, 3/4 lab8, 5/8 rgb16, 131/240 rgb8); each file's status in `tests/psd_oracle_psdtools.txt` | `PSD_TOOLS_CORPUS=<checkout> ctest -R psd_oracle_psdtools` |
 | Render hashes | **711 scenes**: 158 at 8-bit RGB, 157 at 16-bit RGB, 122 at 32-bit RGB, 73 at 8-bit CMYK, 73 at 16-bit CMYK, 64 at 8-bit Lab, 64 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
-| Test suites | **103 CTest tests** registered (773 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
+| Test suites | **105 CTest tests** registered (774 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
 | Automation | **184 methods**, 183 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
@@ -66,9 +68,26 @@ and the mean. Where Patchy keeps Photoshop's own flatten of the file beside it (
 that is the reference, compared in RGB with NekoPhoto's render matted on white as Photoshop flattens; the merged image
 stored inside a file can be stale (Patchy's notes: Photoshop saving headless). Otherwise the reference is the merged
 image Photoshop stored in the file ("Maximize Compatibility", 24 more files), compared premultiplied. Each line of
-the run says which reference it used; the other 45 files have neither. `tests/psd_oracle.txt` holds the floor of files
-within tolerance (it may only rise) and `tests/patchy-manifest.txt` pins the Patchy commit and the SHA-256 of each
-fixture and flatten; a checkout that differs is reported, not failed.
+the run says which reference it used; the other 45 files have neither. `tests/patchy-manifest.txt` pins the Patchy
+commit and the SHA-256 of each fixture and flatten; a checkout that differs is reported, not failed.
+
+Two more corpora of Photoshop's files run the same way, each from its own checkout (none of their files is in this
+repository): [photocraft-corpus](https://github.com/storytold/photocraft-corpus) (MIT or Apache-2.0; 258 files
+Photoshop 27.10 wrote by script, adjustments in every mode and depth, layer effects, Smart Filters, type), named by
+`PHOTOSHOP_CORPUS` and checked file by file against its own `SHA256SUMS`, and psd-tools' test files
+([psd-tools](https://github.com/psd-tools/psd-tools), MIT, `tests/psd_files`), named by `PSD_TOOLS_CORPUS` and pinned
+by `tests/psd-tools-manifest.txt`. Folders are searched recursively. The merged image is compared in the file's own
+space: CMYK and Lab natively, 16-bit files at 16 bits and 32-bit files in linear float, so the two sides are not run
+through different colour conversions (a CMYK file without an adjustment used to fail at a mean of 13.4 levels for
+that alone; it now matches exactly). A file with a Dissolve layer is judged by PhotoCraft's rule, block means inside
+the Dissolve layers, since Photoshop's dissolve pattern is not public.
+
+Each corpus has an expectations file, `tests/psd_oracle.txt`, `tests/psd_oracle_photocraft.txt` and
+`tests/psd_oracle_psdtools.txt`, listing every file's status and numbers. A file that passed and fails now, one no
+longer compared, or a failing file whose mean grows by more than a level fails the test; a file that now passes is
+reported as an improvement, to record with `COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus
+<patchy|photocraft|psd-tools>`. A corpus that is not there is reported as SKIPPED (CTest counts it skipped, not
+passed). In a git worktree Patchy is still found beside the main checkout.
 
 Beyond Patchy's corpus, `tests/psd_writer_tests.cpp` covers the edit cases (painted, moved, opacity changed, a
 project save, a canvas change), and every layered PSD from Photoshop and Clip Studio the project has (up to 54
@@ -200,8 +219,10 @@ NekoPhoto 1.8.10 でツールを実行して集計したものです。
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 21 個は編集可能なテキストとして開きます。
 <!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
-- **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **58 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
-- **描画のハッシュ**: 711 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 103 個(773 `TEST_CASE`)。
+- **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **58 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(各ファイルの状態は `tests/psd_oracle.txt`)。
+- **Photoshop の表示との比較(photocraft-corpus)**: 258 個のうち **165 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 9/15 cmyk16, 9/15 cmyk8, 4/20 f32, 6/12 lab16, 7/12 lab8, 18/29 rgb16, 112/155 rgb8。各ファイルの状態は `tests/psd_oracle_photocraft.txt`)。
+- **Photoshop の表示との比較(psd-tools)**: 285 個のうち **154 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 0/2 cmyk16, 9/13 cmyk8, 6/17 f32, 0/1 lab16, 3/4 lab8, 5/8 rgb16, 131/240 rgb8。各ファイルの状態は `tests/psd_oracle_psdtools.txt`)。
+- **描画のハッシュ**: 711 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 105 個(774 `TEST_CASE`)。
 - **自動操作**: メソッド 184 個、うち 183 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
