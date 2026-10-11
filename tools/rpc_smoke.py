@@ -10,6 +10,7 @@ import base64
 import io
 import json
 import os
+import re
 import socket
 import struct
 import sys
@@ -1549,7 +1550,7 @@ def colour_mode_content_aware(rpc):
             assert rpc.call("document.info")["bits"] == bits
             rpc.call("history.undo")
         except RuntimeError as e:
-            assert "mode" not in str(e), e
+            assert not re.search(r"\bmode\b", str(e)), e   # a refusal over the colour mode, not "model" missing
             print("removeBackground in %s %d:" % (mode, bits), e)
         rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
