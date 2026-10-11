@@ -3,7 +3,9 @@
 #pragma once
 #include "colormodes.h"
 #include "document.h"
+#include <algorithm>
 #include <cstdint>
+#include <type_traits>
 
 namespace compositor {
 
@@ -32,6 +34,75 @@ uint8_t blendByteReference(float v);
 
 /// Composites `source` over `destination` in place (same size), scaling source alpha by `opacity`.
 void compositeImage(BlendMode mode, const Image& source, double opacity, Image& destination);
+
+// ---- Fill in Photoshop's "special eight" -------------------------------------------------------------------------
+//
+// For most modes a layer's Fill is coverage, as its Opacity is. In Color Burn, Linear Burn, Color Dodge, Linear Dodge
+// (Add), Vivid Light, Linear Light, Hard Mix and Difference, Photoshop applies Fill inside the blend: the source is
+// pulled toward the mode's neutral colour (white for the burns, middle grey for Vivid and Linear Light, black for the
+// dodges and Difference) and blended at full strength, and Hard Mix becomes (b - f(1 - s)) / (1 - f). Opacity (and the
+// masks) stay coverage over the backdrop; over transparency Fill is coverage too, so a layer over nothing looks as it
+// did. Adapted from PhotoCraft's crates/compose/src/psblend.rs (`blend_rgb_fill`, `composite_fill`) at commit
+// 88ffd89e9fe2b774023016c0f9024d3a2f6728b4 (MIT OR Apache-2.0, used under MIT; (c) 2026 ArtCraft Team and the
+// PhotoCraft contributors), fitted there to Photoshop 27.11's composites and checked here against Patchy's Photoshop
+// 2026 measurements (tests/fill_opacity_tests.cpp).
+
+/// Whether `mode` takes Fill inside its blend (the mode as drawn in the document: blendModeFor).
+inline bool fillIsSpecial(BlendMode mode) {
+    switch (mode) {
+    case BlendMode::ColorBurn: case BlendMode::LinearBurn: case BlendMode::ColorDodge: case BlendMode::LinearDodge:
+    case BlendMode::VividLight: case BlendMode::LinearLight: case BlendMode::HardMix: case BlendMode::Difference: return true;
+    default: return false;
+    }
+}
+
+/// B(cb, cs) at Fill `fill` (below 1) for a special mode, on `n` straight colour channels: `cs` becomes the blend.
+/// `blend(cb, cs)` is the mode's own blend at full Fill, in place on `cs`.
+template <class Blend>
+inline void blendAtFill(BlendMode mode, int n, const float* cb, float* cs, float fill, Blend&& blend) {
+    const float f = std::clamp(fill, 0.0f, 1.0f);
+    if (mode == BlendMode::HardMix && f < 1) {
+        for (int k = 0; k < n; k++) cs[k] = std::clamp((cb[k] - f * (1 - cs[k])) / (1 - f), 0.0f, 1.0f);
+        return;
+    }
+    const float neutral = mode == BlendMode::ColorBurn || mode == BlendMode::LinearBurn ? 1.0f
+                        : mode == BlendMode::VividLight || mode == BlendMode::LinearLight ? 0.5f : 0.0f;
+    for (int k = 0; k < n; k++) cs[k] = neutral + (cs[k] - neutral) * f;
+    blend(cb, cs);
+}
+
+/// A premultiplied source pixel (`n` colour samples, then alpha, in 0..`one`) over a premultiplied backdrop in place,
+/// in a special mode at Fill `fill`: `coverage` (opacity and masks) scales the source over the backdrop, Fill only its
+/// part over transparency. Float samples (`one` 1) keep colour above 1; integer ones are rounded and kept within alpha.
+template <class T, class Blend>
+inline void compositeAtFill(BlendMode mode, int n, const T* src, float coverage, float fill, T* dst, float one, Blend&& blend) {
+    constexpr bool floating = std::is_floating_point_v<T>;
+    const float sa = float(src[n]) / one, as = sa * coverage;
+    if (!(as > 0)) return;
+    const float ab = std::clamp(float(dst[n]) / one, 0.0f, 1.0f), alone = as * std::clamp(fill, 0.0f, 1.0f);
+    const float ao = ab + (1 - ab) * alone;
+    float cb[4] = {}, cs[4] = {}, b[4] = {};
+    for (int k = 0; k < n; k++) {
+        cs[k] = sa > 0 ? float(src[k]) / one / sa : 0.0f;
+        cb[k] = ab > 0 ? float(dst[k]) / one / ab : 0.0f;
+        if constexpr (!floating) { cs[k] = std::min(cs[k], 1.0f); cb[k] = std::min(cb[k], 1.0f); }
+        b[k] = cs[k];
+    }
+    blendAtFill(mode, n, cb, b, fill, blend);
+    for (int k = 0; k < n; k++) {
+        const float v = ab * (1 - as) * cb[k] + ab * as * b[k] + (1 - ab) * alone * cs[k];
+        if constexpr (floating) dst[k] = T(std::max(0.0f, v));
+        else dst[k] = T(std::clamp(v * one + 0.5f, 0.0f, one));
+    }
+    if constexpr (floating) dst[n] = T(std::clamp(ao, 0.0f, 1.0f));
+    else {
+        dst[n] = T(std::clamp(ao * one + 0.5f, 0.0f, one));
+        for (int k = 0; k < n; k++) dst[k] = std::min(dst[k], dst[n]);
+    }
+}
+
+/// compositeAtFill on an 8-bit RGB pixel with the 8-bit kernels (blendColor).
+void compositePixelAtFill(BlendMode mode, const uint8_t* src, float coverage, float fill, uint8_t* dst);
 
 // ---- 16 bits (blend_u16.cpp) ---------------------------------------------------------------------------------
 //

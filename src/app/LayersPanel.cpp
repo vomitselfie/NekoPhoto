@@ -413,6 +413,25 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     opacitySpin_->setFixedWidth(52);
     appearance->addWidget(opacitySpin_);
     layout->addLayout(appearance);
+    // Photoshop's Fill under Opacity: it fades the layer's own pixels and leaves its effects.
+    auto* fillRow = new QHBoxLayout;
+    fillRow->addStretch(1);
+    auto* fillLabel = new QLabel(tr("Fill"));
+    fillLabel->setToolTip(tr("Fill: fades the layer's own pixels and leaves its effects as they are (Shift and a digit with the Move tool)"));
+    fillRow->addWidget(fillLabel);
+    fillSlider_ = new QSlider(Qt::Horizontal);
+    fillSlider_->setRange(0, 100);
+    fillSlider_->setToolTip(fillLabel->toolTip());
+    fillRow->addWidget(fillSlider_, 1);
+    fillSpin_ = new QSpinBox;
+    fillSpin_->setObjectName(QStringLiteral("layerFill"));
+    fillSpin_->setRange(0, 100);
+    fillSpin_->setSuffix("%");
+    fillSpin_->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    fillSpin_->setAlignment(Qt::AlignRight);
+    fillSpin_->setFixedWidth(52);
+    fillRow->addWidget(fillSpin_);
+    layout->addLayout(fillRow);
 
     tree_ = new LayerTree(session_);
     layout->addWidget(tree_, 1);
@@ -469,23 +488,8 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     blendCombo_->view()->installEventFilter(this);
     // A drag is one undo step: shown as it goes (a preview when routed, an open edit when not), committed at the
     // release as layers.set. A click on the track, a key or the field is a step of its own each time.
-    connect(opacitySlider_, &QSlider::sliderPressed, this, [this] {
-        if (session_->commandsRouted()) session_->beginOpacityPreview(); else session_->beginOpacityEdit();
-    });
-    connect(opacitySlider_, &QSlider::sliderReleased, this, [this] {
-        if (!session_->opacityPreviewing()) { session_->endOpacityEdit(); return; }
-        if (const std::optional<double> value = session_->endOpacityPreview()) commitOpacity(*value);
-    });
-    connect(opacitySlider_, &QSlider::valueChanged, this, [this](int value) {
-        if (opacitySpin_->value() != value) { QSignalBlocker b(opacitySpin_); opacitySpin_->setValue(value); }
-        if (rebuilding_) return;
-        if (session_->opacityPreviewing()) session_->previewLayerOpacity(value / 100.0);
-        else if (opacitySlider_->isSliderDown()) session_->setLayerOpacity(value / 100.0);
-        else commitOpacity(value / 100.0);
-    });
-    connect(opacitySpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
-        if (opacitySlider_->value() != value) { QSignalBlocker b(opacitySlider_); opacitySlider_->setValue(value); if (!rebuilding_) commitOpacity(value / 100.0); }
-    });
+    connectOpacityRow(opacitySlider_, opacitySpin_, false);
+    connectOpacityRow(fillSlider_, fillSpin_, true);
     connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this] {
         if (rebuilding_) return;
         std::set<Uuid> ids;
@@ -735,7 +739,9 @@ void LayersPanel::syncAppearance() {
     blendCombo_->setEnabled(enabled);
     opacitySlider_->setEnabled(active != nullptr);
     opacitySpin_->setEnabled(active != nullptr);
-    QSignalBlocker b1(blendCombo_), b2(opacitySlider_), b3(opacitySpin_);
+    fillSlider_->setEnabled(active != nullptr);
+    fillSpin_->setEnabled(active != nullptr);
+    QSignalBlocker b1(blendCombo_), b2(opacitySlider_), b3(opacitySpin_), b4(fillSlider_), b5(fillSpin_);
     // Pass Through is a folder's alone.
     if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model())) {
         if (auto* item = model->item(0)) item->setEnabled(active && active->isGroup);
@@ -761,10 +767,35 @@ void LayersPanel::syncAppearance() {
     int opacity = active ? int(std::round(active->opacity * 100)) : 100;
     opacitySlider_->setValue(opacity);
     opacitySpin_->setValue(opacity);
+    const int fill = active ? int(std::round(active->fill * 100)) : 100;
+    fillSlider_->setValue(fill);
+    fillSpin_->setValue(fill);
 }
 
-void LayersPanel::commitOpacity(double opacity) {
-    session_->runCommandOr(QStringLiteral("layers.set"), {{"opacity", opacity}}, [this, opacity] { session_->setLayerOpacity(opacity); });
+void LayersPanel::commitOpacity(double opacity, bool fill) {
+    session_->runCommandOr(QStringLiteral("layers.set"), {{fill ? "fill" : "opacity", opacity}}, [this, opacity, fill] {
+        if (fill) session_->setLayerFill(opacity); else session_->setLayerOpacity(opacity);
+    });
+}
+
+void LayersPanel::connectOpacityRow(QSlider* slider, QSpinBox* spin, bool fill) {
+    connect(slider, &QSlider::sliderPressed, this, [this, fill] {
+        if (session_->commandsRouted()) session_->beginOpacityPreview(fill); else session_->beginOpacityEdit(fill);
+    });
+    connect(slider, &QSlider::sliderReleased, this, [this, fill] {
+        if (!session_->opacityPreviewing()) { session_->endOpacityEdit(); return; }
+        if (const std::optional<double> value = session_->endOpacityPreview()) commitOpacity(*value, fill);
+    });
+    connect(slider, &QSlider::valueChanged, this, [this, slider, spin, fill](int value) {
+        if (spin->value() != value) { QSignalBlocker b(spin); spin->setValue(value); }
+        if (rebuilding_) return;
+        if (session_->opacityPreviewing()) session_->previewLayerOpacity(value / 100.0);
+        else if (slider->isSliderDown()) { if (fill) session_->setLayerFill(value / 100.0); else session_->setLayerOpacity(value / 100.0); }
+        else commitOpacity(value / 100.0, fill);
+    });
+    connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, slider, fill](int value) {
+        if (slider->value() != value) { QSignalBlocker b(slider); slider->setValue(value); if (!rebuilding_) commitOpacity(value / 100.0, fill); }
+    });
 }
 
 void LayersPanel::addMask(bool revealing, bool whole) {

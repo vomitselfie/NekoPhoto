@@ -142,7 +142,7 @@ const MethodDoc methodDocs[] = {
     {"screenshot", "The canvas as the person sees it (overlays, selection outline), or the whole window.",
      "window:bool=false The whole window; maxSize:number=1600 Longest side; path:string Write the PNG here instead of returning base64; overwrite:bool=false Replace an existing file at path"},
     // layers
-    {"layers.list", "The layer tree, top first: id, name, depth, kind, visibility, opacity, blend, transform, mask, text.",
+    {"layers.list", "The layer tree, top first: id, name, depth, kind, visibility, opacity, fill, blend, transform, mask, text.",
      "thumbnails:bool=false Add each pixel layer's 96 px thumbnail as base64 PNG"},
     {"layers.get", "One layer, as layers.list reports it, with its Blend If ranges when it has any and its Advanced Blending channels (channels) when it leaves one out.", "id:layer! The layer"},
     {"layers.style", "A layer's effects (Photoshop's layer style): each kind as a list, the ones switched off too, with the Blending Options' Blend If (blendIf, as layers.get shows it), the channels that take part in blending (channels) and the effects' reference point (referenceX, referenceY). Layer > Layer Style > Copy Layer Style.", "id:layer The layer (default the active one)"},
@@ -158,7 +158,7 @@ const MethodDoc methodDocs[] = {
     {"layers.select", "Make a layer (or its mask) active, or select several.",
      "id:layer The layer (the primary one with ids); ids:array Several layer ids; mask:bool=false Select the layer's mask for painting and filters"},
     {"layers.set", "Change a layer's properties.",
-     "id:layer The layer (the active one when left out); name:string New name; visible:bool Shown; opacity:number 0..1; blend:<blend> Blend mode; sampling:<sampling> How it is resampled when transformed; clipping:bool Clip to the layer beneath; "
+     "id:layer The layer (the active one when left out); name:string New name; visible:bool Shown; opacity:number 0..1 Fades the layer and its effects; fill:number 0..1 Photoshop's Fill: fades the layer's own pixels and leaves its effects (Opacity and Fill never change each other); blend:<blend> Blend mode; sampling:<sampling> How it is resampled when transformed; clipping:bool Clip to the layer beneath; "
      "blendIf:object Blending Options' Blend If: channels (gray, red, green, blue; gray, cyan, magenta, yellow, black; lightness, a, b) each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255 (split handles when low differs from high); channels left out stay; reset true clears the others first; "
      "channels:object Blending Options' Advanced Blending Channels: red, green, blue (cyan, magenta, yellow, black; lightness, a, b) each true to blend it or false to leave it out (the backdrop's value stays); channels left out stay"},
     {"layers.add", "Add a layer above the active one and make it active (an adjustment layer with its mask targeted, white or from the selection, as in Photoshop).",

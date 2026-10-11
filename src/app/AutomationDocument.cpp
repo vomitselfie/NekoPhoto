@@ -117,6 +117,7 @@ void AutomationServer::registerDocumentHandlers() {
                 if (!l.asset || !l.asset->image) bits << "blank";
             }
             if (l.opacity < 1) bits << QStringLiteral("%1%").arg(std::lround(l.opacity * 100));
+            if (l.fill < 1) bits << QStringLiteral("Fill %1%").arg(std::lround(l.fill * 100));
             if (l.blendMode != BlendMode::Normal) bits << QString::fromUtf8(blendModeName(l.blendMode));
             if (!l.visible) bits << "hidden";
             if (l.mask) bits << (l.mask->enabled ? "mask" : "mask off");

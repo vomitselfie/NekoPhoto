@@ -178,7 +178,9 @@ struct Writer {
 
     std::string css(const Layer& layer, bool withOpacity = true) const {
         std::string out;
-        if (withOpacity && layer.opacity < 0.99995) out += "opacity:" + opacityText(layer.opacity) + ";";
+        // A layer drawn as SVG has no effects, so its Fill fades it as its opacity does.
+        const double opacity = layer.opacity * layer.fill;
+        if (withOpacity && opacity < 0.99995) out += "opacity:" + opacityText(opacity) + ";";
         if (layer.blendMode != BlendMode::Normal && !cssBlend(layer.blendMode).empty()) out += "mix-blend-mode:" + cssBlend(layer.blendMode) + ";";
         return out;
     }
@@ -236,8 +238,8 @@ struct Writer {
         for (const Layer& original : document.layers) {
             if (!keep.count(original.id) && !ancestors.count(original.id)) continue;
             Layer l = original;
-            if (ancestors.count(l.id)) { l.visible = true; l.opacity = 1; l.blendMode = BlendMode::Normal; l.passThrough = true; l.mask.reset(); l.psdCarry.reset(); }
-            else if (neutral && l.id == neutral->id) { l.visible = true; l.opacity = 1; l.blendMode = BlendMode::Normal; }
+            if (ancestors.count(l.id)) { l.visible = true; l.opacity = 1; l.fill = 1; l.blendMode = BlendMode::Normal; l.passThrough = true; l.mask.reset(); l.psdCarry.reset(); }
+            else if (neutral && l.id == neutral->id) { l.visible = true; l.opacity = 1; l.fill = 1; l.blendMode = BlendMode::Normal; }
             copy.layers.push_back(std::move(l));
         }
         RenderOptions options;
@@ -459,7 +461,7 @@ struct Writer {
         if (!folderExportable(folder)) { emitRasterUnit({&folder}, depth); return; }
         std::string style = css(folder);
         if (!folder.passThrough) style += "isolation:isolate;";
-        else if (folder.opacity < 0.99995) note("A pass-through folder's opacity was written as SVG group opacity, which isolates the folder.");
+        else if (folder.opacity * folder.fill < 0.99995) note("A pass-through folder's opacity was written as SVG group opacity, which isolates the folder.");
         indent(body, depth);
         body += "<g id=\"" + escape(uniqueId(folder.name)) + "\"" + folderMask(folder) + (style.empty() ? std::string() : " style=\"" + style + "\"") + ">\n";
         emitChildren(folder.id, depth + 2);

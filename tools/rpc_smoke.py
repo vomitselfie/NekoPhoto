@@ -426,6 +426,17 @@ def remaining_methods(rpc):
     styled = rpc.call("layers.setStyle", id=placed["id"], style={"dropShadows": [{"distance": 6, "size": 4}], "strokes": [{"size": 2, "color": "#ff0000"}]})
     assert styled["dropShadows"][0]["distance"] == 6 and styled["strokes"][0]["color"] == "#ff0000", styled
     assert rpc.call("layers.style", id=placed["id"])["strokes"][0]["size"] == 2
+    # Fill apart from Opacity, as Photoshop's: Fill 0 hides the pixels and keeps the effects, and an Opacity edit
+    # leaves the Fill alone (each one undo step).
+    before = rpc.call("layers.get", id=placed["id"])
+    filled = rpc.call("layers.set", id=placed["id"], fill=0)
+    assert filled["fill"] == 0 and filled["opacity"] == before["opacity"], filled
+    assert rpc.call("history.info")["undo"] == "Layer Fill"
+    faded = rpc.call("layers.set", id=placed["id"], opacity=0.5)
+    assert faded["fill"] == 0 and abs(faded["opacity"] - 0.5) < 1e-9, faded
+    rpc.call("history.undo")
+    rpc.call("history.undo")
+    assert rpc.call("layers.get", id=placed["id"])["fill"] == before["fill"]
     try:
         rpc.call("layers.setStyle", id=placed["id"], style={"strokes": [{"width": 2}]})
         raise AssertionError("an unknown effect setting should be refused")

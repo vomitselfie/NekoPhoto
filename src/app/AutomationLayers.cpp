@@ -455,7 +455,7 @@ void AutomationServer::registerLayersHandlers() {
         EditorSession* s = session();
         if (has(p, "name")) s->renameLayer(id, str(p, "name"));
         if (has(p, "visible") && flag(p, "visible", true) != l.visible) s->toggleLayerVisibility(id);
-        if (has(p, "opacity") || has(p, "blend") || has(p, "sampling")) {
+        if (has(p, "opacity") || has(p, "fill") || has(p, "blend") || has(p, "sampling")) {
             std::optional<BlendMode> blend;
             bool passThrough = false;
             std::optional<Sampling> sampling;
@@ -474,6 +474,7 @@ void AutomationServer::registerLayersHandlers() {
             }
             withActive(id, [&] {
                 if (has(p, "opacity")) s->setLayerOpacity(std::clamp(num(p, "opacity"), 0.0, 1.0));
+                if (has(p, "fill")) s->setLayerFill(std::clamp(num(p, "fill"), 0.0, 1.0));
                 if (blend) s->setLayerBlendMode(*blend, passThrough);
                 if (sampling) s->setLayerSampling(*sampling);
             });
@@ -754,7 +755,7 @@ void AutomationServer::registerLayersHandlers() {
             alone.parentId.reset();
             alone.maskSourceId.reset();
             alone.visible = true;
-            alone.opacity = 1;
+            alone.opacity = 1; alone.fill = 1;
             alone.blendMode = BlendMode::Normal;
             alone.transform.origin = Point(l.transform.origin.x - bounds.x, l.transform.origin.y - bounds.y);
             solo.layers = {alone};

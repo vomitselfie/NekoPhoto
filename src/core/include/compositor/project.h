@@ -16,9 +16,11 @@ struct ProjectError {
     explicit operator bool() const { return kind != None; }
 };
 
-/// The newest version this reader opens. Version 9 is a CMYK or Lab document ("colorMode"); an RGB document writes
-/// version 8 at most, so older NekoPhoto releases keep opening it.
-constexpr int projectFormatVersion = 9;
+/// The newest version this reader opens. Version 10 has a layer whose Fill is apart from its opacity ("fill"); a
+/// document without one writes what it did before, so older NekoPhoto releases keep opening it.
+constexpr int projectFormatVersion = 10;
+/// Version 9 is a CMYK or Lab document ("colorMode"); an RGB document writes version 8 at most.
+constexpr int projectModesFormatVersion = 9;
 /// What an RGB document with anything past the Mac app's format writes (16 bits, profiles, channels, artboards...).
 constexpr int projectRgbFormatVersion = 8;
 /// What a save writes when the document needs nothing past it (the Mac app reads up to 7).

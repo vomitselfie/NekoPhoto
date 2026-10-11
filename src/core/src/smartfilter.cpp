@@ -119,10 +119,39 @@ SmartFilterParameters parametersOf(const psd::DescriptorObject& f, uint32_t id) 
 
 int32_t i32(uint32_t v) { return int32_t(v); }
 
-// One FEid / FXid record body, read as far as the canvas and the mask.
-struct Record { std::string placedId; bool ok = false; SmartFilterCache cache; };
+// One FEid / FXid record body, read as far as the canvas and the mask; with `planes`, the cache's planes decoded too
+// (one per slot, empty for a slot not written).
+struct Record { std::string placedId; bool ok = false; SmartFilterCache cache; std::vector<std::vector<uint8_t>> planes; };
 
-Record readRecord(std::span<const uint8_t> body) {
+// One `w` x `h` plane as the record stores it: a compression word, then raw rows, or PackBits rows after their
+// lengths. Empty when it does not decode to exactly that.
+std::vector<uint8_t> decodeRecordPlane(std::span<const uint8_t> data, int w, int h) {
+    psd::BigEndianReader r(data);
+    const uint16_t compression = r.read_u16();
+    std::vector<uint8_t> out;
+    if (compression == 0) {
+        if (r.remaining() != size_t(w) * size_t(h)) return {};
+        auto bytes = r.read_bytes(size_t(w) * size_t(h));
+        out.assign(bytes.begin(), bytes.end());
+        return out;
+    }
+    if (compression != 1) return {};
+    std::vector<uint32_t> lengths(static_cast<size_t>(h));
+    for (auto& n : lengths) n = r.read_u32();
+    out.reserve(size_t(w) * size_t(h));
+    for (int y = 0; y < h; y++) {
+        if (lengths[size_t(y)] > r.remaining()) return {};
+        auto encoded = r.read_bytes(lengths[size_t(y)]);
+        size_t used = 0;
+        auto row = psd::decode_packbits(encoded, size_t(w), &used);
+        if (used != encoded.size() || row.size() != size_t(w)) return {};
+        out.insert(out.end(), row.begin(), row.end());
+    }
+    if (r.remaining()) return {};
+    return out;
+}
+
+Record readRecord(std::span<const uint8_t> body, bool planes = false) {
     Record rec;
     try {
         psd::BigEndianReader r(body);
@@ -141,12 +170,21 @@ Record readRecord(std::span<const uint8_t> body) {
             const int64_t cw = int64_t(right) - left, ch = int64_t(bottom) - top;
             if (cw <= 0 || ch <= 0 || cw > 300000 || ch > 300000 || depth != 8 || channels > 64) return rec;
             rec.cache.canvas = {left, top, int(cw), int(ch)};
+            if (planes) {
+                // Decoded planes are bounded as any buffer is (the canvas was only held to Photoshop's limit).
+                if (cw > maxImageSide || ch > maxImageSide || cw * ch > int64_t(Document::pixelBudget)) return rec;
+                rec.planes.resize(channels + 2);
+            }
             for (uint32_t slot = 0; slot < channels + 2; slot++) {
                 const uint32_t written = c.read_u32();
                 if (!written) continue;
                 if (written != 1) return rec;
                 const uint64_t n = c.read_u64();
                 if (n > c.remaining()) return rec;
+                if (planes) {
+                    rec.planes[slot] = decodeRecordPlane(body.subspan(cacheAt + c.position(), size_t(n)), int(cw), int(ch));
+                    if (rec.planes[slot].empty()) return rec;
+                }
                 c.skip(size_t(n));
             }
             if (c.remaining()) return rec;
@@ -273,22 +311,41 @@ std::optional<SmartFilterStack> parseSmartFilterStack(const std::string& key, co
     return SmartFilterStack{};
 }
 
-std::optional<SmartFilterCache> findSmartFilterCache(const std::vector<PsdBlock>& globals, const std::string& placedId) {
+namespace {
+// The one record for `placedId` among the document's global blocks, its planes decoded with `planes`; none when there
+// is not exactly one, or a cache block cannot be walked.
+std::optional<Record> findRecord(const std::vector<PsdBlock>& globals, const std::string& placedId, bool planes) {
     if (placedId.empty()) return std::nullopt;
-    std::optional<SmartFilterCache> found;
+    std::optional<Record> found;
     int matches = 0;
     for (const PsdBlock& b : globals) {
         if (b.key != "FEid" && b.key != "FXid") continue;
         auto records = walk(b.data);
         if (!records) return std::nullopt;   // an unreadable cache block: nothing in it can be told apart
         for (auto [at, n] : *records) {
-            Record rec = readRecord(std::span<const uint8_t>(b.data).subspan(at, n));
+            Record rec = readRecord(std::span<const uint8_t>(b.data).subspan(at, n), planes);
             if (rec.placedId != placedId) continue;
             matches++;
-            if (rec.ok) found = rec.cache;
+            if (rec.ok) found = std::move(rec);
         }
     }
     return matches == 1 ? found : std::nullopt;
+}
+} // namespace
+
+std::optional<SmartFilterCache> findSmartFilterCache(const std::vector<PsdBlock>& globals, const std::string& placedId) {
+    auto rec = findRecord(globals, placedId, false);
+    if (!rec) return std::nullopt;
+    return rec->cache;
+}
+
+std::optional<SmartFilterCachePlanes> findSmartFilterCachePlanes(const std::vector<PsdBlock>& globals, const std::string& placedId) {
+    auto rec = findRecord(globals, placedId, true);
+    if (!rec) return std::nullopt;
+    SmartFilterCachePlanes out;
+    out.cache = std::move(rec->cache);
+    out.planes = std::move(rec->planes);
+    return out;
 }
 
 std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const PixelRect& document, const PlacedRaster& unfiltered,
@@ -409,6 +466,96 @@ bool drawableStack(const std::vector<PsdBlock>& globals, const SmartObjectInstan
 }
 } // namespace
 
+namespace {
+/// The stack whose filter mask Photoshop's merged image applies over an instance's stored pixels: the stack on, at
+/// least one filter on, the mask on, and a cache record with a mask that is not white over the whole canvas (the
+/// stack's `mask` set from it). Read only as far as its switches: an entry not drawn here does not matter, nothing is
+/// drawn.
+std::optional<SmartFilterStack> maskingStack(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance, SmartFilterCache& cache) {
+    std::optional<SmartFilterStack> stack;
+    for (const PsdBlock& b : instance.psdBlocks)
+        if (b.key == "SoLd" || b.key == "SoLE") { stack = parseSmartFilterStack(b.key, b.data); break; }
+    if (!stack || !stack->enabled || !stack->maskEnabled || stack->entries.empty()
+        || std::none_of(stack->entries.begin(), stack->entries.end(), [](const SmartFilterEntry& e) { return e.enabled; }))
+        return std::nullopt;
+    auto found = findSmartFilterCache(globals, instance.placedId);
+    if (!found || !found->mask) return std::nullopt;
+    cache = *found;
+    const GrayImage& mask = *cache.mask;
+    const PixelRect& c = cache.canvas;
+    const PixelRect& m = cache.maskBounds;
+    // Past the mask's rect its default tone shows, when the rect does not cover the canvas.
+    bool white = stack->maskDefault == 255 || (m.x <= c.x && m.y <= c.y && m.x + m.width >= c.x + c.width && m.y + m.height >= c.y + c.height);
+    for (int y = 0; y < mask.height() && white; y++)
+        for (int x = 0; x < mask.width() && white; x++) white = mask.at(x, y) == 255;
+    if (white) return std::nullopt;
+    stack->mask = cache.mask;
+    stack->maskBounds = cache.maskBounds;
+    return stack;
+}
+
+uint8_t maskWeight(const SmartFilterStack& stack, int x, int y) {
+    const GrayImage& mask = *stack.mask;
+    const int mx = x - stack.maskBounds.x, my = y - stack.maskBounds.y;
+    if (mx >= 0 && my >= 0 && mx < stack.maskBounds.width && my < stack.maskBounds.height && mx < mask.width() && my < mask.height()) return mask.at(mx, my);
+    return stack.maskDefault;
+}
+} // namespace
+
+bool smartFilterMaskApplies(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance, const Document& document) {
+    SmartFilterCache cache;
+    return document.colorMode == ColorMode::RGB && document.sampleType == SampleType::U8 && maskingStack(globals, instance, cache).has_value();
+}
+
+std::optional<PlacedRaster> applySmartFilterMask(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance, const PlacedRaster& filtered) {
+    if (!filtered.image) return std::nullopt;
+    SmartFilterCache cache;
+    auto stack = maskingStack(globals, instance, cache);
+    if (!stack) return std::nullopt;
+    auto record = findSmartFilterCachePlanes(globals, instance.placedId);
+    if (!record || record->planes.size() < 3) return std::nullopt;
+    const PixelRect& canvas = record->cache.canvas;
+    const auto& planes = record->planes;
+    const std::vector<uint8_t>& alpha = planes.back();
+    // The colour planes: red, green and blue, or one grey plane (a grey document opens as RGB here).
+    const bool grey = !planes[0].empty() && planes[1].empty() && planes[2].empty();
+    if (planes[0].empty() || (!grey && (planes[1].empty() || planes[2].empty()))) return std::nullopt;
+    const PixelRect out{std::min(canvas.x, filtered.x), std::min(canvas.y, filtered.y), 0, 0};
+    const int right = std::max(canvas.x + canvas.width, filtered.x + filtered.image->width());
+    const int bottom = std::max(canvas.y + canvas.height, filtered.y + filtered.image->height());
+    const int w = right - out.x, h = bottom - out.y;
+    if (w > maxImageSide || h > maxImageSide || int64_t(w) * h > int64_t(Document::pixelBudget)) return std::nullopt;
+    auto image = std::make_shared<Image>(w, h);
+    int minX = w, minY = h, maxX = -1, maxY = -1;
+    const Image& kept = *filtered.image;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const int dx = out.x + x, dy = out.y + y;
+            // Photoshop's stored pixels are the filters' result before the mask; the mask then weighs it against the
+            // unfiltered instance the record caches (straight colour), as Photoshop's merged image shows it.
+            const unsigned weight = maskWeight(*stack, dx, dy);
+            unsigned u[4] = {0, 0, 0, 0}, f[4] = {0, 0, 0, 0};
+            const int cx = dx - canvas.x, cy = dy - canvas.y;
+            if (cx >= 0 && cy >= 0 && cx < canvas.width && cy < canvas.height) {
+                const size_t k = size_t(cy) * size_t(canvas.width) + size_t(cx);
+                const unsigned a = alpha.empty() ? 255u : alpha[k];
+                for (int c = 0; c < 3; c++) u[c] = (unsigned(planes[grey ? 0 : size_t(c)][k]) * a + 127) / 255;
+                u[3] = a;
+            }
+            const int fx = dx - filtered.x, fy = dy - filtered.y;
+            if (fx >= 0 && fy >= 0 && fx < kept.width() && fy < kept.height())
+                for (int c = 0; c < 4; c++) f[c] = kept.pixel(fx, fy)[c];
+            uint8_t* p = image->pixel(x, y);
+            for (int c = 0; c < 4; c++) p[c] = uint8_t((u[c] * (255 - weight) + f[c] * weight + 127) / 255);
+            if (p[3]) { minX = std::min(minX, x); minY = std::min(minY, y); maxX = std::max(maxX, x); maxY = std::max(maxY, y); }
+        }
+    if (maxX < minX) return PlacedRaster{std::make_shared<Image>(1, 1), filtered.x, filtered.y};   // nothing shows
+    if (minX == 0 && minY == 0 && maxX == w - 1 && maxY == h - 1) return PlacedRaster{image, out.x, out.y};
+    auto trimmed = std::make_shared<Image>(maxX - minX + 1, maxY - minY + 1);
+    for (int y = 0; y < trimmed->height(); y++) std::memcpy(trimmed->row(y), image->pixel(minX, minY + y), size_t(trimmed->width()) * 4);
+    return PlacedRaster{trimmed, out.x + minX, out.y + minY};
+}
+
 bool smartFiltersDrawable(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance) {
     std::optional<SmartFilterStack> stack;
     std::optional<SmartFilterCache> cache;
@@ -416,11 +563,11 @@ bool smartFiltersDrawable(const std::vector<PsdBlock>& globals, const SmartObjec
 }
 
 std::optional<PlacedRaster> filteredSmartObjectRaster(const std::vector<PsdBlock>& globals,
-                                                      const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad) {
+                                                      const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad, bool mask) {
     std::optional<SmartFilterStack> stack;
     std::optional<SmartFilterCache> cache;
     if (!drawableStack(globals, instance, stack, cache)) return std::nullopt;
-    stack->mask = cache->mask;
+    if (mask) stack->mask = cache->mask;
     stack->maskBounds = cache->maskBounds;
     // Only what lies on the filter canvas can show (past it the filters repeat the canvas's edge).
     const Rect canvas(cache->canvas.x, cache->canvas.y, cache->canvas.width, cache->canvas.height);
@@ -439,11 +586,11 @@ std::optional<PlacedRaster16> placedSmartObjectRaster(const SmartObjectInstance&
 }
 
 std::optional<PlacedRaster16> filteredSmartObjectRaster(const std::vector<PsdBlock>& globals,
-                                                        const SmartObjectInstance& instance, const Image16& source, const std::array<double, 8>& quad) {
+                                                        const SmartObjectInstance& instance, const Image16& source, const std::array<double, 8>& quad, bool mask) {
     std::optional<SmartFilterStack> stack;
     std::optional<SmartFilterCache> cache;
     if (!drawableStack(globals, instance, stack, cache)) return std::nullopt;
-    stack->mask = cache->mask;
+    if (mask) stack->mask = cache->mask;
     stack->maskBounds = cache->maskBounds;
     const Rect canvas(cache->canvas.x, cache->canvas.y, cache->canvas.width, cache->canvas.height);
     auto placed = placedSmartObjectRaster(instance, source, quad, &canvas);
@@ -509,16 +656,17 @@ std::optional<AnyPlacedRaster> drawInMode(const std::vector<PsdBlock>& globals, 
     std::optional<SmartFilterStack> stack;
     std::optional<SmartFilterCache> cache;
     std::optional<Rect> clip;
-    if (how == SmartObjectDraw::Filtered) {
+    const bool filtered = how == SmartObjectDraw::Filtered || how == SmartObjectDraw::FilteredUnmasked;
+    if (filtered) {
         if (!drawableStack(globals, instance, stack, cache)) return std::nullopt;
-        stack->mask = cache->mask;
+        if (how == SmartObjectDraw::Filtered) stack->mask = cache->mask;
         stack->maskBounds = cache->maskBounds;
         clip = Rect(cache->canvas.x, cache->canvas.y, cache->canvas.width, cache->canvas.height);
     }
     auto raster = renderWarpedImageAny(image, mesh ? *mesh : flat, quad, clip ? &*clip : nullptr);
     if (!raster || !raster->image) return std::nullopt;
     const int x = int(std::lround(raster->transform.origin.x)), y = int(std::lround(raster->transform.origin.y));
-    if (how == SmartObjectDraw::Filtered) return renderSmartFilterStackAny(raster->image, x, y, cache->canvas, *stack, ColorMode::CMYK);
+    if (filtered) return renderSmartFilterStackAny(raster->image, x, y, cache->canvas, *stack, ColorMode::CMYK);
     AnyPlacedRaster r{raster->image, x, y, LayerTransform(Point(x, y), Size(raster->image.width(), raster->image.height()))};
     if (how == SmartObjectDraw::Warped) r.transform = raster->transform;
     return r;
@@ -539,7 +687,9 @@ std::optional<AnyPlacedRaster> drawSmartObjectRaster(const std::vector<PsdBlock>
     auto draw = [&](const auto& pixels) -> std::optional<AnyPlacedRaster> {
         switch (how) {
         case SmartObjectDraw::Filtered:
-            if (auto f = filteredSmartObjectRaster(globals, instance, pixels, quad); f && f->image) return placedAt(std::move(f->image), f->x, f->y);
+        case SmartObjectDraw::FilteredUnmasked:
+            if (auto f = filteredSmartObjectRaster(globals, instance, pixels, quad, how == SmartObjectDraw::Filtered); f && f->image)
+                return placedAt(std::move(f->image), f->x, f->y);
             return std::nullopt;
         case SmartObjectDraw::Warped:
             if (auto w = warpedSmartObjectRaster(instance, pixels, quad); w && w->image) {

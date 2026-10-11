@@ -110,6 +110,7 @@ void EditorSession::beginSelectionTransform() {
     floating.name = QCoreApplication::translate("Names", "Floating Selection").toStdString();
     floating.parentId = src->parentId;
     floating.opacity = src->opacity;
+    floating.fill = src->fill;
     floating.blendMode = src->blendMode;
     int index = document_->indexOf(src->id);
     document_->layers.insert(document_->layers.begin() + index + 1, floating);

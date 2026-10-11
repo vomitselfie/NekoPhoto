@@ -124,7 +124,7 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
         single.profile = document_->profile;
         single.encodedProfile = document_->encodedProfile;
         Layer copy = *layer;
-        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
+        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.fill = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
         single.layers = {copy};
         renderF(single, options, *out);
     } else return std::nullopt;

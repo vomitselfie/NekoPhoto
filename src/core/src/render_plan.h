@@ -46,7 +46,9 @@ struct RenderPlan {
     /// A folder with Blend If isolates even in Pass Through: its result is gated against what is under it.
     static bool isolates(const Layer& g) { return !g.passThrough || hasBlendIf(g); }
     static bool hasBlendIf(const Layer& l) { return l.psdCarry && !l.psdCarry->blendingRanges.empty() && layerBlendIf(l, ColorMode::CMYK); }
-    static bool fades(const Layer& g) { return g.passThrough && g.opacity < 1 && !hasBlendIf(g); }
+    /// What fades a layer's own pixels or a folder's contents: its opacity and its Fill (effects take the opacity alone).
+    static float contentOpacity(const Layer& g) { return float(std::clamp(g.opacity, 0.0, 1.0) * std::clamp(g.fill, 0.0, 1.0)); }
+    static bool fades(const Layer& g) { return g.passThrough && contentOpacity(g) < 1 && !hasBlendIf(g); }
     /// The colour channels the layer or folder leaves out of its blending (blendif.h), 0 for none.
     uint8_t excluded(const Layer& l) const { return layerExcludedChannels(l, document.colorMode); }
 

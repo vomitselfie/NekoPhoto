@@ -933,14 +933,18 @@ TEST_CASE(project_rejects_bad_manifests_like_the_mac) {
         text.replace(text.find("%L"), 2, layers);
         return text;
     };
-    CHECK(!parseManifest(with("10", ""), error));
+    CHECK(!parseManifest(with("11", ""), error));
     CHECK(error.kind == ProjectError::Version);
-    CHECK_EQ(error.version, 10);
+    CHECK_EQ(error.version, 11);
     CHECK(error.message.find("versions 1-" + std::to_string(projectFormatVersion) + ".") != std::string::npos);
     CHECK(parseManifest(with("1", ""), error).has_value());
     std::string layer = R"({"id":"11111111-2222-3333-4444-555555555555","name":"L","isVisible":true,"transform":{"origin":[0,0],"size":[10,10],"rotation":0,"flipX":false,"flipY":false,"sampling":"High quality"}%X})";
     auto layerWith = [&](const std::string& extra) { std::string t = layer; t.replace(t.find("%X"), 2, extra); return t; };
     CHECK(parseManifest(with("7", layerWith("")), error).has_value());
+    // Fill needs version 10, and is within 0..1.
+    CHECK(!parseManifest(with("9", layerWith(",\"fill\":0.5")), error));
+    CHECK(parseManifest(with("10", layerWith(",\"fill\":0.5")), error).has_value());
+    CHECK(!parseManifest(with("10", layerWith(",\"fill\":1.5")), error));
     // Opacity needs version 3.
     CHECK(!parseManifest(with("2", layerWith(",\"opacity\":0.5")), error));
     CHECK(parseManifest(with("3", layerWith(",\"opacity\":0.5")), error).has_value());

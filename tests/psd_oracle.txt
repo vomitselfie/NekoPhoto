@@ -1,65 +1,126 @@
-# Photoshop oracle: how many of Patchy's fixtures NekoPhoto renders like Photoshop's own flatten beside the file
-# (the .bmp), else like the merged image stored in it (tests/psd_composite_oracle.cpp). The floor may only rise;
-# the test fails below it. Each pass names its reference.
-# Raise it after an improvement: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle
+# Photoshop oracle over Patchy's fixtures (MIT, https://github.com/SethRobinson/Patchy, test-fixtures/psd) (tests/psd_composite_oracle.cpp): each file's status and
+# numbers (max and mean in 8-bit levels, the share of pixels more than 2 levels off) when this was written.
+# A pass that fails, a file no longer compared, or a failure whose mean grows by more than a level fails the test.
+# Rewrite it after a change: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus patchy
+corpus patchy
+commit 7d14d1f6ede2dc8fb52c11eefcc7cc8783473711
 compared 72
 flatten 48
 floor 58
-pass patchy-open-path-strokes.psd [merged]
-pass photoshop-bevel-default.psd [merged]
-pass photoshop-bevel-gloss.psd [merged]
-pass photoshop-bevel-smooth.psd [bmp]
-pass photoshop-bevel-texture-ramp.psd [bmp]
-pass photoshop-blend-if-4b-roundtrip.psd [bmp]
-pass photoshop-both-masks-params.psd [bmp]
-pass photoshop-both-masks.psd [bmp]
-pass photoshop-brightness-contrast-legacy.psd [merged]
-pass photoshop-brightness-contrast-modern.psd [merged]
-pass photoshop-channel-restrictions.psd [bmp]
-pass photoshop-color-balance-full.psd [merged]
-pass photoshop-color-balance.psd [merged]
-pass photoshop-gradient-overlay-geometry.psd [bmp]
-pass photoshop-group-fx-blend-fill.psd [bmp]
-pass photoshop-group-fx-interior.psd [bmp]
-pass photoshop-group-fx-mask-stroke.psd [bmp]
-pass photoshop-group-fx-passthrough.psd [bmp]
-pass photoshop-group-opacity.psd [bmp]
-pass photoshop-hue-saturation-master.psd [bmp]
-pass photoshop-inner-glow-range.psd [bmp]
-pass photoshop-inner-glow.psd [bmp]
-pass photoshop-inner-shadow.psd [bmp]
-pass photoshop-interior-exterior-blending.psd [bmp]
-pass photoshop-invert.psd [merged]
-pass photoshop-outer-glow-range.psd [bmp]
-pass photoshop-overlay-zorder.psd [bmp]
-pass photoshop-pattern-anchor.psd [bmp]
-pass photoshop-pattern-deep.psd [merged]
-pass photoshop-pattern-overlay.psd [bmp]
-pass photoshop-pattern-transparent.psd [bmp]
-pass photoshop-pillow-emboss2.psd [bmp]
-pass photoshop-posterize.psd [merged]
-pass photoshop-saved-channels.psd [merged]
-pass photoshop-saved-paths.psd [bmp]
-pass photoshop-shadow-conceals.psd [bmp]
-pass photoshop-shape-boolean.psd [bmp]
-pass photoshop-shape-feather.psd [bmp]
-pass photoshop-shape-first-ops.psd [bmp]
-pass photoshop-shape-live-rect.psd [bmp]
-pass photoshop-shape-pattern.psd [bmp]
-pass photoshop-smart-filter-add-noise-gaussian.psd [merged]
-pass photoshop-smart-filter-add-noise.psd [merged]
-pass photoshop-smart-filter-radial-blur-zoom.psd [merged]
-pass photoshop-smart-filter-radial-blur.psd [merged]
-pass photoshop-stroke-overprint.psd [bmp]
-pass photoshop-stroke-shapeburst.psd [bmp]
-pass photoshop-text-anchor-center-third.psd [merged]
-pass photoshop-text-anchor-center-whole.psd [merged]
-pass photoshop-text-anchor-center90-third.psd [merged]
-pass photoshop-text-anchor-center90-whole.psd [merged]
-pass photoshop-text-rtl-hebrew.psd [merged]
-pass photoshop-text-vertical-box.psd [merged]
-pass photoshop-text-vertical-point.psd [merged]
-pass photoshop-threshold.psd [merged]
-pass photoshop-user-mask-params.psd [bmp]
-pass photoshop-vector-mask-feather.psd [bmp]
-pass photoshop-vector-mask-on-pixel.psd [bmp]
+FAIL arrows.psd                                                       [rgb8]             max  170.00  >2:   5.18%  mean   1.098
+--   patchy-legacy-black-composite.psb                                                   merged image matted by another program (no Photoshop version info, no transparency over transparent layers)
+pass patchy-open-path-strokes.psd                                     [rgb8]             max   31.00  >2:   0.17%  mean   0.034
+--   photoshop-basic.psb                                                                 saved without Maximize Compatibility
+pass photoshop-bevel-default.psd                                      [rgb8]             max    2.00  >2:   0.00%  mean   0.040
+pass photoshop-bevel-gloss.psd                                        [rgb8]             max    2.00  >2:   0.00%  mean   0.026
+pass photoshop-bevel-smooth.psd                                       [bmp]              max    3.00  >2:   0.01%  mean   0.032
+FAIL photoshop-bevel-subs.psd                                         [bmp]              max   94.00  >2:  14.53%  mean   3.101
+FAIL photoshop-bevel-texture-clouds.psd                               [bmp]              max   95.00  >2:  19.99%  mean   1.246
+pass photoshop-bevel-texture-ramp.psd                                 [bmp]              max   29.00  >2:   0.60%  mean   0.390
+pass photoshop-blend-if-4b-roundtrip.psd                              [bmp]              max    2.00  >2:   0.00%  mean   0.521
+pass photoshop-both-masks-params.psd                                  [bmp]              max    3.00  >2:   0.26%  mean   0.076
+pass photoshop-both-masks.psd                                         [bmp]              max    2.00  >2:   0.00%  mean   0.067
+pass photoshop-brightness-contrast-legacy.psd                         [rgb8]             max    1.00  >2:   0.00%  mean   0.562
+pass photoshop-brightness-contrast-modern.psd                         [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-channel-restrictions.psd                               [bmp]              max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-clipping-mask.psd                                                         saved without Maximize Compatibility
+--   photoshop-cmyk-style-colors.psd                                                     saved without Maximize Compatibility
+pass photoshop-color-balance-full.psd                                 [rgb8]             max    1.00  >2:   0.00%  mean   0.250
+pass photoshop-color-balance.psd                                      [rgb8]             max    1.00  >2:   0.00%  mean   0.156
+--   photoshop-curves-clipped.psd                                                        saved without Maximize Compatibility
+--   photoshop-curves-masked.psd                                                         saved without Maximize Compatibility
+FAIL photoshop-emboss-styles.psd                                      [bmp]              max   27.00  >2:   1.81%  mean   0.126
+--   photoshop-global-light-shadow.psd                                                   saved without Maximize Compatibility
+FAIL photoshop-gloss-contour.psd                                      [bmp]              max  191.00  >2:   2.17%  mean   0.811
+pass photoshop-gradient-overlay-geometry.psd                          [bmp]              max    6.00  >2:   0.75%  mean   0.066
+pass photoshop-group-fx-blend-fill.psd                                [bmp]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-group-fx-interior.psd                                  [bmp]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-group-fx-mask-stroke.psd                               [bmp]              max   30.00  >2:   0.06%  mean   0.014
+pass photoshop-group-fx-passthrough.psd                               [bmp]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-group-opacity.psd                                      [bmp]              max    0.00  >2:   0.00%  mean   0.000
+FAIL photoshop-hue-saturation-bands.psd                               [bmp]              max    7.00  >2:   1.98%  mean   0.127
+--   photoshop-hue-saturation-colorize.psd                                               saved without Maximize Compatibility
+pass photoshop-hue-saturation-master.psd                              [bmp]              max    1.00  >2:   0.00%  mean   0.065
+pass photoshop-inner-glow-range.psd                                   [bmp]              max    4.00  >2:   0.27%  mean   0.043
+pass photoshop-inner-glow.psd                                         [bmp]              max  255.00  >2:   0.66%  mean   0.336
+pass photoshop-inner-shadow.psd                                       [bmp]              max    1.00  >2:   0.00%  mean   0.000
+pass photoshop-interior-exterior-blending.psd                         [bmp]              max    1.00  >2:   0.00%  mean   0.027
+pass photoshop-invert.psd                                             [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-layer-style-4a-roundtrip.psd                                              saved without Maximize Compatibility
+--   photoshop-lmfx-multi-stroke.psd                                                     saved without Maximize Compatibility
+--   photoshop-mask-hides-effects.psd                                                    saved without Maximize Compatibility
+pass photoshop-outer-glow-range.psd                                   [bmp]              max    2.00  >2:   0.00%  mean   0.068
+FAIL photoshop-outer-glow.psd                                         [bmp]              max  167.00  >2:  12.43%  mean   0.996
+pass photoshop-overlay-zorder.psd                                     [bmp]              max    1.00  >2:   0.00%  mean   0.006
+pass photoshop-pattern-anchor.psd                                     [bmp]              max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-pattern-bevel-roundtrip.psd                                               saved without Maximize Compatibility
+pass photoshop-pattern-deep.psd                                       [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-pattern-overlay.psd                                    [bmp]              max    0.00  >2:   0.00%  mean   0.000
+FAIL photoshop-pattern-scale.psd                                      [bmp]              max   32.00  >2:  30.08%  mean   1.753
+pass photoshop-pattern-transparent.psd                                [bmp]              max    0.00  >2:   0.00%  mean   0.000
+FAIL photoshop-pillow-emboss.psd                                      [bmp]              max   72.00  >2:   1.03%  mean   0.075
+pass photoshop-pillow-emboss2.psd                                     [bmp]              max   67.00  >2:   0.98%  mean   0.098
+--   photoshop-place-embedded-png.psd                                                    saved without Maximize Compatibility
+pass photoshop-posterize.psd                                          [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-satin-default.psd                                                         saved without Maximize Compatibility
+pass photoshop-saved-channels.psd                                     [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-saved-paths.psd                                        [bmp]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-shadow-conceals.psd                                    [bmp]              max    1.00  >2:   0.00%  mean   0.015
+pass photoshop-shape-boolean.psd                                      [bmp]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-shape-feather.psd                                      [bmp]              max    3.00  >2:   0.33%  mean   0.377
+pass photoshop-shape-first-ops.psd                                    [bmp]              max    1.00  >2:   0.00%  mean   0.271
+FAIL photoshop-shape-gradient.psd                                     [bmp]              max    5.00  >2:  23.95%  mean   0.944
+pass photoshop-shape-live-rect.psd                                    [bmp]              max   10.00  >2:   0.62%  mean   0.041
+pass photoshop-shape-pattern.psd                                      [bmp]              max    6.00  >2:   0.83%  mean   0.052
+FAIL photoshop-shape-solid.psd                                        [bmp]              max   10.00  >2:   1.29%  mean   0.066
+FAIL photoshop-shape-strokes.psd                                      [bmp]              max   58.00  >2:   3.12%  mean   0.242
+FAIL photoshop-shape.psb                                              [bmp]              max   10.00  >2:   1.29%  mean   0.066
+pass photoshop-smart-filter-add-noise-gaussian.psd                    [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-smart-filter-add-noise.psd                             [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-smart-filter-box-blur.psd                                                 saved without Maximize Compatibility
+--   photoshop-smart-filter-dust-and-scratches.psd                                       saved without Maximize Compatibility
+--   photoshop-smart-filter-emboss.psd                                                   saved without Maximize Compatibility
+--   photoshop-smart-filter-high-pass.psd                                                saved without Maximize Compatibility
+--   photoshop-smart-filter-instances-base.psd                                           saved without Maximize Compatibility
+--   photoshop-smart-filter-instances-edit-contents.psd                                  saved without Maximize Compatibility
+--   photoshop-smart-filter-instances-rasterized.psd                                     saved without Maximize Compatibility
+--   photoshop-smart-filter-instances-replace-contents.psd                               saved without Maximize Compatibility
+--   photoshop-smart-filter-median.psd                                                   saved without Maximize Compatibility
+--   photoshop-smart-filter-model.psd                                                    saved without Maximize Compatibility
+--   photoshop-smart-filter-mosaic.psd                                                   saved without Maximize Compatibility
+--   photoshop-smart-filter-plastic-wrap.psd                                             saved without Maximize Compatibility
+pass photoshop-smart-filter-radial-blur-zoom.psd                      [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-smart-filter-radial-blur.psd                           [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-smart-filter-surface-blur.psd                                             saved without Maximize Compatibility
+--   photoshop-smart-filter-tilt-shift.psd                                               saved without Maximize Compatibility
+--   photoshop-smart-filter-unsharp-motion.psd                                           saved without Maximize Compatibility
+FAIL photoshop-stroke-aa-matte.psd                                    [bmp]              max  100.00  >2:   3.72%  mean   0.876
+--   photoshop-stroke-masked.psd                                                         saved without Maximize Compatibility
+pass photoshop-stroke-overprint.psd                                   [bmp]              max   51.00  >2:   0.45%  mean   0.069
+--   photoshop-stroke-partial-alpha.psd                                                  saved without Maximize Compatibility
+--   photoshop-stroke-positions.psd                                                      saved without Maximize Compatibility
+pass photoshop-stroke-shapeburst.psd                                  [bmp]              max  127.00  >2:   0.20%  mean   0.070
+pass photoshop-text-anchor-center-third.psd                           [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-text-anchor-center-whole.psd                           [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-text-anchor-center90-third.psd                         [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-text-anchor-center90-whole.psd                         [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-text-anchor-half.psd                                                      saved without Maximize Compatibility
+--   photoshop-text-anchor-whole.psd                                                     saved without Maximize Compatibility
+--   photoshop-text-box-auto-leading.psd                                                 saved without Maximize Compatibility
+--   photoshop-text-hv-scale.psd                                                         saved without Maximize Compatibility
+--   photoshop-text-point-auto-leading.psd                                               saved without Maximize Compatibility
+--   photoshop-text-point-fixed-leading.psd                                              saved without Maximize Compatibility
+--   photoshop-text-point-transformed.psd                                                saved without Maximize Compatibility
+pass photoshop-text-rtl-hebrew.psd                                    [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-text-tracking.psd                                                         saved without Maximize Compatibility
+pass photoshop-text-vertical-box.psd                                  [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop-text-vertical-point.psd                                [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-text-vertical-rotated-roman.psd                                           saved without Maximize Compatibility
+pass photoshop-threshold.psd                                          [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+--   photoshop-unlinked-mask-shadow.psd                                                  saved without Maximize Compatibility
+--   photoshop-unlinked-mask.psd                                                         saved without Maximize Compatibility
+pass photoshop-user-mask-params.psd                                   [bmp]              max    2.00  >2:   0.00%  mean   0.271
+pass photoshop-vector-mask-feather.psd                                [bmp]              max    3.00  >2:   0.52%  mean   0.381
+pass photoshop-vector-mask-on-pixel.psd                               [bmp]              max   12.00  >2:   0.95%  mean   0.039
+--   photoshop-warp-text.psd                                                             saved without Maximize Compatibility
+--   qual_rca_pinout.psd                                                                 saved without Maximize Compatibility

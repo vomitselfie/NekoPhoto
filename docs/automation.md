@@ -185,7 +185,8 @@ to paint it with `brush.stroke` `mask` and the other mask tools, `show` to see i
 own Custom warp). `layers.warp` bends a layer with one of Photoshop's fifteen presets (`style`, `bend`, `horizontal`, `vertical`,
 `orientation`): Warp Text on text (`none` removes it), a mesh baked into a smart object's placement, bent pixels
 otherwise.
-Layers: `layers.select`, `layers.set` (on `id`, or the active layer when it is left out: name, visible, opacity, blend (a folder also takes "Pass Through"), sampling,
+Layers: `layers.select`, `layers.set` (on `id`, or the active layer when it is left out: name, visible, opacity, fill (Photoshop's Fill:
+the layer's own pixels fade and its effects stay; opacity and fill never change each other), blend (a folder also takes "Pass Through"), sampling,
 clipping, `blendIf`: Blending Options' Blend If on any layer, folders and adjustment layers included, one undo step:
 channels by name (`gray`, `red`, `green`, `blue`; in CMYK `gray`, `cyan`, `magenta`, `yellow`, `black`; in Lab
 `lightness`, `a`, `b`), each with `thisLayer` and/or `underlying` as `[blackLow, blackHigh, whiteLow, whiteHigh]`

@@ -82,8 +82,10 @@ public:
     bool dropSmartFilterForTest(const compositor::Uuid& id, int from, const compositor::Uuid& ontoId, int onto, bool above);
 private:
     void finishSwipe();
-    /// The opacity a click, a key, the field or the end of a drag set: layers.set, one undo step.
-    void commitOpacity(double opacity);
+    /// The opacity (with `fill`, the Fill) a click, a key, the field or the end of a drag set: layers.set, one undo step.
+    void commitOpacity(double opacity, bool fill = false);
+    /// The Opacity or Fill row: a slider and a field kept together, a drag one undo step (layers.set at the release).
+    void connectOpacityRow(QSlider* slider, QSpinBox* spin, bool fill);
     /// The mask button (with a selection, Reveal Selection; Alt-click, Hide Selection; without one, Reveal All or Hide
     /// All) and, `whole`, the row menu's Add Reveal-All / Hide-All Mask: layers.mask.
     void addMask(bool revealing, bool whole = false);
@@ -103,6 +105,8 @@ private:
     QComboBox* blendCombo_;
     QSlider* opacitySlider_;
     QSpinBox* opacitySpin_;
+    QSlider* fillSlider_;
+    QSpinBox* fillSpin_;
     LayerTree* tree_;
     std::map<compositor::Uuid, QTreeWidgetItem*> items_;
     std::set<compositor::Uuid> collapsedSmartFilters_;   // smart objects whose Smart Filters are folded away
