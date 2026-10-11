@@ -9,7 +9,7 @@
 // - Levels: the range formula without its upper clamp, so input above the white point goes on rising (at 8 bits it is
 //   cut at white); the black point still cuts below.
 // - Curves: within 0..255 exactly CurvesSettings::value; above 255 the curve continues as a straight line with its end
-//   tangent (the last segment's slope when the last point is at 255; flat when the last point stops short of 255, as
+//   tangent (the spline's slope at the last point when that point is at 255; flat when the last point stops short of 255, as
 //   the curve already is between that point and 255). Photoshop's own extension above 1 is not documented; this is the
 //   stated assumption (docs/bit-depth.md).
 // - Exposure: the exact multiply by 2^exposure in linear light, the offset added there, the gamma as a power; nothing
@@ -58,38 +58,17 @@ struct LevelsCurve {
 
 // ---- Curves ----------------------------------------------------------------------------------------------------------
 
-/// CurvesSettings::value for one channel with its tangents worked out once; above 255 continued along its end tangent.
+/// CurvesSettings::value for one channel with its spline solved once; above 255 continued along its end tangent.
 struct CurveSpline {
-    std::vector<double> x, y, slope;
+    NaturalCurve curve;
     double endSlope = 0, endValue = 255;
 
-    CurveSpline(const CurvesSettings& settings, int channel) {
-        const auto& p = settings.channels[size_t(std::clamp(channel, 0, 3))];
-        for (const CurvePoint& point : p) { x.push_back(point.x); y.push_back(point.y); }
-        std::vector<double> d;
-        for (size_t j = 0; j + 1 < p.size(); j++) d.push_back((p[j + 1].y - p[j].y) / (p[j + 1].x - p[j].x));
-        for (size_t j = 0; j < p.size(); j++) {
-            if (j == 0) slope.push_back(d[0]);
-            else if (j == p.size() - 1) slope.push_back(d.back());
-            else if (d[j - 1] * d[j] <= 0) slope.push_back(0.0);
-            else slope.push_back(2 / (1 / d[j - 1] + 1 / d[j]));
-        }
-        endValue = hermite(255);
-        endSlope = x.back() >= 255 ? slope.back() : 0.0;
+    CurveSpline(const CurvesSettings& settings, int channel) : curve(settings.channels[size_t(std::clamp(channel, 0, 3))]) {
+        endValue = curve(255);
+        endSlope = curve.x.back() >= 255 ? curve.endSlope() : 0.0;
     }
 
-    /// CurvesSettings::value's maths, 0..255 in and out.
-    double hermite(double at) const {
-        size_t i = 0;
-        for (size_t j = 0; j < x.size(); j++) if (x[j] <= at) i = j;
-        i = std::min(x.size() - 2, i);
-        const double h = x[i + 1] - x[i], t = std::min(1.0, std::max(0.0, (at - x[i]) / h));
-        const double v = (2 * t * t * t - 3 * t * t + 1) * y[i] + (t * t * t - 2 * t * t + t) * h * slope[i]
-            + (-2 * t * t * t + 3 * t * t) * y[i + 1] + (t * t * t - t * t) * h * slope[i + 1];
-        return std::min(255.0, std::max(0.0, v));
-    }
-
-    double operator()(double at) const { return at <= 255 ? hermite(at) : std::max(0.0, endValue + (at - 255) * endSlope); }
+    double operator()(double at) const { return at <= 255 ? curve(at) : std::max(0.0, endValue + (at - 255) * endSlope); }
 };
 
 // ---- the per-pixel frame -------------------------------------------------------------------------------------------

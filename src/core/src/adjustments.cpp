@@ -203,23 +203,43 @@ bool CurvesSettings::isIdentity() const {
     return true;
 }
 
-double CurvesSettings::value(double x, int channel) const {
-    const auto& p = channels[size_t(clamp(channel, 0, levelsChannelCount - 1))];
+NaturalCurve::NaturalCurve(const std::vector<CurvePoint>& points) {
+    for (const CurvePoint& p : points) { x.push_back(p.x); y.push_back(p.y); }
+    const size_t n = x.size();
+    m2.assign(n, 0.0);
+    if (n < 3) return;
+    // The tridiagonal system for the inner second derivatives, by forward elimination and back substitution.
+    std::vector<double> c(n, 0.0), d(n, 0.0);
+    for (size_t i = 1; i + 1 < n; i++) {
+        const double h0 = x[i] - x[i - 1], h1 = x[i + 1] - x[i];
+        const double a = h0 / 6, b = (h0 + h1) / 3, r = (y[i + 1] - y[i]) / h1 - (y[i] - y[i - 1]) / h0;
+        const double denom = b - a * c[i - 1];
+        c[i] = h1 / 6 / denom;
+        d[i] = (r - a * d[i - 1]) / denom;
+    }
+    for (size_t i = n - 2; i >= 1; i--) m2[i] = d[i] - c[i] * m2[i + 1];
+}
+
+double NaturalCurve::operator()(double at) const {
+    if (x.empty()) return std::min(255.0, std::max(0.0, at));
+    if (at <= x.front()) return std::min(255.0, std::max(0.0, y.front()));
+    if (at >= x.back()) return std::min(255.0, std::max(0.0, y.back()));
     size_t i = 0;
-    for (size_t j = 0; j < p.size(); j++) if (p[j].x <= x) i = j;
-    i = std::min(p.size() - 2, i);
-    std::vector<double> d;
-    for (size_t j = 0; j + 1 < p.size(); j++) d.push_back((p[j + 1].y - p[j].y) / (p[j + 1].x - p[j].x));
-    auto slope = [&](size_t j) {
-        if (j == 0) return d[0];
-        if (j == p.size() - 1) return d.back();
-        if (d[j - 1] * d[j] <= 0) return 0.0;
-        return 2 / (1 / d[j - 1] + 1 / d[j]);
-    };
-    double h = p[i + 1].x - p[i].x, t = std::min(1.0, std::max(0.0, (x - p[i].x) / h));
-    double y = (2 * t * t * t - 3 * t * t + 1) * p[i].y + (t * t * t - 2 * t * t + t) * h * slope(i)
-        + (-2 * t * t * t + 3 * t * t) * p[i + 1].y + (t * t * t - t * t) * h * slope(i + 1);
-    return std::min(255.0, std::max(0.0, y));
+    while (i + 2 < x.size() && at > x[i + 1]) i++;
+    const double h = x[i + 1] - x[i], a = (x[i + 1] - at) / h, b = (at - x[i]) / h;
+    const double v = a * y[i] + b * y[i + 1] + ((a * a * a - a) * m2[i] + (b * b * b - b) * m2[i + 1]) * h * h / 6;
+    return std::min(255.0, std::max(0.0, v));
+}
+
+double NaturalCurve::endSlope() const {
+    const size_t n = x.size();
+    if (n < 2) return 1;
+    const double h = x[n - 1] - x[n - 2];
+    return (y[n - 1] - y[n - 2]) / h + h * (m2[n - 2] + 2 * m2[n - 1]) / 6;
+}
+
+double CurvesSettings::value(double x, int channel) const {
+    return NaturalCurve(channels[size_t(clamp(channel, 0, levelsChannelCount - 1))])(x);
 }
 
 Transfer curvesTransfer(const CurvesSettings& settings) {

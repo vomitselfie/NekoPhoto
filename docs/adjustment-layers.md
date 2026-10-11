@@ -11,6 +11,11 @@ Model and maths: `src/core/include/compositor/adjustments.h`, `src/core/src/adju
 Brightness/Contrast and Posterize are per-channel tables, so a run of them with Levels, Curves and Exposure composes
 into one pass.
 
+**Curves** (`curv`) is drawn as Photoshop draws it: the natural cubic spline through the points (no bend at the end
+points), flat beyond the first and last point. Every `curves.psd` in photocraft-corpus (RGB, grayscale, CMYK and Lab, 8
+and 16 bits) renders within a level of Photoshop's merged image (max 0 at 8 bits); a monotone cubic, as before, was up
+to 4 levels off. Camera Raw's point curve is its own and keeps its monotone cubic.
+
 | Kind | Block | How it is drawn | Checked against Photoshop |
 |---|---|---|---|
 | Invert | `nvrt` | 255 - v per channel | exact (Patchy's photoshop-invert.psd composite) |

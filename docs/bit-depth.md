@@ -300,7 +300,7 @@ adjusts as it did, and light above white goes on through the function:
 - **Levels** loses its clamp at the white point: input above it goes on rising along the same formula (at 8 bits it is
   cut at white). The black point still cuts below.
 - **Curves** is exactly the 8-bit curve from 0 to 255; above 255 it continues as a straight line along its end tangent
-  (the last segment's slope when the last point is at 255, flat when the last point stops short of 255, as the curve is
+  (the spline's slope at the last point when that point is at 255, flat when the last point stops short of 255, as the curve is
   already flat there). Photoshop does not document how its 32-bit Curves and Levels carry on above 1; these are
   NekoPhoto's stated choices.
 - **Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance and Color Lookup** are defined on

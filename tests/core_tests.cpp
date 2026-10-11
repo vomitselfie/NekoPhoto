@@ -1075,6 +1075,16 @@ TEST_CASE(adjustments_change_pixels_as_expected) {
     CHECK(std::abs(int(img.pixel(0, 0)[0]) - 200) <= 1);
     CHECK_NEAR(curves.value(0, 0), 0, 1e-9);
     CHECK_NEAR(curves.value(255, 0), 255, 1e-9);
+    // Photoshop's Curves is the natural cubic spline (second derivative 0 at the ends), flat beyond the end points:
+    // the photocraft-corpus curve, its values worked out independently.
+    curves.channels[0] = {{0, 0}, {60, 35}, {190, 225}, {255, 255}};
+    CHECK_NEAR(curves.value(30, 0), 12.641850723533896, 1e-9);
+    CHECK_NEAR(curves.value(60, 0), 35, 1e-9);
+    CHECK_NEAR(curves.value(128, 0), 136.14447243540923, 1e-9);
+    CHECK_NEAR(curves.value(220, 0), 244.925889038608, 1e-9);
+    curves.channels[0] = {{20, 40}, {128, 100}, {230, 210}};
+    CHECK_NEAR(curves.value(5, 0), 40, 1e-9);
+    CHECK_NEAR(curves.value(250, 0), 210, 1e-9);
     GradientMapSettings map;
     map.shadows = {1, 0, 0}; map.highlights = {0, 0, 1};
     applyGradientMap(img = *gray, map);

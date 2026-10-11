@@ -56,15 +56,28 @@ std::vector<CameraRawCurvePoint> repair(const std::vector<CameraRawCurvePoint>& 
     return kept;
 }
 
-/// The point curve through CurvesSettings' shape-preserving interpolation, as upstream does (0…1 in and out).
+/// The point curve through a shape-preserving cubic Hermite (harmonic-mean slopes, flat beyond the end points), as
+/// upstream does (0…1 in and out). Camera Raw's own curve: Photoshop's Curves adjustment is a natural spline instead
+/// (NaturalCurve).
 double curveAt(double x, const std::vector<CameraRawCurvePoint>& points) {
     if (points.size() < 2) return x;
-    CurvesSettings curve;
-    curve.channels[0].clear();
-    for (const auto& p : points) curve.channels[0].push_back({p.x * 255, p.y * 255});
-    return curve.value(x * 255, 0) / 255;
+    const auto& p = points;
+    size_t i = 0;
+    for (size_t j = 0; j < p.size(); j++) if (p[j].x <= x) i = j;
+    i = std::min(p.size() - 2, i);
+    std::vector<double> d;
+    for (size_t j = 0; j + 1 < p.size(); j++) d.push_back((p[j + 1].y - p[j].y) / (p[j + 1].x - p[j].x));
+    auto slope = [&](size_t j) {
+        if (j == 0) return d[0];
+        if (j == p.size() - 1) return d.back();
+        if (d[j - 1] * d[j] <= 0) return 0.0;
+        return 2 / (1 / d[j - 1] + 1 / d[j]);
+    };
+    const double h = p[i + 1].x - p[i].x, t = std::min(1.0, std::max(0.0, (x - p[i].x) / h));
+    const double y = (2 * t * t * t - 3 * t * t + 1) * p[i].y + (t * t * t - 2 * t * t + t) * h * slope(i)
+        + (-2 * t * t * t + 3 * t * t) * p[i + 1].y + (t * t * t - t * t) * h * slope(i + 1);
+    return std::min(1.0, std::max(0.0, y));
 }
-
 
 } // namespace
 

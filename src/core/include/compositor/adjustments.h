@@ -50,8 +50,20 @@ struct CurvesSettings {
     bool operator==(const CurvesSettings&) const = default;
     bool isValid() const;
     bool isIdentity() const;
-    /// Shape-preserving cubic Hermite interpolation; `x` and the result are 0..255.
+    /// Photoshop's curve through the channel's points (NaturalCurve); `x` and the result are 0..255.
     double value(double x, int channel) const;
+};
+
+/// A Curves channel as Photoshop draws it: the natural cubic spline through the points (second derivative 0 at both
+/// ends), flat beyond the end points, the result cut to 0..255. Rule after PhotoCraft's `curve_lut`
+/// (github.com/storytold/photocraft, crates/compose/src/adjust.rs at 88ffd89, MIT OR Apache-2.0, used under MIT).
+struct NaturalCurve {
+    std::vector<double> x, y, m2;   // m2: the second derivative at each point
+    explicit NaturalCurve(const std::vector<CurvePoint>& points);
+    /// The spline at `at` (0..255 in and out).
+    double operator()(double at) const;
+    /// The slope at the last point, approached from the left.
+    double endSlope() const;
 };
 
 struct ExposureSettings {
