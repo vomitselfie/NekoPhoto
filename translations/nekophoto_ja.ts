@@ -7666,6 +7666,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>PNG 画像 (*.png)</translation>
     </message>
     <message>
+        <source>%1 (*.%2)</source>
+        <translation>%1 (*.%2)</translation>
+    </message>
+    <message>
         <source>Exported %1 at 8 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).</source>
         <translation>%1 を 8 bit/チャンネルで書き出しました。32 bit/チャンネルから露光量 0 でトーンマッピングしています（白を超える値はクリップされます）。</translation>
     </message>
@@ -7812,12 +7816,12 @@ File &gt; New creates a blank canvas.</source>
         <translation>書き出し形式</translation>
     </message>
     <message>
-        <source>Quick Export To</source>
-        <translation>クイック書き出し先</translation>
-    </message>
-    <message>
         <source>Quick Export</source>
         <translation>クイック書き出し</translation>
+    </message>
+    <message>
+        <source>Couldn’t create the folder %1.</source>
+        <translation>フォルダー %1 を作成できませんでした。</translation>
     </message>
     <message>
         <source>%1 already exists in %2. Replace it?</source>
@@ -9844,10 +9848,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>クイック書き出しの形式</translation>
     </message>
     <message>
-        <source>Quick Export writes beside the document with the settings File &gt; Export &gt; Export As last used for the format.</source>
-        <translation>クイック書き出しは、ドキュメントと同じフォルダーに、ファイル &gt; 書き出し &gt; 書き出し形式 でその形式に最後に使った設定で書き出します。</translation>
-    </message>
-    <message>
         <source>Crash recovery</source>
         <translation>クラッシュからの復元</translation>
     </message>
@@ -9902,6 +9902,22 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Download cancelled.</source>
         <translation>ダウンロードをキャンセルしました。</translation>
+    </message>
+    <message>
+        <source>Location</source>
+        <translation>場所</translation>
+    </message>
+    <message>
+        <source>Ask where to export each time</source>
+        <translation>毎回書き出し先を確認する</translation>
+    </message>
+    <message>
+        <source>Export files to an assets folder next to the current document</source>
+        <translation>現在のドキュメントの隣のアセットフォルダーに書き出す</translation>
+    </message>
+    <message>
+        <source>Quick Export uses the settings File &gt; Export &gt; Export As last used for the format. A document never saved always asks.</source>
+        <translation>クイック書き出しは、ファイル &gt; 書き出し &gt; 書き出し形式 でその形式に最後に使った設定を使います。一度も保存していないドキュメントは常に確認します。</translation>
     </message>
     <message>
         <source>Downloading G&apos;MIC %1…</source>

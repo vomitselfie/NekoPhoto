@@ -225,11 +225,22 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     quickFormat->setCurrentIndex(std::max(0, quickFormat->findData(exportas::quickExportFormat())));
     connect(quickFormat, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [quickFormat](int) { exportas::setQuickExportFormat(quickFormat->currentData().toString()); });
     exportRow->addWidget(quickFormat, 1);
-    auto* exportHint = new QLabel(tr("Quick Export writes beside the document with the settings File > Export > Export As last used for the format."));
+    // Quick Export Location, as Photoshop's: ask each time, or an assets folder next to the document.
+    exportRow->addWidget(new QLabel(tr("Location")));
+    auto* quickWhere = new QComboBox;
+    quickWhere->setObjectName("quickExportLocation");
+    quickWhere->addItem(tr("Ask where to export each time"), true);
+    quickWhere->addItem(tr("Export files to an assets folder next to the current document"), false);
+    quickWhere->setCurrentIndex(exportas::quickExportAsks() ? 0 : 1);
+    connect(quickWhere, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [quickWhere](int) { exportas::setQuickExportAsks(quickWhere->currentData().toBool()); });
+    exportRow->addWidget(quickWhere, 2);
+    auto* exportHint = new QLabel(tr("Quick Export uses the settings File > Export > Export As last used for the format. A document never saved always asks."));
     exportHint->setWordWrap(true);
     exportHint->setStyleSheet(hintStyle());
-    exportRow->addWidget(exportHint, 2);
-    layout->addWidget(exportBox);
+    auto* exportColumn = new QVBoxLayout;
+    exportColumn->addWidget(exportBox);
+    exportColumn->addWidget(exportHint);
+    layout->addLayout(exportColumn);
 
     auto* recovery = new QGroupBox(tr("Crash recovery"));
     auto* recoveryRow = new QHBoxLayout(recovery);

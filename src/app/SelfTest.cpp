@@ -1677,14 +1677,16 @@ int exportAs(MainWindow& w) {
         expect(QImageReader(layerPng).size() == dialog.sourceSize(), "the layer's file is not its visible size");
     }
     {
-        // Quick Export: beside the saved document, in Preferences' format, with that format's remembered settings.
+        // Quick Export: into the assets folder next to the saved document, in Preferences' format, with that format's remembered settings.
         QString error;
         expect(s.saveProject(dir.filePath("Quick.nekophoto"), &error), "couldn't save the project: " + error);
         exportas::setQuickExportFormat("jpg");
+        exportas::setQuickExportAsks(false);   // the assets folder; asking would open a Save dialog
         w.setErrorSink(&errors);
         if (QAction* quick = action(w, "export.quick")) quick->trigger();
-        const QString quick = dir.filePath("Quick.jpg");
-        expect(QFileInfo::exists(quick) && QImageReader(quick).size() == QSize(doc.width, doc.height), "Quick Export did not write Quick.jpg at full size");
+        const QString quick = dir.filePath("Quick-assets/Quick.jpg");
+        expect(QFileInfo::exists(quick) && QImageReader(quick).size() == QSize(doc.width, doc.height), "Quick Export did not write Quick-assets/Quick.jpg at full size");
+        exportas::setQuickExportAsks(true);
     }
     w.setErrorSink(nullptr);
     expect(errors.isEmpty(), "errors: " + errors);

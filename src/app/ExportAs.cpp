@@ -116,6 +116,9 @@ QString quickExportFormat() {
 }
 void setQuickExportFormat(const QString& format) { QSettings().setValue("export/quickFormat", format); }
 
+bool quickExportAsks() { return QSettings().value("export/quickAsk", true).toBool(); }
+void setQuickExportAsks(bool ask) { QSettings().setValue("export/quickAsk", ask); }
+
 QJsonObject commandParams(const QString& format, const Settings& settings, int width, int height, const QString& layer) {
     QJsonObject p;
     if (hasQuality(format)) p["quality"] = settings.quality;

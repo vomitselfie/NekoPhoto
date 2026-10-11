@@ -52,6 +52,10 @@ void setLastFormat(const QString& format);
 /// Quick Export's format (Preferences; export/quickFormat), PNG by default.
 QString quickExportFormat();
 void setQuickExportFormat(const QString& format);
+/// Where Quick Export writes (Preferences; export/quickAsk), as Photoshop's Quick Export Location: true asks for a name
+/// and a folder each time (the default), false writes into an assets folder next to the saved document.
+bool quickExportAsks();
+void setQuickExportAsks(bool ask);
 
 /// document.export's parameters for these settings (the path and overwrite are the caller's). width and height 0 keep
 /// the source's size; `layer` (an id or "active") exports that layer alone.

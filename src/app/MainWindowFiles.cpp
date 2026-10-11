@@ -699,20 +699,31 @@ void MainWindow::quickExport(bool layer) {
     if (!session_->hasDocument()) return;
     if (layer && !session_->activeLayer()) return;
     const QString format = exportas::quickExportFormat();
-    // Beside the document; a document never saved asks for a folder.
-    QString directory = session_->projectPath().isEmpty() ? QString() : QFileInfo(session_->projectPath()).absolutePath();
-    if (directory.isEmpty()) {
-        directory = QFileDialog::getExistingDirectory(this, tr("Quick Export To"), QSettings().value("lastDir").toString());
-        if (directory.isEmpty()) return;
-        QSettings().setValue("lastDir", directory);
-    }
-    const QString path = QDir(directory).filePath(exportBaseName(layer) + "." + format);
-    if (QFileInfo::exists(path)) {
-        QMessageBox box(QMessageBox::Question, tr("Quick Export"), tr("%1 already exists in %2. Replace it?").arg(QFileInfo(path).fileName(), QDir::toNativeSeparators(directory)), QMessageBox::Cancel, this);
-        QPushButton* replace = box.addButton(tr("Replace"), QMessageBox::AcceptRole);
-        box.setDefaultButton(QMessageBox::Cancel);
-        box.exec();
-        if (box.clickedButton() != static_cast<QAbstractButton*>(replace)) return;
+    const QString base = exportBaseName(layer);
+    const QString saved = session_->projectPath();
+    QString path;
+    if (exportas::quickExportAsks() || saved.isEmpty()) {
+        // Ask where each time (and always for a document never saved): a Save dialog with the name filled in, in the
+        // document's folder, else where the last export went. The dialog asks before replacing a file.
+        const QString start = saved.isEmpty() ? QSettings().value("lastDir").toString() : QFileInfo(saved).absolutePath();
+        path = QFileDialog::getSaveFileName(this, tr("Quick Export as %1").arg(exportas::formatLabel(format)), QDir(start).filePath(base + "." + format),
+                                            tr("%1 (*.%2)").arg(exportas::formatLabel(format), format));
+        if (path.isEmpty()) return;
+        if (!path.endsWith("." + format, Qt::CaseInsensitive)) path += "." + format;
+        QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
+    } else {
+        // An assets folder next to the document, as Photoshop's "<name>-assets".
+        const QFileInfo doc(saved);
+        const QString directory = QDir(doc.absolutePath()).filePath(doc.completeBaseName() + "-assets");
+        if (!QDir().mkpath(directory)) { QMessageBox::warning(this, tr("Quick Export"), tr("Couldn’t create the folder %1.").arg(QDir::toNativeSeparators(directory))); return; }
+        path = QDir(directory).filePath(base + "." + format);
+        if (QFileInfo::exists(path)) {
+            QMessageBox box(QMessageBox::Question, tr("Quick Export"), tr("%1 already exists in %2. Replace it?").arg(QFileInfo(path).fileName(), QDir::toNativeSeparators(directory)), QMessageBox::Cancel, this);
+            QPushButton* replace = box.addButton(tr("Replace"), QMessageBox::AcceptRole);
+            box.setDefaultButton(QMessageBox::Cancel);
+            box.exec();
+            if (box.clickedButton() != static_cast<QAbstractButton*>(replace)) return;
+        }
     }
     QJsonObject params = exportas::commandParams(format, exportas::remembered(format), 0, 0, layer ? QStringLiteral("active") : QString());
     params["path"] = path;
