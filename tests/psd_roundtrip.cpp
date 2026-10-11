@@ -5,10 +5,12 @@
 // A 16-bit file must also come back with every layer's channel data byte for byte (the carried planes, psd_carry.h),
 // and so must a CMYK or Lab file at either depth, which must also reopen in its own colour mode with its profile.
 // PSD_ROUNDTRIP_16=1 or PSD_ROUNDTRIP_32=1 convert each file to 16 or 32 bits first (Image > Mode).
+// Every file must also reopen with the same render (8-bit flattened, within a level).
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
 #include "compositor/psd_carry.h"
 #include "compositor/vectormask.h"
+#include "compositor/render.h"
 #include "psd/psd_binary.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -217,8 +219,9 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
         if (x.section != 3 && x.ranges != y.ranges) problems.push_back("\"" + x.name + "\": Blend If ranges changed");
         if (x.section != 3 && !reduced && !x.mask.empty() && x.mask != y.mask) problems.push_back("\"" + x.name + "\": mask section changed");
         if (x.blocks.count("iOpa") && x.blocks.at("iOpa") != (y.blocks.count("iOpa") ? y.blocks.at("iOpa") : Bytes{255, 0, 0, 0})) problems.push_back("\"" + x.name + "\": Fill changed");
-        // A 16-bit layer's pixels, and a CMYK or Lab layer's: exactly the bytes it was stored with.
-        if ((a.depth == 16 || ((a.mode == 4 || a.mode == 9) && !sixteen)) && x.section != 3)
+        // A 16-bit layer's pixels, and a CMYK or Lab layer's: exactly the bytes it was stored with. (Not a Grayscale or
+        // other file that opens as RGB: its layers are written anew as RGB, which the render check below covers.)
+        if ((a.mode == 3 || a.mode == 4 || a.mode == 9) && (a.depth == 16 || ((a.mode == 4 || a.mode == 9) && !sixteen)) && x.section != 3)
             for (auto& [id, data] : x.channels) {
                 if (id < -1) continue;   // masks: the mask section's check
                 if (!y.channels.count(id) || y.channels.at(id) != data) problems.push_back("\"" + x.name + "\": " + (a.depth == 16 ? "16-bit " : "") + "channel " + std::to_string(id) + " changed");
@@ -244,6 +247,24 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     else if (sixteen && reopened->document.sampleType != compositor::SampleType::U16) problems.push_back("our file does not reopen at 16 bits");
     else if (thirtyTwo && reopened->document.sampleType != compositor::SampleType::F32) problems.push_back("our file does not reopen at 32 bits");
     if (reopened && reopened->document.colorMode != imported->document.colorMode) problems.push_back("our file does not reopen in the same colour mode");
+    // What it looks like: the reopened document renders as the opened one did, within a level. Structure alone can
+    // come back while the pixels do not (a Grayscale file's one plane written into an RGB record).
+    if (reopened) {
+        auto before = compositor::renderFlattened(imported->document), after = compositor::renderFlattened(reopened->document);
+        if (!before || !after || before->width() != after->width() || before->height() != after->height()) problems.push_back("render: our file reopens at another size");
+        else {
+            int worst = 0; long off = 0;
+            for (int y = 0; y < before->height(); y++)
+                for (int x = 0; x < before->width(); x++) {
+                    const uint8_t *p = before->pixel(x, y), *q = after->pixel(x, y);
+                    int d = 0;
+                    for (int c = 0; c < 4; c++) d = std::max(d, std::abs(int(p[c]) - int(q[c])));
+                    worst = std::max(worst, d);
+                    off += d > 1;
+                }
+            if (worst > 1) problems.push_back("render after reopening: max " + std::to_string(worst) + " levels on " + std::to_string(off) + " pixels");
+        }
+    }
     if (b.mode != a.mode && (a.mode == 3 || a.mode == 4 || a.mode == 9)) problems.push_back("colour mode " + std::to_string(a.mode) + " -> " + std::to_string(b.mode));
     // A CMYK file's profile (1039) is the document's and comes back byte for byte.
     if (a.mode == 4 && a.resources.count(1039) && (!b.resources.count(1039) || b.resources.at(1039) != a.resources.at(1039))) problems.push_back("CMYK profile (1039) changed");

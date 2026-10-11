@@ -5,6 +5,7 @@
 #include "check.h"
 #include "compositor/depth.h"
 #include "compositor/png.h"
+#include "compositor/psd_carry.h"
 #include "compositor/project.h"
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
@@ -60,11 +61,13 @@ struct FixtureLayer {
     std::map<int, std::vector<uint16_t>> planes;   // -1 alpha, 0..2 colour, -2 mask (over the layer's rectangle)
 };
 
-/// A 16-bit RGB PSD as Photoshop writes one: the layers in 'Lr16', the merged image raw.
-Bytes makePsd16(int width, int height, const std::vector<FixtureLayer>& layers) {
+/// A 16-bit RGB PSD as Photoshop writes one: the layers in 'Lr16', the merged image raw. `mode` 1 makes it Grayscale
+/// (one colour plane, id 0).
+Bytes makePsd16(int width, int height, const std::vector<FixtureLayer>& layers, int mode = 3) {
+    const int colours = mode == 1 ? 1 : 3;
     Put f;
     f.str("8BPS"); f.u16(1); for (int i = 0; i < 6; i++) f.u8(0);
-    f.u16(3); f.u32(uint32_t(height)); f.u32(uint32_t(width)); f.u16(16); f.u16(3);
+    f.u16(unsigned(colours)); f.u32(uint32_t(height)); f.u32(uint32_t(width)); f.u16(16); f.u16(unsigned(mode));
     f.u32(0);   // colour mode data
     f.u32(0);   // image resources
     Put info;
@@ -99,8 +102,8 @@ Bytes makePsd16(int width, int height, const std::vector<FixtureLayer>& layers) 
     section.str("8BIM"); section.str("Lr16"); section.u32(uint32_t(info.b.size())); section.bytes(info.b);
     f.u32(uint32_t(section.b.size()));
     f.bytes(section.b);
-    f.u16(0);   // merged image, raw: three planes of mid grey
-    for (int c = 0; c < 3; c++) for (int i = 0; i < width * height; i++) f.u16(0x8001);
+    f.u16(0);   // merged image, raw: three planes (one in Grayscale) of mid grey
+    for (int c = 0; c < colours; c++) for (int i = 0; i < width * height; i++) f.u16(0x8001);
     return f.b;
 }
 
@@ -236,6 +239,49 @@ TEST_CASE(sixteen_bit_psd_round_trips_byte_for_byte) {
     REQUIRE(viaProject.size() == 2);
     for (size_t i = 0; i < before.size(); i++) for (auto& [id, bytes] : before[i]) CHECK(viaProject[i].at(id) == bytes);
     { std::error_code cleanup_; fs::remove_all(project, cleanup_); }
+}
+
+TEST_CASE(sixteen_bit_grayscale_psd_exports_without_losing_green_and_blue) {
+    // A Grayscale file opens as RGB: its one grey plane must not be carried into the RGB record we write, or the layer
+    // reopens red (Green and Blue empty). Exported and reopened, it renders as it did.
+    std::mt19937 rng(1601);
+    FixtureLayer a{"grey layer", 1, 2, 18, 12, 3, {}};
+    for (int id : {-1, 0}) a.planes[id] = noise(rng, a.width * a.height, true);
+    for (auto& s : a.planes[-1]) s = uint16_t(s | 0x8000);   // mostly opaque, so the colour shows
+    std::string error;
+    auto imported = importPsdBytes(makePsd16(24, 16, {a}, 1), &error);
+    REQUIRE(imported.has_value());
+    REQUIRE(imported->document.sampleType == SampleType::U16);
+    REQUIRE(imported->document.layers.size() == 1);
+    const Layer& layer = imported->document.layers[0];
+    REQUIRE(layer.asset && layer.asset->image.u16());
+    CHECK(!layer.psdCarry || layer.psdCarry->planes.empty());
+    auto sameRender = [](const Document& x, const Document& y) {
+        auto p = renderFlattened(x), q = renderFlattened(y);
+        if (!p || !q || p->width() != q->width() || p->height() != q->height()) return false;
+        for (int yy = 0; yy < p->height(); yy++)
+            for (int xx = 0; xx < p->width(); xx++)
+                for (int c = 0; c < 4; c++) if (std::abs(int(p->pixel(xx, yy)[c]) - int(q->pixel(xx, yy)[c])) > 1) return false;
+        return true;
+    };
+    PsdExportSummary summary;
+    auto again = importPsdBytes(encodePsd(imported->document, PsdExportOptions(), &summary, &error), &error);
+    REQUIRE(again.has_value());
+    CHECK(sameRender(imported->document, again->document));
+    const uint16_t* p = again->document.layers.at(0).asset->image.u16()->pixel(4, 5);
+    CHECK(p[0] == p[1] && p[1] == p[2] && p[0] > 0);
+
+    // A carry made before this was fixed (a project holding a grey file's planes) is refused by the writer, not
+    // written into an RGB record.
+    Document stale = imported->document;
+    auto carry = stale.layers[0].psdCarry ? std::make_shared<PsdLayerCarry>(*stale.layers[0].psdCarry) : std::make_shared<PsdLayerCarry>();
+    carry->contentHash = carry->planesHash = psdContentHash(stale.layers[0].asset->image);
+    carry->placement = stale.layers[0].transform;
+    carry->planes = {{-1, channel16(a.planes.at(-1), a.width, a.height, 0)}, {0, channel16(a.planes.at(0), a.width, a.height, 0)}};
+    stale.layers[0].psdCarry = carry;
+    auto staleBack = importPsdBytes(encodePsd(stale, PsdExportOptions(), &summary, &error), &error);
+    REQUIRE(staleBack.has_value());
+    CHECK(sameRender(imported->document, staleBack->document));
 }
 
 TEST_CASE(sixteen_bit_documents_export_as_sixteen_bit_psd) {

@@ -121,7 +121,8 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
 
 A 16-bit PSD that NekoPhoto opened and exports again as PSD keeps each unedited layer's channel data byte for byte,
 so a round trip does not lose Photoshop's full 16 bits; a layer you edit (and a PSB) is written from its 0..32768
-values, which drops the lowest of the file's 16 bits. PNG and TIFF are always written from 0..32768.
+values, which drops the lowest of the file's 16 bits. A 16- or 32-bit grayscale file opens as RGB, so its layers are
+always written anew as RGB from the document's values. PNG and TIFF are always written from 0..32768.
 
 A 16-bit PSD does not get Photoshop's Smart Filter cache (it is 8-bit data; Photoshop rebuilds it). Opening a 16-bit
 PSD that has none, NekoPhoto draws each Smart Filter stack over the whole canvas with its filter mask all white, so the

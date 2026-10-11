@@ -566,7 +566,14 @@ private:
         // (a PSB's RLE rows count in 32 bits).
         // A smart object's carried raster goes back with its own bounds, as long as the instance has not moved.
         const bool smartRaster = c.planesRect && l.smartObject && l.isLiveSmartObject();
-        if ((deep_ || float_ || native_) && !options_.large && (sameContent || smartRaster) && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset
+        // Carried planes go back only when they hold every colour channel of the record being written (a file in another
+        // colour model, such as Grayscale opened as RGB, carries fewer).
+        const bool planesCover = [&] {
+            for (int id = 0; id < colours_; id++)
+                if (std::none_of(c.planes.begin(), c.planes.end(), [&](const PsdLayerCarry::CarriedPlane& p) { return p.id == id; })) return false;
+            return true;
+        }();
+        if ((deep_ || float_ || native_) && !options_.large && (sameContent || smartRaster) && placementKept && planesCover && c.planesHash == contentNow && l.asset
             && (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8)))) {
             if (smartRaster) { r.left = (*c.planesRect)[0]; r.top = (*c.planesRect)[1]; r.right = (*c.planesRect)[2]; r.bottom = (*c.planesRect)[3]; }
             std::vector<std::pair<int, std::vector<uint8_t>>> channels;

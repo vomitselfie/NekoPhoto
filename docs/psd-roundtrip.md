@@ -133,7 +133,8 @@ tags; a pass-through folder says `norm` in its record and `pass` in `lsct`; ever
 
 `build/tests/psd_roundtrip DIR` opens every PSD in a folder, exports it and compares the two files record
 by record: every carried block, Blend If, the mask section, blend key, flags, folder state, opacity and
-clipping, the resources and the global blocks, byte for byte; then reopens our file. Over Patchy's 117
+clipping, the resources and the global blocks, byte for byte; then reopens our file and checks that it renders as
+the opened file did (within a level), so pixels lost under an intact structure cannot pass. Over Patchy's 117
 fixtures (all but two saved by Photoshop 2026: text, smart objects and smart filters, shapes, styles, masks, Blend
 If, 16-bit and PSB): all pass, 3,675 blocks back unchanged. `PSD_ROUNDTRIP_16=1` does the same through a 16-bit
 export: all 118 files (Patchy's and K.psd) pass ([compatibility.md](compatibility.md)), and the Photoshop composite

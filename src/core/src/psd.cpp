@@ -1027,7 +1027,9 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (c.id == -2) { w = rec.mask.width(); h = rec.mask.height(); }
                 if (c.id == -3) { w = rec.mask.realWidth(); h = rec.mask.realHeight(); }
                 if (c.id == -2 || c.id == -3) maskRaw.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
-                else if ((deep || float32 || nativeMode) && !psb && c.id >= -1 && c.id <= (mode == CMYK ? 3 : 2)) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
+                // Only a file whose colour model is the document's: a Grayscale (or Duotone…) file opens as RGB, and
+                // its one grey plane written back into an RGB record would leave Green and Blue empty.
+                else if ((deep || float32 || nativeMode) && (mode == RGB || nativeMode) && !psb && c.id >= -1 && c.id <= (mode == CMYK ? 3 : 2)) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
                 std::vector<uint8_t> plane;
                 std::vector<uint16_t> wide;
                 std::vector<float> floats;
