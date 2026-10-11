@@ -16,6 +16,20 @@ bool EditorSession::quickMaskActive() const {
     return quickMaskLayer_ && document_ && document_->find(*quickMaskLayer_);
 }
 
+bool EditorSession::paintsMask() const {
+    const Layer* layer = activeLayer();
+    return isMaskSelected_ && layer && layer->mask;
+}
+
+double EditorSession::maskGrey(const QColor& color) {
+    return std::clamp(0.30 * color.redF() + 0.59 * color.greenF() + 0.11 * color.blueF(), 0.0, 1.0);
+}
+
+double EditorSession::maskPaintValue(const QColor& color) const {
+    const double grey = maskGrey(color);
+    return paintsQuickMask() ? 1 - grey : grey;
+}
+
 bool EditorSession::paintsQuickMask() const {
     // An alpha channel is painted the same way (EditorSessionChannels.cpp): its layer's mask is the channel's inverse.
     if (channelProxy_ && activeLayerId_ == channelProxy_ && isMaskSelected_ && document_ && document_->find(*channelProxy_)) return true;

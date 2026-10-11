@@ -696,13 +696,24 @@ void AutomationServer::registerLayersHandlers() {
         return QJsonObject{{"flipped", true}};
     });
     add("layers.mask", [session, layerOrActive, withActive](const QJsonObject& p) {
-        // action: add (revealing all, or hiding), addFromSelection, delete, toggle, invert, apply, link
+        // action: add (Reveal All, or Hide All), addFromSelection (Reveal Selection, or Hide Selection), delete, toggle,
+        // invert, apply, link. `revealing` says which of the two; `mode` names one of the four (Photoshop's Layer >
+        // Layer Mask items) in its place.
         Uuid id = layerOrActive(p).id;
         QString action = str(p, "action").toLower();
+        bool revealing = flag(p, "revealing", true);
+        if (has(p, "mode")) {
+            const QString mode = str(p, "mode");
+            if (mode != "revealAll" && mode != "hideAll" && mode != "revealSelection" && mode != "hideSelection")
+                fail("mode must be revealAll, hideAll, revealSelection or hideSelection", invalidParams);
+            if (action != "add" && action != "addfromselection") fail("mode goes with action add", invalidParams);
+            action = mode.endsWith("Selection") ? QStringLiteral("addfromselection") : QStringLiteral("add");
+            revealing = mode.startsWith("reveal");
+        }
         withActive(id, [&] {
             EditorSession* s = session();
-            if (action == "add") s->addLayerMask(flag(p, "revealing", true));
-            else if (action == "addfromselection") s->addMaskFromSelection(flag(p, "revealing", true));
+            if (action == "add") s->addLayerMask(revealing);
+            else if (action == "addfromselection") s->addMaskFromSelection(revealing);
             else if (action == "delete") s->deleteLayerMask();
             else if (action == "toggle") s->toggleLayerMask();
             else if (action == "invert") s->invertMask();

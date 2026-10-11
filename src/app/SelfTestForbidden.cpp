@@ -3,18 +3,25 @@
 // over the canvas, following the active layer, its visibility and the tool without the pointer moving. A mask takes
 // the paint, an adjustment layer's too (it comes with one, targeted: painting it is one step and changes the composite
 // only under the stroke); rasterizing a type layer lets the brush on, and undoing it refuses it again. Rasterize Shape
-// bakes the outline and drops the vector mask, the composite unchanged (on Patchy's Photoshop shapes too).
+// bakes the outline and drops the vector mask, the composite unchanged (on Patchy's Photoshop shapes too, gradient and
+// pattern fills included, and those fills as fill layers at 8 and 16 bits). Masks as Photoshop makes and paints them:
+// Add Layer Mask reveals the selection, a colour paints its grey, a folder's mask takes the brush.
 #include "SelfTest.h"
 #include "CanvasWidget.h"
+#include "ColorSwatches.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "Theme.h"
+#include "compositor/depth.h"
 #include "compositor/psd.h"
+#include "compositor/psd_carry.h"
 #include "compositor/render.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
+#include <QAction>
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 #include <QMouseEvent>
@@ -40,6 +47,14 @@ void settle(int ms) {
         QApplication::processEvents(QEventLoop::AllEvents, 20);
         QThread::msleep(2);
     } while (t.elapsed() < ms);
+}
+
+/// A layer's mask at a document point, 0..255 (an 8-bit document's); -1 without one.
+int maskAt(const Layer& layer, double x, double y) {
+    const GrayImage* g = layer.mask ? layer.mask->asset.image.u8().get() : nullptr;
+    if (!g) return -1;
+    const Point p = layer.maskTransform().pixelToDocument(g->width(), g->height()).inverted().apply({x, y});
+    return g->at(std::clamp(int(std::floor(p.x)), 0, g->width() - 1), std::clamp(int(std::floor(p.y)), 0, g->height() - 1));
 }
 
 /// The largest difference of any channel between two renders (256 when their sizes differ).
@@ -127,15 +142,16 @@ int forbiddenCursor(MainWindow& w) {
         const size_t steps = s.undoNames().size();
         const Tool tool = s.tool();
         const BrushSettings brush = s.brushSettings;
-        const bool white = s.maskPaintWhite, erase = s.brushErase;
+        const QColor foreground = s.foregroundColor;
+        const bool erase = s.brushErase;
         s.selectTool(Tool::Brush);
         s.brushSettings.diameter = 12; s.brushSettings.hardness = 1; s.brushSettings.opacity = 1;
-        s.maskPaintWhite = false; s.brushErase = false;   // black: the adjustment is hidden under the stroke
+        s.foregroundColor = Qt::black; s.brushErase = false;   // black: the adjustment is hidden under the stroke
         const double cy = doc.height / 2.0, x0 = doc.width / 4.0, x1 = doc.width / 2.0;
         const bool began = s.beginBrush(QPointF(x0, cy), false);
         expect(began, "the brush did not start on the adjustment layer's mask");
         if (began) { s.continueBrush(QPointF(x1, cy)); s.endBrush(); }
-        s.brushSettings = brush; s.maskPaintWhite = white; s.brushErase = erase;
+        s.brushSettings = brush; s.foregroundColor = foreground; s.brushErase = erase;
         s.selectTool(tool);
         expect(s.undoNames().size() == steps + 1 && s.undoNames().back() == "Paint Mask", "painting the adjustment layer's mask was not one Paint Mask step");
         const auto after = renderFlattened(*s.document());
@@ -155,6 +171,160 @@ int forbiddenCursor(MainWindow& w) {
         for (int y = 0; restored && y < before->height(); y++)
             for (int x = 0; restored && x < before->width(); x++) restored = std::memcmp(before->pixel(x, y), undone->pixel(x, y), 4) == 0;
         expect(restored, "undoing the mask stroke did not restore the composite");
+    }
+
+    // Add Layer Mask with a selection: Photoshop's button and Layer > Layer Mask > Reveal Selection make it white inside
+    // the selection and black outside; Hide Selection the reverse; Reveal All and Hide All ignore it. A new adjustment
+    // layer's mask is made the same way. The selection goes into the mask.
+    {
+        expect(call("layers.add", {{"kind", "pixels"}, {"name", "Masked"}}).has_value(), "could not add a layer to mask");
+        const auto maskedId = s.activeLayerId();
+        call("pixels.fill", {{"color", "#20a040"}});
+        const Document& doc = *s.document();
+        const double inX = doc.width * 0.25, outX = doc.width * 0.75, y = doc.height * 0.5;
+        auto select = [&] { call("selection.rect", {{"x", 0}, {"y", 0}, {"width", doc.width / 2}, {"height", doc.height}}); };
+        auto masked = [&] { return maskedId ? s.document()->find(*maskedId) : nullptr; };
+        struct Case { QJsonObject params; int inside, outside; const char* what; };
+        const Case cases[] = {
+            {{{"action", "addFromSelection"}}, 255, 0, "addFromSelection did not reveal the selection"},
+            {{{"action", "add"}, {"mode", "revealSelection"}}, 255, 0, "Reveal Selection did not reveal the selection"},
+            {{{"action", "add"}, {"mode", "hideSelection"}}, 0, 255, "Hide Selection did not hide the selection"},
+            {{{"action", "addFromSelection"}, {"revealing", false}}, 0, 255, "addFromSelection with revealing false did not hide the selection"},
+            {{{"action", "add"}, {"mode", "revealAll"}}, 255, 255, "Reveal All with a selection was not all white"},
+            {{{"action", "add"}, {"mode", "hideAll"}}, 0, 0, "Hide All with a selection was not all black"},
+        };
+        for (const Case& c : cases) {
+            select();
+            call("layers.mask", c.params);
+            const Layer* l = masked();
+            expect(l && maskAt(*l, inX, y) == c.inside && maskAt(*l, outX, y) == c.outside, c.what);
+            call("history.undo");
+            call("selection.none");
+        }
+        // The Layers panel's mask button and the menu items reach the same requests (MainWindow's menus and the panel).
+        select();
+        QAction* reveal = nullptr;
+        for (QAction* a : w.findChildren<QAction*>()) if (a->text() == QLatin1String("Reveal Selection")) reveal = a;
+        expect(reveal && reveal->isEnabled(), "no Layer > Layer Mask > Reveal Selection, or it is greyed with a selection");
+        if (reveal) reveal->trigger();
+        expect(masked() && maskAt(*masked(), inX, y) == 255 && maskAt(*masked(), outX, y) == 0 && !s.document()->selection,
+               "Layer > Layer Mask > Reveal Selection did not reveal the selection and take it");
+        call("history.undo");
+        call("selection.none");
+        select();
+        s.addAdjustmentLayer(AdjustmentKind::Invert);
+        const Layer* adjustment = s.activeLayer();
+        expect(adjustment && adjustment->adjustment && adjustment->mask && maskAt(*adjustment, inX, y) == 255 && maskAt(*adjustment, outX, y) == 0,
+               "a new adjustment layer's mask did not reveal the selection");
+        call("history.undo");
+        call("selection.none");
+        if (maskedId) s.selectLayer(*maskedId, false);
+    }
+
+    // Painting a mask, as in Photoshop: the colours paint their grey (0.30 R + 0.59 G + 0.11 B), the brush the
+    // foreground's, the eraser the background's, the Gradient tool both, the Paint Bucket and Fill the colour asked
+    // for; the swatches show the greys while the mask is the target, and D makes them white on black there.
+    {
+        expect(call("layers.add", {{"kind", "pixels"}, {"name", "Grey mask"}}).has_value(), "could not add a layer for the grey mask");
+        const auto greyId = s.activeLayerId();
+        call("pixels.fill", {{"color", "#2040c0"}});
+        call("layers.mask", {{"action", "add"}, {"mode", "revealAll"}});
+        const Document& doc = *s.document();
+        const double y = doc.height * 0.5;
+        auto mask = [&](double x) { const Layer* l = greyId ? s.document()->find(*greyId) : nullptr; return l ? maskAt(*l, x, y) : -1; };
+        auto near = [](int v, int want) { return std::abs(v - want) <= 1; };
+        const QColor red(255, 0, 0), green(0, 255, 0), blue(0, 0, 255);
+        const int redGrey = 77, greenGrey = 150, blueGrey = 28;   // 0.30, 0.59, 0.11 of 255
+        expect(s.paintsMask(), "adding a mask did not target it");
+        const QColor foreground = s.foregroundColor, background = s.backgroundColor;
+        const Tool tool = s.tool();
+        const BrushSettings brush = s.brushSettings;
+        const bool erase = s.brushErase;
+        s.selectTool(Tool::Brush);
+        s.brushSettings.diameter = 9; s.brushSettings.hardness = 1; s.brushSettings.opacity = 1;
+        auto stroke = [&](double x) {
+            if (s.beginBrush(QPointF(x, y), false)) { s.continueBrush(QPointF(x + 1, y)); s.endBrush(); }
+        };
+        // The swatches: greys on the mask, the colours themselves elsewhere.
+        s.foregroundColor = red; s.backgroundColor = blue;
+        emit s.toolChanged();
+        auto* swatches = w.findChild<ColorSwatches*>();
+        auto grey = [](const QColor& c) { const int v = c.red(); return c.green() == v && c.blue() == v ? v : -1; };
+        expect(swatches && near(grey(swatches->foreground()), redGrey) && near(grey(swatches->background()), blueGrey),
+               "the swatches did not show the colours' greys on a mask");
+        const double x0 = doc.width * 0.2, x1 = doc.width * 0.4, x2 = doc.width * 0.6, x3 = doc.width * 0.8;
+        stroke(x0);
+        expect(near(mask(x0), redGrey), "the brush did not paint the foreground's grey on the mask");
+        s.brushErase = true;
+        stroke(x1);
+        expect(near(mask(x1), blueGrey), "the eraser did not erase the mask to the background's grey");
+        s.brushErase = false;
+        s.foregroundColor = green;
+        call("selection.rect", {{"x", x2 - 4}, {"y", y - 4}, {"width", 8}, {"height", 8}});
+        s.fillSelection(s.foregroundColor);
+        expect(near(mask(x2), greenGrey), "Fill did not fill the mask with the colour's grey");
+        call("selection.none");
+        call("pixels.bucket", {{"x", x3}, {"y", 2}, {"color", "#ff0000"}, {"antialias", false}});
+        expect(near(mask(x3), redGrey), "the Paint Bucket did not fill the mask with the colour's grey");
+        call("gradient.draw", {{"x0", x1}, {"y0", 0}, {"x1", x2}, {"y1", 0}, {"foreground", "#ff0000"}, {"background", "#00ff00"}, {"style", "foreground-to-background"}});
+        expect(near(mask(x0), redGrey) && near(mask(x3), greenGrey), "the Gradient tool did not draw from the foreground's grey to the background's on the mask");
+        // D on a mask: white on black, as in Photoshop; elsewhere black on white.
+        QAction* defaults = nullptr;
+        for (QAction* a : w.findChildren<QAction*>()) if (a->objectName() == QLatin1String("command.colors.default")) defaults = a;
+        expect(defaults != nullptr, "no Default Colours command");
+        if (defaults) {
+            defaults->trigger();
+            expect(s.foregroundColor == QColor(Qt::white) && s.backgroundColor == QColor(Qt::black), "D on a mask did not make white the foreground and black the background");
+            if (greyId) s.selectLayer(*greyId, false);
+            settle(5);
+            expect(swatches && swatches->foreground() == QColor(Qt::white), "the swatches did not show the colours again off the mask");
+            defaults->trigger();
+            expect(s.foregroundColor == QColor(Qt::black) && s.backgroundColor == QColor(Qt::white), "D off a mask did not make black the foreground");
+        }
+        s.foregroundColor = foreground; s.backgroundColor = background;
+        s.brushSettings = brush; s.brushErase = erase;
+        s.selectTool(tool);
+        emit s.toolChanged();
+    }
+
+    // A group's mask takes what a layer's does, as in Photoshop: the brushes and eraser, Blur, the Paint Bucket, Fill
+    // and the Gradient tool. Without a mask (or with the group itself the target) a group is refused.
+    {
+        expect(call("layers.add", {{"kind", "group"}, {"name", "Masked group"}}).has_value(), "could not add a group");
+        const auto groupId = s.activeLayerId();
+        expect(kind(Tool::Brush, ToolRefusal::Refused), "a group without a mask was not refused");
+        call("layers.mask", {{"action", "add"}, {"mode", "revealAll"}});
+        expect(s.isMaskSelected() && s.paintsMask(), "adding a group's mask did not target it");
+        for (Tool t : {Tool::Brush, Tool::Gradient, Tool::PaintBucket})
+            expect(!refusal(t), "a tool was refused on a group's mask");
+        const BlurToolMode blur = s.blurMode;
+        s.blurMode = BlurToolMode::Blur;
+        expect(!refusal(Tool::Smudge), "Blur was refused on a group's mask");
+        s.blurMode = blur;
+        expect(kind(Tool::CloneStamp, ToolRefusal::Refused), "Clone Stamp on a group's mask was not refused");
+        const Document& doc = *s.document();
+        const double x = doc.width * 0.5, y = doc.height * 0.5;
+        auto groupMask = [&] { const Layer* g = groupId ? s.document()->find(*groupId) : nullptr; return g ? maskAt(*g, x, y) : -1; };
+        const Tool tool = s.tool();
+        const BrushSettings brush = s.brushSettings;
+        const QColor foreground = s.foregroundColor;
+        s.selectTool(Tool::Brush);
+        s.brushSettings.diameter = 9; s.brushSettings.hardness = 1; s.brushSettings.opacity = 1;
+        s.foregroundColor = Qt::black;
+        const size_t steps = s.undoNames().size();
+        const bool began = s.beginBrush(QPointF(x, y), false);
+        expect(began, "the brush did not start on a group's mask");
+        if (began) { s.continueBrush(QPointF(x + 1, y)); s.endBrush(); }
+        expect(groupMask() == 0 && s.undoNames().size() == steps + 1 && s.undoNames().back() == "Paint Mask", "the brush did not paint the group's mask in one step");
+        s.foregroundColor = Qt::white;
+        s.fillSelection(s.foregroundColor);
+        expect(groupMask() == 255, "Fill did not fill the group's mask");
+        expect(call("brush.stroke", {{"points", QJsonArray{QJsonArray{x, y}, QJsonArray{x + 1, y}}}, {"size", 9}, {"hardness", 1}, {"mask", true}, {"color", "#000000"}}).has_value()
+                   && groupMask() == 0, "brush.stroke did not paint the group's mask");
+        s.brushSettings = brush; s.foregroundColor = foreground;
+        s.selectTool(tool);
+        if (groupId) s.selectLayer(*groupId, false);
+        expect(kind(Tool::Brush, ToolRefusal::Refused), "the group itself, its mask not the target, was not refused");
     }
 
     // A type layer: rasterize first. Rasterized, the brush works; undone, it is type again.
@@ -234,11 +404,18 @@ int forbiddenCursor(MainWindow& w) {
     else expect(false, "could not make a smart object");
 
     // Photoshop's own shape layers (Patchy's fixtures, when PATCHY_FIXTURES names them): strokes, Feather,
-    // combined paths, a live rectangle. Each rasterized shape looks as it did. (A gradient or pattern fill is drawn from
-    // its PSD data and refused, not rasterized.)
+    // combined paths, a live rectangle, gradient and pattern fills. Each rasterized shape looks as it did.
     const QString fixtures = qEnvironmentVariable("PATCHY_FIXTURES");
+    int drawnShapes = 0, drawnFills = 0;   // gradient and pattern fills rasterized
     if (!fixtures.isEmpty()) {
-        for (const char* name : {"photoshop-shape-strokes.psd", "photoshop-shape-feather.psd", "photoshop-shape-boolean.psd", "photoshop-shape-live-rect.psd"}) {
+        // A gradient or pattern fill ('GdFl', 'PtFl') is drawn from its PSD data whatever the pixels hold: rasterizing
+        // renders it into them (Photoshop's Rasterize Shape / Fill Content), and the brush works on them after.
+        auto drawn = [](const Layer& l) {
+            if (l.psdCarry) for (const PsdBlock& b : l.psdCarry->blocks) if (b.key == "GdFl" || b.key == "PtFl") return true;
+            return false;
+        };
+        for (const char* name : {"photoshop-shape-strokes.psd", "photoshop-shape-feather.psd", "photoshop-shape-boolean.psd", "photoshop-shape-live-rect.psd",
+                                 "photoshop-shape-gradient.psd", "photoshop-shape-pattern.psd"}) {
             const std::string path = (fixtures + "/" + QString::fromLatin1(name)).toStdString();
             std::string why;
             auto imported = importPsd(path, &why);
@@ -250,18 +427,63 @@ int forbiddenCursor(MainWindow& w) {
             if (shapes.empty()) { std::fprintf(stderr, "forbidden cursor: %s has no shape layer\n", name); failures++; }
             for (const Uuid& id : shapes) {
                 s.selectLayer(id, false);
+                const bool fill = s.activeLayer() && drawn(*s.activeLayer());
+                drawnShapes += fill;
+                if (fill && !kind(Tool::Brush, ToolRefusal::Rasterize)) { std::fprintf(stderr, "forbidden cursor: %s: a gradient or pattern shape did not ask to be rasterized\n", name); failures++; }
                 const auto before = renderFlattened(*s.document());
                 const bool rasterized = s.rasterizeLayer();
                 const Layer* raster = s.document()->find(id);
                 const int difference = maxDifference(*before, *renderFlattened(*s.document()));
-                if (!rasterized || !raster || layerVectorMask(*raster, *s.document()) || difference > 2) {
+                if (!rasterized || !raster || layerVectorMask(*raster, *s.document()) || drawn(*raster) || difference > 2 || refusal(Tool::Brush)) {
                     std::fprintf(stderr, "forbidden cursor: %s: Rasterize Shape on \"%s\": rasterized %d, difference %d\n", name, raster ? raster->name.c_str() : "?", int(rasterized), difference);
                     failures++;
                 }
             }
         }
+        // The same fills as fill layers (no path): drawn over the whole canvas, Rasterize Fill Content, at 8 and 16
+        // bits, each composite as it was.
+        for (const char* name : {"photoshop-shape-gradient.psd", "photoshop-shape-pattern.psd"})
+            for (int bits : {8, 16}) {
+                auto imported = importPsd((fixtures + "/" + QString::fromLatin1(name)).toStdString(), nullptr);
+                if (!imported) continue;   // reported above
+                int fills = 0;
+                for (Layer& l : imported->document.layers) {
+                    if (!drawn(l)) continue;
+                    auto carry = std::make_shared<PsdLayerCarry>(*l.psdCarry);
+                    std::erase_if(carry->blocks, [](const PsdBlock& b) { return b.key == "vmsk" || b.key == "vsms" || b.key == "vstk" || b.key == "vscg" || b.key == "vogk"; });
+                    l.psdCarry = std::move(carry);
+                    fills++;
+                }
+                s.adoptDocument(imported->document, QString::fromLatin1(name));
+                if (bits == 16) call("image.mode", {{"bits", 16}});
+                if (!fills || s.document()->sampleType != (bits == 16 ? SampleType::U16 : SampleType::U8)) {
+                    std::fprintf(stderr, "forbidden cursor: %s at %d bits: no fill layer to rasterize\n", name, bits);
+                    failures++;
+                    continue;
+                }
+                auto flat = [&] { return bits == 16 ? narrowImage(*renderFlattened16(*s.document())) : renderFlattened(*s.document()); };
+                std::vector<Uuid> ids;
+                for (const Layer& l : s.document()->layers) if (drawn(l)) ids.push_back(l.id);
+                for (const Uuid& id : ids) {
+                    s.selectLayer(id, false);
+                    const bool asked = EditorSession::rasterizable(*s.activeLayer()) == Rasterizable::Fill && kind(Tool::Brush, ToolRefusal::Rasterize);
+                    const auto before = flat();
+                    const size_t steps = s.undoNames().size();
+                    const bool rasterized = s.rasterizeLayer();
+                    const Layer* raster = s.document()->find(id);
+                    const int difference = maxDifference(*before, *flat());
+                    const bool oneStep = s.undoNames().size() == steps + 1 && s.undoNames().back() == "Rasterize Fill Content";
+                    drawnFills++;
+                    if (!asked || !rasterized || !raster || drawn(*raster) || !raster->asset || difference > 2 || !oneStep || refusal(Tool::Brush)) {
+                        std::fprintf(stderr, "forbidden cursor: %s at %d bits: Rasterize Fill Content on \"%s\": asked %d, rasterized %d, one step %d, difference %d\n",
+                                     name, bits, raster ? raster->name.c_str() : "?", int(asked), int(rasterized), int(oneStep), difference);
+                        failures++;
+                    }
+                }
+            }
     }
 
+    if (!fixtures.isEmpty()) std::printf("forbidden cursor: %d gradient or pattern shapes and %d fill layers rasterized\n", drawnShapes, drawnFills);
     std::printf("forbidden cursor: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

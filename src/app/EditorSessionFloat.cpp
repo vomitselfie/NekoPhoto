@@ -15,7 +15,7 @@ namespace app {
 
 bool EditorSession::fillThroughF(const QColor& color, const GrayF* selection, const char* name) {
     Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || (layer->adjustment && !(isMaskSelected_ && layer->mask))) return false;
+    if (!layer || ((layer->isGroup || layer->adjustment) && !(isMaskSelected_ && layer->mask))) return false;
     const bool mask = isMaskSelected_ && layer->mask;
     if (!mask && smartObjectBlocksPixels(true)) return false;
     auto coverageAt = [&](Point d) -> float {
@@ -25,8 +25,7 @@ bool EditorSession::fillThroughF(const QColor& color, const GrayF* selection, co
     if (mask) {
         if (!layer->mask->asset.image.f32()) return false;
         auto out = std::make_shared<GrayF>(*layer->mask->asset.image.f32());
-        const bool white = color.lightnessF() >= 0.5;
-        const float value = (paintsQuickMask() ? !white : white) ? 1.0f : 0.0f;
+        const float value = float(maskPaintValue(color));   // the colour's grey
         const Affine toDoc = layer->maskTransform().pixelToDocument(out->width(), out->height());
         for (int py = 0; py < out->height(); py++)
             for (int px = 0; px < out->width(); px++) {

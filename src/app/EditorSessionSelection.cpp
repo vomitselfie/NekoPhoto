@@ -258,7 +258,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     const int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || (layer->adjustment && !(isMaskSelected_ && layer->mask))) return false;   // an adjustment layer's mask takes it
+    if (!layer || ((layer->isGroup || layer->adjustment) && !(isMaskSelected_ && layer->mask))) return false;   // a group's or an adjustment layer's mask takes it
     if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && layer->mask)) return paintBucketMode(*layer, x, y);
     if (document_->sampleType == SampleType::U16) {
         // What to fill is chosen on the pixels as the canvas shows them (Tolerance counts 8-bit levels, as the Magic
@@ -395,7 +395,7 @@ bool EditorSession::patchSelection(int dx, int dy) {
 
 bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection, double opacity, const char* name, const Image* from) {
     Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || (layer->adjustment && !(isMaskSelected_ && layer->mask))) return false;   // an adjustment layer's mask takes it
+    if (!layer || ((layer->isGroup || layer->adjustment) && !(isMaskSelected_ && layer->mask))) return false;   // a group's or an adjustment layer's mask takes it
     bool mask = isMaskSelected_ && layer->mask;
     if (!mask && smartObjectBlocksPixels(true)) return false;
     opacity = std::clamp(opacity, 0.0, 1.0);
@@ -403,8 +403,7 @@ bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection,
     BrushSettings settings;
     settings.diameter = 1;
     settings.red = color.redF(); settings.green = color.greenF(); settings.blue = color.blueF();
-    if (mask) settings.maskValue = color.lightnessF() >= 0.5 ? 1 : 0;
-    if (mask && paintsQuickMask()) settings.maskValue = 1 - settings.maskValue;
+    if (mask) settings.maskValue = maskPaintValue(color);   // the colour's grey
     BrushStroke stroke(*layer, mask, settings, document_->size(), selection);
     if (!stroke.isValid()) return false;
     // Direct fill over the working image rather than dabbing.
@@ -455,7 +454,7 @@ bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection,
 
 bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, const char* name, const Image16* from) {
     Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || (layer->adjustment && !(isMaskSelected_ && layer->mask))) return false;
+    if (!layer || ((layer->isGroup || layer->adjustment) && !(isMaskSelected_ && layer->mask))) return false;
     const bool mask = isMaskSelected_ && layer->mask;
     if (!mask && smartObjectBlocksPixels(true)) return false;
     // Coverage at a document point: the selection's there, everything when there is none.
@@ -466,8 +465,7 @@ bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, 
     if (mask) {
         if (!layer->mask->asset.image.u16()) return false;
         auto out = std::make_shared<Gray16>(*layer->mask->asset.image.u16());
-        const bool white = color.lightnessF() >= 0.5;
-        const uint32_t value = (paintsQuickMask() ? !white : white) ? one16 : 0;
+        const uint32_t value = uint32_t(std::lround(maskPaintValue(color) * one16));   // the colour's grey
         const Affine toDoc = layer->maskTransform().pixelToDocument(out->width(), out->height());
         for (int py = 0; py < out->height(); py++)
             for (int px = 0; px < out->width(); px++) {

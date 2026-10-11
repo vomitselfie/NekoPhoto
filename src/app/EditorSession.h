@@ -65,9 +65,9 @@ struct ToolRefusal {
     QString reason;
 };
 
-/// What rasterizing would take from a layer: its type, its shape, its solid colour fill, or (a gradient or pattern
-/// fill, drawn from its carried PSD data) nothing NekoPhoto can turn into pixels.
-enum class Rasterizable { No, Type, Shape, Fill, DrawnFill };
+/// What rasterizing would take from a layer: its type, its shape (a solid, gradient or pattern fill cut by a path), or
+/// its fill (a solid colour, gradient or pattern fill layer).
+enum class Rasterizable { No, Type, Shape, Fill };
 enum class LassoKind { Freehand, Polygonal };
 enum class BlurToolMode { Liquify, Blur, Smudge, Sharpen };
 enum class GradientStyle { ForegroundToBackground, ForegroundToTransparent };
@@ -239,6 +239,13 @@ public:
     const std::set<compositor::Uuid>& selectedLayerIds() const { return selectedLayerIds_; }
     const compositor::Layer* activeLayer() const;
     bool isMaskSelected() const { return isMaskSelected_; }
+    /// Whether painting now goes into a mask: a layer's (an adjustment's, a group's), the Quick Mask or an alpha channel.
+    bool paintsMask() const;
+    /// The grey a colour paints on a mask, 0..1: Photoshop's luminosity, 0.30 R + 0.59 G + 0.11 B.
+    static double maskGrey(const QColor& color);
+    /// What `color` puts into the mask being painted: its grey, the inverse on the Quick Mask and an alpha channel
+    /// (their layers' masks hold the inverse of what they select).
+    double maskPaintValue(const QColor& color) const;
     void selectLayer(const std::optional<compositor::Uuid>& id, bool mask = false);
     void selectLayers(const std::set<compositor::Uuid>& ids, const std::optional<compositor::Uuid>& primary);
     std::set<compositor::Uuid> collapsedGroupIds;
@@ -298,7 +305,9 @@ public:
     void toggleClippingMask(const compositor::Uuid& id);
     bool canToggleClippingMask(const compositor::Uuid& id) const;
     void addLayerMask(bool revealing);
-    void addMaskFromSelection(bool revealing);
+    /// Layer > Layer Mask > Reveal Selection (white inside the selection, black outside) or Hide Selection; without a
+    /// selection, Reveal All or Hide All.
+    void addMaskFromSelection(bool revealSelection);
     void toggleLayerMask();
     void deleteLayerMask();
     void toggleMaskLink(const compositor::Uuid& id);
@@ -557,9 +566,11 @@ public:
     std::function<void(QPointF, QPointF)> canvasDragHook;
     std::function<void()> canvasReleaseHook;
     bool brushErase = false;
+    /// The colours stay what they were picked as; on a mask (paintsMask) they paint their grey, as Photoshop's swatches
+    /// show them there: the brush, the Gradient tool, the Paint Bucket and Edit > Fill the foreground's (or the
+    /// colour asked for), the eraser the background's.
     QColor foregroundColor{Qt::black};
     QColor backgroundColor{Qt::white};
-    bool maskPaintWhite = true;
     bool brushActive() const { return stroke_ != nullptr; }
     bool beginBrush(QPointF documentPoint, bool straightFromLast);
     void continueBrush(QPointF documentPoint);
@@ -1063,8 +1074,8 @@ public:
     /// rasterizeRequested).
     void refuseTool(const ToolRefusal& refusal);
     static Rasterizable rasterizable(const compositor::Layer& layer);
-    /// The active type, shape or solid colour fill layer as the plain pixels it shows (one undo step), as
-    /// Photoshop's Rasterize before painting.
+    /// The active type, shape or fill layer (solid colour, gradient or pattern) as the plain pixels it shows, at the
+    /// document's depth and mode (one undo step), as Photoshop's Rasterize before painting.
     bool rasterizeLayer();
 
 signals:
@@ -1114,9 +1125,9 @@ private:
     std::weak_ptr<const compositor::GrayImage> selectAllCoverage_;
     void restore(const compositor::DocumentHistory::Snapshot& snapshot);
     void setActiveLayer(const std::optional<compositor::Uuid>& id);
-    /// The selection as a mask in `layer`'s pixel grid (the selected area revealed when `revealing`); none without a
-    /// selection or past the pixel budget.
-    std::optional<compositor::LayerMask> maskFromSelection(const compositor::Layer& layer, bool revealing) const;
+    /// The selection as a mask in `layer`'s pixel grid (the selected area white when `revealSelection`, else black);
+    /// none without a selection or past the pixel budget.
+    std::optional<compositor::LayerMask> maskFromSelection(const compositor::Layer& layer, bool revealSelection) const;
     void finishDeleting(const std::vector<compositor::Uuid>& ids);
     void notifyDocument(QRectF region = {});
     compositor::Layer* activeLayerMutable();

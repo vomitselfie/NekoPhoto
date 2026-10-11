@@ -204,8 +204,10 @@ any of `font`, `size`, `sizeBy` (pixels added to each letter's own size, as Phot
 above it, the whole layer without a selection), `layers.copy` and `layers.paste` (whole layers between documents, as Edit > Copy with layers
 selected and no selection, then Paste: `ids` to copy, default the selected ones; the paste answers the new ids),
 `layers.move`, `layers.reorder`, `layers.setTransform`,
-`layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
-apply, link), `layers.merge` (`down` for Merge Down, `visible` for Merge Visible), `layers.group`, `adjustments.set`.
+`layers.flip`, `layers.mask` (add: Reveal All, or Hide All with `revealing` false; addFromSelection: Reveal Selection,
+white inside the selection and black outside as Photoshop's mask button makes it, or Hide Selection with `revealing`
+false, the selection going into the mask; `mode` revealAll, hideAll, revealSelection or hideSelection with action add
+names Layer ▸ Layer Mask's item instead; delete, toggle, invert, apply, link), `layers.merge` (`down` for Merge Down, `visible` for Merge Visible), `layers.group`, `adjustments.set`.
 `layers.style` gives a layer's effects (Photoshop's layer style) as JSON, every kind a list with switched-off
 effects kept (`enabled` false), with the Blending Options' `blendIf` and `channels` (as `layers.get` shows them), the effects' reference
 point (`referenceX`, `referenceY`) and a CMYK colour's inks beside its `#rrggbb` (`colorInk` and the like); `layers.setStyle`
@@ -348,7 +350,10 @@ eraser, healing, healingbrush or clone with `source`, smudge, blur, sharpen or l
 shadows, midtones or highlights and `protectTones`) and sponge (`saturate: true` to saturate), whose `opacity` is
 the Exposure or Flow; `size`,
 `hardness`, `opacity` 0..1, `color`, `mask: true` paints the active layer's
-mask; with brush or eraser, `preset` paints with a MyPaint brush from
+mask; on a mask (an adjustment layer's, the Quick Mask's and an alpha channel's too) a colour paints its grey,
+0.30 R + 0.59 G + 0.11 B, as in Photoshop: the brush paints `color`'s, the eraser erases to it, and without `color`
+the brush paints white and the eraser black (D's colours on a mask); `pixels.fill`, `pixels.bucket` and
+`gradient.draw` paint their colours' greys on a mask too; with brush or eraser, `preset` paints with a MyPaint brush from
 `brush.presets`, or `"round"` for the plain tip, or an imported tip brush, at its own size unless `size`
 is given, and `pressure` 0..1 or `pressures`, one per point, drive it the way
 a pen would, as do `tilts` (`[tiltX, tiltY]` degrees per point), `twists` (degrees per point) and

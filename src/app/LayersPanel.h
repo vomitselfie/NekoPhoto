@@ -84,8 +84,9 @@ private:
     void finishSwipe();
     /// The opacity a click, a key, the field or the end of a drag set: layers.set, one undo step.
     void commitOpacity(double opacity);
-    /// The mask button and the row menu's Add Reveal-All / Hide-All Mask: layers.mask.
-    void addMask(bool revealing);
+    /// The mask button (with a selection, Reveal Selection; Alt-click, Hide Selection; without one, Reveal All or Hide
+    /// All) and, `whole`, the row menu's Add Reveal-All / Hide-All Mask: layers.mask.
+    void addMask(bool revealing, bool whole = false);
     QWidget* makeRow(const compositor::Layer& layer, int depth, bool visible);
     /// A smart object's Smart Filters as child rows of its item: the stack's row (its mask, its switch), then each
     /// entry, last applied first as in Photoshop. They are not layers: their data names the smart object.

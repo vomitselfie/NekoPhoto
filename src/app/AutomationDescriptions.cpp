@@ -185,7 +185,9 @@ const MethodDoc methodDocs[] = {
      "id:layer The layer (default the active one); x:number Left; y:number Top; width:number Width; height:number Height; rotation:number Degrees clockwise; scale:number Scale the current size by this factor about its centre; flipX:bool Mirrored left to right; flipY:bool Mirrored top to bottom"},
     {"layers.flip", "Flip a layer's pixels.", "id:layer The layer (default the active one); vertical:bool=false Top to bottom instead of left to right"},
     {"layers.mask", "Add, remove or change a layer mask.",
-     "id:layer The layer (default the active one); action:(add|addFromSelection|delete|toggle|invert|apply|link)! What to do; revealing:bool=true For add: white (reveal all) rather than black"},
+     "id:layer The layer (default the active one); action:(add|addFromSelection|delete|toggle|invert|apply|link)! What to do; "
+     "revealing:bool=true For add: white (Reveal All) rather than black (Hide All); for addFromSelection: white inside the selection and black outside (Reveal Selection, the mask button's default) rather than the reverse (Hide Selection), add without a selection; "
+     "mode:(revealAll|hideAll|revealSelection|hideSelection) With add: Layer > Layer Mask's item by name, in place of revealing"},
     {"layers.merge", "Merge the selected layers, or the active layer into the one beneath; visible: true merges every visible layer (Layer > Merge Visible).", "down:bool=false Merge the active layer down; visible:bool=false Merge all visible layers into one; hidden layers stay"},
     {"layers.group", "Put the selected layers in a new folder.", ""},
     {"artboards.list", "The document's artboards: folders with a rectangle and a background, their children clipped to it.", ""},
@@ -378,7 +380,7 @@ const MethodDoc methodDocs[] = {
     {"presets.remove", "Remove an imported style, gradient or pattern from the library (the document keeps patterns it was given).", "kind:(style|gradient|pattern)! Which list; name:string! The preset's name (a pattern's id or name)"},
     {"brush.stroke", "Paint a stroke through points on the active layer (or its mask); the person's tool and settings are put back afterwards.",
      "points:array! [x, y] points in document pixels; tool:(brush|eraser|healing|healingbrush|clone|smudge|blur|sharpen|liquify|dodge|burn|sponge)=brush The tool (healingbrush heals from source, as clone copies; for dodge, burn and sponge opacity is the Exposure or Flow); size:number Diameter in pixels; hardness:number 0..1; opacity:number 0..1; "
-     "color:color Paint colour (default the foreground); mask:bool=false Paint the active layer's mask; erase:bool=false Erase with the brush; source:object {x, y} Clone and Healing Brush source; "
+     "color:color Paint colour (default the foreground); on a mask its grey (0.30 R + 0.59 G + 0.11 B) is painted, the eraser erasing to it, and without one the brush paints white and the eraser black; mask:bool=false Paint the active layer's mask; erase:bool=false Erase with the brush; source:object {x, y} Clone and Healing Brush source; "
      "preset:string A preset id from brush.presets, or round; pressure:number=0.5 Pen pressure 0..1; pressures:array One pressure per point; "
      "tilts:array One [tiltX, tiltY] per point, degrees from upright; twists:array One barrel rotation per point, degrees; times:array One time per point, seconds (8 ms apart by default); seed:number The tip brushes' jitter seed, to repeat a stroke exactly; viewScale:number=1 The zoom the stroke is taken as drawn at (2 is 200%), which speed-on-screen dynamics read; "
      "smoothing:number=0 Brush and Eraser: the stabiliser, 0..100 (the options bar's Smoothing); pulledString:bool=false The brush moves only once the string is taut; strokeCatchUp:bool=true The brush keeps closing on a paused pen; "

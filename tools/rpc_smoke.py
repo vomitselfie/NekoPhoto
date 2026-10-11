@@ -1377,6 +1377,62 @@ def gradient_methods(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def mask_parity(rpc):
+    """Layer masks as Photoshop makes and paints them: Add Layer Mask with a selection reveals it (layers.mask
+    addFromSelection, or add with mode revealSelection), Hide Selection hides it, Reveal All and Hide All ignore it."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=64, height=16)
+    rpc.call("pixels.fill", color="#ffffff")
+    red = rpc.call("layers.add")["id"]
+    rpc.call("pixels.fill", color="#ff0000")
+
+    def shown():
+        return rpc.call("color.sample", x=8, y=8)["color"], rpc.call("color.sample", x=56, y=8)["color"]
+
+    for params, inside, outside in (({"action": "addFromSelection"}, "#ff0000", "#ffffff"),
+                                    ({"action": "add", "mode": "revealSelection"}, "#ff0000", "#ffffff"),
+                                    ({"action": "add", "mode": "hideSelection"}, "#ffffff", "#ff0000"),
+                                    ({"action": "addFromSelection", "revealing": False}, "#ffffff", "#ff0000"),
+                                    ({"action": "add", "mode": "revealAll"}, "#ff0000", "#ff0000"),
+                                    ({"action": "add", "mode": "hideAll"}, "#ffffff", "#ffffff")):
+        rpc.call("selection.rect", x=0, y=0, width=32, height=16)
+        rpc.call("layers.mask", id=red, **params)
+        assert shown() == (inside, outside), (params, shown())
+        rpc.call("history.undo")
+        rpc.call("selection.none")
+    expect_refused(rpc, "mode must be", "layers.mask", id=red, action="add", mode="revealEverything")
+
+    # Painting a mask paints the colour's grey (0.30 R + 0.59 G + 0.11 B): red over white shows 255 - grey in green.
+    # Without a colour the brush paints white and the eraser black (D's colours on a mask); the eraser's colour is
+    # the background it erases to.
+    def green_at(x):
+        return int(rpc.call("color.sample", x=x, y=8)["color"][3:5], 16)
+
+    rpc.call("layers.mask", id=red, action="add")
+    rpc.call("brush.stroke", points=[[8, 8], [9, 8]], size=6, hardness=1, mask=True, color="#ff0000")
+    assert abs(green_at(8) - 178) <= 2, green_at(8)
+    rpc.call("brush.stroke", tool="eraser", points=[[24, 8], [25, 8]], size=6, hardness=1, mask=True)
+    assert rpc.call("color.sample", x=24, y=8)["color"] == "#ffffff"
+    rpc.call("brush.stroke", points=[[24, 8], [25, 8]], size=6, hardness=1, mask=True)
+    assert rpc.call("color.sample", x=24, y=8)["color"] == "#ff0000"
+    rpc.call("brush.stroke", tool="eraser", points=[[40, 8], [41, 8]], size=6, hardness=1, mask=True, color="#0000ff")
+    assert abs(green_at(40) - 227) <= 2, green_at(40)
+    assert rpc.call("history.info")["undo"] == "Paint Mask"
+
+    # A folder's mask takes the brush, as a layer's does.
+    rpc.call("layers.mask", id=red, action="delete")
+    rpc.call("layers.select", id=red)
+    folder = rpc.call("layers.group")["id"]
+    rpc.call("layers.mask", id=folder, action="add")
+    rpc.call("brush.stroke", points=[[8, 8], [9, 8]], size=6, hardness=1, mask=True, color="#000000")
+    assert rpc.call("history.info")["undo"] == "Paint Mask"
+    assert rpc.call("color.sample", x=8, y=8)["color"] == "#ffffff" and rpc.call("color.sample", x=56, y=8)["color"] == "#ff0000"
+    rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def colour_mode_painting(rpc):
     """P7 E (docs/color-modes.md): painting in CMYK and Lab documents at 8 and 16 bits in the document's own samples.
     Black in CMYK lays the Working CMYK's rich black (K and C, M, Y); a Lab stroke's L is the colour's; the Eyedropper
@@ -2720,6 +2776,7 @@ def main():
     colour_modes(rpc)
     pixel_clipboard(rpc)
     colour_mode_painting(rpc)
+    mask_parity(rpc)
     colour_mode_content_aware(rpc)
     colour_mode_vectors(rpc)
     gradient_methods(rpc)

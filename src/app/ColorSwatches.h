@@ -17,6 +17,8 @@ public:
         setCursor(Qt::PointingHandCursor);
     }
     void setColors(const QColor& foreground, const QColor& background) { fg_ = foreground; bg_ = background; update(); }
+    QColor foreground() const { return fg_; }
+    QColor background() const { return bg_; }
 
 signals:
     void foregroundClicked();

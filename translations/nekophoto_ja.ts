@@ -5000,10 +5000,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>アクティブなレイヤーは塗りつぶしレイヤーです。ラスタライズしてからペイントしてください。</translation>
     </message>
     <message>
-        <source>The active layer is a gradient or pattern fill layer: it has no pixels to paint on.</source>
-        <translation>アクティブなレイヤーはグラデーションまたはパターンの塗りつぶしレイヤーです。ペイントするピクセルがありません。</translation>
-    </message>
-    <message>
         <source>The shape reaches too far to be rasterized.</source>
         <translation>シェイプの範囲が大きすぎるため、ラスタライズできません。</translation>
     </message>
@@ -6738,8 +6734,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>新規グループ</translation>
     </message>
     <message>
-        <source>Add layer mask (reveal all, or hide the selection)</source>
-        <translation>レイヤーマスクを追加 (すべて表示、または選択範囲を隠す)</translation>
+        <source>Add layer mask (it reveals the selection; Alt-click: hides it)</source>
+        <translation>レイヤーマスクを追加 (選択範囲を表示。Alt キーを押しながらクリック:選択範囲を隠す)</translation>
     </message>
     <message>
         <source>New adjustment layer</source>
@@ -8446,6 +8442,18 @@ File &gt; New creates a blank canvas.</source>
         <translation>スマートオブジェクトをコピーできませんでした</translation>
     </message>
     <message>
+        <source>No selection</source>
+        <translation>選択範囲がありません</translation>
+    </message>
+    <message>
+        <source>Reveal Selection</source>
+        <translation>選択範囲外をマスク</translation>
+    </message>
+    <message>
+        <source>Hide Selection</source>
+        <translation>選択範囲をマスク</translation>
+    </message>
+    <message>
         <source>Reselect</source>
         <translation>再選択</translation>
     </message>
@@ -8804,14 +8812,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Hide All</source>
         <translation>すべての領域を隠す</translation>
-    </message>
-    <message>
-        <source>From Selection (Reveal)</source>
-        <translation>選択範囲から作成(表示)</translation>
-    </message>
-    <message>
-        <source>From Selection (Hide)</source>
-        <translation>選択範囲から作成(非表示)</translation>
     </message>
     <message>
         <source>Enable / Disable</source>

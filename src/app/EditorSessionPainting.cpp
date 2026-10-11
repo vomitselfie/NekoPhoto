@@ -73,12 +73,31 @@ AnyImage flattenedNative(const Document& document) {
     return renderNative(document);
 }
 
-/// A shape layer as the plain pixels it shows, at the document's depth and layout: its fill cut by its path, its
-/// stroke over it, softened by its Feather, over all the shape reaches (past the canvas too) and trimmed to it. Its
-/// effects, opacity, blend mode, Fill and pixel mask stay the layer's, so they are left out. None without a path, or
-/// when the shape reaches past the size limits.
+/// Whether `layer` is a PSD's gradient or pattern fill ('GdFl', 'PtFl'), which the renderer draws over the canvas from
+/// the carried block whatever the layer's pixels hold (a shape layer's fill when it has a path).
+bool drawnFill(const Layer& layer) {
+    if (!layer.psdCarry) return false;
+    for (const PsdBlock& b : layer.psdCarry->blocks)
+        if (b.key == "GdFl" || b.key == "PtFl") return true;
+    return false;
+}
+
+std::optional<std::pair<AnyImage, LayerTransform>> layerAsPixels(const Document& document, const Layer& layer, double x0, double y0, double w, double h);
+
+/// A shape or fill layer as the plain pixels it shows, at the document's depth and layout: its fill (a solid colour,
+/// gradient or pattern) cut by its path, its stroke over it, softened by its Feather, over all the shape reaches (past
+/// the canvas too) and trimmed to it; a gradient or pattern fill layer without a path, over the canvas. Its effects,
+/// opacity, blend mode, Fill and pixel mask stay the layer's, so they are left out. None for a solid colour layer
+/// without a path (its pixels are already the colour), or when the shape reaches past the size limits.
 std::optional<std::pair<AnyImage, LayerTransform>> shapeAsPixels(const Document& document, const Layer& layer) {
-    if (!layer.psdCarry || !layer.asset || !layer.asset->image || !layerVectorMask(layer, document)) return std::nullopt;
+    if (!layer.psdCarry) return std::nullopt;
+    const bool path = layerVectorMask(layer, document).has_value();
+    if (!(path && layer.asset && layer.asset->image) && !drawnFill(layer)) return std::nullopt;
+    if (!path || !layer.asset || !layer.asset->image) {
+        // A gradient or pattern fill is drawn over the canvas (renderFillLayer), cut by its path when it has one.
+        const double w = document.width, h = document.height;
+        return layerAsPixels(document, layer, 0, 0, w, h);
+    }
     const int pw = layer.pixelWidth(), ph = layer.pixelHeight();
     const Rect placed = layer.transform.pixelToDocument(pw, ph).mapBounds(Rect(0, 0, pw, ph));
     // A stroke may sit outside the fill's pixels, and a Feather spreads past both.
@@ -88,14 +107,19 @@ std::optional<std::pair<AnyImage, LayerTransform>> shapeAsPixels(const Document&
     const double x0 = std::floor(placed.x - pad), y0 = std::floor(placed.y - pad);
     const double w = std::ceil(placed.maxX() + pad) - x0, h = std::ceil(placed.maxY() + pad) - y0;
     if (!(w >= 1 && h >= 1) || w > maxImageSide || h > maxImageSide || w * h > double(Document::pixelBudget)) return std::nullopt;
+    return layerAsPixels(document, layer, x0, y0, w, h);
+}
+
+/// shapeAsPixels over the document rectangle x0, y0, w, h.
+std::optional<std::pair<AnyImage, LayerTransform>> layerAsPixels(const Document& document, const Layer& layer, double x0, double y0, double w, double h) {
     // The layer alone in a copy of the document (its patterns, profile and the canvas its path was stored against),
-    // keeping only the blocks that draw the shape.
+    // keeping only the blocks that draw the shape or the fill (a pattern's reference point too).
     Document single = document;
     Layer copy = layer;
     copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
     std::erase_if(carry->blocks, [](const PsdBlock& b) {
-        static const std::set<std::string> shape{"vmsk", "vsms", "vstk", "vscg", "vogk", "SoCo", "GdFl", "PtFl"};
+        static const std::set<std::string> shape{"vmsk", "vsms", "vstk", "vscg", "vogk", "SoCo", "GdFl", "PtFl", "fxrp"};
         return !shape.count(b.key);
     });
     copy.psdCarry = std::move(carry);
@@ -127,15 +151,14 @@ Rasterizable EditorSession::rasterizable(const Layer& layer) {
     if (layer.isLiveText()) return Rasterizable::Type;
     if (layer.isLiveShape()) return Rasterizable::Shape;
     if (!layer.psdCarry) return Rasterizable::No;
-    // A PSD's fill layer: a solid colour ('SoCo', its pixels the colour; with a vector mask, Photoshop's shape layer),
-    // or a gradient or pattern the renderer draws from the carried block whatever the pixels hold.
-    bool solid = false, vector = false;
+    // A PSD's fill layer: a solid colour ('SoCo', its pixels the colour), or a gradient or pattern ('GdFl', 'PtFl') the
+    // renderer draws from the carried block whatever the pixels hold; with a vector mask, Photoshop's shape layer.
+    bool fill = false, vector = false;
     for (const PsdBlock& b : layer.psdCarry->blocks) {
-        if (b.key == "GdFl" || b.key == "PtFl") return Rasterizable::DrawnFill;
-        if (b.key == "SoCo") solid = true;
+        if (b.key == "SoCo" || b.key == "GdFl" || b.key == "PtFl") fill = true;
         if (b.key == "vmsk" || b.key == "vsms") vector = true;
     }
-    return solid ? (vector ? Rasterizable::Shape : Rasterizable::Fill) : Rasterizable::No;
+    return fill ? (vector ? Rasterizable::Shape : Rasterizable::Fill) : Rasterizable::No;
 }
 
 std::optional<ToolRefusal> EditorSession::toolRefusal(Tool tool) const {
@@ -147,9 +170,9 @@ std::optional<ToolRefusal> EditorSession::toolRefusal(Tool tool) const {
     if (!layer) return std::nullopt;
     const bool mask = isMaskSelected_ && layer->mask;
     auto refused = [](ToolRefusal::Kind kind, const QString& reason) { return std::optional<ToolRefusal>(ToolRefusal{kind, reason}); };
-    // A group's mask takes a gradient (as beginGradient does); nothing else paints on a group. An adjustment layer's
-    // mask (or a fill layer's) takes what a pixel layer's does; the adjustment itself has no pixels.
-    if (layer->isGroup && !(mask && tool == Tool::Gradient)) return refused(ToolRefusal::Refused, tr("The active layer is a group: choose a layer to paint on."));
+    // A group's mask, an adjustment layer's (or a fill layer's) takes what a pixel layer's does, as in Photoshop; the
+    // group and the adjustment themselves have no pixels.
+    if (layer->isGroup && !mask) return refused(ToolRefusal::Refused, tr("The active layer is a group: choose a layer to paint on."));
     if (layer->adjustment && !mask)
         return refused(ToolRefusal::Refused, layer->mask ? tr("The active layer is an adjustment layer: target its mask to paint on it.")
                                                          : tr("The active layer is an adjustment layer without a mask: add a layer mask to paint where it applies."));
@@ -167,7 +190,6 @@ std::optional<ToolRefusal> EditorSession::toolRefusal(Tool tool) const {
     case Rasterizable::Type: return refused(ToolRefusal::Rasterize, tr("The active layer is a type layer: rasterize it to paint on it."));
     case Rasterizable::Shape: return refused(ToolRefusal::Rasterize, tr("The active layer is a shape layer: rasterize it to paint on it."));
     case Rasterizable::Fill: return refused(ToolRefusal::Rasterize, tr("The active layer is a fill layer: rasterize it to paint on it."));
-    case Rasterizable::DrawnFill: return refused(ToolRefusal::Refused, tr("The active layer is a gradient or pattern fill layer: it has no pixels to paint on."));
     case Rasterizable::No: break;
     }
     return std::nullopt;
@@ -186,11 +208,13 @@ bool EditorSession::rasterizeLayer() {
     Layer* layer = activeLayerMutable();
     if (!canEditLayers() || !layer) return false;
     const Rasterizable what = rasterizable(*layer);
-    if (what == Rasterizable::No || what == Rasterizable::DrawnFill) return false;
+    if (what == Rasterizable::No) return false;
     // Rasterize Shape bakes the shape's outline (and stroke) into the pixels, so the vector mask that cut them goes, as
-    // in Photoshop: a shape layer's path is its vector mask (a shape has no other one here).
+    // in Photoshop: a shape layer's path is its vector mask (a shape has no other one here). A gradient or pattern
+    // fill, drawn from its PSD data rather than its pixels, is rendered into them likewise (over the canvas without a
+    // path).
     std::optional<std::pair<AnyImage, LayerTransform>> baked;
-    if (what == Rasterizable::Shape && layerVectorMask(*layer, *document_)) {
+    if ((what == Rasterizable::Shape && layerVectorMask(*layer, *document_)) || (what != Rasterizable::Type && drawnFill(*layer))) {
         baked = shapeAsPixels(*document_, *layer);
         if (!baked) { emit error(tr("The shape reaches too far to be rasterized.")); return false; }
     }
@@ -237,9 +261,9 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (!document_ || stroke_ || transformEdit_) return false;
     const bool deep = document_->sampleType == SampleType::U16;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup) return false;
+    if (!layer) return false;
     bool mask = isMaskSelected_ && layer->mask;
-    if (layer->adjustment && !mask) return false;   // an adjustment layer has only its mask to paint
+    if ((layer->isGroup || layer->adjustment) && !mask) return false;   // a group or an adjustment layer has only its mask to paint
     if (!mask && smartObjectBlocksPixels(true)) return false;
     bool healing = tool_ == Tool::SpotHealing, cloning = tool_ == Tool::CloneStamp || (healing && spotHealingMode == 3);
     if (healing && spotHealingMode == 4) return false;   // Patch drags the selection instead
@@ -305,9 +329,9 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     settings.healing = healing;
     settings.healingMode = spotHealingMode;
     settings.healingSeed = uint32_t(std::random_device{}());
-    if (mask) settings.maskValue = (maskPaintWhite != brushErase) ? 1 : 0;
-    if (mask && paintsQuickMask()) settings.maskValue = 1 - settings.maskValue;   // white selects: the Quick Mask holds the inverse
-    else { settings.red = foregroundColor.redF(); settings.green = foregroundColor.greenF(); settings.blue = foregroundColor.blueF(); }
+    // On a mask the brush paints the foreground's grey and the eraser erases to the background's, as in Photoshop.
+    if (mask) settings.maskValue = maskPaintValue(tool_ == Tool::Brush && brushErase ? backgroundColor : foregroundColor);
+    if (!mask || !paintsQuickMask()) { settings.red = foregroundColor.redF(); settings.green = foregroundColor.greenF(); settings.blue = foregroundColor.blueF(); }
     stroke_ = strokeAtDepth(*document_, *layer, mask, settings);
     if (!stroke_) return false; // an explicit empty selection: touch nothing
     if (!stroke_->isValid()) { emit error(QString::fromStdString(stroke_->error())); stroke_.reset(); return false; }
@@ -563,9 +587,9 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     if (refusedAtDepth("tool.smudge", tr("Editing pixels"))) return false;
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
-    // Blur softens a mask (an adjustment layer's too); everything else here works on the layer's pixels.
+    // Blur softens a mask (a group's or an adjustment layer's too); everything else here works on the layer's pixels.
     const bool blursMask = layer && isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask;
-    if (!layer || layer->isGroup || (!blursMask && (layer->adjustment || !layer->asset || !layer->asset->image))) return false;
+    if (!layer || (!blursMask && (layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image))) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const bool deep = document_->sampleType == SampleType::U16;
     if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.f32()) {
@@ -844,10 +868,9 @@ void EditorSession::refreshGradient() {
         if (const GradientPreset* preset = gradientSettings.preset.isEmpty() ? nullptr : PresetLibrary::instance().findGradient(gradientSettings.preset)) {
             const float f[3] = {float(fg.redF()), float(fg.greenF()), float(fg.blueF())}, g[3] = {float(bg.redF()), float(bg.greenF()), float(bg.blueF())};
             GradientStops stops = preset->stops(f, g);
-            if (gradient_->mask)   // a mask takes each stop's lightness
+            if (gradient_->mask)   // a mask takes each stop's grey
                 for (auto& s : stops.colors) {
-                    float v = 0.299f * s.rgb[0] + 0.587f * s.rgb[1] + 0.114f * s.rgb[2];
-                    if (paintsQuickMask()) v = 1 - v;
+                    const float v = float(maskPaintValue(QColor::fromRgbF(s.rgb[0], s.rgb[1], s.rgb[2])));
                     s.rgb[0] = s.rgb[1] = s.rgb[2] = v;
                 }
             if (gradientSettings.reversed) stops.reverse();
@@ -859,8 +882,7 @@ void EditorSession::refreshGradient() {
         }
         float start[4], end[4];
         if (gradient_->mask) {
-            float f = fg.lightnessF() >= 0.5 ? 1 : 0, g = bg.lightnessF() >= 0.5 ? 1 : 0;
-            if (paintsQuickMask()) { f = 1 - f; g = 1 - g; }
+            const float f = float(maskPaintValue(fg)), g = float(maskPaintValue(bg));   // their greys
             start[0] = start[1] = start[2] = f; start[3] = 1;
             end[0] = end[1] = end[2] = gradientSettings.style == GradientStyle::ForegroundToBackground ? g : f;
             end[3] = gradientSettings.style == GradientStyle::ForegroundToBackground ? 1 : 0;
