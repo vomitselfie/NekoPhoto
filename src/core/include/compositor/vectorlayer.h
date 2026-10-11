@@ -61,12 +61,27 @@ std::optional<VectorShape> vectorShapeOf(const Layer& layer, const Document& doc
 /// (styles, Blend If, ...) stay.
 void setVectorShape(Layer& layer, const Document& document, const VectorShape& shape);
 
+/// Whether the layer shows its shape as drawn: its pixels are still the ones a PSD stored for it (Photoshop's own
+/// drawing, the fill already cut by the path and antialiased, the stroke over it; PsdLayerCarry::drawnShape), so they
+/// are shown as they are, not cut by the path or stroked again. Opacity, Fill, blend mode, visibility, effects and a
+/// move by whole pixels keep them; changing the path, fill or stroke, scaling, rotating or flipping draws the shape
+/// anew from its path (setVectorShape, refreshVectorShapes), as Photoshop does. A vector mask with a density or
+/// feather never shows them (Photoshop's stored pixels lack the fill beyond the path).
+bool shapeShowsDrawnPixels(const Layer& layer);
+/// Whether a vector mask with these mask parameters (the section, as stored) is soft: a density or a feather.
+bool softVectorMask(const std::vector<uint8_t>& maskSection);
+/// A shape layer drawn as a PSD stores it: its fill cut by its path, its stroke over it, over the layer's own pixel
+/// grid at the document's depth and layout (without its opacity, mode, masks or effects). None at 32 bits, or when the
+/// layer is not a vector shape layer on its grid.
+AnyImage shapeDrawing(const Document& document, const Layer& layer);
+
 /// After a shape layer's pixels were converted in place (Image > Mode, Convert to Profile): its blocks are pinned to
 /// the new pixels, so it stays a shape layer.
 void keepVectorShapeBlocks(Layer& layer);
 
 /// Vector shape layers moved, scaled or rotated since they were drawn, drawn again on their moved path (a shape
-/// scales as a path, not as pixels). Returns how many.
+/// scales as a path, not as pixels). Returns how many. One showing its drawn pixels (shapeShowsDrawnPixels) and only
+/// moved by whole pixels keeps them: its path goes along and nothing is drawn.
 int refreshVectorShapes(Document& document);
 
 /// The control-point bounds of a path (document pixels); empty for none.

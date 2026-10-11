@@ -11,6 +11,16 @@ Photoshop stores a shape layer: the path as a `vsms` block, the stroke as `vstk`
 shape layers opened from a PSD), PSD export writes them back so Photoshop opens a live shape layer, and the project
 package keeps them. The layer's pixels are the fill colour over the path's bounds; the path cuts them.
 
+A shape opened from a PSD shows the pixels the file stored for it (Photoshop's own drawing: the fill already cut by
+the path and antialiased, the stroke over it) until it is edited, as text does (`shapeShowsDrawnPixels`). Opacity,
+Fill, blend mode, visibility, layer effects and moves by whole pixels keep them (the path goes along); changing the
+path, the fill or the stroke, and scaling, rotating, flipping or a move by part of a pixel draw the shape anew from its
+path, crisp at its new size. A shape whose vector mask has a density or feather is always drawn here. PSD export
+writes a shape drawn here as Photoshop writes one, its drawing over its pixels (other readers show it right, and it
+opens here as stored pixels); an unedited one goes back with the channels it was read from, byte for byte, at 8 and
+16 bits and in CMYK and Lab. An older file's `vscg` fill (Photoshop CS6) counts as the fill block, so those shapes
+are editable too; the first edit writes `SoCo` and `vstk` and drops it, as Photoshop's own resave does.
+
 - The Shape tool (U; Shift-U steps through the kinds) draws Rectangle (corner radius), Ellipse, Polygon (sides, and
   a star inset), Line (weight; Shift snaps to 45°) and Custom Shape (Heart, Star, Arrow, Speech Bubble, Check Mark,
   Lightning), filled with the foreground colour.

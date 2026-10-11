@@ -422,7 +422,8 @@ struct RenderExecDeep {
         const float opacity = float(clamp(layer.opacity, 0.0, 1.0)), fill = float(clamp(layer.fill, 0.0, 1.0));
         const Gray* coverageWithoutVector = coverage;
         const std::optional<MaskParameters> maskParameters = layer.psdCarry ? parseMaskParameters(layer.psdCarry->maskData) : std::nullopt;
-        std::optional<VectorPath> vector = layerVectorMask(layer, document);
+        // Photoshop's own drawing of a shape (vectorlayer.h, shapeShowsDrawnPixels) is already cut and stroked: shown as it is.
+        std::optional<VectorPath> vector = shapeShowsDrawnPixels(layer) ? std::nullopt : layerVectorMask(layer, document);
         Cover cut;
         if (vector) {
             cut = vectorCut(*vector, maskParameters, region, outWidth, outHeight);

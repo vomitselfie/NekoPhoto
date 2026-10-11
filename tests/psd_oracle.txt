@@ -7,7 +7,7 @@ commit 7d14d1f6ede2dc8fb52c11eefcc7cc8783473711
 compared 72
 flatten 48
 floor 58
-FAIL arrows.psd                                                       [rgb8]             max  170.00  >2:   5.18%  mean   1.098
+FAIL arrows.psd                                                       [rgb8]             max   98.00  >2:   5.14%  mean   1.088
 --   patchy-legacy-black-composite.psb                                                   merged image matted by another program (no Photoshop version info, no transparency over transparent layers)
 pass patchy-open-path-strokes.psd                                     [rgb8]             max   31.00  >2:   0.17%  mean   0.034
 --   photoshop-basic.psb                                                                 saved without Maximize Compatibility

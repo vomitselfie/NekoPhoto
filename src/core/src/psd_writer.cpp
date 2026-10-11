@@ -8,6 +8,7 @@
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
+#include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
 #include <algorithm>
 #include <array>
@@ -570,9 +571,11 @@ private:
         // An 8-bit RGB smart object carries planes only for its Smart Filters' mask applied on import: Photoshop's
         // unmasked raster goes back, as Photoshop stores it (applySmartFilterMask).
         const bool eightBitSmart = !deep_ && !float_ && !native_ && smartRaster && l.asset && l.asset->image.u8();
-        if ((deep_ || float_ || native_ || eightBitSmart) && !options_.large && (sameContent || smartRaster) && placementKept && !c.planes.empty()
+        // So does a shape's drawing as Photoshop stored it at 8 bits (vectorlayer.h, shapeShowsDrawnPixels).
+        const bool drawn8 = c.drawnShape && !deep_ && !float_ && !native_ && l.asset && l.asset->image.u8();
+        if ((deep_ || float_ || native_ || eightBitSmart || drawn8) && !options_.large && (sameContent || smartRaster) && placementKept && !c.planes.empty()
             && c.planesHash == contentNow && l.asset
-            && (eightBitSmart || (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8))))) {
+            && (eightBitSmart || drawn8 || (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8))))) {
             r.carriedPixels = true;
             if (smartRaster) { r.left = (*c.planesRect)[0]; r.top = (*c.planesRect)[1]; r.right = (*c.planesRect)[2]; r.bottom = (*c.planesRect)[3]; }
             std::vector<std::pair<int, std::vector<uint8_t>>> channels;
@@ -1162,10 +1165,15 @@ private:
         }
         r.clipping = clipFits;
         if (onGrid) {
-            if (native_) setPixelsAny(r, l.asset->image, int(t.origin.x), int(t.origin.y));
-            else if (l.asset->image.u16()) setPixels(r, *l.asset->image.u16(), int(t.origin.x), int(t.origin.y));
-            else if (l.asset->image.f32()) setPixels(r, *l.asset->image.f32(), int(t.origin.x), int(t.origin.y));
-            else setPixels(r, *l.asset->image.u8(), int(t.origin.x), int(t.origin.y));
+            // A shape drawn here is its fill, which the path cuts: written as Photoshop writes a shape, its drawing (the
+            // fill cut and antialiased, the stroke over it), which readers show and which opens here as drawn pixels.
+            AnyImage pixels = l.asset->image;
+            if (encode_ && isVectorShapeLayer(l) && !shapeShowsDrawnPixels(l) && !softVectorMask(l.psdCarry->maskData))
+                if (AnyImage drawn = shapeDrawing(doc_, l); drawn && drawn.width() == imageWidth && drawn.height() == imageHeight) pixels = drawn;
+            if (native_) setPixelsAny(r, pixels, int(t.origin.x), int(t.origin.y));
+            else if (pixels.u16()) setPixels(r, *pixels.u16(), int(t.origin.x), int(t.origin.y));
+            else if (pixels.f32()) setPixels(r, *pixels.f32(), int(t.origin.x), int(t.origin.y));
+            else setPixels(r, *pixels.u8(), int(t.origin.x), int(t.origin.y));
             setMask(r, l, Rect(t.origin.x, t.origin.y, imageWidth, imageHeight), true);
         } else {
             // Live text is redrawn by Photoshop from its type data, so resampling its preview pixels is not worth a note.

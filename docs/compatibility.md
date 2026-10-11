@@ -16,11 +16,11 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 |---|---|---|
 | Photoshop as the oracle | **58 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest, each file's status in `tests/psd_oracle.txt` | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
 | Photoshop as the oracle: photocraft-corpus | **165 of 258** files within the same bar, compared in each file's own mode and depth (9/15 cmyk16, 9/15 cmyk8, 4/20 f32, 6/12 lab16, 7/12 lab8, 18/29 rgb16, 112/155 rgb8); each file's status in `tests/psd_oracle_photocraft.txt` | `PHOTOSHOP_CORPUS=<checkout> ctest -R psd_oracle_photocraft` |
-| Photoshop as the oracle: psd-tools | **154 of 285** files within the same bar, compared in each file's own mode and depth (0/2 cmyk16, 9/13 cmyk8, 6/17 f32, 0/1 lab16, 3/4 lab8, 5/8 rgb16, 131/240 rgb8); each file's status in `tests/psd_oracle_psdtools.txt` | `PSD_TOOLS_CORPUS=<checkout> ctest -R psd_oracle_psdtools` |
+| Photoshop as the oracle: psd-tools | **208 of 285** files within the same bar, compared in each file's own mode and depth (0/2 cmyk16, 9/13 cmyk8, 8/17 f32, 0/1 lab16, 4/4 lab8, 5/8 rgb16, 182/240 rgb8); each file's status in `tests/psd_oracle_psdtools.txt` | `PSD_TOOLS_CORPUS=<checkout> ctest -R psd_oracle_psdtools` |
 | Render hashes | **711 scenes**: 158 at 8-bit RGB, 157 at 16-bit RGB, 122 at 32-bit RGB, 73 at 8-bit CMYK, 73 at 16-bit CMYK, 64 at 8-bit Lab, 64 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
-| Test suites | **105 CTest tests** registered (774 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
+| Test suites | **105 CTest tests** registered (778 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
 | Automation | **184 methods**, 183 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
@@ -114,7 +114,8 @@ Read, drawn and written back:
   and folders, drawn at every depth and edited in Blending Options; unedited ranges go back byte for byte
   ([layer-styles.md](layer-styles.md#blend-if)).
 - **Shapes**: solid, gradient and pattern fill layers, strokes (inside, centred, outside; dashes, caps, joins),
-  path booleans, live rectangles ([vector-masks.md](vector-masks.md)).
+  path booleans, live rectangles; a shape or fill layer shows the pixels Photoshop stored for it until it is edited,
+  as text does ([vector-masks.md](vector-masks.md)).
 - **Text**: point and box text, several style runs, tracking, leading, alignment, rotation, the fifteen Warp Text
   presets open as editable text, and NekoPhoto text is written as Photoshop type layers
   ([psd-roundtrip.md](psd-roundtrip.md#text)).
@@ -221,13 +222,14 @@ NekoPhoto 1.8.10 でツールを実行して集計したものです。
 <!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
 - **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **58 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(各ファイルの状態は `tests/psd_oracle.txt`)。
 - **Photoshop の表示との比較(photocraft-corpus)**: 258 個のうち **165 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 9/15 cmyk16, 9/15 cmyk8, 4/20 f32, 6/12 lab16, 7/12 lab8, 18/29 rgb16, 112/155 rgb8。各ファイルの状態は `tests/psd_oracle_photocraft.txt`)。
-- **Photoshop の表示との比較(psd-tools)**: 285 個のうち **154 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 0/2 cmyk16, 9/13 cmyk8, 6/17 f32, 0/1 lab16, 3/4 lab8, 5/8 rgb16, 131/240 rgb8。各ファイルの状態は `tests/psd_oracle_psdtools.txt`)。
-- **描画のハッシュ**: 711 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 105 個(774 `TEST_CASE`)。
+- **Photoshop の表示との比較(psd-tools)**: 285 個のうち **208 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 0/2 cmyk16, 9/13 cmyk8, 8/17 f32, 0/1 lab16, 4/4 lab8, 5/8 rgb16, 182/240 rgb8。各ファイルの状態は `tests/psd_oracle_psdtools.txt`)。
+- **描画のハッシュ**: 711 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 105 個(778 `TEST_CASE`)。
 - **自動操作**: メソッド 184 個、うち 183 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
   クリッピング、調整レイヤー、レイヤースタイル、ブレンド条件(このレイヤー・下になっているレイヤー、チャンネルごと、分割した
-  スライダー。Photoshop の描画との差は 2 レベル以内)、グラデーションの方法(知覚的・リニア・クラシック)、シェイプ、
+  スライダー。Photoshop の描画との差は 2 レベル以内)、グラデーションの方法(知覚的・リニア・クラシック)、シェイプ
+  (シェイプレイヤーと塗りつぶしレイヤーは、テキストと同じく編集するまで Photoshop が保存したピクセルで表示)、
   編集可能なテキスト、スマートオブジェクトとスマートフィルター、PSB。
 - **16 bit**: 16 bit の PSD は 16 bit のまま開いて書き出し、編集していないレイヤーのチャンネルデータはバイト単位で戻ります。
   上のテストファイルを 16 bit に変換して書き出しても、118 個すべてで引き継いだブロックが戻ります([bit-depth.md](bit-depth.md))。

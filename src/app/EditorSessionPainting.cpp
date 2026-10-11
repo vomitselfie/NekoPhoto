@@ -155,7 +155,7 @@ Rasterizable EditorSession::rasterizable(const Layer& layer) {
     // renderer draws from the carried block whatever the pixels hold; with a vector mask, Photoshop's shape layer.
     bool fill = false, vector = false;
     for (const PsdBlock& b : layer.psdCarry->blocks) {
-        if (b.key == "SoCo" || b.key == "GdFl" || b.key == "PtFl") fill = true;
+        if (b.key == "SoCo" || b.key == "GdFl" || b.key == "PtFl" || b.key == "vscg") fill = true;   // vscg: an older file's fill
         if (b.key == "vmsk" || b.key == "vsms") vector = true;
     }
     return fill ? (vector ? Rasterizable::Shape : Rasterizable::Fill) : Rasterizable::No;

@@ -114,6 +114,16 @@ Photoshop's do, Liberation Sans standing in for Helvetica Neue.
 Checked on Patchy's Photoshop text fixtures: after an edit, our lines land within a pixel of Photoshop's (automatic
 and fixed leading, tracking, centred and right-aligned anchors), with Liberation Sans standing in for Arial.
 
+## Shape and fill layers
+
+The same rule as text: a shape or fill layer shows the pixels Photoshop stored for it until it is edited. A fill
+layer's pixels are its fill over the canvas; a shape layer's are its drawing, the fill cut by the path and the stroke
+over it, so they are shown as they are, not cut by the path again (`PsdLayerCarry::drawnShape`,
+`shapeShowsDrawnPixels`; vector-tools.md lists what keeps them and what draws the shape anew). Unedited, the record's
+channels go back as stored, byte for byte (at 8 bits too, where premultiplying would lose the colour of the faintest
+edge pixels), with its blocks; projects keep the flag. A shape drawn here is written as its drawing too, as Photoshop
+writes one. A 32-bit file's solid colour fill without pixels takes its colour as linear, as Photoshop stores it.
+
 ## Masks
 
 Photoshop stores a layer that has a vector mask and a painted mask with the painted one in channel -3

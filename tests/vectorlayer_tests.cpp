@@ -5,6 +5,8 @@
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
+#include "compositor/colormgmt.h"
+#include "compositor/psd_carry.h"
 #include "compositor/vectorlayer.h"
 #include <cmath>
 
@@ -311,10 +313,10 @@ TEST_CASE(live_rectangles_and_ellipses_keep_their_properties_until_the_path_is_e
     auto live = vectorShapeOf(back->document.layers[1], back->document);
     REQUIRE(live.has_value() && live->live.size() == 2);
     CHECK(std::abs(live->live[0].radii[3] - 12) < 1e-6 && std::abs(live->live[1].box.width - 30) < 1e-4);
-    // Moved: the boxes go along.
+    // Moved: the boxes go along (by whole pixels, the stored drawing is kept, so nothing is drawn).
     Layer& l = back->document.layers[1];
     l.transform.origin.x += 5;
-    CHECK_EQ(refreshVectorShapes(back->document), 1);
+    CHECK_EQ(refreshVectorShapes(back->document), 0);
     auto moved = vectorShapeOf(l, back->document);
     REQUIRE(moved.has_value() && moved->live.size() == 2);
     CHECK(std::abs(moved->live[0].box.x - 15) < 1e-3);
@@ -369,5 +371,167 @@ TEST_CASE(rectangles_take_a_radius_per_corner) {
     const VectorPath a = rectanglePath(Rect(0, 0, 40, 20), 6), b = rectanglePath(Rect(0, 0, 40, 20), std::array<double, 4>{6, 6, 6, 6});
     REQUIRE(a.subpaths[0].knots.size() == 8);
     for (size_t i = 0; i < 8; i++) CHECK(std::abs(a.subpaths[0].knots[i].outX - b.subpaths[0].knots[i].outX) < 1e-12);
+}
+
+// ---- Shapes showing the pixels a PSD stored (shapeShowsDrawnPixels) -------------------------------------------------
+
+namespace {
+/// A 64 x 64 white document with a stroked ellipse shape drawn here, at `type`.
+Document ellipseDocument(SampleType type = SampleType::U8) {
+    Document doc = canvas(64, 64);
+    if (std::string error; type != SampleType::U8 && !convertSampleType(doc, type, &error)) check::fail(__FILE__, __LINE__, "convertSampleType: " + error);
+    VectorShape shape;
+    shape.path = ellipsePath(Rect(10.3, 12.6, 40, 30));
+    shape.r = 20; shape.g = 90; shape.b = 200;
+    shape.stroke.enabled = true;
+    shape.stroke.width = 3;
+    shape.stroke.r = 250; shape.stroke.g = 10; shape.stroke.b = 10;
+    Layer layer(Asset::make(std::make_shared<Image>(1, 1), "Ellipse"), Point(0, 0));
+    setVectorShape(layer, doc, shape);
+    doc.layers.push_back(layer);
+    return doc;
+}
+/// The largest difference between two rasters of one layout, in their own samples.
+int maxSampleDifference(const AnyImage& a, const AnyImage& b) {
+    auto worst = [](const auto& x, const auto& y, int channels) {
+        int w = 0;
+        const size_t n = size_t(x.width()) * size_t(channels);
+        for (int r = 0; r < x.height(); r++)
+            for (size_t i = 0; i < n; i++) w = std::max(w, std::abs(int(x.row(r)[i]) - int(y.row(r)[i])));
+        return w;
+    };
+    if (a.u16() && b.u16()) return worst(*a.u16(), *b.u16(), a.channels());
+    if (a.c8() && b.c8()) return worst(*a.c8(), *b.c8(), a.channels());
+    if (a.u8() && b.u8()) return worst(*a.u8(), *b.u8(), 4);
+    return 1 << 30;
+}
+int maxDifference(const Image& a, const Image& b) {
+    int worst = 0;
+    for (int y = 0; y < a.height(); y++)
+        for (int x = 0; x < a.width() * 4; x++) worst = std::max(worst, std::abs(int(a.row(y)[x]) - int(b.row(y)[x])));
+    return worst;
+}
+}
+
+TEST_CASE(an_unedited_shape_shows_the_pixels_its_psd_stored) {
+    Document doc = ellipseDocument();
+    CHECK(!shapeShowsDrawnPixels(doc.layers[1]));
+    const ImagePtr drawn = renderFlattened(doc);
+    // Exported, its pixels are the drawing (as Photoshop writes a shape); opened again they are shown as they are.
+    auto back = throughPsd(doc);
+    REQUIRE(back.has_value());
+    Layer& shape = back->document.layers[1];
+    REQUIRE(isVectorShapeLayer(shape));
+    REQUIRE(shapeShowsDrawnPixels(shape));
+    CHECK(maxDifference(*renderFlattened(back->document), *drawn) <= 1);
+    // Photoshop's own pixels, whatever they hold (here a mark outside the path, and the edge pixels halved), are what
+    // shows: not cut by the path again, not stroked again.
+    auto stored = std::make_shared<Image>(*shape.asset->image.u8());
+    for (int y = 0; y < stored->height(); y++)
+        for (int x = 0; x < stored->width(); x++) {
+            uint8_t* p = stored->pixel(x, y);
+            if (p[3] > 0 && p[3] < 255) for (int k = 0; k < 4; k++) p[k] = uint8_t(p[k] / 2);
+        }
+    uint8_t* corner = stored->pixel(0, 0);
+    corner[0] = 0; corner[1] = 0; corner[2] = 0; corner[3] = 255;
+    shape.asset = Asset::make(stored, shape.name);
+    auto carry = std::make_shared<PsdLayerCarry>(*shape.psdCarry);
+    carry->contentHash = psdContentHash(shape.asset->image);
+    carry->planes.clear();
+    shape.psdCarry = carry;
+    REQUIRE(shapeShowsDrawnPixels(shape));
+    Document alone = back->document;
+    alone.layers.erase(alone.layers.begin());
+    const ImagePtr out = renderFlattened(alone);
+    const int x0 = int(shape.transform.origin.x), y0 = int(shape.transform.origin.y);
+    int worst = 0;
+    for (int y = 0; y < stored->height(); y++)
+        for (int x = 0; x < stored->width(); x++) {
+            if (x0 + x < 0 || y0 + y < 0 || x0 + x >= 64 || y0 + y >= 64) continue;
+            for (int k = 0; k < 4; k++) worst = std::max(worst, std::abs(int(out->pixel(x0 + x, y0 + y)[k]) - int(stored->pixel(x, y)[k])));
+        }
+    CHECK_EQ(worst, 0);
+}
+
+TEST_CASE(an_edited_or_scaled_shape_is_drawn_again_from_its_path) {
+    Document doc = ellipseDocument();
+    auto back = throughPsd(doc);
+    REQUIRE(back.has_value());
+    Document opened = back->document;
+    // Opacity, blend mode and visibility keep the stored pixels.
+    opened.layers[1].opacity = 0.5;
+    opened.layers[1].blendMode = BlendMode::Multiply;
+    CHECK(shapeShowsDrawnPixels(opened.layers[1]));
+    // A move by whole pixels keeps them too: the path goes along, nothing is drawn.
+    Layer& l = opened.layers[1];
+    const AnyImage before = l.asset->image;
+    l.transform.origin.x += 3;
+    l.transform.origin.y -= 2;
+    CHECK_EQ(refreshVectorShapes(opened), 0);
+    CHECK(shapeShowsDrawnPixels(l) && l.asset->image == before);
+    CHECK(std::abs(pathBounds(vectorShapeOf(l, opened)->path).x - 13.3) < 1e-3);
+    // Recoloured: drawn anew from the path, the pixels its fill again, cut by the path.
+    auto shape = vectorShapeOf(l, opened);
+    REQUIRE(shape.has_value());
+    shape->r = 0;
+    setVectorShape(l, opened, *shape);
+    CHECK(isVectorShapeLayer(l));
+    CHECK(!shapeShowsDrawnPixels(l));
+    // Scaled twice as large: drawn from the path at the new size, as crisp as the shape drawn there (the stored
+    // pixels resampled would be soft).
+    Document scaled = back->document;
+    Layer& s = scaled.layers[1];
+    s.transform.size = Size(s.transform.size.width * 2, s.transform.size.height * 2);
+    CHECK_EQ(refreshVectorShapes(scaled), 1);
+    CHECK(!shapeShowsDrawnPixels(s));
+    auto big = vectorShapeOf(s, scaled);
+    REQUIRE(big.has_value());
+    Document fresh = canvas(64, 64);
+    Layer drawnHere(Asset::make(std::make_shared<Image>(1, 1), "Ellipse"), Point(0, 0));
+    setVectorShape(drawnHere, fresh, *big);
+    fresh.layers.push_back(drawnHere);
+    CHECK(maxDifference(*renderFlattened(scaled), *renderFlattened(fresh)) <= 1);
+}
+
+TEST_CASE(an_unedited_shape_round_trips_its_stored_pixels_at_every_depth) {
+    for (SampleType type : {SampleType::U8, SampleType::U16}) {
+        Document doc = ellipseDocument(type);
+        auto once = throughPsd(doc);
+        REQUIRE(once.has_value());
+        REQUIRE(shapeShowsDrawnPixels(once->document.layers[1]));
+        std::string error;
+        const auto first = encodePsd(once->document, {}, nullptr, &error);
+        auto twice = importPsdBytes(first, &error);
+        REQUIRE(twice.has_value());
+        const Layer& a = once->document.layers[1];
+        const Layer& b = twice->document.layers[1];
+        REQUIRE(shapeShowsDrawnPixels(b));
+        CHECK(psdContentHash(a.asset->image) == psdContentHash(b.asset->image));
+        CHECK(a.transform.origin == b.transform.origin);
+        // The file written again is the same, byte for byte (its channels as stored, the blocks as read).
+        CHECK(encodePsd(twice->document, {}, nullptr, &error) == first);
+        // A project keeps it showing them.
+        auto carry = parsePsdLayerCarry(serializePsdCarry(*b.psdCarry));
+        REQUIRE(carry != nullptr);
+        CHECK(carry->drawnShape);
+    }
+}
+
+TEST_CASE(cmyk_and_lab_shapes_show_their_stored_pixels) {
+    for (ColorMode mode : {ColorMode::CMYK, ColorMode::Lab}) {
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            Document doc = ellipseDocument(type);
+            std::string error;
+            REQUIRE(convertDocumentMode(doc, mode, ColorProfile(), ConvertOptions(), &error));
+            REQUIRE(isVectorShapeLayer(doc.layers[1]));
+            const AnyImage drawn = renderNative(doc);
+            auto back = throughPsd(doc);
+            REQUIRE(back.has_value());
+            REQUIRE(shapeShowsDrawnPixels(back->document.layers[1]));
+            const AnyImage again = renderNative(back->document);
+            REQUIRE(again.width() == drawn.width());
+            CHECK(maxSampleDifference(again, drawn) <= (type == SampleType::U8 ? 1 : 2));
+        }
+    }
 }
 TEST_MAIN()

@@ -2,6 +2,7 @@
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/psd_carry.h"
+#include "compositor/render.h"
 #include "compositor/selection.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
@@ -232,13 +233,28 @@ uint64_t cachedContentHash(const Image16Ptr& image) {
     return hash;
 }
 
+/// psdContentHash of a layer's pixels, remembered for 8- and 16-bit RGB rasters.
+uint64_t layerContentHash(const AnyImage& image) {
+    if (image.u16()) return cachedContentHash(image.u16());
+    if (image.u8()) return cachedContentHash(image.u8());
+    return psdContentHash(image);
+}
+
+/// The fill block `key` ('SoCo', 'GdFl', 'PtFl'): the layer's own, else an older file's 'vscg' holding that kind (its
+/// four-character kind, then the same payload), which is the fill when the layer has no fill block of its own.
+std::optional<std::vector<uint8_t>> fillBlock(const Layer& layer, const char* key) {
+    if (auto b = block(layer, key)) return *b;
+    if (block(layer, "SoCo") || block(layer, "GdFl") || block(layer, "PtFl")) return std::nullopt;
+    if (auto v = block(layer, "vscg"); v && v->size() > 4 && std::equal(key, key + 4, v->begin())) return std::vector<uint8_t>(v->begin() + 4, v->end());
+    return std::nullopt;
+}
+
 /// The blocks are there and the pixels are still the fill they describe (wherever the layer now is), at any depth.
 bool hasShapeBlocks(const Layer& layer) {
     if (layer.isGroup || layer.adjustment || !layer.asset || !layer.asset->image || !(block(layer, "vsms") || block(layer, "vmsk"))
-        || !(block(layer, "SoCo") || block(layer, "GdFl") || block(layer, "PtFl"))) return false;
-    const AnyImage& image = layer.asset->image;
-    if (image.c8()) return layer.psdCarry->contentHash == psdContentHash(image);
-    return layer.psdCarry->contentHash == (image.u16() ? cachedContentHash(image.u16()) : cachedContentHash(image.u8()));
+        || !(fillBlock(layer, "SoCo") || fillBlock(layer, "GdFl") || fillBlock(layer, "PtFl"))) return false;
+    if (layer.asset->image.f32()) return false;   // not drawn as a shape at 32 bits
+    return layer.psdCarry->contentHash == layerContentHash(layer.asset->image);
 }
 }
 
@@ -251,6 +267,74 @@ void keepVectorShapeBlocks(Layer& layer) {
     layer.psdCarry = std::move(carry);
 }
 
+bool softVectorMask(const std::vector<uint8_t>& maskSection) {
+    const auto parameters = parseMaskParameters(maskSection);
+    return parameters && ((parameters->vectorFeather && *parameters->vectorFeather > 0) || (parameters->vectorDensity && *parameters->vectorDensity < 255));
+}
+
+bool shapeShowsDrawnPixels(const Layer& layer) {
+    if (!layer.psdCarry || !layer.psdCarry->drawnShape || layer.isGroup || layer.adjustment || !layer.asset || !layer.asset->image) return false;
+    if (!(block(layer, "vsms") || block(layer, "vmsk")) || softVectorMask(layer.psdCarry->maskData)) return false;
+    return layer.psdCarry->contentHash == layerContentHash(layer.asset->image);
+}
+
+AnyImage shapeDrawing(const Document& document, const Layer& layer) {
+    if (document.sampleType == SampleType::F32 || !isVectorShapeLayer(layer)) return {};
+    const LayerTransform& t = layer.transform;
+    const int w = layer.pixelWidth(), h = layer.pixelHeight();
+    if (t.rotation != 0 || t.flipX || t.flipY || t.size.width != w || t.size.height != h || t.origin.x != std::round(t.origin.x) || t.origin.y != std::round(t.origin.y)) return {};
+    // The layer alone in a copy of the document (its patterns, profile and the canvas its path was stored against),
+    // plain, keeping only what draws the shape (and the mask section, whose parameters shape its vector mask).
+    Document alone = document;
+    Layer copy = layer;
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
+    std::erase_if(carry->blocks, [](const PsdBlock& b) {
+        static const std::set<std::string> shape{"vmsk", "vsms", "vstk", "vscg", "vogk", "SoCo", "GdFl", "PtFl", "fxrp"};
+        return !shape.count(b.key);
+    });
+    carry->blendingRanges.clear();
+    copy.psdCarry = std::move(carry);
+    alone.layers = {copy};
+    alone.selection.reset();
+    RenderOptions options;
+    options.region = Rect(t.origin.x, t.origin.y, w, h);
+    return renderNative(alone, options);
+}
+
+namespace {
+/// A shape showing its drawn pixels, moved by whole pixels since its blocks were pinned: they are pinned where it now
+/// is (the path and the live shapes' boxes moved along), its pixels kept. False when the path cannot be moved.
+bool moveDrawnShape(Layer& layer, const Document& document) {
+    const PsdLayerCarry& c = *layer.psdCarry;
+    const double dx = layer.transform.origin.x - c.placement.origin.x, dy = layer.transform.origin.y - c.placement.origin.y;
+    int cw = 0, ch = 0;
+    pathCanvas(document, cw, ch);
+    auto carry = std::make_shared<PsdLayerCarry>(c);
+    for (auto it = carry->blocks.begin(); it != carry->blocks.end();) {
+        if (it->key == "vmsk" || it->key == "vsms") {
+            auto moved = mapVectorMask(it->data, cw, ch, [&](Point p) { return Point(p.x + dx, p.y + dy); });
+            if (!moved) return false;
+            it->data = std::move(*moved);
+        } else if (it->key == "vogk") {
+            // Kept only when reading and writing it again loses nothing (entries of kinds not read here would go).
+            auto live = parseVectorOrigination(it->data);
+            if (!live || authorVectorOrigination(*live) != it->data) { it = carry->blocks.erase(it); continue; }
+            for (LiveShape& l : *live) { l.box.x += dx; l.box.y += dy; }
+            it->data = authorVectorOrigination(*live);
+        }
+        ++it;
+    }
+    // The mask section as stored described the old place; the mask is written from the layer's own from now on.
+    carry->maskData.clear();
+    carry->maskChannels.clear();
+    carry->maskHash = 0;
+    carry->placement = layer.transform;
+    layer.psdCarry = std::move(carry);
+    return true;
+}
+} // namespace
+
 int refreshVectorShapes(Document& document) {
     int redrawn = 0;
     for (Layer& layer : document.layers) {
@@ -258,6 +342,10 @@ int refreshVectorShapes(Document& document) {
         const LayerTransform& at = layer.psdCarry->placement;
         const LayerTransform& now = layer.transform;
         if (at.origin == now.origin && at.size == now.size && at.rotation == now.rotation && at.flipX == now.flipX && at.flipY == now.flipY) continue;
+        // Photoshop's drawing moved by whole pixels is the same drawing: kept.
+        if (shapeShowsDrawnPixels(layer) && at.size == now.size && at.rotation == now.rotation && at.flipX == now.flipX && at.flipY == now.flipY
+            && now.origin.x - at.origin.x == std::round(now.origin.x - at.origin.x) && now.origin.y - at.origin.y == std::round(now.origin.y - at.origin.y)
+            && moveDrawnShape(layer, document)) continue;
         auto shape = vectorShapeOf(layer, document);   // the path already follows the layer to where it is
         if (!shape) continue;
         setVectorShape(layer, document, *shape);
@@ -272,7 +360,7 @@ std::optional<VectorShape> vectorShapeOf(const Layer& layer, const Document& doc
     if (!path) return std::nullopt;
     VectorShape shape;
     shape.path = *path;
-    if (auto soco = block(layer, "SoCo")) {
+    if (auto soco = fillBlock(layer, "SoCo")) {
         try {
             psd::BigEndianReader r(*soco);
             if (r.read_u32() == 16) {
@@ -291,12 +379,12 @@ std::optional<VectorShape> vectorShapeOf(const Layer& layer, const Document& doc
                 }
             }
         } catch (std::exception&) {}
-    } else if (auto gdfl = block(layer, "GdFl"); gdfl && parseFillGradient(*gdfl)) {
+    } else if (auto gdfl = fillBlock(layer, "GdFl"); gdfl && parseFillGradient(*gdfl)) {
         shape.fillPaint.kind = VectorPaint::Kind::Gradient;
         shape.fillPaint.gradient = *parseFillGradient(*gdfl);
         // The solid colour it falls back to: the gradient's first stop.
         if (!shape.fillPaint.gradient.colors.empty()) { auto c = shape.fillPaint.gradient.colors.front().color; shape.r = c.r; shape.g = c.g; shape.b = c.b; }
-    } else if (auto ptfl = block(layer, "PtFl"); ptfl && parseFillPattern(*ptfl)) {
+    } else if (auto ptfl = fillBlock(layer, "PtFl"); ptfl && parseFillPattern(*ptfl)) {
         shape.fillPaint.kind = VectorPaint::Kind::Pattern;
         shape.fillPaint.pattern = *parseFillPattern(*ptfl);
     }
@@ -445,6 +533,7 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
     // The blocks describe these pixels where they now are, so they are kept (and not moved) until they change.
     carry->placement = layer.transform;
     carry->contentHash = psdContentHash(image);
+    carry->drawnShape = false;   // our pixels: the fill, which the path cuts
     layer.psdCarry = std::move(carry);
 }
 
@@ -943,6 +1032,7 @@ void setLayerVectorMask(Layer& layer, const Document& document, const std::optio
         // The stored mask section described the vector mask's derived plane: it goes with it.
         carry->maskData.clear();
     }
+    carry->drawnShape = false;   // drawn for the old path: the pixels are cut by the new one from now on
     layer.psdCarry = std::move(carry);
 }
 } // namespace compositor

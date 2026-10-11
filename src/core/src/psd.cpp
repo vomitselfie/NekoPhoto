@@ -11,6 +11,7 @@
 #include "compositor/render.h"
 #include "compositor/smartfilter.h"
 #include "compositor/modetransform.h"
+#include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
 #include "psd/psd_descriptor.hpp"
 #include <cstdio>
@@ -1012,6 +1013,14 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         // Channel image data follows the records, one channel after another in record order.
         using WidePlanes = std::map<int, std::vector<uint16_t>>;
         using FloatPlanes = std::map<int, std::vector<float>>;
+        // A shape layer whose pixels are its drawing (a path with a fill or a stroke, and pixels): Photoshop's own,
+        // the fill cut by the path and the stroke over it. A soft vector mask (density, feather) is drawn here instead, and
+        // so is a 32-bit shape (Photoshop stores none; pixels there are a fill written by us, which the path cuts).
+        auto drawnShapeRecord = [&](const Record& rec) {
+            auto has = [&](const char* key) { return rec.blocks.count(key) > 0; };
+            return !float32 && rec.width() > 0 && rec.height() > 0 && rec.section == 0 && (has("vmsk") || has("vsms"))
+                && (has("SoCo") || has("GdFl") || has("PtFl") || has("vscg") || has("vstk")) && !softVectorMask(rec.mask.section);
+        };
         auto decodeRecordChannels = [&](const Record& rec, std::map<int, std::vector<uint8_t>>& planes, std::map<int, std::vector<uint8_t>>& maskPlanes, size_t& cursor,
                                         std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw, WidePlanes& widePlanes, WidePlanes& wideMaskPlanes,
                                         std::vector<PsdLayerCarry::CarriedPlane>& rawPlanes, FloatPlanes& floatPlanes, FloatPlanes& floatMaskPlanes) {
@@ -1030,7 +1039,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (c.id == -2) { w = rec.mask.width(); h = rec.mask.height(); }
                 if (c.id == -3) { w = rec.mask.realWidth(); h = rec.mask.realHeight(); }
                 if (c.id == -2 || c.id == -3) maskRaw.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
-                else if ((deep || float32 || nativeMode || smartChannels) && !psb && c.id >= -1 && c.id <= (mode == CMYK ? 3 : 2)) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
+                else if ((deep || float32 || nativeMode || smartChannels || drawnShapeRecord(rec)) && !psb && c.id >= -1 && c.id <= (mode == CMYK ? 3 : 2)) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
                 std::vector<uint8_t> plane;
                 std::vector<uint16_t> wide;
                 std::vector<float> floats;
@@ -1081,8 +1090,12 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                                      && smartObjectPixelsArePlacement(*layer.smartObject);
             // An 8-bit RGB smart object with its filter mask applied here keeps Photoshop's unmasked raster the same way.
             const bool eightBit = !deep && !float32 && !nativeMode;
-            if (!rawPlanes.empty() && layer.asset
-                && (eightBit ? filterMasked : smartRaster || (nativeMode ? planesRead : bool(layer.asset->image.u16()) || bool(layer.asset->image.f32())))) {
+            // A shape's drawing as Photoshop stored it (vectorlayer.h, shapeShowsDrawnPixels), its channels kept at 8 bits too
+            // so an unedited shape goes back byte for byte (premultiplying loses its faint edge's colour).
+            carry->drawnShape = drawnShapeRecord(rec) && layer.asset && layer.asset->image && !layer.text && !layer.smartObject && !layer.adjustment;
+            const bool drawnPlanes = carry->drawnShape && mode == RGB && bool(layer.asset->image.u8());
+            if (!rawPlanes.empty() && layer.asset && rec.width() > 0 && rec.height() > 0
+                && (eightBit ? drawnPlanes || filterMasked : smartRaster || (nativeMode ? planesRead : bool(layer.asset->image.u16()) || bool(layer.asset->image.f32())))) {
                 carry->planes = std::move(rawPlanes);
                 carry->planesHash = carry->contentHash;
                 if (smartRaster || filterMasked) carry->planesRect = std::array<int, 4>{rec.left, rec.top, rec.right, rec.bottom};
@@ -1212,6 +1225,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
 
             // Pixels, or what stands in for them.
             std::shared_ptr<Image> image;
+            std::optional<std::array<float, 4>> linearFill;   // a 32-bit file's solid colour: its values are linear
             std::optional<LayerAdjustment> adjustment;
             std::string extraJson;
             auto block = [&](const char* key) -> const std::pair<const uint8_t*, size_t>* { auto it = rec.blocks.find(key); return it == rec.blocks.end() ? nullptr : &it->second; };
@@ -1237,6 +1251,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                     if (auto colour = solidColourFrom(b->first, b->second)) {
                         image = std::make_shared<Image>(int(width), int(height));
                         image->fill(uint8_t(std::lround(colour->red * 255)), uint8_t(std::lround(colour->green * 255)), uint8_t(std::lround(colour->blue * 255)), 255);
+                        if (float32) linearFill = std::array<float, 4>{float(colour->red), float(colour->green), float(colour->blue), 1.0f};
                     }
                 }
             }
@@ -1296,6 +1311,12 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             // A 32-bit file's pixels in linear float, likewise.
             if (float32 && image && layer.asset && layer.asset->image.u8() == image && !floatPlanes.empty()) {
                 layer.asset = Asset::make(ImageFPtr(assembleF(mode, rec.width(), rec.height(), floatPlanes)), layer.asset->name);
+            } else if (linearFill && image && layer.asset && layer.asset->image.u8() == image) {
+                // A solid fill without pixels: Photoshop's 32-bit colour is linear already (psd-tools' 300dpi: 172, 11.5,
+                // 11.5 shows as 214, 60, 60), not an sRGB colour to linearise.
+                auto fill = std::make_shared<ImageF>(image->width(), image->height());
+                fill->fill(linearFill->data());
+                layer.asset = Asset::make(ImageFPtr(fill), layer.asset->name);
             }
             if (type) {
                 layer.text = type->text;

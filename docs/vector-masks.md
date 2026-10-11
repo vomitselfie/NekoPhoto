@@ -13,7 +13,13 @@ record layout and combine rules follow Patchy (MIT, `src/third_party/patchy_psd/
   nearly horizontal edge by quarters, and half as many curve segments left curves polygonal: the fill fixtures went
   from 2.17% / 2.01% / 1.10% of pixels more than 2 levels off (solid, live rectangle, pattern; max 22, 15, 23) to
   1.29% / 0.62% / 0.83% (max 10, 10, 6). Inverted and disabled masks are honoured.
-- **Shapes**: a solid shape is its fill (the layer's full-canvas pixels) cut by the path. Gradient and pattern fill
+- **Shapes**: a shape whose file stored its pixels (Photoshop always does at 8 and 16 bits) shows them as they are:
+  they are its drawing, already cut by the path and stroked, so cutting them again thinned every curved edge
+  (psd-tools' blend-modes and path-operations files were 38 to 153 levels off at their edges, and failed; now all 12
+  path-operations files pass within a level, and 26 of the 31 blend-modes files within 3 levels but for 0.05% of one
+  file; Dissolve, Divide and the three all-modes files (RGB, CMYK, grey) still fail). The first edit to the path,
+  fill or stroke, or a scale or rotation, draws the shape here instead ([vector-tools.md](vector-tools.md)). A shape without stored pixels, or one with a vector density or feather, is
+  drawn here: a solid shape is its fill (the layer's full-canvas pixels) cut by the path. Gradient and pattern fill
   layers ('GdFl', 'PtFl'), which store no pixels, draw their fill: the gradient over the shape's bounds with
   Photoshop's fill-layer geometry (the centre chord, unsnapped, Classic easing even on two stops; Patchy's
   calibration), the pattern from the file's patterns.

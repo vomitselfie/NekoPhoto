@@ -388,7 +388,8 @@ struct RenderExec<SampleType::U8> {
         const GrayImage* coverageWithoutVector = coverage;
         const std::optional<MaskParameters> maskParameters = layer.psdCarry ? parseMaskParameters(layer.psdCarry->maskData) : std::nullopt;
         // A vector mask (a shape layer's shape, or a mask drawn with paths) cuts the layer like its pixel mask.
-        std::optional<VectorPath> vector = layerVectorMask(layer, document);
+        // Photoshop's own drawing of a shape (vectorlayer.h, shapeShowsDrawnPixels) is already cut and stroked: shown as it is.
+        std::optional<VectorPath> vector = shapeShowsDrawnPixels(layer) ? std::nullopt : layerVectorMask(layer, document);
         std::shared_ptr<GrayImage> cut;
         if (vector) {
             cut = rasterizeVectorMask(*vector, region, scale, outWidth, outHeight);

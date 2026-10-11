@@ -69,6 +69,10 @@ struct PsdLayerCarry {
     /// An adjustment layer's settings as read (their JSON): while they are still these, the file's own adjustment
     /// block is written back instead of one made anew. Empty for anything else.
     std::string adjustmentJson;
+    /// A shape layer whose pixels are its shape as drawn (Photoshop's own, as read): the fill already cut by the path
+    /// and antialiased, the stroke over it. While the pixels are still these (`contentHash`) they are shown as they
+    /// are, not cut by the path again (vectorlayer.h, shapeShowsDrawnPixels).
+    bool drawnShape = false;
 
     enum class Binding { Always, Placement, Content };
     /// What `key` describes: nothing about the pixels (Always), where they are (a vector mask: Placement),
