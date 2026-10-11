@@ -138,6 +138,34 @@ def oracle():
     return (floor, compared, flatten) if floor is not None else None
 
 
+def corpus_oracle(name):
+    """(passing, compared, {space: (passing, compared)}) from a corpus's expectations file in tests/, or None."""
+    rel = os.path.join("tests", name)
+    if not os.path.exists(os.path.join(ROOT, rel)):
+        return None
+    floor = compared = None
+    spaces = {}
+    for l in lines(rel):
+        w = l.split()
+        if w[0] == "floor":
+            floor = int(w[1])
+        elif w[0] == "compared":
+            compared = int(w[1])
+        elif w[0] in ("pass", "FAIL") and len(w) > 2 and w[2].startswith("["):
+            space = w[2].strip("[]")
+            p, n = spaces.get(space, (0, 0))
+            spaces[space] = (p + (w[0] == "pass"), n + 1)
+    return (floor, compared, spaces) if floor is not None and compared is not None else None
+
+
+CORPORA = (("psd_oracle_photocraft.txt", "photocraft-corpus", "PHOTOSHOP_CORPUS", "psd_oracle_photocraft"),
+           ("psd_oracle_psdtools.txt", "psd-tools", "PSD_TOOLS_CORPUS", "psd_oracle_psdtools"))
+
+
+def by_space(spaces):
+    return ", ".join(f"{p}/{n} {s}" for s, (p, n) in sorted(spaces.items()))
+
+
 def tables():
     scenes, by_mode = render_hashes()
     gcases, gpngs = golden()
@@ -154,8 +182,14 @@ def tables():
     if orc:
         en.append(f"| Photoshop as the oracle | **{orc[0]} of {orc[1]}** Patchy files render within 2 levels of what Photoshop shows "
                   f"on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for {orc[2]} of them, the merged image "
-                  "stored in the file for the rest (the floor in `tests/psd_oracle.txt`; it may only rise) "
+                  "stored in the file for the rest, each file's status in `tests/psd_oracle.txt` "
                   "| `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |")
+    for name, label, var, test in CORPORA:
+        c = corpus_oracle(name)
+        if c:
+            en.append(f"| Photoshop as the oracle: {label} | **{c[0]} of {c[1]}** files within the same bar, compared in each "
+                      f"file's own mode and depth ({by_space(c[2])}); each file's status in `tests/{name}` "
+                      f"| `{var}=<checkout> ctest -R {test}` |")
     en += [
         f"| Render hashes | **{scenes} scenes**: {modes}; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |",
         f"| Golden images | **{gcases} golden test cases over {gpngs} reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |",
@@ -179,7 +213,12 @@ def tables():
     if orc:
         ja.append(f"- **Photoshop の表示との比較**: Patchy のファイル {orc[1]} 個(うち {orc[2]} 個はファイルに添えられた Photoshop 自身の"
                   f"統合結果、残りはファイル内の統合画像と比較)のうち **{orc[0]} 個**が、"
-                  "99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。")
+                  "99% のピクセルで 2 レベル以内・平均 1 レベル未満(各ファイルの状態は `tests/psd_oracle.txt`)。")
+    for name, label, var, test in CORPORA:
+        c = corpus_oracle(name)
+        if c:
+            ja.append(f"- **Photoshop の表示との比較({label})**: {c[1]} 個のうち **{c[0]} 個**が同じ基準を満たします"
+                      f"(各ファイル自身のモードとビット深度で比較: {by_space(c[2])}。各ファイルの状態は `tests/{name}`)。")
     ja += [
         f"- **描画のハッシュ**: {scenes} シーン。**ゴールデン画像**: {gcases} テスト・参照 PNG {gpngs} 枚。"
         f"**ブラシの基準値**: {brows} 行。**テストスイート**: CTest {suites} 個({cases} `TEST_CASE`)。",

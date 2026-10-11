@@ -1,5 +1,5 @@
-# Patchy's fixtures (MIT, https://github.com/SethRobinson/Patchy, test-fixtures/psd) that tests/psd_composite_oracle.cpp
-# measures: the commit and each file's SHA-256. Rewritten with COMPOSITOR_UPDATE_PSD_ORACLE=1.
+# Patchy's fixtures (MIT, https://github.com/SethRobinson/Patchy, test-fixtures/psd)
+# that tests/psd_composite_oracle.cpp measures: the commit and each file's SHA-256. Rewritten with COMPOSITOR_UPDATE_PSD_ORACLE=1.
 commit 7d14d1f6ede2dc8fb52c11eefcc7cc8783473711
 158809e7eb1f57005f68da2585ba1295642af15066da7fd661186cbaf19543df  arrows.psd
 140877ee1d3df09cbc8a7e8b1cb0d71efe745fb0c915201ab28aa7dcbcbb26f1  patchy-legacy-black-composite.psb
