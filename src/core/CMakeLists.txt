@@ -269,9 +269,11 @@ target_include_directories(compositor_core
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
     PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party
 )
+# The vendored Little CMS comes first on the link line: LibRaw's pkg-config file asks for the system's -llcms2, and
+# a shared library named before the archive would answer every cms* call with whatever version the system has.
 target_link_libraries(compositor_core
     PUBLIC compositor::pixels
-    PRIVATE PkgConfig::PNG PkgConfig::ZLIB compositor_warnings
+    PRIVATE nekophoto_lcms2 PkgConfig::PNG PkgConfig::ZLIB compositor_warnings
 )
 target_compile_definitions(compositor_core PRIVATE _USE_MATH_DEFINES)
 # The Mosh effects hash float bit patterns: no fused multiply-adds, so every CPU computes the same bits.
@@ -316,4 +318,3 @@ file(GLOB NEKOPHOTO_LCMS2_SOURCES ${CMAKE_SOURCE_DIR}/src/third_party/lcms2/*.c)
 add_library(nekophoto_lcms2 STATIC ${NEKOPHOTO_LCMS2_SOURCES})
 target_include_directories(nekophoto_lcms2 PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party/lcms2)
 set_target_properties(nekophoto_lcms2 PROPERTIES POSITION_INDEPENDENT_CODE ON C_VISIBILITY_PRESET hidden)
-target_link_libraries(compositor_core PRIVATE nekophoto_lcms2)
