@@ -13,7 +13,9 @@ into one pass.
 
 **Exposure** (`expA`) works in linear light as Photoshop does at 8 and 16 bits: the value is linearised through a 2.2
 power (not the sRGB curve), multiplied by 2^exposure, the offset added, raised to 1 / gamma and encoded again; an Exposure
-layer read from a grayscale PSD keeps Photoshop's grey power of 1.732 (the file opens as RGB). At 32 bits the samples are
+layer read from a grayscale PSD keeps Photoshop's grey power of 1.732 (the file opens as RGB). Exported as PSD (RGB),
+such a layer is drawn through 2.2 by Photoshop and by NekoPhoto on reopening, as in Photoshop after Image ▸ Mode ▸ RGB
+Color; the export warns. At 32 bits the samples are
 linear already and are taken as stored. photocraft-corpus `exposure.psd` in rgb8/16/32 and gray8/16/32 and psd-tools'
 `exposure_rgb` and `exposure_grayscale` are within a level or so of Photoshop (they were up to 34 levels off through the
 sRGB curve). Camera Raw's exposure is its own.

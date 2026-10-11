@@ -4,6 +4,10 @@
 #include "compositor/psd.h"
 #include "compositor/adjustments.h"
 #include "compositor/render.h"
+#include "compositor/psd_writer.h"
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -167,6 +171,33 @@ TEST_CASE(grayscale_levels_and_curves_act_on_grey_not_red) {
         CHECK(p[0] == p[1] && p[1] == p[2]);
         CHECK(p[0] > 100);
     }
+}
+
+TEST_CASE(grayscale_exposure_keeps_the_grey_tone_curve) {
+    // A Grayscale file's Exposure is drawn through Photoshop's grey power (1.732); written into an RGB PSD it cannot say
+    // so, and the export warns.
+    const int W = 4, H = 2;
+    LayerSpec grey{"Background", 0, 0, W, H, {solid(W, H, 76)}, {0}};
+    LayerSpec exposure{"Exposure", 0, 0, 0, 0, {}, {}};
+    Out o;
+    o.u16(1);
+    for (float v : {0.0f, 0.1738f, 1.0f}) { uint32_t bits; std::memcpy(&bits, &v, 4); o.u32(bits); }
+    o.u16(0);
+    exposure.extraKey = "expA"; exposure.extraBlock = o.b;
+    auto imported = importPsd(writeTemp(writePsd(W, H, {grey, exposure}, {solid(W, H, 76)}, false, 1), "grey-exposure.psd"), nullptr);
+    REQUIRE(imported.has_value());
+    AdjustmentSettings parsed;
+    REQUIRE(imported->document.layers.at(1).adjustment.has_value());
+    REQUIRE(AdjustmentSettings::parse(imported->document.layers[1].adjustment->json, parsed));
+    CHECK_NEAR(parsed.exposure.toneGamma, 1.732, 1e-12);
+    CHECK_NEAR(parsed.exposure.offset, 0.1738, 1e-6);
+    auto image = renderFlattened(imported->document);
+    REQUIRE(image);
+    CHECK(std::abs(int(image->pixel(1, 1)[0]) - int(std::lround(std::pow(std::pow(76 / 255.0, 1.732) + 0.1738, 1 / 1.732) * 255))) <= 1);
+    PsdExportSummary summary;
+    std::string error;
+    REQUIRE(!encodePsd(imported->document, PsdExportOptions(), &summary, &error).empty());
+    CHECK(std::any_of(summary.warnings.begin(), summary.warnings.end(), [](const std::string& w) { return w.find("Grayscale") != std::string::npos; }));
 }
 
 TEST_CASE(psd_layers_folders_masks_and_blends_come_through) {

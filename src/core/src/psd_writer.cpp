@@ -895,6 +895,9 @@ private:
             o.f32(float(s.exposure.exposure)); o.f32(float(s.exposure.offset)); o.f32(float(s.exposure.gamma));
             o.u16(0);   // Photoshop's block is 16 bytes: two zero bytes after the gamma
             r.adjustmentKey = "expA";
+            // Read from a Grayscale file, it was drawn through Grayscale's tone curve; an RGB file has no place for that.
+            if (s.exposure.normalized().toneGamma != 2.2)
+                summary_.warnings.push_back("Layer \"" + l.name + "\": its Exposure came from a Grayscale file; in this RGB file it looks different (Photoshop draws RGB Exposure through a 2.2 power).");
             break;
         case AdjustmentKind::HueSaturation: {
             // Hue, lightness, colorize and the six ranges (their bands, linear falloffs and all) draw as in

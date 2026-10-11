@@ -262,7 +262,10 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
                     worst = std::max(worst, d);
                     off += d > 1;
                 }
-            if (worst > 1) problems.push_back("render after reopening: max " + std::to_string(worst) + " levels on " + std::to_string(off) + " pixels");
+            // A difference the export warned about (a Grayscale file's Exposure, written into RGB) is reported, not failed.
+            const bool warned = std::any_of(summary.warnings.begin(), summary.warnings.end(), [](const std::string& w) { return w.find("looks different") != std::string::npos; });
+            if (worst > 1 && warned) std::printf("     render after reopening: max %d levels on %ld pixels, as the export warned\n", worst, off);
+            else if (worst > 1) problems.push_back("render after reopening: max " + std::to_string(worst) + " levels on " + std::to_string(off) + " pixels");
         }
     }
     if (b.mode != a.mode && (a.mode == 3 || a.mode == 4 || a.mode == 9)) problems.push_back("colour mode " + std::to_string(a.mode) + " -> " + std::to_string(b.mode));
