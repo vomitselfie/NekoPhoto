@@ -24,15 +24,22 @@ void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
     }
     if (kind == AdjustmentKind::Grain) settings.grain.seed = uint32_t(std::random_device{}());
     layer.adjustment = settings.toLayerAdjustment();
+    // Photoshop's adjustment layer comes with a layer mask, targeted: white, or the selection (which it takes) so the
+    // adjustment works where it was.
+    std::optional<LayerMask> fromSelection = maskFromSelection(layer, false);
+    if (fromSelection) layer.mask = *fromSelection;
+    else { LayerMask white; white.asset = MaskAsset::solid(true, document_->sampleType); layer.mask = white; }
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
     beginEdit(QStringLiteral(QT_TRANSLATE_NOOP("History", "New %1 Adjustment")).arg(adjustmentKindName(kind)));
     document_->layers.insert(document_->layers.begin() + index, layer);
     if (layer.parentId) collapsedGroupIds.erase(*layer.parentId);
-    setActiveLayer(layer.id);
+    if (fromSelection) document_->selection.reset();
+    setActiveLayer(layer.id);   // its mask the target (setActiveLayer)
     endEdit();
     notifyDocument();
+    if (fromSelection) emit selectionChanged();
 }
 
 void EditorSession::beginAdjustmentEdit() {

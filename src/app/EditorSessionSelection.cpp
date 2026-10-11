@@ -258,7 +258,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     const int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment) return false;
+    if (!layer || layer->isGroup || (layer->adjustment && !(isMaskSelected_ && layer->mask))) return false;   // an adjustment layer's mask takes it
     if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && layer->mask)) return paintBucketMode(*layer, x, y);
     if (document_->sampleType == SampleType::U16) {
         // What to fill is chosen on the pixels as the canvas shows them (Tolerance counts 8-bit levels, as the Magic
@@ -395,7 +395,7 @@ bool EditorSession::patchSelection(int dx, int dy) {
 
 bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection, double opacity, const char* name, const Image* from) {
     Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || layer->adjustment) return false;
+    if (!layer || layer->isGroup || (layer->adjustment && !(isMaskSelected_ && layer->mask))) return false;   // an adjustment layer's mask takes it
     bool mask = isMaskSelected_ && layer->mask;
     if (!mask && smartObjectBlocksPixels(true)) return false;
     opacity = std::clamp(opacity, 0.0, 1.0);
@@ -455,7 +455,7 @@ bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection,
 
 bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, const char* name, const Image16* from) {
     Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || layer->adjustment) return false;
+    if (!layer || layer->isGroup || (layer->adjustment && !(isMaskSelected_ && layer->mask))) return false;
     const bool mask = isMaskSelected_ && layer->mask;
     if (!mask && smartObjectBlocksPixels(true)) return false;
     // Coverage at a document point: the selection's there, everything when there is none.

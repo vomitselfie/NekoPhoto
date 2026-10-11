@@ -95,11 +95,17 @@ std::optional<ToolRefusal> EditorSession::toolRefusal(Tool tool) const {
     if (!layer) return std::nullopt;
     const bool mask = isMaskSelected_ && layer->mask;
     auto refused = [](ToolRefusal::Kind kind, const QString& reason) { return std::optional<ToolRefusal>(ToolRefusal{kind, reason}); };
-    // A group's or an adjustment layer's mask takes a gradient (as beginGradient does); nothing else paints on them.
+    // A group's mask takes a gradient (as beginGradient does); nothing else paints on a group. An adjustment layer's
+    // mask (or a fill layer's) takes what a pixel layer's does; the adjustment itself has no pixels.
     if (layer->isGroup && !(mask && tool == Tool::Gradient)) return refused(ToolRefusal::Refused, tr("The active layer is a group: choose a layer to paint on."));
-    if (layer->adjustment && !(mask && tool == Tool::Gradient)) return refused(ToolRefusal::Refused, tr("The active layer is an adjustment layer: it has no pixels to paint on."));
+    if (layer->adjustment && !mask)
+        return refused(ToolRefusal::Refused, layer->mask ? tr("The active layer is an adjustment layer: target its mask to paint on it.")
+                                                         : tr("The active layer is an adjustment layer without a mask: add a layer mask to paint where it applies."));
     if (mask) {
         if (tool == Tool::SpotHealing || tool == Tool::CloneStamp) return refused(ToolRefusal::Refused, tr("Spot Healing and Clone Stamp work on a layer's pixels, not on its mask."));
+        // Of the Blur / Smudge tool, only Blur softens a mask; Dodge, Burn and Sponge tone pixels.
+        if ((tool == Tool::Smudge && blurMode != BlurToolMode::Blur) || tool == Tool::Dodge)
+            return refused(ToolRefusal::Refused, tr("This tool works on a layer's pixels, not on its mask."));
         return std::nullopt;
     }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return refused(ToolRefusal::Refused, tr("The active layer is hidden."));
@@ -161,8 +167,9 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (!document_ || stroke_ || transformEdit_) return false;
     const bool deep = document_->sampleType == SampleType::U16;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment) return false;
+    if (!layer || layer->isGroup) return false;
     bool mask = isMaskSelected_ && layer->mask;
+    if (layer->adjustment && !mask) return false;   // an adjustment layer has only its mask to paint
     if (!mask && smartObjectBlocksPixels(true)) return false;
     bool healing = tool_ == Tool::SpotHealing, cloning = tool_ == Tool::CloneStamp || (healing && spotHealingMode == 3);
     if (healing && spotHealingMode == 4) return false;   // Patch drags the selection instead
@@ -486,7 +493,9 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     if (refusedAtDepth("tool.smudge", tr("Editing pixels"))) return false;
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    // Blur softens a mask (an adjustment layer's too); everything else here works on the layer's pixels.
+    const bool blursMask = layer && isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask;
+    if (!layer || layer->isGroup || (!blursMask && (layer->adjustment || !layer->asset || !layer->asset->image))) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const bool deep = document_->sampleType == SampleType::U16;
     if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.f32()) {

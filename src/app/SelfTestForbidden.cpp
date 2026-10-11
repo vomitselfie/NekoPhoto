@@ -1,12 +1,14 @@
 // forbidden-cursor: the tools that paint pixels refuse a group, an adjustment layer, a hidden layer, a smart object
 // and a type or shape layer (EditorSession::toolRefusal), say which in the status bar and show the forbidden cursor
 // over the canvas, following the active layer, its visibility and the tool without the pointer moving. A mask takes
-// the paint; rasterizing a type layer lets the brush on, and undoing it refuses it again.
+// the paint, an adjustment layer's too (it comes with one, targeted: painting it is one step and changes the composite
+// only under the stroke); rasterizing a type layer lets the brush on, and undoing it refuses it again.
 #include "SelfTest.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "Theme.h"
+#include "compositor/render.h"
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QJsonObject>
@@ -15,6 +17,7 @@
 #include <QStatusBar>
 #include <QThread>
 #include <cstdio>
+#include <cstring>
 
 using namespace compositor;
 
@@ -79,8 +82,64 @@ int forbiddenCursor(MainWindow& w) {
     // A group and an adjustment layer.
     call("layers.add", {{"kind", "group"}});
     expect(kind(Tool::Brush, ToolRefusal::Refused) && kind(Tool::Smudge, ToolRefusal::Refused), "a group was not refused");
-    call("layers.add", {{"kind", "adjustment"}, {"adjustmentKind", "levels"}});
-    expect(kind(Tool::Brush, ToolRefusal::Refused) && kind(Tool::Dodge, ToolRefusal::Refused), "an adjustment layer was not refused");
+    // An adjustment layer comes with its mask targeted, as in Photoshop: it takes what a pixel layer's mask does, and
+    // stays the target when the layer is chosen again. Without a mask there is nothing to paint.
+    expect(call("layers.add", {{"kind", "adjustment"}, {"adjustmentKind", "levels"}}).has_value(), "could not add an adjustment layer");
+    const Layer* levels = s.activeLayer();
+    expect(levels && levels->adjustment && levels->mask && s.isMaskSelected(), "a new adjustment layer did not come with its mask targeted");
+    expect(!refusal(Tool::Brush) && !refusal(Tool::Gradient) && !refusal(Tool::PaintBucket), "painting an adjustment layer's mask was refused");
+    expect(kind(Tool::CloneStamp, ToolRefusal::Refused) && kind(Tool::Dodge, ToolRefusal::Refused), "Clone Stamp or Dodge on an adjustment layer's mask was not refused");
+    if (levels) {
+        const auto levelsId = levels->id;
+        s.selectLayer(pixels, false);
+        s.selectLayer(levelsId, false);
+        expect(s.isMaskSelected(), "choosing the adjustment layer again did not target its mask");
+        s.deleteLayerMask();
+        expect(kind(Tool::Brush, ToolRefusal::Refused) && kind(Tool::Gradient, ToolRefusal::Refused), "an adjustment layer without a mask was not refused");
+        call("history.undo");
+        expect(s.activeLayer() && s.activeLayer()->mask && s.isMaskSelected() && !refusal(Tool::Brush), "undoing Delete Layer Mask did not target the adjustment layer's mask again");
+    }
+
+    // Painting an adjustment layer's mask: one undo step, and the composite changes only where the brush went.
+    s.selectLayer(pixels, false);
+    s.addAdjustmentLayer(AdjustmentKind::Invert);
+    const Layer* invert = s.activeLayer();
+    expect(invert && invert->adjustment && invert->mask && s.isMaskSelected(), "the Invert adjustment layer did not come with its mask targeted");
+    if (invert && invert->mask && s.isMaskSelected()) {
+        const Document& doc = *s.document();
+        const auto before = renderFlattened(doc);
+        const size_t steps = s.undoNames().size();
+        const Tool tool = s.tool();
+        const BrushSettings brush = s.brushSettings;
+        const bool white = s.maskPaintWhite, erase = s.brushErase;
+        s.selectTool(Tool::Brush);
+        s.brushSettings.diameter = 12; s.brushSettings.hardness = 1; s.brushSettings.opacity = 1;
+        s.maskPaintWhite = false; s.brushErase = false;   // black: the adjustment is hidden under the stroke
+        const double cy = doc.height / 2.0, x0 = doc.width / 4.0, x1 = doc.width / 2.0;
+        const bool began = s.beginBrush(QPointF(x0, cy), false);
+        expect(began, "the brush did not start on the adjustment layer's mask");
+        if (began) { s.continueBrush(QPointF(x1, cy)); s.endBrush(); }
+        s.brushSettings = brush; s.maskPaintWhite = white; s.brushErase = erase;
+        s.selectTool(tool);
+        expect(s.undoNames().size() == steps + 1 && s.undoNames().back() == "Paint Mask", "painting the adjustment layer's mask was not one Paint Mask step");
+        const auto after = renderFlattened(*s.document());
+        int inside = 0, outside = 0;
+        for (int y = 0; y < after->height(); y++)
+            for (int x = 0; x < after->width(); x++) {
+                if (std::memcmp(before->pixel(x, y), after->pixel(x, y), 4) == 0) continue;
+                // The stroke's reach: its line, widened by the radius and a pixel of antialiasing.
+                const bool near = x >= x0 - 8 && x <= x1 + 8 && y >= cy - 8 && y <= cy + 8;
+                (near ? inside : outside)++;
+            }
+        expect(inside > 0, "painting the adjustment layer's mask changed nothing");
+        expect(outside == 0, "painting the adjustment layer's mask changed the composite away from the stroke");
+        s.undo();
+        const auto undone = renderFlattened(*s.document());
+        bool restored = undone->width() == before->width() && undone->height() == before->height();
+        for (int y = 0; restored && y < before->height(); y++)
+            for (int x = 0; restored && x < before->width(); x++) restored = std::memcmp(before->pixel(x, y), undone->pixel(x, y), 4) == 0;
+        expect(restored, "undoing the mask stroke did not restore the composite");
+    }
 
     // A type layer: rasterize first. Rasterized, the brush works; undone, it is type again.
     expect(call("layers.add", {{"kind", "text"}, {"text", "Neko"}, {"x", 20}, {"y", 20}, {"size", 40}}).has_value(), "could not add a type layer");
