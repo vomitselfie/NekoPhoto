@@ -247,22 +247,25 @@ void ripple(const Plane& src, Plane& out, const Rect& bounds, float amount, Ripp
 void polar(const Plane& src, Plane& out, const Rect& bounds, PolarMode mode) {
     const float w = float(std::max(1, bounds.width())), h = float(std::max(1, bounds.height()));
     const float cx = float(bounds.x0) + w / 2.0f, cy = float(bounds.y0) + h / 2.0f;
-    const float rmax = std::min(w, h) / 2.0f;
-    // Photoshop leaves no hole: past the mapped disc (Rectangular to Polar's corners) the source's edge pixels repeat,
-    // so the corners carry the bottom row's colours outwards along each angle and an opaque layer stays opaque.
+    // Photoshop's polar space is the ellipse inscribed in the area, not a circle: x and y are each measured against
+    // their own half-extent, so a 2:1 image maps onto a 2:1 ellipse touching all four sides (which is why a "tiny
+    // planet" is made square first). The angle and radius are the ellipse's: 1 on its outline.
+    const float hx = w / 2.0f, hy = h / 2.0f;
+    // Photoshop leaves no hole: past the mapped ellipse (Rectangular to Polar's corners) the source's edge pixels
+    // repeat, so the corners carry the bottom row's colours outwards along each angle and an opaque layer stays opaque.
     remap(src, out, bounds, Edge::Repeat, [&](float x, float y, float& sx, float& sy) {
         if (mode == PolarMode::RectangularToPolar) {
             // The output is polar: the angle from 12 o'clock clockwise gives the source's x, the radius its y.
-            const float dx = x - cx, dy = y - cy;
-            const float theta = euclidModF(std::atan2(dx, -dy), tau);
-            const float r = std::sqrt(dx * dx + dy * dy);
+            const float nx = (x - cx) / hx, ny = (y - cy) / hy;
+            const float theta = euclidModF(std::atan2(nx, -ny), tau);
+            const float r = std::sqrt(nx * nx + ny * ny);
             sx = float(bounds.x0) + theta / tau * w;
-            sy = float(bounds.y0) + r / rmax * h;
+            sy = float(bounds.y0) + r * h;
         } else {
             const float theta = (x - float(bounds.x0)) / w * tau;
-            const float r = (y - float(bounds.y0)) / h * rmax;
-            sx = cx + r * std::sin(theta);
-            sy = cy - r * std::cos(theta);
+            const float r = (y - float(bounds.y0)) / h;
+            sx = cx + r * hx * std::sin(theta);
+            sy = cy - r * hy * std::cos(theta);
         }
     });
 }

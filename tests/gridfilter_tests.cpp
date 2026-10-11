@@ -285,13 +285,13 @@ TEST_CASE(distortion_values) {
     };
     CHECK(near(t, 96, 50, 71, 255));
     CHECK(near(w, 71, 28, 0, 255));
-    CHECK(near(p, 224, 173, 100, 255));
+    CHECK(near(p, 230, 153, 0, 255));
     CHECK(near(z, 80, 65, 200, 255));
     CHECK(near(s, 95, 83, 101, 255));
 #ifndef _WIN32
     checkHash("twirl/default", t, 0x96a3905a3a70a023ull);
     checkHash("wave/default", w, 0x71d8c35bc24232a8ull);
-    checkHash("polar/default", p, 0x4e20a8cbd5b87500ull);
+    checkHash("polar/default", p, 0x385beff128e9f53dull);
     checkHash("zigzag/default", z, 0x57732b278a61b8d9ull);
     checkHash("spherize/default", s, 0x4a46c3bca7023850ull);
 #endif
@@ -351,10 +351,10 @@ TEST_CASE(radial_blur_zoom_at_every_depth_and_mode) {
 }
 
 TEST_CASE(polar_coordinates_fills_the_corners_with_the_edge) {
-    // Rectangular to Polar maps the image into the disc inscribed in the area; Photoshop fills what lies past it (the
+    // Rectangular to Polar maps the image into the ellipse inscribed in the area; Photoshop fills what lies past it (the
     // corners) with the source's edge pixels repeated outwards, so an opaque layer stays opaque. Here the source's
     // green rises from 0 at the top to 255 at the bottom row and red follows x: each corner is the bottom row's green,
-    // and its red the bottom row's red at the corner's angle.
+    // and its red the bottom row's red at the corner's angle on the ellipse.
     const int w = 64, h = 48;
     auto img = std::make_shared<Image>(w, h);
     for (int y = 0; y < h; y++)
@@ -370,10 +370,57 @@ TEST_CASE(polar_coordinates_fills_the_corners_with_the_edge) {
     for (auto [x, y] : {std::pair{0, 0}, std::pair{w - 1, 0}, std::pair{0, h - 1}, std::pair{w - 1, h - 1}}) {
         const uint8_t* q = out.u8()->pixel(x, y);
         CHECK(q[1] >= 250);
-        double theta = std::atan2(x + 0.5 - w / 2.0, -(y + 0.5 - h / 2.0));
+        double theta = std::atan2((x + 0.5 - w / 2.0) / (w / 2.0), -(y + 0.5 - h / 2.0) / (h / 2.0));
         if (theta < 0) theta += 2 * pi;
         const int column = std::clamp(int(theta / (2 * pi) * w), 0, w - 1);
         CHECK(std::abs(int(q[0]) - int(img->pixel(column, h - 1)[0])) <= 10);
+    }
+}
+
+TEST_CASE(polar_coordinates_map_to_the_inscribed_ellipse) {
+    // Photoshop's polar space on a 2:1 image is a 2:1 ellipse touching all four sides, not a circle: x and y are each
+    // measured against their own half-extent. The source's green follows its row and its red its column.
+    const int w = 128, h = 64;
+    auto img = std::make_shared<Image>(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint8_t* p = img->pixel(x, y);
+            p[0] = uint8_t(x * 255 / (w - 1)); p[1] = uint8_t(y * 255 / (h - 1)); p[2] = 60; p[3] = 255;
+        }
+    const AnyImage out = run(FilterKind::PolarCoordinates, ImagePtr(img), defaults(FilterKind::PolarCoordinates));
+    REQUIRE(out.u8());
+    auto green = [&](int x, int y) { return int(out.u8()->pixel(x, y)[1]); };
+    // Rectangular to Polar: half-way out to each side's midpoint is radius 0.5 on the ellipse, so all four come from the
+    // middle row; at the sides' midpoints the ring is the bottom row, left and right as top and bottom.
+    const int cx = w / 2, cy = h / 2;
+    const int half = green(cx + w / 4, cy);
+    CHECK(std::abs(half - 128) <= 8);
+    for (int g : {green(cx - w / 4, cy), green(cx, cy - h / 4), green(cx, cy + h / 4)}) CHECK(std::abs(g - half) <= 6);
+    for (int g : {green(0, cy), green(w - 1, cy), green(cx, 0), green(cx, h - 1)}) CHECK(g >= 245);
+    // 12, 3, 6 and 9 o'clock at radius 0.5 are a quarter of the source's width apart.
+    auto red = [&](int x, int y) { return int(out.u8()->pixel(x, y)[0]); };
+    CHECK(std::abs(red(cx + w / 4, cy) - 64) <= 8);
+    CHECK(std::abs(red(cx, cy + h / 4) - 128) <= 8);
+    CHECK(std::abs(red(cx - w / 4, cy) - 191) <= 8);
+
+    // Polar to Rectangular reads the ellipse: a source whose green is its elliptical radius comes out with every row
+    // flat, at that row's radius.
+    auto rings = std::make_shared<Image>(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const double nx = (x + 0.5 - w / 2.0) / (w / 2.0), ny = (y + 0.5 - h / 2.0) / (h / 2.0);
+            uint8_t* p = rings->pixel(x, y);
+            p[0] = 0; p[1] = uint8_t(std::lround(std::min(1.0, std::sqrt(nx * nx + ny * ny)) * 255)); p[2] = 0; p[3] = 255;
+        }
+    FilterSettings back = defaults(FilterKind::PolarCoordinates);
+    back.style = 1;   // Polar to Rectangular
+    const AnyImage flat = run(FilterKind::PolarCoordinates, ImagePtr(rings), back);
+    REQUIRE(flat.u8());
+    for (int y : {8, 16, 32, 48}) {
+        const int expected = int(std::lround(double(y) / h * 255));
+        int worst = 0;
+        for (int x = 0; x < w; x++) worst = std::max(worst, std::abs(int(flat.u8()->pixel(x, y)[1]) - expected));
+        CHECK(worst <= 6);
     }
 }
 
