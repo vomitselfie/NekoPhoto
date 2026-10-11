@@ -139,6 +139,27 @@ Automation takes the same settings on `document.open` and `smartObject.editConte
 `pixels.cameraRaw` (the filter on pixels) keeps relative Temperature and Tint, as Photoshop's Camera Raw Filter does,
 and refuses the RAW-only keys.
 
+## Camera Raw parity
+
+`tests/camera_raw_parity` measures how far a RAW develop is from Photoshop's Camera Raw. It uses the public colour corpus
+of [RAWmakase](https://github.com/pch/rawmakase) (MIT; `tests/fixtures/camera-raw-parity`, see THIRD-PARTY-NOTICES.md):
+
+- `synthetic-d65.dng`, a 970 × 742 chart from an invented camera under daylight with its own colour matrices: a 24-step
+  grey ramp from −8 to +3.5 EV, 216 hue patches (24 hues × 3 lightnesses × 3 chromas), a wide-gamut row, a ColorChecker,
+  skin tones, near-neutrals, two sweeps and colours on black and white surrounds (`layout.json`);
+- `cases.json`, the settings cases as Camera Raw XMP attributes (sliders one at a time and at their extremes, pairs, the
+  colour mixer bands, curves, effects and geometry);
+- `camera-raw-synthetic-d65.json`, Camera Raw 18.7's render of each case: the mean encoded sRGB (16-bit) of every patch.
+
+The test develops the chart as File ▸ Open does (`developRaw`), once per case with its attributes mapped onto
+`CameraRawSettings`, measures the same patches and scores each case by CIEDE2000: the mean and the 95th percentile over
+the patches, the wide-gamut row left out. Cases for controls NekoPhoto has no counterpart for (Convert to Black & White
+and its mix, look profiles, Point Color) are listed and skipped. Every case is held to
+`tests/camera_raw_parity_baseline.txt`: one that gets worse by more than 0.1 on its mean or 0.3 on its 95th percentile
+fails. After an intended change, `COMPOSITOR_BLESS_CAMERA_RAW_PARITY=1 build/tests/camera_raw_parity` rewrites the
+baseline (commit its diff with the change); `COMPOSITOR_CAMERA_RAW_PARITY_DUMP=<file>` writes every case's patch values
+as JSON, for fitting. The test prints every case and a summary per control.
+
 ## Automation
 
 `pixels.cameraRaw` takes `settings`, an object with the model's keys. Nested objects hold `curve`, `mixer`,
