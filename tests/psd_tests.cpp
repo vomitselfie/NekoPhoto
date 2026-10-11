@@ -65,10 +65,11 @@ std::vector<uint8_t> channelData(const LayerSpec& l, const std::vector<uint8_t>&
 }
 
 /// `psb` writes the large-document variant: version 2, and the three section lengths that widen to 64 bits.
-std::vector<uint8_t> writePsd(int width, int height, const std::vector<LayerSpec>& layers, const std::vector<std::vector<uint8_t>>& compositePlanes, bool psb = false) {
+/// `mode` is the header's colour mode (3 RGB, 1 Grayscale).
+std::vector<uint8_t> writePsd(int width, int height, const std::vector<LayerSpec>& layers, const std::vector<std::vector<uint8_t>>& compositePlanes, bool psb = false, int mode = 3) {
     Out f;
     f.str("8BPS"); f.u16(psb ? 2 : 1); for (int i = 0; i < 6; i++) f.u8(0);
-    f.u16(unsigned(compositePlanes.size())); f.u32(uint32_t(height)); f.u32(uint32_t(width)); f.u16(8); f.u16(3);
+    f.u16(unsigned(compositePlanes.size())); f.u32(uint32_t(height)); f.u32(uint32_t(width)); f.u16(8); f.u16(unsigned(mode));
     f.u32(0);   // colour mode data
     // Image resources: the resolution (0x03ED) at 144 ppi.
     Out res;
@@ -128,6 +129,45 @@ std::string writeTemp(const std::vector<uint8_t>& bytes, const char* name) {
 }
 
 } // namespace
+
+TEST_CASE(grayscale_levels_and_curves_act_on_grey_not_red) {
+    // A Grayscale file's Levels record 1 and Curves bit 1 are its Gray channel. It opens as RGB, where they would be Red:
+    // they go to the composite, so the adjusted image stays grey.
+    const int W = 4, H = 2;
+    for (const char* key : {"levl", "curv"}) {
+        LayerSpec grey{"Background", 0, 0, W, H, {solid(W, H, 100)}, {0}};
+        LayerSpec adjustment{"Adjustment", 0, 0, 0, 0, {}, {}};
+        Out o;
+        if (std::string(key) == "levl") {
+            o.u16(2);
+            for (int i = 0; i < 29; i++) { o.u16(i == 1 ? 15 : 0); o.u16(i == 1 ? 230 : 255); o.u16(i == 1 ? 10 : 0); o.u16(i == 1 ? 245 : 255); o.u16(i == 1 ? 130 : 100); }
+        } else {
+            o.u8(0); o.u16(1); o.u32(1u << 1);   // bit 1 only: Gray
+            o.u16(3); o.u16(0); o.u16(0); o.u16(200); o.u16(100); o.u16(255); o.u16(255);   // (output, input) pairs
+        }
+        adjustment.extraKey = key; adjustment.extraBlock = o.b;
+        auto imported = importPsd(writeTemp(writePsd(W, H, {grey, adjustment}, {solid(W, H, 100)}, false, 1), "grey-adjustment.psd"), nullptr);
+        REQUIRE(imported.has_value());
+        REQUIRE(imported->document.layers.size() == 2u);
+        AdjustmentSettings parsed;
+        REQUIRE(imported->document.layers[1].adjustment.has_value());
+        REQUIRE(AdjustmentSettings::parse(imported->document.layers[1].adjustment->json, parsed));
+        if (std::string(key) == "levl") {
+            CHECK_NEAR(parsed.levels.ranges[0].black, 15, 1e-9);
+            CHECK_NEAR(parsed.levels.ranges[0].gamma, 1.3, 1e-9);
+            CHECK(parsed.levels.ranges[1] == LevelsRange());
+        } else {
+            REQUIRE(parsed.curves.channels[0].size() == 3u);
+            CHECK_NEAR(parsed.curves.channels[0][1].y, 200, 1e-9);
+            CHECK(parsed.curves.channels[1].size() == 2u);
+        }
+        auto image = renderFlattened(imported->document);
+        REQUIRE(image);
+        const uint8_t* p = image->pixel(1, 1);
+        CHECK(p[0] == p[1] && p[1] == p[2]);
+        CHECK(p[0] > 100);
+    }
+}
 
 TEST_CASE(psd_layers_folders_masks_and_blends_come_through) {
     const int W = 8, H = 6;

@@ -57,7 +57,8 @@ Each is listed before you export (the export dialog) or in the reply (`warnings`
   compressed rows, which Photoshop requires of a smart object's embedded file when the document keeps Smart Filter
   caches.
 - Bitmap, indexed, grayscale, duotone and multichannel are not export modes: such a file opens as RGB and exports as
-  RGB. 16-bit and 32-bit files and PSBs leave their Smart Filter caches for Photoshop to rebuild.
+  RGB. A grayscale or duotone file's Levels and Curves, which Photoshop keeps on its Gray channel, open on the RGB
+  composite, so they adjust as they did. 16-bit and 32-bit files and PSBs leave their Smart Filter caches for Photoshop to rebuild.
 - Text, layer styles ([layer-styles.md](layer-styles.md)), shape layers and smart objects
   ([smart-objects.md](smart-objects.md)) are written as Photoshop's own; adjustments Photoshop has no equivalent for
   are baked as described above.
