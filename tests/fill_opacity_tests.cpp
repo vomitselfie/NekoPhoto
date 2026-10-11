@@ -20,6 +20,7 @@
 // and a project saved before Fill was modelled (one opacity, Opacity x Fill, beside the file's two in the carry) opens
 // with the two apart again.
 #include "check.h"
+#include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/layerstyle.h"
 #include "compositor/project.h"
@@ -262,6 +263,99 @@ TEST_CASE(project_before_fill_splits_the_folded_opacity) {
     CHECK(std::abs(again->layers[0].opacity - 204 / 255.0) < 1e-9);
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);
+}
+
+namespace {
+
+/// kBaseA under kTopA in `mode` at Fill `fill`, as a document of the given depth (no PSD in between).
+Document specialAtDepth(BlendMode mode, int fill, SampleType depth) {
+    Document doc(4, 4);
+    doc.sampleType = depth;
+    auto asset = [&](const RGB& c, const char* name) {
+        auto image = solid(c);
+        if (depth == SampleType::U16) return Asset::make(Image16Ptr(widenImage(*image)), name);
+        return Asset::make(image, name);
+    };
+    Layer background("Background", doc.size());
+    background.asset = asset(kBaseA, "Background");
+    doc.layers.push_back(background);
+    Layer layer("Fill", doc.size());
+    layer.asset = asset(kTopA, "Fill");
+    layer.blendMode = mode;
+    layer.fill = fill / 255.0;
+    doc.layers.push_back(layer);
+    return doc;
+}
+
+} // namespace
+
+TEST_CASE(special_fill_at_16_bits_and_with_effects) {
+    // The same kernels at 16 bits, and for a styled layer's own pixels (its effects keep the opacity alone).
+    const struct { BlendMode mode; RGB photoshop; } cases[] = {
+        {BlendMode::LinearDodge, {250, 240, 210}}, {BlendMode::ColorBurn, {176, 132, 88}}, {BlendMode::HardMix, {245, 225, 165}},
+        {BlendMode::VividLight, {193, 188, 157}}, {BlendMode::Difference, {150, 60, 10}},
+    };
+    for (const auto& c : cases) {
+        Document deep = specialAtDepth(c.mode, 128, SampleType::U16);
+        auto flat16 = renderFlattened16(deep);
+        REQUIRE(flat16 != nullptr);
+        const uint16_t* p = flat16->pixel(1, 1);
+        const RGB got{narrow16(p[0]), narrow16(p[1]), narrow16(p[2])};
+        if (!near(got, c.photoshop, 2))
+            check::fail(__FILE__, __LINE__, std::string(blendModeName(c.mode)) + " at 16 bits: " + std::to_string(got[0]) + "," + std::to_string(got[1]) + "," + std::to_string(got[2]));
+
+        // A styled layer: a 1 px outside stroke around a 2 x 2 square in the middle of an 8 x 8 canvas.
+        Document styled(8, 8);
+        Layer background(Asset::make(solidSized(8, 8, kBaseA), "Background"), Point(0, 0));
+        styled.layers.push_back(background);
+        Layer square(Asset::make(solidSized(4, 4, kTopA), "Square"), Point(2, 2));
+        square.blendMode = c.mode;
+        square.fill = 128 / 255.0;
+        LayerStyle style;
+        Stroke stroke;
+        stroke.size = 1;
+        style.strokes.push_back(stroke);
+        setLayerStyle(square, style);
+        styled.layers.push_back(square);
+        auto flat = renderFlattened(styled);
+        REQUIRE(flat != nullptr);
+        const RGB inside = pixelAt(*flat, 4, 4);
+        if (!near(inside, c.photoshop, 2))
+            check::fail(__FILE__, __LINE__, std::string(blendModeName(c.mode)) + " with a style: " + std::to_string(inside[0]) + "," + std::to_string(inside[1]) + "," + std::to_string(inside[2]));
+    }
+}
+
+TEST_CASE(special_fill_in_cmyk) {
+    // CMYK blends its stored (inverted ink) channels with the RGB kernels, Fill included: Linear Dodge at Fill 50% of
+    // 150 over 200 adds 75 and clips at 255, where Fill as coverage would give 228.
+    Document doc(4, 4);
+    doc.colorMode = ColorMode::CMYK;
+    auto plane = [](uint8_t v) {
+        auto image = std::make_shared<ImageC8>(4, 4, 5);
+        for (int y = 0; y < 4; y++)
+            for (int x = 0; x < 4; x++) {
+                uint8_t* q = image->pixel(x, y);
+                for (int k = 0; k < 4; k++) q[k] = v;
+                q[4] = 255;
+            }
+        return image;
+    };
+    Layer background(Asset::make(ImageC8Ptr(plane(200)), "Background"), Point(0, 0));
+    doc.layers.push_back(background);
+    Layer layer(Asset::make(ImageC8Ptr(plane(150)), "Fill"), Point(0, 0));
+    layer.blendMode = BlendMode::LinearDodge;
+    layer.fill = 128 / 255.0;
+    doc.layers.push_back(layer);
+    const AnyImage flat = renderNative(doc);
+    REQUIRE(flat.c8() != nullptr);
+    const uint8_t* q = flat.c8()->pixel(1, 1);
+    for (int k = 0; k < 4; k++) CHECK_EQ(int(q[k]), 255);
+    // At Fill 100% with Opacity 50% the same layer is plain coverage.
+    doc.layers.back().fill = 1;
+    doc.layers.back().opacity = 128 / 255.0;
+    const AnyImage half = renderNative(doc);
+    REQUIRE(half.c8() != nullptr);
+    CHECK(std::abs(int(half.c8()->pixel(1, 1)[0]) - 228) <= 1);
 }
 
 TEST_MAIN()

@@ -96,6 +96,13 @@ not distributed). Reading a Gradient Map's method from 'grdm' version 3 (`src/co
 `src/additionalInfo.ts` at commit 387049670cb89b88fb8fe1b7c01aeacf98dd2e3b (MIT, (c) Agamnentzar): the method's
 four-character code after Dither, present when its first byte is not zero.
 
+Fill in Photoshop's special eight blend modes (`fillIsSpecial`, `blendAtFill` and `compositeAtFill` in
+`src/core/include/compositor/blend.h`: the source pulled toward the mode's neutral colour, Hard Mix's ramp, Opacity as
+coverage and Fill as coverage over transparency) is adapted from [PhotoCraft](https://github.com/storytold/photocraft)'s
+`crates/compose/src/psblend.rs` (`blend_rgb_fill`, `composite_fill`) at commit 88ffd89e9fe2b774023016c0f9024d3a2f6728b4
+(dual MIT / Apache-2.0, used under MIT, [PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt); Copyright (c) 2026 ArtCraft
+Team and the PhotoCraft contributors).
+
 Edit ▸ Search's fuzzy match (`fuzzyScore` in `src/app/CommandPalette.cpp`: a subsequence match scored by contiguous
 runs and word starts, less for long texts) is adapted from [PhotoCraft](https://github.com/storytold/photocraft)'s
 `crates/ui-egui/src/palette.rs` at commit b07a2e5b43939497032a0c27489df55a1a1a7295 (dual MIT / Apache-2.0, used under

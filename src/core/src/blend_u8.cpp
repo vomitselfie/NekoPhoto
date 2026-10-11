@@ -281,6 +281,13 @@ Rgb blendColor(BlendMode mode, Rgb cb, Rgb cs) {
     }
 }
 
+void compositePixelAtFill(BlendMode mode, const uint8_t* src, float coverage, float fill, uint8_t* dst) {
+    compositeAtFill(mode, 3, src, coverage, fill, dst, 255.0f, [mode](const float* cb, float* cs) {
+        const Rgb m = blendColor(mode, {cb[0], cb[1], cb[2]}, {cs[0], cs[1], cs[2]});
+        cs[0] = m.r; cs[1] = m.g; cs[2] = m.b;
+    });
+}
+
 uint8_t photoshopBlendByte(BlendMode mode, uint8_t source, uint8_t backdrop) { return photoshopChannel(mode, source, backdrop); }
 uint8_t photoshopBlendByteTabled(BlendMode mode, uint8_t source, uint8_t backdrop) {
     return photoshopByteMode(mode) ? photoshopTable(mode)[source * 256 + backdrop] : photoshopChannel(mode, source, backdrop);

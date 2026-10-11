@@ -44,6 +44,17 @@ own value, as in Photoshop: Opacity fades the layer and its effects, Fill only t
 shows its stroke, shadow or glow alone, and an Opacity edit never changes it. A folder's Fill fades its contents (its
 effects excepted). PSD files keep the two apart ('iOpa').
 
+In Color Burn, Linear Burn, Color Dodge, Linear Dodge (Add), Vivid Light, Linear Light, Hard Mix and Difference,
+Photoshop applies Fill inside the blend rather than as coverage: the layer's colour is pulled toward the mode's neutral
+(white for the burns, middle grey for Vivid and Linear Light, black for the dodges and Difference) and blended at full
+strength, and Hard Mix becomes a ramp, (b − f(1 − s)) / (1 − f); Opacity and masks stay coverage, and over transparency
+Fill is coverage too. So a Linear Dodge (Add) glow at low Fill brightens as in Photoshop. This is drawn at every depth,
+in CMYK and Lab (in their stored channels, as their blending is), and for a styled layer's own pixels. The rule is
+PhotoCraft's (`blend_rgb_fill` / `composite_fill`, fitted to Photoshop 27.11); `tests/fill_opacity_tests.cpp` checks it
+against 24 Photoshop 27.11 composites measured by PhotoCraft and 8 Photoshop 2026 ones measured by Patchy: 31 within
+2 levels, the last within 3 (Hard Mix at Fill 75%, whose division magnifies Photoshop's rounding, is allowed 4). Unverified against Photoshop: CMYK and Lab, 32 bits, a folder's Fill in these modes
+(drawn as coverage), and an adjustment layer's.
+
 Bevel & Emboss goes past Patchy in three places, each fitted to Photoshop's merged image of a Patchy fixture
 (`build/tests/psd_composite_oracle`):
 
