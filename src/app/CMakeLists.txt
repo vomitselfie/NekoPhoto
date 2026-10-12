@@ -76,6 +76,12 @@ qt_add_executable(nekophoto
     MainWindowCanvasMenu.cpp
     SelfTest.h
     SelfTest.cpp
+    SelfTestSupport.h
+    SelfTestCommandPath.cpp
+    SelfTestMenuCommands.cpp
+    SelfTestFiles.cpp
+    SelfTestKeys.cpp
+    SelfTestInterface.cpp
     SelfTestWork.cpp
     SelfTestFullScreen.cpp
     SelfTestHidePanels.cpp
