@@ -552,3 +552,18 @@ add_test(NAME document_file_tests COMMAND document_file_tests)
 add_executable(gridfilter_tests gridfilter_tests.cpp)
 target_link_libraries(gridfilter_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME gridfilter_tests COMMAND gridfilter_tests)
+
+# The standard headers the tests include, precompiled once in core_tests (COMPOSITOR_PCH) and reused by every test on
+# the core alone; the ones on Qt are compiled with other flags and parse their headers themselves.
+if(COMPOSITOR_PCH)
+    compositor_precompile_headers(core_tests algorithm array cmath cstdint cstdio cstdlib cstring filesystem fstream functional map
+                                  memory optional random set string vector)
+    get_property(compositor_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(test_target IN LISTS compositor_test_targets)
+        get_target_property(test_type ${test_target} TYPE)
+        get_target_property(test_libraries ${test_target} LINK_LIBRARIES)
+        if(NOT test_target STREQUAL "core_tests" AND test_type MATCHES "^(EXECUTABLE|STATIC_LIBRARY)$" AND NOT test_libraries MATCHES "Qt6::")
+            set_target_properties(${test_target} PROPERTIES PRECOMPILE_HEADERS_REUSE_FROM core_tests)
+        endif()
+    endforeach()
+endif()

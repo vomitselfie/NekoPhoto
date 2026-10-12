@@ -103,7 +103,9 @@ Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 `-DCOMPOSITOR_WITH_MYPAINT=OFF` leaves out the MyPaint brushes (the round brush stays);
 `-DCOMPOSITOR_WITH_SQLITE=OFF` leaves out Clip Studio brush import;
 `-DCOMPOSITOR_WITH_QTPDF=OFF` leaves out PDF import;
-`-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses.
+`-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses;
+`-DCOMPOSITOR_PCH=OFF` turns off the precompiled headers (on by default, off under MinGW), for a toolchain that
+mishandles them or to check that every file includes what it uses.
 `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4` builds against the OpenCV that
 `tools/build-opencv.sh <prefix>` makes: a pinned 4.x, static, with only the
 three modules the model needs and every optional dependency off. CI and the

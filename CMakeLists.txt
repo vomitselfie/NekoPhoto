@@ -52,6 +52,32 @@ target_compile_options(compositor_warnings INTERFACE
     $<$<AND:$<BOOL:${COMPOSITOR_WARNINGS_AS_ERRORS}>,$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>>:-Werror>
 )
 
+# Precompiled headers: the standard and Qt headers most files include are parsed once per target instead of once per
+# file. Only system headers, never the project's own: a project header in a PCH would rebuild every file of the target
+# whenever it changed. Off by default under MinGW, whose GCC can fail to map a large PCH where it was built ("had to
+# relocate PCH"). Turn it off wherever a toolchain misbehaves; a build with it off also shows a file that has come to
+# lean on the PCH for one of its includes.
+if(MINGW)
+    set(COMPOSITOR_PCH_DEFAULT OFF)
+else()
+    set(COMPOSITOR_PCH_DEFAULT ON)
+endif()
+option(COMPOSITOR_PCH "Precompile the common standard and Qt headers" ${COMPOSITOR_PCH_DEFAULT})
+
+# compositor_precompile_headers(<target> <header>...): precompiles the system headers named (vector, QWidget) for the
+# target's C++ files when COMPOSITOR_PCH is on; its C files get none. A file compiled with other options than the
+# target's opts out with the SKIP_PRECOMPILE_HEADERS source property.
+function(compositor_precompile_headers target)
+    if(NOT COMPOSITOR_PCH)
+        return()
+    endif()
+    set(headers "")
+    foreach(header IN LISTS ARGN)
+        list(APPEND headers "$<$<COMPILE_LANGUAGE:CXX>:<${header}$<ANGLE-R>>")
+    endforeach()
+    target_precompile_headers(${target} PRIVATE ${headers})
+endfunction()
+
 add_subdirectory(src/pixels)
 add_subdirectory(src/core)
 

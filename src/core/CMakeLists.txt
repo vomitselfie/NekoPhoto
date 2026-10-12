@@ -276,9 +276,13 @@ target_link_libraries(compositor_core
     PRIVATE nekophoto_lcms2 PkgConfig::PNG PkgConfig::ZLIB compositor_warnings
 )
 target_compile_definitions(compositor_core PRIVATE _USE_MATH_DEFINES)
-# The Mosh effects hash float bit patterns: no fused multiply-adds, so every CPU computes the same bits.
+# The standard headers most of the core includes (COMPOSITOR_PCH). Not nlohmann/json.hpp: nine files include it, and
+# a PCH holding it costs the other hundred and twenty more to load than it saves those nine.
+compositor_precompile_headers(compositor_core algorithm array cmath cstdint cstdio cstring functional map memory mutex optional set string vector)
+# The Mosh effects hash float bit patterns: no fused multiply-adds, so every CPU computes the same bits. A PCH built
+# without that option does not fit them, so they parse their headers themselves.
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set_source_files_properties(src/mosh.cpp src/mosh_effects.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+    set_source_files_properties(src/mosh.cpp src/mosh_effects.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off" SKIP_PRECOMPILE_HEADERS ON)
 endif()
 if(COMPOSITOR_HAVE_OPENCV)
     target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_OPENCV_LIBS})

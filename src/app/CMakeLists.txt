@@ -221,6 +221,13 @@ qt_add_executable(nekophoto
 )
 
 target_compile_definitions(nekophoto PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")
+# The Qt and standard headers most of the app includes (COMPOSITOR_PCH): a chosen few rather than all of <QtWidgets>,
+# which takes twice as long to parse and makes a PCH that every file is slower to load.
+compositor_precompile_headers(nekophoto
+    algorithm cmath functional map memory optional set vector
+    QApplication QCheckBox QComboBox QDialog QDialogButtonBox QDir QDoubleSpinBox QFile QFileInfo QFormLayout QHBoxLayout
+    QJsonArray QJsonDocument QJsonObject QKeyEvent QLabel QLineEdit QMenu QMessageBox QMouseEvent QPainter QPointer
+    QPushButton QSettings QSpinBox QString QStringList QTimer QToolButton QVBoxLayout QWidget)
 # The MyPaint brush presets (CC0) are compiled in, so every package and a plain build tree have them.
 file(GLOB_RECURSE COMPOSITOR_BRUSH_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*.myb ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*_prev.png)
