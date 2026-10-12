@@ -206,6 +206,9 @@ int workCounters(MainWindow& window) {
         b.expect(d[Counter::LayerDraws] >= 3, "the frame after hiding a layer below the dragged adjustment did not draw the layers below again");
         d = step([&] { s.setVisibilityInSwipe(*photoId, true); s.endVisibilitySwipe(); });
         b.expect(d[Counter::LayerDraws] >= 4, "the frame after showing a layer below the dragged adjustment did not draw the layers below again");
+        // The swipe's own follow-ups (panel thumbnails, a deferred canvas frame) finish first: on a slow runner they
+        // landed inside the next tick and were counted against it.
+        settle();
         settings->levels.ranges[0].white = 200;
         d = step([&] { s.setAdjustment(*id, *settings); });
         b.at("a tick after the swipe", d, Counter::LayerDraws, 0);
