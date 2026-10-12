@@ -4,8 +4,8 @@ adjust/black_&_white a82636aa35eaf081
 adjust/brightness/contrast 0de885277ee25cb8
 adjust/channel_mixer b590e249095157ae
 adjust/color_balance 16f8d8f8b7ab7b9a
-adjust/curves dbf86caa117a87ce
-adjust/exposure 31635189d1475217
+adjust/curves 1e22ee5fd9f12303
+adjust/exposure 504a150b4f17040f
 adjust/gradient_map d22a3646f0cf26f4
 adjust/grain 77b8fbaf289647b2
 adjust/hue/saturation f9bd14d0d1d9dd8f
@@ -20,8 +20,8 @@ adjust_layer/black_&_white e522bbc8255cbdcb
 adjust_layer/brightness/contrast 017399784effee14
 adjust_layer/channel_mixer a6decbe8767d46e0
 adjust_layer/color_balance e9f506b4355e552a
-adjust_layer/curves c4868679b99898c5
-adjust_layer/exposure ae7a06f5d7bec298
+adjust_layer/curves 907d3b2084d3052c
+adjust_layer/exposure 6b5295eae63641c1
 adjust_layer/gradient_map e9f6ab7ab911d3e6
 adjust_layer/grain 13eeaf96604c2546
 adjust_layer/hue/saturation 707a96654a63f9d9
@@ -98,7 +98,7 @@ brush/tip_jitter_grain 2bd36b973b49cd1a
 brush/tip_square 52c291b922c60133
 channels/base_clip_folder_adjustment e19499f27a9668c1
 cmyk/adjust/colour a78a1d00d1059e9a
-cmyk/adjust/levels_curves 050c64dcbb6880f6
+cmyk/adjust/levels_curves 489eae2cc7709859
 cmyk/adjust/tones 9a7c93fc9fa9ecf4
 cmyk/artboard/coloured_background e4e4974ff0127dbf
 cmyk/blend/color 306262e25c00f4e5
@@ -171,7 +171,7 @@ cmyk/style/pattern_overlay 285cdb6b3cddfcf6
 cmyk/style/satin f684189b7737d001
 cmyk/style/stroke 5dd44d31544cf7f4
 cmyk16/adjust/colour c31f582324749556
-cmyk16/adjust/levels_curves 910fb8b914f86e56
+cmyk16/adjust/levels_curves ce6e32a41ca2734d
 cmyk16/adjust/tones acd667ae70c135fb
 cmyk16/artboard/coloured_background b0eb47467b08e240
 cmyk16/blend/color fb3501015a53750d
@@ -246,7 +246,7 @@ cmyk16/style/stroke 43ea29720f5e0e5a
 f32/adjust/black_&_white 1ee697096b01db23
 f32/adjust/channel_mixer a80a21238ed30660
 f32/adjust/color_balance 4018a5132bb880ec
-f32/adjust/curves 8374720610e9dcbd
+f32/adjust/curves 5b1c8dcc3036ea6a
 f32/adjust/exposure f39e46542c8bd143
 f32/adjust/gradient_map 2a3ec4115ba475d7
 f32/adjust/hue/saturation 42568583a46fc6f9
@@ -257,7 +257,7 @@ f32/adjust/vibrance f73da4d51b0f09ff
 f32/adjust_layer/black_&_white be612aee0803e044
 f32/adjust_layer/channel_mixer 0ff95762b20f8cb6
 f32/adjust_layer/color_balance e6a004b63c72ebe6
-f32/adjust_layer/curves ef4ebe9b411c0b24
+f32/adjust_layer/curves 73a792d0770de114
 f32/adjust_layer/exposure 16a23ace11aaa7b1
 f32/adjust_layer/gradient_map bfb3ca7e436634d5
 f32/adjust_layer/hue/saturation 55d24b9d4f07db66
@@ -265,7 +265,7 @@ f32/adjust_layer/invert e422d68dc2771380
 f32/adjust_layer/levels 4f77b91326667217
 f32/adjust_layer/photo_filter 558ed64449427613
 f32/adjust_layer/posterize_not_drawn 173ff4d8b3b1efbc
-f32/adjust_layer/stack f985f2271d874623
+f32/adjust_layer/stack 3dc47d545ba32180
 f32/adjust_layer/vibrance 4ea7b377acf42a2d
 f32/blend/color 959b8732e2a92788
 f32/blend/color@0.5 557b0f82c80092c7
@@ -402,9 +402,9 @@ golden/reduced_layer 20afb8f967832f5c
 golden/transformed_layer c8ae323d04ec301c
 golden/transformed_layer_nearest dc1e414ea473abb4
 golden/zoomed_region 2ac737d156e610ab
-gradient_method/linear 2a0e94230286c2e4
-gradient_method/perceptual 97a90a8ed284325f
-lab/adjust/levels_curves 125f0e4cf3ae6847
+gradient_method/linear 97a7fc236462d8c3
+gradient_method/perceptual 464d3edb4e1eb772
+lab/adjust/levels_curves 6e8e5d6443b21264
 lab/adjust/tones 4d92e8c5c720b571
 lab/artboard/coloured_background 2e514e8950ed82c2
 lab/blend/color 96fa7cbe05b06b66
@@ -468,7 +468,7 @@ lab/style/outer_glow c9f6b299d9d10f8d
 lab/style/pattern_overlay 318e293d77a81537
 lab/style/satin 5573187cdfe66678
 lab/style/stroke ae05a2012910e2e9
-lab16/adjust/levels_curves a6d995ea7bad8403
+lab16/adjust/levels_curves 3541748e9c0d0521
 lab16/adjust/tones 83c45fc55dc09ff4
 lab16/artboard/coloured_background e217844300bc9f56
 lab16/blend/color f0f60a90ed01d0b8
@@ -558,8 +558,8 @@ u16/adjust/black_&_white 72f48dedf7af8c94
 u16/adjust/brightness/contrast 28aba1ea192ee1eb
 u16/adjust/channel_mixer cb1beb03791dc691
 u16/adjust/color_balance a43f051fd07f3568
-u16/adjust/curves b0448b6c3c665374
-u16/adjust/exposure f323e082eef3452f
+u16/adjust/curves fe972aa747f47b17
+u16/adjust/exposure 96bcf9c963c69803
 u16/adjust/gradient_map a66c06e8e78f81b1
 u16/adjust/grain 91eb916d1f1901bc
 u16/adjust/hue/saturation 8a077054478b563a
@@ -574,8 +574,8 @@ u16/adjust_layer/black_&_white fd1ddc16aef87ab8
 u16/adjust_layer/brightness/contrast e4c3a7d1e24807bc
 u16/adjust_layer/channel_mixer fdba7c9353ce2c8c
 u16/adjust_layer/color_balance a962c8db545a3662
-u16/adjust_layer/curves 63f58e703a4f5666
-u16/adjust_layer/exposure dbf13aa6dbd9087d
+u16/adjust_layer/curves b96f34317afd282a
+u16/adjust_layer/exposure 1ac2e31654623ce6
 u16/adjust_layer/gradient_map c021c306f58dc3ac
 u16/adjust_layer/grain 28c38be03b053d54
 u16/adjust_layer/hue/saturation 18225d74c77ceb41
@@ -652,7 +652,7 @@ u16/channels/base_clip_folder_adjustment 0cbe9a549942e8e5
 u16/export/artboard_rect 96889daae3a81d02
 u16/export/svg 726261fedab83944
 u16/feather/stroked_shape_and_vector_mask e79c578ec38cf685
-u16/fill_layer/gradient c8af46e5fa6b5d53
+u16/fill_layer/gradient 423c3f62cec2ff67
 u16/filter/add_noise_gaussian_mono 3f270c0ca8067784
 u16/filter/add_noise_uniform 4ba05a38e6a1d598
 u16/filter/gaussian_blur_20 20d45d9c87bd14b9
@@ -668,8 +668,8 @@ u16/filter/motion_blur_0 474efff93e42755b
 u16/filter/motion_blur_30 3cf7942e8687c099
 u16/golden/placed_mask 4c7b81da539a597a
 u16/golden/transformed_layer fb6f63fee069e412
-u16/gradient_method/linear 590f9b32ef98bc44
-u16/gradient_method/perceptual 95e084c4273ad7b5
+u16/gradient_method/linear 44039c3b99751f21
+u16/gradient_method/perceptual 6ce21fd19f5b50ee
 u16/remove_background/refined_and_decontaminated b119da06acd53cf8
 u16/shape/dashed_stroke 09c5d4403052a7f2
 u16/shape/gradient_fill_and_stroke 3760b5e6fe067971

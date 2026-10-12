@@ -250,8 +250,8 @@ double levelsAt(const LevelsRange& range, double x) {
 
 double curveAt(const CurvesSettings& curves, int channel, double x) {
     if (x <= 255) return curves.value(x, channel);
-    const auto& p = curves.channels[size_t(channel)];
-    const double slope = p.back().x >= 255 ? (p.back().y - p[p.size() - 2].y) / (p.back().x - p[p.size() - 2].x) : 0.0;
+    const NaturalCurve spline(curves.channels[size_t(channel)]);
+    const double slope = spline.x.back() >= 255 ? spline.endSlope() : 0.0;
     return std::max(0.0, curves.value(255, channel) + (x - 255) * slope);
 }
 

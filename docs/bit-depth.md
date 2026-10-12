@@ -121,7 +121,8 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
 
 A 16-bit PSD that NekoPhoto opened and exports again as PSD keeps each unedited layer's channel data byte for byte,
 so a round trip does not lose Photoshop's full 16 bits; a layer you edit (and a PSB) is written from its 0..32768
-values, which drops the lowest of the file's 16 bits. PNG and TIFF are always written from 0..32768.
+values, which drops the lowest of the file's 16 bits. A 16- or 32-bit grayscale file opens as RGB, so its layers are
+always written anew as RGB from the document's values. PNG and TIFF are always written from 0..32768.
 
 A 16-bit PSD does not get Photoshop's Smart Filter cache (it is 8-bit data; Photoshop rebuilds it). Opening a 16-bit
 PSD that has none, NekoPhoto draws each Smart Filter stack over the whole canvas with its filter mask all white, so the
@@ -299,7 +300,7 @@ adjusts as it did, and light above white goes on through the function:
 - **Levels** loses its clamp at the white point: input above it goes on rising along the same formula (at 8 bits it is
   cut at white). The black point still cuts below.
 - **Curves** is exactly the 8-bit curve from 0 to 255; above 255 it continues as a straight line along its end tangent
-  (the last segment's slope when the last point is at 255, flat when the last point stops short of 255, as the curve is
+  (the spline's slope at the last point when that point is at 255, flat when the last point stops short of 255, as the curve is
   already flat there). Photoshop does not document how its 32-bit Curves and Levels carry on above 1; these are
   NekoPhoto's stated choices.
 - **Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance and Color Lookup** are defined on
@@ -313,7 +314,8 @@ adjusts as it did, and light above white goes on through the function:
 On an 8-bit picture converted to 32 bits, adjusted there and converted back at exposure 0, every kind is within one
 level of the 8-bit adjustment on opaque pixels but Hue/Saturation, within three: at 8 bits it is Photoshop's byte
 arithmetic (lightness, half-chroma and hue each rounded to a level, which a raised saturation multiplies), at 16 and 32
-bits the same model unrounded. On half-transparent pixels Exposure, Levels, Curves, Invert, Black &
+bits the same model unrounded; and Exposure, a few levels apart, as in Photoshop: at 8 and 16 bits it linearises
+through a 2.2 power (1.732 for a grayscale file), at 32 bits it takes the stored linear values. On half-transparent pixels Levels, Curves, Invert, Black &
 White, Channel Mixer and Gradient Map stay within a level; Hue/Saturation, Color Balance, Photo Filter and Vibrance
 reach 2 to 5 levels on under 0.1% of samples, because the 8-bit kernels round the straight colour to a whole level
 (value × 255 / alpha, cut) before their function, which at a low alpha is off by up to a level divided by the alpha.

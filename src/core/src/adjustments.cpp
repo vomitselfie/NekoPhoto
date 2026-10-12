@@ -203,23 +203,43 @@ bool CurvesSettings::isIdentity() const {
     return true;
 }
 
-double CurvesSettings::value(double x, int channel) const {
-    const auto& p = channels[size_t(clamp(channel, 0, levelsChannelCount - 1))];
+NaturalCurve::NaturalCurve(const std::vector<CurvePoint>& points) {
+    for (const CurvePoint& p : points) { x.push_back(p.x); y.push_back(p.y); }
+    const size_t n = x.size();
+    m2.assign(n, 0.0);
+    if (n < 3) return;
+    // The tridiagonal system for the inner second derivatives, by forward elimination and back substitution.
+    std::vector<double> c(n, 0.0), d(n, 0.0);
+    for (size_t i = 1; i + 1 < n; i++) {
+        const double h0 = x[i] - x[i - 1], h1 = x[i + 1] - x[i];
+        const double a = h0 / 6, b = (h0 + h1) / 3, r = (y[i + 1] - y[i]) / h1 - (y[i] - y[i - 1]) / h0;
+        const double denom = b - a * c[i - 1];
+        c[i] = h1 / 6 / denom;
+        d[i] = (r - a * d[i - 1]) / denom;
+    }
+    for (size_t i = n - 2; i >= 1; i--) m2[i] = d[i] - c[i] * m2[i + 1];
+}
+
+double NaturalCurve::operator()(double at) const {
+    if (x.empty()) return std::min(255.0, std::max(0.0, at));
+    if (at <= x.front()) return std::min(255.0, std::max(0.0, y.front()));
+    if (at >= x.back()) return std::min(255.0, std::max(0.0, y.back()));
     size_t i = 0;
-    for (size_t j = 0; j < p.size(); j++) if (p[j].x <= x) i = j;
-    i = std::min(p.size() - 2, i);
-    std::vector<double> d;
-    for (size_t j = 0; j + 1 < p.size(); j++) d.push_back((p[j + 1].y - p[j].y) / (p[j + 1].x - p[j].x));
-    auto slope = [&](size_t j) {
-        if (j == 0) return d[0];
-        if (j == p.size() - 1) return d.back();
-        if (d[j - 1] * d[j] <= 0) return 0.0;
-        return 2 / (1 / d[j - 1] + 1 / d[j]);
-    };
-    double h = p[i + 1].x - p[i].x, t = std::min(1.0, std::max(0.0, (x - p[i].x) / h));
-    double y = (2 * t * t * t - 3 * t * t + 1) * p[i].y + (t * t * t - 2 * t * t + t) * h * slope(i)
-        + (-2 * t * t * t + 3 * t * t) * p[i + 1].y + (t * t * t - t * t) * h * slope(i + 1);
-    return std::min(255.0, std::max(0.0, y));
+    while (i + 2 < x.size() && at > x[i + 1]) i++;
+    const double h = x[i + 1] - x[i], a = (x[i + 1] - at) / h, b = (at - x[i]) / h;
+    const double v = a * y[i] + b * y[i + 1] + ((a * a * a - a) * m2[i] + (b * b * b - b) * m2[i + 1]) * h * h / 6;
+    return std::min(255.0, std::max(0.0, v));
+}
+
+double NaturalCurve::endSlope() const {
+    const size_t n = x.size();
+    if (n < 2) return 1;
+    const double h = x[n - 1] - x[n - 2];
+    return (y[n - 1] - y[n - 2]) / h + h * (m2[n - 2] + 2 * m2[n - 1]) / 6;
+}
+
+double CurvesSettings::value(double x, int channel) const {
+    return NaturalCurve(channels[size_t(clamp(channel, 0, levelsChannelCount - 1))])(x);
 }
 
 Transfer curvesTransfer(const CurvesSettings& settings) {
@@ -237,20 +257,22 @@ void applyCurves(Image& image, const CurvesSettings& settings) {
 // ---- Exposure ----------------------------------------------------------------------
 
 ExposureSettings ExposureSettings::normalized() const {
-    return {clampFinite(exposure, -20, 20, 0), clampFinite(offset, -0.5, 0.5, 0), clampFinite(gamma, 0.01, 9.99, 1)};
+    return {clampFinite(exposure, -20, 20, 0), clampFinite(offset, -0.5, 0.5, 0), clampFinite(gamma, 0.01, 9.99, 1), clampFinite(toneGamma, 1, 3, 2.2)};
+}
+
+double ExposureSettings::at(double encoded) const {
+    // Photoshop linearises through a plain power law, 2.2 in RGB and 1.732 in Grayscale (photocraft-corpus and psd-tools
+    // exposure files; an offset of 0.1738 lifts 76 to 134, where the sRGB curve gives 136). Rule after PhotoCraft's
+    // crates/compose/src/adjust.rs (88ffd89, MIT).
+    const ExposureSettings s = normalized();
+    const double linear = std::pow(std::max(0.0, encoded), s.toneGamma);
+    const double v = std::pow(std::max(0.0, linear * std::pow(2.0, s.exposure) + s.offset), 1 / s.gamma);
+    return std::min(1.0, std::max(0.0, std::pow(v, 1 / s.toneGamma)));
 }
 
 std::array<float, 256> ExposureSettings::table() const {
-    ExposureSettings s = normalized();
     std::array<float, 256> result{};
-    double scale = std::pow(2.0, s.exposure);
-    for (int i = 0; i < 256; i++) {
-        double encoded = i / 255.0;
-        double linear = encoded <= 0.04045 ? encoded / 12.92 : std::pow((encoded + 0.055) / 1.055, 2.4);
-        linear = std::pow(std::max(0.0, linear * scale + s.offset), 1 / s.gamma);
-        double output = linear <= 0.0031308 ? linear * 12.92 : 1.055 * std::pow(linear, 1 / 2.4) - 0.055;
-        result[size_t(i)] = float(std::min(1.0, std::max(0.0, output)));
-    }
+    for (int i = 0; i < 256; i++) result[size_t(i)] = float(at(i / 255.0));
     return result;
 }
 
@@ -988,7 +1010,7 @@ bool AdjustmentSettings::parse(const std::string& text, AdjustmentSettings& out)
     if (curves != j.end() && !curves->is_null() && !parseCurves(*curves, s.curves)) return false;
     auto exposure = j.find("exposureSettings");
     if (exposure != j.end() && exposure->is_object()) {
-        s.exposure = {num(*exposure, "exposure", 0), num(*exposure, "offset", 0), num(*exposure, "gamma", 1)};
+        s.exposure = {num(*exposure, "exposure", 0), num(*exposure, "offset", 0), num(*exposure, "gamma", 1), num(*exposure, "toneGamma", 2.2)};
         if (!(s.exposure == s.exposure.normalized())) return false;
     }
     auto gradient = j.find("gradientMapSettings");
@@ -1037,6 +1059,7 @@ std::string AdjustmentSettings::toJson() const {
     j["levels"] = levelsJson(levels);
     j["curves"] = curvesJson(curves);
     j["exposureSettings"] = {{"exposure", number(exposure.exposure)}, {"offset", number(exposure.offset)}, {"gamma", number(exposure.gamma)}};
+    if (exposure.toneGamma != 2.2) j["exposureSettings"]["toneGamma"] = number(exposure.toneGamma);
     j["gradientMapSettings"] = {{"shadows", {{"red", number(gradientMap.shadows.red)}, {"green", number(gradientMap.shadows.green)}, {"blue", number(gradientMap.shadows.blue)}}},
                                 {"highlights", {{"red", number(gradientMap.highlights.red)}, {"green", number(gradientMap.highlights.green)}, {"blue", number(gradientMap.highlights.blue)}}},
                                 {"reversed", gradientMap.reversed}, {"interpolation", gradientMethodKey(gradientMap.method)}};

@@ -43,8 +43,11 @@ struct RenderPlan {
     void buildWithin(const RenderPlan& parent, const Uuid& group);
 
     bool within(const Layer& layer, const Uuid& group) const;
-    /// A folder with Blend If isolates even in Pass Through: its result is gated against what is under it.
-    static bool isolates(const Layer& g) { return !g.passThrough || hasBlendIf(g); }
+    /// A folder with Blend If isolates even in Pass Through: its result is gated against what is under it. So does a
+    /// Pass Through folder below 100% Fill, as Photoshop composites it (psd-tools' passthrough_fill_adjustment: an
+    /// adjustment inside no longer reaches the layers beneath). A styled one at 100% Fill does not (Patchy's
+    /// photoshop-group-fx-passthrough).
+    static bool isolates(const Layer& g) { return !g.passThrough || hasBlendIf(g) || g.fill < 1; }
     static bool hasBlendIf(const Layer& l) { return l.psdCarry && !l.psdCarry->blendingRanges.empty() && layerBlendIf(l, ColorMode::CMYK); }
     /// What fades a layer's own pixels or a folder's contents: its opacity and its Fill (effects take the opacity alone).
     static float contentOpacity(const Layer& g) { return float(std::clamp(g.opacity, 0.0, 1.0) * std::clamp(g.fill, 0.0, 1.0)); }

@@ -568,12 +568,19 @@ private:
         // (a PSB's RLE rows count in 32 bits).
         // A smart object's carried raster goes back with its own bounds, as long as the instance has not moved.
         const bool smartRaster = c.planesRect && l.smartObject && l.isLiveSmartObject();
+        // Carried planes go back only when they hold every colour channel of the record being written (a file in another
+        // colour model, such as Grayscale opened as RGB, carries fewer).
+        const bool planesCover = [&] {
+            for (int id = 0; id < colours_; id++)
+                if (std::none_of(c.planes.begin(), c.planes.end(), [&](const PsdLayerCarry::CarriedPlane& p) { return p.id == id; })) return false;
+            return true;
+        }();
         // An 8-bit RGB smart object carries planes only for its Smart Filters' mask applied on import: Photoshop's
         // unmasked raster goes back, as Photoshop stores it (applySmartFilterMask).
         const bool eightBitSmart = !deep_ && !float_ && !native_ && smartRaster && l.asset && l.asset->image.u8();
         // So does a shape's drawing as Photoshop stored it at 8 bits (vectorlayer.h, shapeShowsDrawnPixels).
         const bool drawn8 = c.drawnShape && !deep_ && !float_ && !native_ && l.asset && l.asset->image.u8();
-        if ((deep_ || float_ || native_ || eightBitSmart || drawn8) && !options_.large && (sameContent || smartRaster) && placementKept && !c.planes.empty()
+        if ((deep_ || float_ || native_ || eightBitSmart || drawn8) && !options_.large && (sameContent || smartRaster) && placementKept && planesCover
             && c.planesHash == contentNow && l.asset
             && (eightBitSmart || drawn8 || (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8))))) {
             r.carriedPixels = true;
@@ -891,6 +898,9 @@ private:
             o.f32(float(s.exposure.exposure)); o.f32(float(s.exposure.offset)); o.f32(float(s.exposure.gamma));
             o.u16(0);   // Photoshop's block is 16 bytes: two zero bytes after the gamma
             r.adjustmentKey = "expA";
+            // Read from a Grayscale file, it was drawn through Grayscale's tone curve; an RGB file has no place for that.
+            if (s.exposure.normalized().toneGamma != 2.2)
+                summary_.warnings.push_back("Layer \"" + l.name + "\": its Exposure came from a Grayscale file; in this RGB file it looks different (Photoshop draws RGB Exposure through a 2.2 power).");
             break;
         case AdjustmentKind::HueSaturation: {
             // Hue, lightness, colorize and the six ranges (their bands, linear falloffs and all) draw as in

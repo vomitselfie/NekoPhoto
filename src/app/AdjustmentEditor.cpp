@@ -536,7 +536,7 @@ QWidget* AdjustmentEditor::buildExposure() {
     v->addWidget(sliderRow(tr("Offset"), -0.5, 0.5, 4, 10000, [this] { return settings_.exposure.offset; }, [this](double x) { settings_.exposure.offset = x; }));
     v->addWidget(sliderRow(tr("Gamma"), 0.01, 9.99, 2, 100, [this] { return settings_.exposure.gamma; }, [this](double x) { settings_.exposure.gamma = x; }));
     auto* reset = new QPushButton(tr("Reset"));
-    connect(reset, &QPushButton::clicked, this, [this] { emit editStarted(); settings_.exposure = ExposureSettings(); changed(); emit editFinished(); });
+    connect(reset, &QPushButton::clicked, this, [this] { emit editStarted(); const double tone = settings_.exposure.toneGamma; settings_.exposure = ExposureSettings(); settings_.exposure.toneGamma = tone; changed(); emit editFinished(); });
     v->addWidget(reset);
     return w;
 }

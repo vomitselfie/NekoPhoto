@@ -6,13 +6,13 @@ corpus photocraft
 commit f5b1178cab15309e05b7b504545df3c701f6d8fd
 compared 258
 flatten 0
-floor 165
+floor 179
 pass photoshop/adjustments/cmyk16/baseline-layer-copy.psd             [cmyk16]           max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/cmyk16/brightness-contrast-legacy.psd      [cmyk16]           max    0.58  >2:   0.00%  mean   0.058
 pass photoshop/adjustments/cmyk16/brightness-contrast.psd             [cmyk16]           max    0.50  >2:   0.00%  mean   0.083
 pass photoshop/adjustments/cmyk16/channel-mixer.psd                   [cmyk16]           max    0.40  >2:   0.00%  mean   0.062
 pass photoshop/adjustments/cmyk16/color-balance.psd                   [cmyk16]           max    0.50  >2:   0.00%  mean   0.057
-FAIL photoshop/adjustments/cmyk16/curves.psd                          [cmyk16]           max    4.02  >2:  51.02%  mean   0.665
+pass photoshop/adjustments/cmyk16/curves.psd                          [cmyk16]           max    0.02  >2:   0.00%  mean   0.003
 FAIL photoshop/adjustments/cmyk16/gradient-map.psd                    [cmyk16]           max  148.30  >2: 100.00%  mean  40.650
 FAIL photoshop/adjustments/cmyk16/hue-saturation-colorize.psd         [cmyk16]           max  143.23  >2:  74.35%  mean  33.121
 pass photoshop/adjustments/cmyk16/hue-saturation.psd                  [cmyk16]           max    1.03  >2:   0.00%  mean   0.202
@@ -27,7 +27,7 @@ pass photoshop/adjustments/cmyk8/brightness-contrast-legacy.psd       [cmyk8]   
 pass photoshop/adjustments/cmyk8/brightness-contrast.psd              [cmyk8]            max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/cmyk8/channel-mixer.psd                    [cmyk8]            max    1.00  >2:   0.00%  mean   0.059
 pass photoshop/adjustments/cmyk8/color-balance.psd                    [cmyk8]            max    1.00  >2:   0.00%  mean   0.089
-FAIL photoshop/adjustments/cmyk8/curves.psd                           [cmyk8]            max    4.00  >2:  45.51%  mean   0.665
+pass photoshop/adjustments/cmyk8/curves.psd                           [cmyk8]            max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/cmyk8/gradient-map.psd                     [cmyk8]            max  148.00  >2: 100.00%  mean  40.603
 FAIL photoshop/adjustments/cmyk8/hue-saturation-colorize.psd          [cmyk8]            max  147.00  >2:  74.26%  mean  32.947
 pass photoshop/adjustments/cmyk8/hue-saturation.psd                   [cmyk8]            max    3.00  >2:   0.02%  mean   0.109
@@ -40,33 +40,33 @@ FAIL photoshop/adjustments/cmyk8/threshold-128.psd                    [cmyk8]   
 pass photoshop/adjustments/gray16/baseline-layer-copy.psd             [rgb16]            max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/gray16/brightness-contrast-legacy.psd      [rgb16]            max    0.23  >2:   0.00%  mean   0.087
 pass photoshop/adjustments/gray16/brightness-contrast.psd             [rgb16]            max    0.01  >2:   0.00%  mean   0.001
-FAIL photoshop/adjustments/gray16/curves.psd                          [rgb16]            max   35.03  >2:  73.71%  mean   8.108
-FAIL photoshop/adjustments/gray16/exposure.psd                        [rgb16]            max   34.26  >2:  53.26%  mean   3.773
+pass photoshop/adjustments/gray16/curves.psd                          [rgb16]            max    0.02  >2:   0.00%  mean   0.005
+pass photoshop/adjustments/gray16/exposure.psd                        [rgb16]            max    1.13  >2:   0.00%  mean   0.055
 FAIL photoshop/adjustments/gray16/gradient-map.psd                    [rgb16]            max  235.12  >2: 100.00%  mean 107.096
 pass photoshop/adjustments/gray16/invert.psd                          [rgb16]            max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/gray16/levels.psd                          [rgb16]            max   25.43  >2:  97.56%  mean   8.687
+pass photoshop/adjustments/gray16/levels.psd                          [rgb16]            max    1.19  >2:   0.00%  mean   0.011
 pass photoshop/adjustments/gray16/posterize-4.psd                     [rgb16]            max    0.01  >2:   0.00%  mean   0.002
 pass photoshop/adjustments/gray16/threshold-128.psd                   [rgb16]            max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/gray32/baseline-layer-copy.psd             [f32]              max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/gray32/brightness-contrast-legacy.psd      [f32]              max   90.57  >2:  96.59%  mean  33.056
 FAIL photoshop/adjustments/gray32/brightness-contrast.psd             [f32]              max   32.32  >2:  53.35%  mean   7.521
-FAIL photoshop/adjustments/gray32/curves.psd                          [f32]              max   62.40  >2:  74.71%  mean  11.437
+FAIL photoshop/adjustments/gray32/curves.psd                          [f32]              max   57.21  >2:  63.08%  mean  13.752
 pass photoshop/adjustments/gray32/exposure.psd                        [f32]              max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/gray32/levels.psd                          [f32]              max   25.42  >2:  98.07%  mean  10.480
+FAIL photoshop/adjustments/gray32/levels.psd                          [f32]              max   20.57  >2:  98.07%  mean   7.954
 pass photoshop/adjustments/gray8/baseline-layer-copy.psd              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/gray8/brightness-contrast-legacy.psd       [rgb8]             max    1.00  >2:   0.00%  mean   0.050
 pass photoshop/adjustments/gray8/brightness-contrast.psd              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/gray8/curves.psd                           [rgb8]             max   35.00  >2:  73.10%  mean   8.117
-FAIL photoshop/adjustments/gray8/exposure.psd                         [rgb8]             max   34.00  >2:  52.38%  mean   3.835
+pass photoshop/adjustments/gray8/curves.psd                           [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop/adjustments/gray8/exposure.psd                         [rgb8]             max    1.00  >2:   0.00%  mean   0.035
 FAIL photoshop/adjustments/gray8/gradient-map.psd                     [rgb8]             max  235.00  >2: 100.00%  mean 106.791
 pass photoshop/adjustments/gray8/invert.psd                           [rgb8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/gray8/levels.psd                           [rgb8]             max   26.00  >2:  97.56%  mean   8.678
+pass photoshop/adjustments/gray8/levels.psd                           [rgb8]             max    2.00  >2:   0.00%  mean   0.202
 pass photoshop/adjustments/gray8/posterize-4.psd                      [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/gray8/threshold-128.psd                    [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/lab16/baseline-layer-copy.psd              [lab16]            max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/lab16/brightness-contrast-legacy.psd       [lab16]            max    0.58  >2:   0.00%  mean   0.041
 pass photoshop/adjustments/lab16/brightness-contrast.psd              [lab16]            max    0.50  >2:   0.00%  mean   0.041
-FAIL photoshop/adjustments/lab16/curves.psd                           [lab16]            max    4.02  >2:  37.73%  mean   0.427
+pass photoshop/adjustments/lab16/curves.psd                           [lab16]            max    0.02  >2:   0.00%  mean   0.001
 FAIL photoshop/adjustments/lab16/gradient-map.psd                     [lab16]            max   75.87  >2: 100.00%  mean  29.876
 FAIL photoshop/adjustments/lab16/hue-saturation-colorize.psd          [lab16]            max  133.48  >2: 100.00%  mean  27.126
 FAIL photoshop/adjustments/lab16/hue-saturation.psd                   [lab16]            max  110.75  >2:  97.88%  mean  18.699
@@ -78,7 +78,7 @@ pass photoshop/adjustments/lab16/threshold-128.psd                    [lab16]   
 pass photoshop/adjustments/lab8/baseline-layer-copy.psd               [lab8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/lab8/brightness-contrast-legacy.psd        [lab8]             max    1.00  >2:   0.00%  mean   0.027
 pass photoshop/adjustments/lab8/brightness-contrast.psd               [lab8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/lab8/curves.psd                            [lab8]             max    4.00  >2:  29.74%  mean   0.413
+pass photoshop/adjustments/lab8/curves.psd                            [lab8]             max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/lab8/gradient-map.psd                      [lab8]             max   76.00  >2: 100.00%  mean  29.826
 FAIL photoshop/adjustments/lab8/hue-saturation-colorize.psd           [lab8]             max  134.00  >2: 100.00%  mean  27.147
 FAIL photoshop/adjustments/lab8/hue-saturation.psd                    [lab8]             max  111.00  >2:  97.56%  mean  18.601
@@ -93,9 +93,9 @@ pass photoshop/adjustments/rgb16/brightness-contrast-legacy.psd       [rgb16]   
 pass photoshop/adjustments/rgb16/brightness-contrast.psd              [rgb16]            max    0.01  >2:   0.00%  mean   0.001
 pass photoshop/adjustments/rgb16/channel-mixer.psd                    [rgb16]            max    0.40  >2:   0.00%  mean   0.099
 pass photoshop/adjustments/rgb16/color-balance.psd                    [rgb16]            max    0.49  >2:   0.00%  mean   0.047
-pass photoshop/adjustments/rgb16/curves-per-channel.psd               [rgb16]            max    1.33  >2:   0.00%  mean   0.165
-FAIL photoshop/adjustments/rgb16/curves.psd                           [rgb16]            max    4.02  >2:  45.00%  mean   0.866
-FAIL photoshop/adjustments/rgb16/exposure.psd                         [rgb16]            max   32.75  >2:  21.20%  mean   0.945
+pass photoshop/adjustments/rgb16/curves-per-channel.psd               [rgb16]            max    0.01  >2:   0.00%  mean   0.000
+pass photoshop/adjustments/rgb16/curves.psd                           [rgb16]            max    0.02  >2:   0.00%  mean   0.002
+pass photoshop/adjustments/rgb16/exposure.psd                         [rgb16]            max    0.27  >2:   0.00%  mean   0.003
 FAIL photoshop/adjustments/rgb16/gradient-map.psd                     [rgb16]            max  104.36  >2:  76.86%  mean  25.711
 FAIL photoshop/adjustments/rgb16/hue-saturation-colorize.psd          [rgb16]            max    2.36  >2:  60.55%  mean   0.512
 pass photoshop/adjustments/rgb16/hue-saturation.psd                   [rgb16]            max    1.01  >2:   0.00%  mean   0.234
@@ -112,8 +112,8 @@ FAIL photoshop/adjustments/rgb32/brightness-contrast-legacy.psd       [f32]     
 FAIL photoshop/adjustments/rgb32/brightness-contrast.psd              [f32]              max   32.31  >2:  49.21%  mean   3.808
 FAIL photoshop/adjustments/rgb32/channel-mixer.psd                    [f32]              max   67.17  >2:  98.05%  mean  11.879
 FAIL photoshop/adjustments/rgb32/color-balance.psd                    [f32]              max   28.61  >2:  55.38%  mean   3.170
-FAIL photoshop/adjustments/rgb32/curves-per-channel.psd               [f32]              max   28.22  >2:  77.73%  mean   4.993
-FAIL photoshop/adjustments/rgb32/curves.psd                           [f32]              max   62.40  >2:  56.52%  mean   6.460
+FAIL photoshop/adjustments/rgb32/curves-per-channel.psd               [f32]              max   28.22  >2:  77.37%  mean   4.987
+FAIL photoshop/adjustments/rgb32/curves.psd                           [f32]              max   57.21  >2:  51.01%  mean   6.276
 pass photoshop/adjustments/rgb32/exposure.psd                         [f32]              max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/rgb32/hue-saturation-colorize.psd          [f32]              max   73.87  >2:  71.86%  mean  26.179
 FAIL photoshop/adjustments/rgb32/hue-saturation.psd                   [f32]              max  166.19  >2:  94.30%  mean  24.654
@@ -127,9 +127,9 @@ pass photoshop/adjustments/rgb8/brightness-contrast.psd               [rgb8]    
 pass photoshop/adjustments/rgb8/channel-mixer.psd                     [rgb8]             max    1.00  >2:   0.00%  mean   0.059
 pass photoshop/adjustments/rgb8/clipped-hue-sat-blend-color.psd       [rgb8]             max    1.00  >2:   0.00%  mean   0.005
 pass photoshop/adjustments/rgb8/color-balance.psd                     [rgb8]             max    1.00  >2:   0.00%  mean   0.101
-pass photoshop/adjustments/rgb8/curves-per-channel.psd                [rgb8]             max    2.00  >2:   0.00%  mean   0.138
-FAIL photoshop/adjustments/rgb8/curves.psd                            [rgb8]             max    4.00  >2:  43.44%  mean   0.865
-FAIL photoshop/adjustments/rgb8/exposure.psd                          [rgb8]             max   33.00  >2:  20.01%  mean   0.953
+pass photoshop/adjustments/rgb8/curves-per-channel.psd                [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop/adjustments/rgb8/curves.psd                            [rgb8]             max    0.00  >2:   0.00%  mean   0.000
+pass photoshop/adjustments/rgb8/exposure.psd                          [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/rgb8/gradient-map.psd                      [rgb8]             max  104.00  >2:  76.69%  mean  25.729
 pass photoshop/adjustments/rgb8/hue-saturation-colorize.psd           [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/rgb8/hue-saturation.psd                    [rgb8]             max    2.00  >2:   0.00%  mean   0.097
@@ -139,7 +139,7 @@ pass photoshop/adjustments/rgb8/masked-curves-gradient-mask-opacity60.psd [rgb8]
 FAIL photoshop/adjustments/rgb8/photo-filter.psd                      [rgb8]             max  124.00  >2:  75.72%  mean  11.977
 pass photoshop/adjustments/rgb8/posterize-4.psd                       [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/rgb8/selective-color.psd                   [rgb8]             max   11.00  >2:  10.37%  mean   0.299
-pass photoshop/adjustments/rgb8/stack-levels-curves-hue-posterize.psd [rgb8]             max   51.00  >2:   0.58%  mean   0.198
+pass photoshop/adjustments/rgb8/stack-levels-curves-hue-posterize.psd [rgb8]             max   51.00  >2:   0.16%  mean   0.062
 pass photoshop/adjustments/rgb8/threshold-128.psd                     [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/rgb8/vibrance.psd                          [rgb8]             max   74.00  >2:  59.38%  mean   8.798
 FAIL photoshop/effects/bevel-emboss-chisel-hard.psd                   [rgb8]             max  135.00  >2:  18.99%  mean   3.217

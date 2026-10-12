@@ -1073,12 +1073,34 @@ TEST_CASE(adjustments_change_pixels_as_expected) {
     ExposureSettings exposure{1, 0, 1};
     applyExposure(img = *gray, exposure);
     CHECK(img.pixel(0, 0)[0] > 160);
+    // Photoshop linearises through a 2.2 power, not the sRGB curve: an offset of 0.1738 lifts 76 to 134 (PhotoCraft's
+    // pinned number, psd-tools adjustment_nested_composition_4; the sRGB curve gives 136). Grayscale's power is 1.732.
+    ExposureSettings lift{0, 0.1738, 1};
+    CHECK_NEAR(lift.table()[76] * 255, 134, 0.5);
+    CHECK_NEAR(lift.at(76 / 255.0) * 255, std::pow(std::pow(76 / 255.0, 2.2) + 0.1738, 1 / 2.2) * 255, 1e-9);
+    ExposureSettings greyLift{0, 0.1738, 1, 1.732};
+    CHECK_NEAR(greyLift.at(76 / 255.0), std::pow(std::pow(76 / 255.0, 1.732) + 0.1738, 1 / 1.732), 1e-9);
+    AdjustmentSettings greyJson = AdjustmentSettings::defaults(AdjustmentKind::Exposure);
+    greyJson.exposure = greyLift;
+    AdjustmentSettings greyBack;
+    REQUIRE(AdjustmentSettings::parse(greyJson.toJson(), greyBack));
+    CHECK_NEAR(greyBack.exposure.toneGamma, 1.732, 1e-12);
     CurvesSettings curves;
     curves.channels[0] = {{0, 0}, {128, 200}, {255, 255}};
     applyCurves(img = *gray, curves);
     CHECK(std::abs(int(img.pixel(0, 0)[0]) - 200) <= 1);
     CHECK_NEAR(curves.value(0, 0), 0, 1e-9);
     CHECK_NEAR(curves.value(255, 0), 255, 1e-9);
+    // Photoshop's Curves is the natural cubic spline (second derivative 0 at the ends), flat beyond the end points:
+    // the photocraft-corpus curve, its values worked out independently.
+    curves.channels[0] = {{0, 0}, {60, 35}, {190, 225}, {255, 255}};
+    CHECK_NEAR(curves.value(30, 0), 12.641850723533896, 1e-9);
+    CHECK_NEAR(curves.value(60, 0), 35, 1e-9);
+    CHECK_NEAR(curves.value(128, 0), 136.14447243540923, 1e-9);
+    CHECK_NEAR(curves.value(220, 0), 244.925889038608, 1e-9);
+    curves.channels[0] = {{20, 40}, {128, 100}, {230, 210}};
+    CHECK_NEAR(curves.value(5, 0), 40, 1e-9);
+    CHECK_NEAR(curves.value(250, 0), 210, 1e-9);
     GradientMapSettings map;
     map.shadows = {1, 0, 0}; map.highlights = {0, 0, 1};
     applyGradientMap(img = *gray, map);

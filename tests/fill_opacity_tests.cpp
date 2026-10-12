@@ -20,6 +20,7 @@
 // and a project saved before Fill was modelled (one opacity, Opacity x Fill, beside the file's two in the carry) opens
 // with the two apart again.
 #include "check.h"
+#include "compositor/adjustments.h"
 #include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/layerstyle.h"
@@ -356,6 +357,31 @@ TEST_CASE(special_fill_in_cmyk) {
     const AnyImage half = renderNative(doc);
     REQUIRE(half.c8() != nullptr);
     CHECK(std::abs(int(half.c8()->pixel(1, 1)[0]) - 228) <= 1);
+}
+
+TEST_CASE(pass_through_folder_below_full_fill_isolates) {
+    // Photoshop composites a Pass Through folder below 100% Fill isolated (psd-tools' passthrough_fill_adjustment): an
+    // Invert inside it no longer reaches the Background under the folder. At 100% Fill it does.
+    for (double fill : {1.0, 0.5}) {
+        Document doc(4, 4);
+        Layer background("Background", doc.size());
+        background.asset = Asset::make(solid({200, 150, 100}), "Background");
+        doc.layers.push_back(background);
+        Layer folder("Group", doc.size());
+        folder.isGroup = true;
+        folder.passThrough = true;
+        folder.fill = fill;
+        doc.layers.push_back(folder);
+        Layer invert = Layer("Invert", doc.size());
+        invert.adjustment = AdjustmentSettings::defaults(AdjustmentKind::Invert).toLayerAdjustment();
+        invert.parentId = folder.id;
+        doc.layers.push_back(invert);
+        auto flat = renderFlattened(doc);
+        REQUIRE(flat);
+        const uint8_t* p = flat->pixel(1, 1);
+        if (fill == 1.0) CHECK_EQ(int(p[0]), 55);    // inverted
+        else CHECK_EQ(int(p[0]), 200);               // the folder holds nothing of its own: the Background shows
+    }
 }
 
 TEST_MAIN()

@@ -21,8 +21,11 @@ record layout and combine rules follow Patchy (MIT, `src/third_party/patchy_psd/
   fill or stroke, or a scale or rotation, draws the shape here instead ([vector-tools.md](vector-tools.md)). A shape without stored pixels, or one with a vector density or feather, is
   drawn here: a solid shape is its fill (the layer's full-canvas pixels) cut by the path. Gradient and pattern fill
   layers ('GdFl', 'PtFl'), which store no pixels, draw their fill: the gradient over the shape's bounds with
-  Photoshop's fill-layer geometry (the centre chord, unsnapped, Classic easing even on two stops; Patchy's
-  calibration), the pattern from the file's patterns.
+  Photoshop's fill-layer geometry (the centre chord, Classic easing even on two stops; Patchy's calibration; a Linear or
+  Reflected ramp's end points truncated to the pixel grid, which sets its real angle and length, as psd-tools' 4 x 4
+  Reflected fills show at 8, 16 and 32 bits), the pattern from the file's patterns. A fill layer is drawn the same at
+  every depth. Not yet: a 32-bit file stores its fill's stop colours in linear light, which NekoPhoto reads as encoded,
+  so such a fill's colours are off (its geometry is right).
 - **Strokes** ('vstk'): a band along the path, inside, centred or outside, in the stroke's colour and opacity over
   the fill, in the layer's mode; with the fill switched off, the stroke alone. It is an outline like Patchy's stroker:
   a quad per segment, mitred (within the miter limit), round or bevelled joins, butt, round or square caps, and

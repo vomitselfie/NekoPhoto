@@ -413,7 +413,7 @@ const char* blendDescription(const std::string& key) {
     return it == names.end() ? key.c_str() : it->second;
 }
 
-std::optional<AdjustmentSettings> levelsFrom(const uint8_t* data, size_t size) {
+std::optional<AdjustmentSettings> levelsFrom(const uint8_t* data, size_t size, bool grey) {
     Reader r(data, size);
     if (r.u16() != 2) return std::nullopt;
     AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Levels);
@@ -422,10 +422,18 @@ std::optional<AdjustmentSettings> levelsFrom(const uint8_t* data, size_t size) {
         double black = r.u16(), white = r.u16(), outBlack = r.u16(), outWhite = r.u16(), gamma = r.u16() / 100.0;
         s.levels.ranges[size_t(i)] = LevelsRange{black, gamma > 0 ? gamma : 1, white, outBlack, outWhite}.normalized();
     }
+    // A Grayscale (or Duotone) file's one channel is record 1, Gray. It opens as RGB, where record 1 would be Red: it
+    // goes to the composite, or to all three channels when the composite holds something too.
+    if (grey) {
+        const LevelsRange gray = s.levels.ranges[1], identity;
+        for (size_t i = 1; i < s.levels.ranges.size(); i++) s.levels.ranges[i] = identity;
+        if (s.levels.ranges[0] == identity) s.levels.ranges[0] = gray;
+        else for (size_t i = 1; i <= 3; i++) s.levels.ranges[i] = gray;
+    }
     return s;
 }
 
-std::optional<AdjustmentSettings> curvesFrom(const uint8_t* data, size_t size) {
+std::optional<AdjustmentSettings> curvesFrom(const uint8_t* data, size_t size, bool grey) {
     Reader r(data, size);
     r.u8();
     if (r.u16() != 1) return std::nullopt;
@@ -439,6 +447,13 @@ std::optional<AdjustmentSettings> curvesFrom(const uint8_t* data, size_t size) {
         std::vector<CurvePoint> points;
         for (int i = 0; i < count && r.remaining() >= 4; i++) { double out = r.u16(), in = r.u16(); points.push_back({in, out}); }
         if (channel < levelsChannelCount && points.size() >= 2) s.curves.channels[size_t(channel)] = points;
+    }
+    // Grayscale (or Duotone): bit 1 is Gray, not Red (see levelsFrom).
+    if (grey) {
+        const std::vector<CurvePoint> gray = s.curves.channels[1], identity{{0, 0}, {255, 255}};
+        for (size_t i = 1; i < s.curves.channels.size(); i++) s.curves.channels[i] = identity;
+        if (s.curves.channels[0] == identity) s.curves.channels[0] = gray;
+        else for (size_t i = 1; i <= 3; i++) s.curves.channels[i] = gray;
     }
     return s.curves.isValid() ? std::optional<AdjustmentSettings>(s) : std::nullopt;
 }
@@ -463,11 +478,12 @@ std::optional<AdjustmentSettings> hueSaturationFrom(const uint8_t* data, size_t 
     return s;
 }
 
-std::optional<AdjustmentSettings> exposureFrom(const uint8_t* data, size_t size) {
+std::optional<AdjustmentSettings> exposureFrom(const uint8_t* data, size_t size, bool grey) {
     Reader r(data, size);
     if (r.u16() != 1) return std::nullopt;
     AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Exposure);
-    s.exposure = ExposureSettings{r.f32(), r.f32(), r.f32()}.normalized();
+    // A Grayscale file's Exposure linearises through Photoshop's grey tone curve, a 1.732 power (ExposureSettings).
+    s.exposure = ExposureSettings{r.f32(), r.f32(), r.f32(), grey ? 1.732 : 2.2}.normalized();
     return s;
 }
 
@@ -1039,7 +1055,9 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (c.id == -2) { w = rec.mask.width(); h = rec.mask.height(); }
                 if (c.id == -3) { w = rec.mask.realWidth(); h = rec.mask.realHeight(); }
                 if (c.id == -2 || c.id == -3) maskRaw.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
-                else if ((deep || float32 || nativeMode || smartChannels || drawnShapeRecord(rec)) && !psb && c.id >= -1 && c.id <= (mode == CMYK ? 3 : 2)) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
+                // Only a file whose colour model is the document's: a Grayscale (or Duotone…) file opens as RGB, and
+                // its one grey plane written back into an RGB record would leave Green and Blue empty.
+                else if ((deep || float32 || nativeMode || smartChannels || drawnShapeRecord(rec)) && (mode == RGB || nativeMode) && !psb && c.id >= -1 && c.id <= (mode == CMYK ? 3 : 2)) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
                 std::vector<uint8_t> plane;
                 std::vector<uint16_t> wide;
                 std::vector<float> floats;
@@ -1231,10 +1249,10 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             auto block = [&](const char* key) -> const std::pair<const uint8_t*, size_t>* { auto it = rec.blocks.find(key); return it == rec.blocks.end() ? nullptr : &it->second; };
             if (rec.width() > 0 && rec.height() > 0 && !planes.empty()) image = assemble(mode, rec.width(), rec.height(), planes, palette, cmykProfile.get());
             std::optional<AdjustmentSettings> settings;
-            if (auto b = block("levl")) settings = levelsFrom(b->first, b->second);
-            else if (auto b = block("curv")) settings = curvesFrom(b->first, b->second);
+            if (auto b = block("levl")) settings = levelsFrom(b->first, b->second, mode == Grayscale || mode == Duotone);
+            else if (auto b = block("curv")) settings = curvesFrom(b->first, b->second, mode == Grayscale || mode == Duotone);
             else if (auto b = block("hue2")) settings = hueSaturationFrom(b->first, b->second);
-            else if (auto b = block("expA")) settings = exposureFrom(b->first, b->second);
+            else if (auto b = block("expA")) settings = exposureFrom(b->first, b->second, mode == Grayscale || mode == Duotone);
             else if (auto b = block("grdm")) settings = gradientMapFrom(b->first, b->second);
             else if (block("CgEd") || block("brit")) settings = brightnessContrastFrom(block("CgEd"), block("brit"));
             if (!settings)

@@ -96,6 +96,13 @@ not distributed). Reading a Gradient Map's method from 'grdm' version 3 (`src/co
 `src/additionalInfo.ts` at commit 387049670cb89b88fb8fe1b7c01aeacf98dd2e3b (MIT, (c) Agamnentzar): the method's
 four-character code after Dither, present when its first byte is not zero.
 
+Curves as a natural cubic spline, flat beyond its end points (`NaturalCurve` in `src/core/src/adjustments.cpp`),
+Exposure's tone curve (a 2.2 power, 1.732 in Grayscale; `ExposureSettings::at`) and a gradient fill layer's end points
+snapped to the pixel grid (`gradientPosition` in `src/core/src/layerstyle.cpp`) follow
+[PhotoCraft](https://github.com/storytold/photocraft)'s `curve_lut` and Exposure in `crates/compose/src/adjust.rs` and
+`gradient_layout` in `crates/compose/src/fill_layout.rs` at commit 88ffd89 (dual MIT / Apache-2.0, used under MIT, [PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt); Copyright (c) 2026
+ArtCraft Team and the PhotoCraft contributors).
+
 Fill in Photoshop's special eight blend modes (`fillIsSpecial`, `blendAtFill` and `compositeAtFill` in
 `src/core/include/compositor/blend.h`: the source pulled toward the mode's neutral colour, Hard Mix's ramp, Opacity as
 coverage and Fill as coverage over transparency) is adapted from [PhotoCraft](https://github.com/storytold/photocraft)'s

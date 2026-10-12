@@ -190,7 +190,9 @@ Normal), "Layer Mask Hides Effects". Vector masks and shape layers are drawn too
 
 Folders follow Photoshop: a folder in any mode but Pass Through isolates its children and composites their
 result in its mode and opacity; a Pass Through folder below full opacity fades its result back toward what was
-under it. With that, the styled-folder fixtures match Photoshop at 0.00-0.02 and the folder opacity fixture at 2.1
+under it, and one below 100% Fill isolates, as Photoshop composites it (an adjustment inside it no longer reaches the
+layers under the folder: psd-tools' passthrough_fill_adjustment, mean 43.8 levels off before, now within a level). A
+styled Pass Through folder at 100% Fill does not isolate (Patchy's photoshop-group-fx-passthrough). With that, the styled-folder fixtures match Photoshop at 0.00-0.02 and the folder opacity fixture at 2.1
 (it was 14.9).
 
 ## Speed
