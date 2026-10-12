@@ -99,7 +99,7 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
       <h3>Edit without regret</h3>
       Seventeen adjustment layers, from Levels and Curves to Black &amp; White, Selective Color and Color Lookup, keep every change live: mask them, stack them, switch them off. Your pixels never change, and the layers go out to PSD as Photoshop's own (Grain, which Photoshop lacks, and a Gradient Map made here, as their result).
       <br><br>
-      Hold Alt on Levels or Curves to see exactly what clips, and read the Histogram panel's channels and statistics as you go.
+      Curves follows Photoshop's own curve and Exposure its tone curve, so a PSD's adjustments look the same here. Hold Alt on Levels or Curves to see exactly what clips, and read the Histogram panel's channels and statistics as you go.
     </td>
   </tr>
   <tr>
@@ -128,9 +128,9 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
       <br>
       <sub>A poster converted to CMYK: its own channels in the Channels panel and CMYK Curves.<br><a href="https://commons.wikimedia.org/wiki/File:Th%C3%A9ophile-Alexandre_Steinlen_-_Tourn%C3%A9e_du_Chat_Noir_de_Rodolphe_Salis_(Tour_of_Rodolphe_Salis%27_Chat_Noir)_-_Google_Art_Project.jpg"><i>Tournée du Chat Noir de Rodolphe Salis</i></a>, Théophile-Alexandre Steinlen, 1896</sub>
       <h3>Print-ready, natively</h3>
-      Open CMYK and Lab PSDs in their own mode, or convert with Image › Mode through your working CMYK profile. Paint, retouch, adjust, filter, type and use layer styles right in CMYK and Lab, with the blend modes Photoshop offers there.
+      Open CMYK and Lab PSDs in their own mode, or convert with Image › Mode through your working CMYK profile. Paint, retouch, adjust, filter, type and use layer styles right in CMYK and Lab, with the blend modes Photoshop offers there. Content-Aware Fill, Move and Scale and Remove Background work on the inks themselves.
       <br><br>
-      Color Settings, Assign and Convert to Profile, a CMYK proof, and 16-bit and 32-bit HDR documents with HDR Toning.
+      Color Settings, Assign and Convert to Profile, Proof Colors with Simulate Paper Color and Gamut Warning in every mode, and 16-bit and 32-bit HDR documents with HDR Toning.
     </td>
     <td width="50%" valign="top">
       <img src="docs/images/filters.jpg" alt="Kuniyoshi's print of cats in different poses with the Mosh Halftone filter previewing live on the canvas, its dialog open" width="100%">
@@ -139,7 +139,7 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
       <h3>A Filter menu to get lost in</h3>
       Photoshop's Filter menu in its own submenus: blurs, distortions, noise, pixelate, render, sharpen and stylize, previewing on the canvas inside your selection. Many go on a smart object as Smart Filters you can reorder, mask and edit later.
       <br><br>
-      Plus the Camera Raw Filter (Shift+Ctrl+A), more than 850 G'MIC filters when <code>gmic</code> is installed, and 54 glitch and retro effects under Filter › Mosh.
+      Plus the Camera Raw Filter (Shift+Ctrl+A), measured against Camera Raw 18.7 and loading your Lightroom and Camera Raw <code>.xmp</code> presets, more than 850 G'MIC filters when <code>gmic</code> is installed, and 54 glitch and retro effects under Filter › Mosh.
     </td>
   </tr>
   <tr>
@@ -150,14 +150,14 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
       <h3>Works the way your hands expect</h3>
       Photoshop's tools and shortcuts, Shift+letter to step through a tool group, and its held keys: Ctrl for the Move tool, Alt for the Eyedropper while painting, a tool's letter held for a spring-loaded tool. Edit › Keyboard Shortcuts changes any key, with clashes caught as you type.
       <br><br>
-      Right-click menus that fit the tool and what is under the pointer, rulers, guides and smart guides, labels you drag to change a number, and File › Revert (F12). Full Screen Mode (F) leaves only the canvas: the tools, the options bar and the panels slide out from the screen's edges when the pointer reaches them, and Tab keeps them out.
+      Right-click menus that fit the tool and what is under the pointer, rulers, guides and smart guides, labels you drag to change a number, and File › Revert (F12). Tab hides the panels. Full Screen Mode (F) leaves only the canvas: the tools, the options bar and the panels slide out from the screen's edges when the pointer reaches them. The cursor tells you when a tool can't work on the layer, and why.
     </td>
     <td width="50%" valign="top">
       <img src="docs/images/export-as.jpg" alt="Hiroshige's Asakusa Ricefields and Torinomachi Festival, with a white cat at the window, in the Export As dialog: WebP at quality 90, the image size, colour space options, a preview and the file's size" width="100%">
       <br>
       <sub>Export As with a preview of the encoded file and its size.<br><a href="https://commons.wikimedia.org/wiki/File:Hiroshige,_Asakusa_ricefields_and_torinomachi_festival,_1857.jpg"><i>Asakusa Ricefields and Torinomachi Festival</i></a>, Utagawa Hiroshige, 1857</sub>
       <h3>Ship it anywhere</h3>
-      Export As writes PNG, JPEG, GIF, WebP, TIFF or TGA with a live preview, the file's size, a new size, a matte and sRGB conversion, remembered per format. Quick Export in one click, Layer › Export As, artboards and slices to files in one go.
+      Export As writes PNG, JPEG, GIF, WebP, TIFF or TGA with a live preview, the file's size, a new size, a matte and sRGB conversion, remembered per format. Quick Export in the format you pick, Layer › Export As, artboards and slices to files in one go.
       <br><br>
       Record Actions as you work and run them over a folder with File › Automate › Batch.
     </td>
@@ -172,7 +172,7 @@ public-domain prints and paintings from Wikimedia Commons unless a credit says o
   <tr>
     <td width="33%" valign="top">
       <h4>🗂️ Layers</h4>
-      Folders, all 27 of Photoshop's blend modes plus Pass Through, layer and vector masks, clipping masks, fill and adjustment layers, Blend If and Advanced Blending's channel boxes, smart objects you can place, convert, edit and replace, and whole layers copied between documents.
+      Folders, all 27 of Photoshop's blend modes plus Pass Through, Fill apart from Opacity (special modes included), layer and vector masks, clipping masks, fill and adjustment layers, Blend If and Advanced Blending's channel boxes, smart objects you can place, convert, edit and replace, and whole layers copied between documents.
     </td>
     <td width="33%" valign="top">
       <h4>✂️ Selections and retouching</h4>
@@ -221,7 +221,10 @@ NekoPhoto is tested against real Photoshop files, and the numbers are published 
   and Smart Filters, layer styles, shapes, masks, PSB), open, export and reopen with nothing lost; 3,675 blocks
   NekoPhoto does not edit go back byte for byte. Converted to 16 bits, they come back too.
 - **Against Photoshop's own render:** 59 of 72 files render within 2 levels of what Photoshop shows on 99% of their
-  pixels, compared with Photoshop's own flatten or the merged image it stored.
+  pixels, compared with Photoshop's own flatten or the merged image it stored. Two public corpora check the same way:
+  179 of the 258 files Photoshop saved for [PhotoCraft's corpus](https://github.com/storytold/photocraft-corpus), and
+  220 of the 285 [psd-tools](https://github.com/psd-tools/psd-tools) test files with a merged image, each compared in
+  its own colour mode and depth. Shape and fill layers show Photoshop's own pixels until you edit them.
 - **Colour:** the ICC profile of all 64 tagged RGB PSDs in the corpus is written back byte for byte.
 - **No surprises:** what PSD cannot carry is listed before you export, and an unedited 16-bit layer goes back byte for byte.
 
@@ -462,9 +465,9 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
       <br>
       <sub>CMYK に変換したポスター。チャンネルパネルに各版が並び、トーンカーブも CMYK で。<br><a href="https://commons.wikimedia.org/wiki/File:Th%C3%A9ophile-Alexandre_Steinlen_-_Tourn%C3%A9e_du_Chat_Noir_de_Rodolphe_Salis_(Tour_of_Rodolphe_Salis%27_Chat_Noir)_-_Google_Art_Project.jpg">テオフィル＝アレクサンドル・スタンラン『Tournée du Chat Noir de Rodolphe Salis』</a>(1896 年)</sub>
       <h3>印刷用データもそのまま</h3>
-      CMYK・Lab の PSD はそのモードのまま開け、イメージ › モードで作業用 CMYK プロファイルを使って変換できます。描画・修正・色調補正・フィルター・文字・レイヤースタイルを CMYK・Lab のまま使え、描画モードも Photoshop がそのモードで用意しているものが使えます。
+      CMYK・Lab の PSD はそのモードのまま開け、イメージ › モードで作業用 CMYK プロファイルを使って変換できます。描画・修正・色調補正・フィルター・文字・レイヤースタイルを CMYK・Lab のまま使え、描画モードも Photoshop がそのモードで用意しているものが使えます。コンテンツに応じた塗りつぶし・移動・拡大・縮小と背景を削除も、インキそのものに働きます。
       <br><br>
-      カラー設定、プロファイルの指定・変換、CMYK の校正表示、16 ビット、HDR トーン付きの 32 ビット HDR ドキュメントにも対応しています。
+      カラー設定、プロファイルの指定・変換、どのモードでも使える色の校正(紙色・インキの黒をシミュレート)と色域外警告、16 ビット、HDR トーン付きの 32 ビット HDR ドキュメントにも対応しています。
     </td>
     <td width="50%" valign="top">
       <img src="docs/images/filters.jpg" alt="国芳の猫の版画に Mosh のハーフトーンをカンバス上でライブプレビューし、そのダイアログを表示" width="100%">
@@ -473,7 +476,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
       <h3>試しきれないほどのフィルター</h3>
       Photoshop と同じサブメニューに並ぶフィルター(ぼかし、変形、ノイズ、ピクセレート、描画、シャープ、表現手法)は、選択範囲の中でカンバス上にプレビューされます。多くはスマートオブジェクトにスマートフィルターとして適用でき、あとから並べ替え・マスク・編集ができます。
       <br><br>
-      さらに Camera Raw フィルター(Shift+Ctrl+A)、<code>gmic</code> をインストールすれば 850 種類以上の G'MIC フィルター、フィルター › Mosh の 54 種類のグリッチ・レトロ効果も使えます。
+      さらに Camera Raw 18.7 と照らし合わせ、Lightroom・Camera Raw の <code>.xmp</code> プリセットも読み込める Camera Raw フィルター(Shift+Ctrl+A)、<code>gmic</code> をインストールすれば 850 種類以上の G'MIC フィルター、フィルター › Mosh の 54 種類のグリッチ・レトロ効果も使えます。
     </td>
   </tr>
   <tr>
@@ -484,14 +487,14 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
       <h3>手が覚えている操作のままで</h3>
       Photoshop と同じツールとショートカット、Shift+キーでのツールグループの切り替え、押している間だけのキー(Ctrl で移動ツール、描画中の Alt でスポイト、ツールのキーを押し続けて一時的に切り替え)。編集 › キーボードショートカット でどのキーも変更でき、重複はその場で知らせます。
       <br><br>
-      ツールとポインター下の対象に合わせた右クリックメニュー、定規・ガイド・スマートガイド、ドラッグで数値を変えられるラベル、ファイル › 復帰(F12)。フルスクリーンモード(F)ではカンバスだけを表示し、ポインターを画面の端に寄せるとツール・オプションバー・パネルがスライドして現れます。Tab で出したままにできます。
+      ツールとポインター下の対象に合わせた右クリックメニュー、定規・ガイド・スマートガイド、ドラッグで数値を変えられるラベル、ファイル › 復帰(F12)。Tab でパネルを隠せます。フルスクリーンモード(F)ではカンバスだけを表示し、ポインターを画面の端に寄せるとツール・オプションバー・パネルがスライドして現れます。ツールがそのレイヤーに使えないときは、カーソルが理由とともに知らせます。
     </td>
     <td width="50%" valign="top">
       <img src="docs/images/export-as.jpg" alt="広重『浅草田甫酉の町詣』(窓辺に白い猫)を 書き出し形式 のダイアログで WebP・品質 90 に設定し、画像サイズ、カラースペース、プレビューとファイルサイズを表示" width="100%">
       <br>
       <sub>書き出し形式。書き出したファイルのプレビューとサイズを確認できます。<br><a href="https://commons.wikimedia.org/wiki/File:Hiroshige,_Asakusa_ricefields_and_torinomachi_festival,_1857.jpg">歌川広重『名所江戸百景 浅草田甫酉の町詣』</a>(1857 年)</sub>
       <h3>どこへでも書き出せる</h3>
-      書き出し形式で PNG・JPEG・GIF・WebP・TIFF・TGA を、プレビュー・ファイルサイズ・画像サイズ・マット・sRGB 変換を確認しながら書き出せ、設定は形式ごとに記憶されます。クイック書き出し、レイヤー › 書き出し形式、アートボードとスライスの一括書き出しも。
+      書き出し形式で PNG・JPEG・GIF・WebP・TIFF・TGA を、プレビュー・ファイルサイズ・画像サイズ・マット・sRGB 変換を確認しながら書き出せ、設定は形式ごとに記憶されます。選んだ形式でのクイック書き出し、レイヤー › 書き出し形式、アートボードとスライスの一括書き出しも。
       <br><br>
       作業をアクションとして記録し、ファイル › 自動処理 › バッチでフォルダーごと処理できます。
     </td>
@@ -504,7 +507,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
   <tr>
     <td width="33%" valign="top">
       <h4>🗂️ レイヤー</h4>
-      グループ、Photoshop の 27 種類の描画モードと通過、レイヤーマスクとベクトルマスク、クリッピングマスク、塗りつぶしレイヤーと調整レイヤー、ブレンド条件と高度な合成のチャンネル指定、配置・変換・編集・置き換えのできるスマートオブジェクト、ドキュメント間でのレイヤーのコピー。
+      グループ、Photoshop の 27 種類の描画モードと通過、不透明度とは別の塗り(特殊な描画モードにも対応)、レイヤーマスクとベクトルマスク、クリッピングマスク、塗りつぶしレイヤーと調整レイヤー、ブレンド条件と高度な合成のチャンネル指定、配置・変換・編集・置き換えのできるスマートオブジェクト、ドキュメント間でのレイヤーのコピー。
     </td>
     <td width="33%" valign="top">
       <h4>✂️ 選択と修正</h4>
@@ -553,7 +556,10 @@ NekoPhoto は実際の Photoshop ファイルで検証しており、その数�
   レイヤースタイル、シェイプ、マスク、PSB を網羅)は、開いて書き出し、開き直しても何も失われません。NekoPhoto が編集しない
   3,675 個のブロックはバイト単位でそのまま戻ります。16 ビットに変換しても同様です。
 - **Photoshop 自身の描画と比較:** 72 個中 59 個のファイルが、ピクセルの 99% で Photoshop の表示と 2 レベル以内に収まります
-  (Photoshop で統合した画像、またはファイルに保存された統合画像と比較)。
+  (Photoshop で統合した画像、またはファイルに保存された統合画像と比較)。公開されている 2 つのテスト用ファイル群でも同じ方法で
+  確認しています。[PhotoCraft のコーパス](https://github.com/storytold/photocraft-corpus)の Photoshop で保存された 258 個中 179 個、
+  [psd-tools](https://github.com/psd-tools/psd-tools) の統合画像付きテストファイル 285 個中 220 個で、それぞれのカラーモードと
+  ビット数のまま比較しています。シェイプレイヤーと塗りつぶしレイヤーは、編集するまで Photoshop が保存したピクセルをそのまま表示します。
 - **色:** テスト用ファイルのうちプロファイル付きの RGB PSD 64 個すべてで、ICC プロファイルがバイト単位でそのまま書き戻されます。
 - **想定外なし:** PSD で表現できない要素は書き出す前に一覧表示され、編集していない 16 ビットのレイヤーはバイト単位でそのまま戻ります。
 
