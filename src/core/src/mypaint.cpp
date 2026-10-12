@@ -1,11 +1,11 @@
-#include "compositor/mypaint.h"
-#include "compositor/colormgmt.h"
-#include "compositor/parallel.h"
+#include "nekophoto/mypaint.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/parallel.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
 
-#ifdef COMPOSITOR_HAVE_MYPAINT
+#ifdef NEKOPHOTO_HAVE_MYPAINT
 extern "C" {
 #include <mypaint-brush.h>
 #include <mypaint-brush-settings.h>
@@ -16,7 +16,7 @@ extern "C" {
 #include <vector>
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
 MyPaintPresetInfo myPaintPresetInfo(const std::string& brushJson) {
     MyPaintPresetInfo info;
@@ -35,7 +35,7 @@ MyPaintPresetInfo myPaintPresetInfo(const std::string& brushJson) {
     return info;
 }
 
-#ifdef COMPOSITOR_HAVE_MYPAINT
+#ifdef NEKOPHOTO_HAVE_MYPAINT
 
 namespace {
 
@@ -417,4 +417,4 @@ void MyPaintStroke::finish() {}
 
 #endif
 
-} // namespace compositor
+} // namespace nekophoto

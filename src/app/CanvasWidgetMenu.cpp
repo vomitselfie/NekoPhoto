@@ -2,13 +2,13 @@
 // Selection tools' anchor and path commands, and the text being typed.
 #include "CanvasWidget.h"
 #include "QtGeometry.h"
-#include "compositor/vectorlayer.h"
+#include "nekophoto/vectorlayer.h"
 #include <QContextMenuEvent>
 #include <QKeyEvent>
 #include <QMenu>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -41,12 +41,12 @@ bool CanvasWidget::addPathMenu(QMenu* menu, QPointF view) {
     const QPointF doc = documentPoint(view);
     if (auto path = session_->targetPath()) {
         const double radius = 6 / std::max(1e-6, session_->viewport.pointsPerPixel());
-        if (auto knot = compositor::nearestKnot(*path, toPoint(doc), radius)) {
+        if (auto knot = nekophoto::nearestKnot(*path, toPoint(doc), radius)) {
             const auto [sub, index] = *knot;
             menu->addAction(tr("Delete Anchor Point"), this, [this, sub, index] {
                 auto p = session_->targetPath();
                 if (!p || sub >= int(p->subpaths.size()) || index >= int(p->subpaths[size_t(sub)].knots.size())) return;
-                compositor::removeAnchor(*p, sub, index);
+                nekophoto::removeAnchor(*p, sub, index);
                 selectedKnot_.reset();
                 session_->setTargetPath(*p, QT_TRANSLATE_NOOP("History", "Delete Anchor Point"));
             });
@@ -57,13 +57,13 @@ bool CanvasWidget::addPathMenu(QMenu* menu, QPointF view) {
                 session_->setTargetPath(*p, QT_TRANSLATE_NOOP("History", "Convert Point"));
             });
             added = true;
-        } else if (auto hit = compositor::nearestPathSegment(*path, toPoint(doc)); hit && hit->distance <= radius) {
+        } else if (auto hit = nekophoto::nearestPathSegment(*path, toPoint(doc)); hit && hit->distance <= radius) {
             const int sub = hit->subpath, segment = hit->segment;
             const double t = hit->t;
             menu->addAction(tr("Add Anchor Point"), this, [this, sub, segment, t] {
                 auto p = session_->targetPath();
                 if (!p || sub >= int(p->subpaths.size())) return;
-                compositor::insertAnchor(*p, sub, segment, t);
+                nekophoto::insertAnchor(*p, sub, segment, t);
                 session_->setTargetPath(*p, QT_TRANSLATE_NOOP("History", "Add Anchor Point"));
             });
             added = true;

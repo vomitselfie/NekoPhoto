@@ -1,9 +1,9 @@
-#include "compositor/vectorlayer.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/psd_carry.h"
-#include "compositor/render.h"
-#include "compositor/selection.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/render.h"
+#include "nekophoto/selection.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <mutex>
 #include <set>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace psd = patchy::psd;
 
@@ -1035,4 +1035,4 @@ void setLayerVectorMask(Layer& layer, const Document& document, const std::optio
     carry->drawnShape = false;   // drawn for the old path: the pixels are cut by the new one from now on
     layer.psdCarry = std::move(carry);
 }
-} // namespace compositor
+} // namespace nekophoto

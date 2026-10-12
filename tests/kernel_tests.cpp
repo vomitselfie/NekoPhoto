@@ -1,8 +1,8 @@
 // Each optimised kernel against the portable C reference it replaces.
 #include "check.h"
-#include "compositor/kernels.h"
-#include "compositor/adjustments.h"
-#include "compositor/wand.h"
+#include "nekophoto/kernels.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/wand.h"
 extern "C" {
 #include "AdjustPixels.h"
 #include "LensPixels.h"
@@ -14,7 +14,7 @@ extern "C" {
 #include <cstring>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

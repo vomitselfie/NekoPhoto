@@ -8,7 +8,7 @@ follows, not the display server's frame pacing. `--bench-size WxH` sets the docu
 how many events the first paint appears.
 
 ```sh
-QT_QPA_PLATFORM=offscreen COMPOSITOR_WINDOW_SIZE=1400x1000 QT_SCALE_FACTOR=2.25 \
+QT_QPA_PLATFORM=offscreen NEKOPHOTO_WINDOW_SIZE=1400x1000 QT_SCALE_FACTOR=2.25 \
     ./build/src/app/nekophoto --bench-brush classic/dry_brush --bench-size 1086x1448
 ```
 

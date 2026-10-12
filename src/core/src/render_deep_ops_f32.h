@@ -12,11 +12,11 @@
 // adjustments_f32.cpp (P5b); the kinds Photoshop lacks at 32 bits are kept but not drawn.
 #pragma once
 #include "render_deep_ops.h"
-#include "compositor/view32.h"
+#include "nekophoto/view32.h"
 #include <array>
 #include <mutex>
 
-namespace compositor {
+namespace nekophoto {
 
 /// What a 32-bit render needs to know about its document.
 struct FloatRenderContext {
@@ -92,7 +92,7 @@ struct DeepOps<SampleType::F32> {
     }
 
     static void drawLayer(const Params& params, const Rect& region, double scale, const Gray* coverage, Image& out) {
-        compositor::drawLayer(params, region, scale, coverage, out);
+        nekophoto::drawLayer(params, region, scale, coverage, out);
     }
     static void sampleMask(const GrayPtr& mask, const LayerTransform& transform, const Rect& region, double scale, Gray& out) {
         sampleMaskCoverage(mask, transform, region, scale, 0.0f, out, false);
@@ -140,9 +140,9 @@ struct DeepOps<SampleType::F32> {
         cache.backdrop.reset(); cache.above.reset(); cache.backdrop16.reset(); cache.above16.reset(); cache.backdropC8.reset(); cache.aboveC8.reset();
     }
 
-    static std::shared_ptr<Image> widenFrom8(const compositor::Image& image) { return lineariseImage(image, floatRenderContext().curve); }
-    static std::shared_ptr<compositor::Image> narrowTo8(const Image& image) { return encodeImage8(image, floatRenderContext().curve); }
-    static void toDisplay(const Image& deep, compositor::Image& out, const ColorTransform* display) {
+    static std::shared_ptr<Image> widenFrom8(const nekophoto::Image& image) { return lineariseImage(image, floatRenderContext().curve); }
+    static std::shared_ptr<nekophoto::Image> narrowTo8(const Image& image) { return encodeImage8(image, floatRenderContext().curve); }
+    static void toDisplay(const Image& deep, nekophoto::Image& out, const ColorTransform* display) {
         const FloatRenderContext& c = floatRenderContext();
         float peak = c.peak;
         if (c.view.method == ToneMethod::HighlightCompression && !(peak > 0)) peak = peakLuminance(deep, {c.luma[0], c.luma[1], c.luma[2]});
@@ -150,4 +150,4 @@ struct DeepOps<SampleType::F32> {
     }
 };
 
-} // namespace compositor
+} // namespace nekophoto

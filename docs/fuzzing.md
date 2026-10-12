@@ -21,8 +21,8 @@ A separate, instrumented build (the targets need Clang):
 
 ```bash
 cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-  -DCOMPOSITOR_BUILD_APP=OFF -DCOMPOSITOR_BUILD_TESTS=OFF -DCOMPOSITOR_BUILD_FUZZERS=ON \
-  -DCOMPOSITOR_WITH_OPENCV=OFF -DCOMPOSITOR_WITH_MYPAINT=OFF -DCOMPOSITOR_WITH_SQLITE=OFF \
+  -DNEKOPHOTO_BUILD_APP=OFF -DNEKOPHOTO_BUILD_TESTS=OFF -DNEKOPHOTO_BUILD_FUZZERS=ON \
+  -DNEKOPHOTO_WITH_OPENCV=OFF -DNEKOPHOTO_WITH_MYPAINT=OFF -DNEKOPHOTO_WITH_SQLITE=OFF \
   "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined,fuzzer-no-link -fno-omit-frame-pointer" \
   "-DCMAKE_C_FLAGS=-fsanitize=address,undefined,fuzzer-no-link" "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
 cmake --build build-fuzz --target fuzz_psd fuzz_psd_parts fuzz_tga fuzz_ico fuzz_gif fuzz_aseprite fuzz_affinity fuzz_svg fuzz_svgimport fuzz_presets fuzz_colorlookup

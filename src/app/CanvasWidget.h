@@ -48,15 +48,15 @@ public:
     void cancelType();   // Esc: the text as it was (new type goes)
     /// The options bar's change to the selected letters, or to the letters typed next when none are selected;
     /// `alignment` for the paragraphs.
-    void applyTypeStyle(const compositor::TextRunPatch& patch, std::optional<int> alignment = std::nullopt);
-    static compositor::TextRunPatch typePatch(const compositor::LayerText& before, const compositor::LayerText& after);
+    void applyTypeStyle(const nekophoto::TextRunPatch& patch, std::optional<int> alignment = std::nullopt);
+    static nekophoto::TextRunPatch typePatch(const nekophoto::LayerText& before, const nekophoto::LayerText& after);
     /// The style at the caret (the letter before it) or the selection's start, for the options bar.
-    std::optional<compositor::TextRun> typeStyleAtCaret() const;
+    std::optional<nekophoto::TextRun> typeStyleAtCaret() const;
     std::optional<int> typeAlignment() const;
     /// How long the last change took to reach the layer's pixels (layout and raster), in milliseconds.
     double lastTypeLatencyMs() const { return lastTypeMs_; }
     /// For tests and automation-free checks: start typing on a layer, or new type at a document point.
-    bool startTypeOn(const compositor::Uuid& id, std::optional<QPointF> documentPoint);
+    bool startTypeOn(const nekophoto::Uuid& id, std::optional<QPointF> documentPoint);
     bool startNewType(QPointF documentPoint, std::optional<QRectF> box);
     QPointF viewPointForTest(QPointF documentPoint) const { return viewPoint(documentPoint); }
 
@@ -141,7 +141,7 @@ private:
     QSizeF documentSize() const;
     QRectF documentViewRect() const;
     void syncViewport();
-    HandleHit hitHandle(QPointF viewPoint, const compositor::Corners& corners, bool insideBox) const;
+    HandleHit hitHandle(QPointF viewPoint, const nekophoto::Corners& corners, bool insideBox) const;
     bool boxShown() const;
     void updateCursor(QPointF viewPoint, Qt::KeyboardModifiers modifiers);
     /// Why a press with the canvas's tool would be refused (EditorSession::toolRefusal; not a clone source Alt-click),
@@ -159,9 +159,9 @@ private:
     void sampleColor(QPointF documentPoint, bool background);
     bool sampleBackground_ = false;
     std::optional<EditorSession::CompositeSnapshot> sampleSnapshot_;
-    compositor::SelectionMode selectionMode(Qt::KeyboardModifiers modifiers) const;
+    nekophoto::SelectionMode selectionMode(Qt::KeyboardModifiers modifiers) const;
     void drawOverlays(QPainter& painter);
-    void drawTransformBox(QPainter& painter, const compositor::Corners& corners, bool active, bool distorting);
+    void drawTransformBox(QPainter& painter, const nekophoto::Corners& corners, bool active, bool distorting);
     void drawSelectionAnts(QPainter& painter);
     void drawScribbles(QPainter& painter);
     void drawCropOverlay(QPainter& painter);
@@ -174,7 +174,7 @@ private:
     std::optional<int> guideUnder(QPointF viewPoint) const;
     struct GuideDrag {
         std::optional<int> index;   // none: a new guide coming out of a ruler
-        compositor::Guide::Orientation orientation = compositor::Guide::Orientation::Vertical;
+        nekophoto::Guide::Orientation orientation = nekophoto::Guide::Orientation::Vertical;
         double position = 0;
         bool outside = false;       // over a ruler or beyond the canvas: dropping removes it
     };
@@ -182,13 +182,13 @@ private:
     void dragGuide(QPointF viewPoint, Qt::KeyboardModifiers modifiers);
     void finishGuideDrag();
     void drawGuides(QPainter& painter);
-    void snapMove(compositor::LayerTransform& draft);
+    void snapMove(nekophoto::LayerTransform& draft);
     QPointF snapPoint(QPointF documentPoint);
     bool isBrushLike() const;
 
     EditorSession* session_;
     QImage cache_;
-    compositor::RenderCache renderCache_;   // the layers around the one being edited, kept between frames
+    nekophoto::RenderCache renderCache_;   // the layers around the one being edited, kept between frames
     QRect cacheDeviceRect_;
     QPointF cacheDocumentOrigin_;
     double cacheZoom_ = 0;
@@ -201,8 +201,8 @@ private:
     void zoomGesture(double factor, QPointF viewPoint);
     Drag drag_ = Drag::None;
     QPointF dragStartView_, dragStartDocument_, lastView_;
-    std::optional<compositor::TransformDrag> transformDrag_;
-    compositor::Corners distortStart_{};
+    std::optional<nekophoto::TransformDrag> transformDrag_;
+    nekophoto::Corners distortStart_{};
     int distortIndex_ = 0;
     bool dragMoved_ = false;
     bool spaceHeld_ = false;
@@ -217,11 +217,11 @@ private:
     struct PathHit { int sub = -1, knot = -1; enum Part { None, Anchor, In, Out, Subpath } part = None; };
     PathHit pathHit(QPointF view) const;
     /// Photoshop's Convert Point on knot `knot`: smooth becomes corner, corner smooth.
-    static void convertPoint(compositor::VectorPath::Subpath& subpath, int knot);
+    static void convertPoint(nekophoto::VectorPath::Subpath& subpath, int knot);
     std::optional<std::pair<int, int>> selectedKnot_;
     int cageIndex_ = -1;
     void drawWarpCage(QPainter& painter);
-    std::optional<compositor::VectorPath> pathDragStart_;
+    std::optional<nekophoto::VectorPath> pathDragStart_;
     PathHit pathDrag_;
     void drawPathOverlay(QPainter& painter);
     std::vector<QPointF> lassoPoints_;
@@ -232,7 +232,7 @@ private:
     bool clickBackground_ = false;
     std::optional<QPointF> lassoCursor_;
     std::optional<QRectF> marquee_;
-    std::optional<compositor::Selection> selectionMoveOrigin_;
+    std::optional<nekophoto::Selection> selectionMoveOrigin_;
     std::optional<QRectF> crop_;
     QRectF cropOrigin_;
     int cropHandle_ = -1;
@@ -242,7 +242,7 @@ private:
     std::vector<QPolygonF> selectionOutline_;
     /// Set when the outline is too detailed to trace or draw as vectors: the ants come from a raster pass instead.
     bool selectionRasterAnts_ = false;
-    void drawRasterAnts(QPainter& painter, const compositor::GrayImage& coverage);
+    void drawRasterAnts(QPainter& painter, const nekophoto::GrayImage& coverage);
     int antsPhase_ = 0;
     QTimer antsTimer_;
     bool layerPickedOnPress_ = false;
@@ -251,7 +251,7 @@ private:
     /// committed on release as one undo step.
     struct BoxDrag {
         enum class Kind { Draw, Move, Resize } kind = Kind::Draw;
-        std::optional<compositor::Uuid> artboard;
+        std::optional<nekophoto::Uuid> artboard;
         std::optional<uint32_t> slice;
         QRectF origin;
         int edges = 0;          // Resize: 1 left, 2 top, 4 right, 8 bottom
@@ -266,26 +266,26 @@ private:
     // Typing on the canvas (CanvasWidgetText.cpp): the caret and selection in UTF-16 units of the text, the layout
     // they are drawn from, and the raster-to-document map of the layer.
     struct TypeState {
-        compositor::Uuid layer;
+        nekophoto::Uuid layer;
         int caret = 0, anchor = 0;
         double preferredX = -1;                            // Up and Down keep to this x on the raster
-        std::optional<compositor::TextRunPatch> pending;   // the style for the letters typed next
-        struct Snapshot { compositor::LayerText text; int caret = 0, anchor = 0; };
+        std::optional<nekophoto::TextRunPatch> pending;   // the style for the letters typed next
+        struct Snapshot { nekophoto::LayerText text; int caret = 0, anchor = 0; };
         std::vector<Snapshot> undo, redo;                  // Ctrl+Z inside the session
         enum class Drag { None, Select, Box } drag = Drag::None;
         int boxEdges = 0;
-        compositor::LayerText boxStart;
+        nekophoto::LayerText boxStart;
         QPointF boxStartRaster, boxShift;
-        compositor::Affine boxStartMap;
+        nekophoto::Affine boxStartMap;
         bool boxRecorded = false;
         bool caretOn = true;
         TextCaretGeometry geometry;
-        compositor::Affine toDocument;
+        nekophoto::Affine toDocument;
         QSizeF rasterSize;
         /// An input method's composition (Japanese and the like), shown inline in the layer until it is committed:
         /// `base` is the text without it, `start` where it sits, `length` how long it is; `clauses` are the ranges
         /// (in the composition) the input method marks, `thick` for the one being converted. Never recorded.
-        struct Composition { compositor::LayerText base; int start = 0, length = 0; std::vector<std::tuple<int, int, bool>> clauses; };
+        struct Composition { nekophoto::LayerText base; int start = 0, length = 0; std::vector<std::tuple<int, int, bool>> clauses; };
         std::optional<Composition> composition;
     };
     std::optional<TypeState> typeEdit_;
@@ -293,7 +293,7 @@ private:
     std::optional<QRectF> typeCreateRect_;
     QTimer caretBlink_;
     double lastTypeMs_ = 0;
-    const compositor::Layer* typeLayer() const;
+    const nekophoto::Layer* typeLayer() const;
     void refreshTypeGeometry();
     QPointF typeRaster(QPointF documentPoint) const;
     QPointF typeView(QPointF rasterPoint) const;
@@ -301,7 +301,7 @@ private:
     bool typeContains(QPointF documentPoint) const;
     void startTypeSession();
     void finishTypeSession(bool keep);
-    void setTypeText(compositor::LayerText text, int caret, int anchor, QPointF rasterShift = {}, bool record = true);
+    void setTypeText(nekophoto::LayerText text, int caret, int anchor, QPointF rasterShift = {}, bool record = true);
     void typeReplace(int from, int to, const QString& insert, bool record = true);
     void dropComposition();
     bool typeUndo(bool redo);

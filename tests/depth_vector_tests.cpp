@@ -2,15 +2,15 @@
 // path. An 8-bit document converted to 16 bits (or the same shape made in a 16-bit one) renders, reduced to 8 bits,
 // within a level of the 8-bit render where the result is continuous; where it is not, the test says by how much and
 // why. And a smooth ramp keeps more than 256 levels where 8 bits would band.
-// COMPOSITOR_REPORT_U16_CALIBRATION=1 prints the worst difference and the share beyond a level for each scene.
+// NEKOPHOTO_REPORT_U16_CALIBRATION=1 prints the worst difference and the share beyond a level for each scene.
 #include "check.h"
-#include "compositor/depth.h"
-#include "compositor/layerstyle.h"
-#include "compositor/presets.h"
-#include "compositor/psd_carry.h"
-#include "compositor/render.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/presets.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/render.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -18,7 +18,7 @@
 #include <set>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 
@@ -86,7 +86,7 @@ Apart apart(const Image& eight, const Image16& deep) {
 }
 
 void report(const std::string& what, const Apart& a) {
-    if (std::getenv("COMPOSITOR_REPORT_U16_CALIBRATION"))
+    if (std::getenv("NEKOPHOTO_REPORT_U16_CALIBRATION"))
         std::fprintf(stderr, "  %-40s worst %3d, beyond a level %.4f%%\n", what.c_str(), a.worst, a.beyondOne * 100);
 }
 

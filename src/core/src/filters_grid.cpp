@@ -1,17 +1,17 @@
 // The Filter menu's grid filters (filters.h, applyGridFilter): the filters Photoshop names that NekoPhoto drew only as
 // Smart Filters, run destructively through the same kernels (a one-entry stack, smartfilter.h), and the filters ported
 // from PhotoCraft (filters_photocraft.cpp), run on a float plane of straight colour at any depth and layout.
-#include "compositor/filters.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/smartfilter.h"
-#include "compositor/supports.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/supports.h"
 #include "filters_photocraft.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -325,4 +325,4 @@ bool coverageBounds(const AnyGray& coverage, GridFilterContext& context) {
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

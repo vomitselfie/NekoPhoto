@@ -4,13 +4,13 @@
 #include "Automation.h"
 #include "AutomationGuard.h"
 #include "AutomationHandlers.h"
-#include "compositor/animation.h"
+#include "nekophoto/animation.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QPointer>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {

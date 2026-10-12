@@ -1,6 +1,6 @@
 #include "Names.h"
-#include "compositor/adjustments.h"
-#include "compositor/transform.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/transform.h"
 
 namespace app::names {
 
@@ -60,12 +60,12 @@ namespace {
 } // namespace
 
 QString core(const char* english) { return QCoreApplication::translate("Names", english); }
-QString blendMode(compositor::BlendMode mode) { return core(compositor::blendModeName(mode)); }
-QString adjustmentKind(compositor::AdjustmentKind kind) { return core(compositor::adjustmentKindName(kind)); }
-QString filterKind(compositor::FilterKind kind) { return core(compositor::filterKindName(kind)); }
-QString levelsChannel(int channel) { return core(compositor::levelsChannelName(channel)); }
-QString levelsChannel(int channel, compositor::ColorMode mode) { return core(compositor::levelsChannelName(channel, mode)); }
-QString colorRange(int range) { return core(compositor::colorRangeName(range)); }
+QString blendMode(nekophoto::BlendMode mode) { return core(nekophoto::blendModeName(mode)); }
+QString adjustmentKind(nekophoto::AdjustmentKind kind) { return core(nekophoto::adjustmentKindName(kind)); }
+QString filterKind(nekophoto::FilterKind kind) { return core(nekophoto::filterKindName(kind)); }
+QString levelsChannel(int channel) { return core(nekophoto::levelsChannelName(channel)); }
+QString levelsChannel(int channel, nekophoto::ColorMode mode) { return core(nekophoto::levelsChannelName(channel, mode)); }
+QString colorRange(int range) { return core(nekophoto::colorRangeName(range)); }
 
 QString history(const QString& english) {
     const QByteArray key = english.toUtf8();

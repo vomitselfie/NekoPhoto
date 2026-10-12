@@ -2,7 +2,7 @@
 // compressed, folders nested by underscores, author subfolders, marked controls and previews).
 #include "check.h"
 #include "Gmic.h"
-#include "compositor/depth.h"
+#include "nekophoto/depth.h"
 #include <QByteArray>
 #include <QDir>
 #include <QFile>
@@ -112,7 +112,7 @@ TEST_CASE(gmic_patch_based_commands_are_never_offered_or_run) {
     CHECK(!GmicRunner::allowedForAutomation("inpaint_patch 7", &why));
     CHECK(!GmicCatalogue::excludedIn("blur 3 matchpatch[0] [1]").isEmpty());
     CHECK(GmicCatalogue::excludedIn("blur 3").isEmpty());
-    compositor::Image tiny(4, 4);
+    nekophoto::Image tiny(4, 4);
     QString error;
     CHECK(!GmicRunner::runSync(tiny, "+matchpatch[0] [0],3", &error));
     CHECK(error.contains("matchpatch"));
@@ -130,7 +130,7 @@ TEST_CASE(gmic_at_sixteen_bits_agrees_with_eight_bits_on_eight_bit_input) {
     if (GmicRunner::executable().isEmpty()) { std::fprintf(stderr, "  skipped: no gmic executable\n"); return; }
     // An 8-bit picture (ramps, texture, and a half-transparent corner or not) and the same pixels widened to 16 bits.
     auto picture = [](bool corner) {
-        compositor::Image image(48, 32);
+        nekophoto::Image image(48, 32);
         uint32_t noise = 99;
         for (int y = 0; y < 32; y++)
             for (int x = 0; x < 48; x++) {
@@ -150,13 +150,13 @@ TEST_CASE(gmic_at_sixteen_bits_agrees_with_eight_bits_on_eight_bit_input) {
                           {"solarize", false, 1}, {"solarize", true, 6}};
     bool within = true;
     for (const Case& k : cases) {
-        const compositor::Image source = picture(k.corner);
-        const auto deep = compositor::widenImage(source);
+        const nekophoto::Image source = picture(k.corner);
+        const auto deep = nekophoto::widenImage(source);
         QString error8, error16;
         auto eight = GmicRunner::runSync(source, k.command, &error8);
         auto sixteen = GmicRunner::runSync(*deep, k.command, &error16);
         REQUIRE(eight && sixteen);
-        auto narrowed = compositor::narrowImage(*sixteen);
+        auto narrowed = nekophoto::narrowImage(*sixteen);
         int worst = 0;
         long long over1 = 0, samples = 0;
         for (int y = 0; y < 32; y++)
@@ -173,7 +173,7 @@ TEST_CASE(gmic_at_sixteen_bits_agrees_with_eight_bits_on_eight_bit_input) {
     }
     CHECK(within);
     // 16-bit precision survives the round trip: a ramp finer than 8 bits through an identity command keeps its values.
-    compositor::Image16 ramp(512, 2);
+    nekophoto::Image16 ramp(512, 2);
     for (int y = 0; y < 2; y++)
         for (int x = 0; x < 512; x++) { uint16_t* p = ramp.pixel(x, y); p[0] = p[1] = p[2] = uint16_t(8000 + x * 13); p[3] = 32768; }
     QString error;

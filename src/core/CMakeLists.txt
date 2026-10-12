@@ -7,14 +7,14 @@ pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
 
 # OpenCV's DNN module runs the Remove Background model. Optional: without it the
 # refinement still builds and the menu item explains what's missing.
-option(COMPOSITOR_WITH_OPENCV "Use OpenCV DNN for Remove Background" ON)
-set(COMPOSITOR_HAVE_OPENCV OFF)
-if(COMPOSITOR_WITH_OPENCV)
+option(NEKOPHOTO_WITH_OPENCV "Use OpenCV DNN for Remove Background" ON)
+set(NEKOPHOTO_HAVE_OPENCV OFF)
+if(NEKOPHOTO_WITH_OPENCV)
     # Only the three modules the model needs, so a packaged build doesn't drag in all of OpenCV.
     find_package(OpenCV QUIET COMPONENTS core imgproc dnn)
     if(OpenCV_FOUND)
-        set(COMPOSITOR_HAVE_OPENCV ON)
-        set(COMPOSITOR_OPENCV_LIBS opencv_core opencv_imgproc opencv_dnn)
+        set(NEKOPHOTO_HAVE_OPENCV ON)
+        set(NEKOPHOTO_OPENCV_LIBS opencv_core opencv_imgproc opencv_dnn)
         message(STATUS "Remove Background: OpenCV ${OpenCV_VERSION} DNN from ${OpenCV_DIR}")
     else()
         pkg_check_modules(OPENCV IMPORTED_TARGET opencv5)
@@ -22,20 +22,20 @@ if(COMPOSITOR_WITH_OPENCV)
             pkg_check_modules(OPENCV IMPORTED_TARGET opencv4)
         endif()
         if(OPENCV_FOUND)
-            set(COMPOSITOR_HAVE_OPENCV ON)
-            set(COMPOSITOR_OPENCV_LIBS PkgConfig::OPENCV)
+            set(NEKOPHOTO_HAVE_OPENCV ON)
+            set(NEKOPHOTO_OPENCV_LIBS PkgConfig::OPENCV)
             message(STATUS "Remove Background: OpenCV ${OPENCV_VERSION} DNN (via pkg-config, all modules)")
         else()
             message(STATUS "Remove Background: OpenCV not found, model inference disabled")
         endif()
     endif()
 endif()
-set(COMPOSITOR_HAVE_OPENCV ${COMPOSITOR_HAVE_OPENCV} PARENT_SCOPE)
+set(NEKOPHOTO_HAVE_OPENCV ${NEKOPHOTO_HAVE_OPENCV} PARENT_SCOPE)
 
 # libmypaint paints the MyPaint brush presets. Optional: without it the round brush is the only engine.
-option(COMPOSITOR_WITH_MYPAINT "Use libmypaint for the MyPaint brush presets" ON)
-set(COMPOSITOR_HAVE_MYPAINT OFF)
-if(COMPOSITOR_WITH_MYPAINT)
+option(NEKOPHOTO_WITH_MYPAINT "Use libmypaint for the MyPaint brush presets" ON)
+set(NEKOPHOTO_HAVE_MYPAINT OFF)
+if(NEKOPHOTO_WITH_MYPAINT)
     pkg_check_modules(MYPAINT IMPORTED_TARGET libmypaint>=1.5)
     if(MYPAINT_FOUND)
         # Ubuntu's libmypaint.pc puts -fopenmp in Libs. libmypaint.so already links its own OpenMP runtime;
@@ -49,18 +49,18 @@ if(COMPOSITOR_WITH_MYPAINT)
                 set_target_properties(PkgConfig::MYPAINT PROPERTIES ${property} "${values}")
             endif()
         endforeach()
-        set(COMPOSITOR_HAVE_MYPAINT ON)
+        set(NEKOPHOTO_HAVE_MYPAINT ON)
         message(STATUS "Brushes: libmypaint ${MYPAINT_VERSION}")
     else()
         message(STATUS "Brushes: libmypaint not found, MyPaint presets disabled")
     endif()
 endif()
-set(COMPOSITOR_HAVE_MYPAINT ${COMPOSITOR_HAVE_MYPAINT} PARENT_SCOPE)
+set(NEKOPHOTO_HAVE_MYPAINT ${NEKOPHOTO_HAVE_MYPAINT} PARENT_SCOPE)
 
 # LibRaw (LGPL 2.1 / CDDL 1.0) develops camera RAW files. Optional: without it RAW files are refused.
-option(COMPOSITOR_WITH_LIBRAW "Open camera RAW files through LibRaw" ON)
-set(COMPOSITOR_HAVE_LIBRAW OFF)
-if(COMPOSITOR_WITH_LIBRAW)
+option(NEKOPHOTO_WITH_LIBRAW "Open camera RAW files through LibRaw" ON)
+set(NEKOPHOTO_HAVE_LIBRAW OFF)
+if(NEKOPHOTO_WITH_LIBRAW)
     pkg_check_modules(LIBRAW IMPORTED_TARGET libraw)
     if(LIBRAW_FOUND)
         # Ubuntu's libraw.pc asks for -fopenmp as libmypaint's does; libraw.so links its own runtime (see above).
@@ -73,7 +73,7 @@ if(COMPOSITOR_WITH_LIBRAW)
                 set_target_properties(PkgConfig::LIBRAW PROPERTIES ${property} "${values}")
             endif()
         endforeach()
-        set(COMPOSITOR_HAVE_LIBRAW ON)
+        set(NEKOPHOTO_HAVE_LIBRAW ON)
         message(STATUS "RAW: LibRaw ${LIBRAW_VERSION}")
     else()
         message(STATUS "RAW: LibRaw not found, camera RAW files disabled")
@@ -81,40 +81,40 @@ if(COMPOSITOR_WITH_LIBRAW)
 endif()
 
 # SQLite reads Clip Studio brushes (.sut) and projects (.clip). Optional: without it those imports are refused.
-option(COMPOSITOR_WITH_SQLITE "Import Clip Studio brushes through SQLite" ON)
-set(COMPOSITOR_HAVE_SQLITE OFF)
-if(COMPOSITOR_WITH_SQLITE)
+option(NEKOPHOTO_WITH_SQLITE "Import Clip Studio brushes through SQLite" ON)
+set(NEKOPHOTO_HAVE_SQLITE OFF)
+if(NEKOPHOTO_WITH_SQLITE)
     find_package(SQLite3 QUIET)
     if(SQLite3_FOUND)
-        set(COMPOSITOR_HAVE_SQLITE ON)
+        set(NEKOPHOTO_HAVE_SQLITE ON)
         # CMake 4 names the target SQLite3::SQLite3 and deprecates SQLite::SQLite3, the only name CMake 3.22 has.
         if(TARGET SQLite3::SQLite3)
-            set(COMPOSITOR_SQLITE_TARGET SQLite3::SQLite3)
+            set(NEKOPHOTO_SQLITE_TARGET SQLite3::SQLite3)
         else()
-            set(COMPOSITOR_SQLITE_TARGET SQLite::SQLite3)
+            set(NEKOPHOTO_SQLITE_TARGET SQLite::SQLite3)
         endif()
         message(STATUS "Brush import: Clip Studio through SQLite ${SQLite3_VERSION}")
     else()
         message(STATUS "Brush import: SQLite not found, Clip Studio brushes disabled")
     endif()
 endif()
-set(COMPOSITOR_HAVE_SQLITE ${COMPOSITOR_HAVE_SQLITE} PARENT_SCOPE)
+set(NEKOPHOTO_HAVE_SQLITE ${NEKOPHOTO_HAVE_SQLITE} PARENT_SCOPE)
 
 # zstd decompresses the streams of Affinity documents (most from Affinity 2 on). Optional: without it such
 # documents are refused with a message; zlib-compressed ones still open.
-option(COMPOSITOR_WITH_ZSTD "Open zstd-compressed Affinity documents through libzstd" ON)
-set(COMPOSITOR_HAVE_ZSTD OFF)
-if(COMPOSITOR_WITH_ZSTD)
+option(NEKOPHOTO_WITH_ZSTD "Open zstd-compressed Affinity documents through libzstd" ON)
+set(NEKOPHOTO_HAVE_ZSTD OFF)
+if(NEKOPHOTO_WITH_ZSTD)
     pkg_check_modules(ZSTD IMPORTED_TARGET libzstd)
     if(ZSTD_FOUND)
-        set(COMPOSITOR_HAVE_ZSTD ON)
+        set(NEKOPHOTO_HAVE_ZSTD ON)
         message(STATUS "Affinity: zstd ${ZSTD_VERSION}")
     else()
         message(STATUS "Affinity: libzstd not found, zstd-compressed Affinity documents disabled")
     endif()
 endif()
 
-add_library(compositor_core STATIC
+add_library(nekophoto_core STATIC
     src/abr.cpp
     src/artboard.cpp
     src/guides.cpp
@@ -248,9 +248,9 @@ add_library(compositor_core STATIC
     src/filters_f32.cpp
     src/resample_f32.cpp
 )
-add_library(compositor::core ALIAS compositor_core)
+add_library(nekophoto::core ALIAS nekophoto_core)
 # The version a .nekophoto file names as its writer (nekophoto.json); on the one file, so a version bump rebuilds little.
-set_source_files_properties(src/project.cpp PROPERTIES COMPILE_DEFINITIONS NEKOPHOTO_WRITER_VERSION="${COMPOSITOR_VERSION_STRING}")
+set_source_files_properties(src/project.cpp PROPERTIES COMPILE_DEFINITIONS NEKOPHOTO_WRITER_VERSION="${NEKOPHOTO_VERSION_STRING}")
 
 # The default Working CMYK profile, ISO Coated v2 300% (basICColor, zlib licence; src/third_party/icc/README.md),
 # compiled in as bytes so the core has a CMYK profile without files beside the program.
@@ -263,50 +263,50 @@ add_custom_command(
     DEPENDS ${NEKOPHOTO_CMYK_PROFILE} ${CMAKE_CURRENT_SOURCE_DIR}/embed_blob.cmake
     COMMENT "Embedding the default CMYK profile"
     VERBATIM)
-target_sources(compositor_core PRIVATE ${NEKOPHOTO_CMYK_BLOB})
+target_sources(nekophoto_core PRIVATE ${NEKOPHOTO_CMYK_BLOB})
 
-target_include_directories(compositor_core
+target_include_directories(nekophoto_core
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
     PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party
 )
 # The vendored Little CMS comes first on the link line: LibRaw's pkg-config file asks for the system's -llcms2, and
 # a shared library named before the archive would answer every cms* call with whatever version the system has.
-target_link_libraries(compositor_core
-    PUBLIC compositor::pixels
-    PRIVATE nekophoto_lcms2 PkgConfig::PNG PkgConfig::ZLIB compositor_warnings
+target_link_libraries(nekophoto_core
+    PUBLIC nekophoto::pixels
+    PRIVATE nekophoto_lcms2 PkgConfig::PNG PkgConfig::ZLIB nekophoto_warnings
 )
-target_compile_definitions(compositor_core PRIVATE _USE_MATH_DEFINES)
-# The standard headers most of the core includes (COMPOSITOR_PCH). Not nlohmann/json.hpp: nine files include it, and
+target_compile_definitions(nekophoto_core PRIVATE _USE_MATH_DEFINES)
+# The standard headers most of the core includes (NEKOPHOTO_PCH). Not nlohmann/json.hpp: nine files include it, and
 # a PCH holding it costs the other hundred and twenty more to load than it saves those nine.
-compositor_precompile_headers(compositor_core algorithm array cmath cstdint cstdio cstring functional map memory mutex optional set string vector)
+nekophoto_precompile_headers(nekophoto_core algorithm array cmath cstdint cstdio cstring functional map memory mutex optional set string vector)
 # The Mosh effects hash float bit patterns: no fused multiply-adds, so every CPU computes the same bits. A PCH built
 # without that option does not fit them, so they parse their headers themselves.
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set_source_files_properties(src/mosh.cpp src/mosh_effects.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off" SKIP_PRECOMPILE_HEADERS ON)
 endif()
-if(COMPOSITOR_HAVE_OPENCV)
-    target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_OPENCV_LIBS})
-    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_OPENCV)
+if(NEKOPHOTO_HAVE_OPENCV)
+    target_link_libraries(nekophoto_core PRIVATE ${NEKOPHOTO_OPENCV_LIBS})
+    target_compile_definitions(nekophoto_core PRIVATE NEKOPHOTO_HAVE_OPENCV)
 endif()
-if(COMPOSITOR_HAVE_SQLITE)
+if(NEKOPHOTO_HAVE_SQLITE)
     # Clip Studio projects (.clip): a C reader of the container, its SQLite database and the layer tiles.
-    target_sources(compositor_core PRIVATE src/csp_clip_import.c)
-    target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_SQLITE_TARGET})
-    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_SQLITE)
+    target_sources(nekophoto_core PRIVATE src/csp_clip_import.c)
+    target_link_libraries(nekophoto_core PRIVATE ${NEKOPHOTO_SQLITE_TARGET})
+    target_compile_definitions(nekophoto_core PRIVATE NEKOPHOTO_HAVE_SQLITE)
 endif()
-if(COMPOSITOR_HAVE_ZSTD)
-    target_link_libraries(compositor_core PRIVATE PkgConfig::ZSTD)
-    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_ZSTD)
+if(NEKOPHOTO_HAVE_ZSTD)
+    target_link_libraries(nekophoto_core PRIVATE PkgConfig::ZSTD)
+    target_compile_definitions(nekophoto_core PRIVATE NEKOPHOTO_HAVE_ZSTD)
 endif()
-if(COMPOSITOR_HAVE_LIBRAW)
-    target_link_libraries(compositor_core PRIVATE PkgConfig::LIBRAW)
-    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_LIBRAW)
+if(NEKOPHOTO_HAVE_LIBRAW)
+    target_link_libraries(nekophoto_core PRIVATE PkgConfig::LIBRAW)
+    target_compile_definitions(nekophoto_core PRIVATE NEKOPHOTO_HAVE_LIBRAW)
 endif()
-if(COMPOSITOR_HAVE_MYPAINT)
-    target_link_libraries(compositor_core PRIVATE PkgConfig::MYPAINT)
-    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_MYPAINT)
+if(NEKOPHOTO_HAVE_MYPAINT)
+    target_link_libraries(nekophoto_core PRIVATE PkgConfig::MYPAINT)
+    target_compile_definitions(nekophoto_core PRIVATE NEKOPHOTO_HAVE_MYPAINT)
 endif()
-set_target_properties(compositor_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(nekophoto_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Patchy's PSD primitives (MIT, src/third_party/patchy_psd/README.md): descriptors and binary I/O.
 add_library(patchy_psd STATIC
@@ -315,7 +315,7 @@ add_library(patchy_psd STATIC
 )
 target_include_directories(patchy_psd PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party/patchy_psd)
 set_target_properties(patchy_psd PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(compositor_core PUBLIC patchy_psd)
+target_link_libraries(nekophoto_core PUBLIC patchy_psd)
 
 # Little CMS (MIT, src/third_party/lcms2/README.md): CMYK PSDs through their own colour profiles.
 file(GLOB NEKOPHOTO_LCMS2_SOURCES ${CMAKE_SOURCE_DIR}/src/third_party/lcms2/*.c)

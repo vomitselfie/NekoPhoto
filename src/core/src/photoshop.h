@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace compositor::photoshop {
+namespace nekophoto::photoshop {
 
 struct Truncated {};
 
@@ -84,4 +84,4 @@ Descriptor readDescriptorObject(Reader& r, int depth = 0);
 /// A descriptor block: its version (16), then the object.
 Descriptor readDescriptor(Reader& r);
 
-} // namespace compositor::photoshop
+} // namespace nekophoto::photoshop

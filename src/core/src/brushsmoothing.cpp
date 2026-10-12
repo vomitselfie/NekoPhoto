@@ -1,8 +1,8 @@
-#include "compositor/brushsmoothing.h"
+#include "nekophoto/brushsmoothing.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -191,4 +191,4 @@ void BrushStabilizer::give(const BrushSample& pen, std::vector<BrushSample>& out
     out.push_back(s);
 }
 
-} // namespace compositor
+} // namespace nekophoto

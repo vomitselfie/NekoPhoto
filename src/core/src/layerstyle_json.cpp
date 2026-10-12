@@ -1,7 +1,7 @@
 // Layer styles as JSON, for automation (layers.style_get / layers.style_set). One field list per effect serves both
 // directions. Colours are "#rrggbb"; opacities, scales and depths are fractions (1 = 100%); spread, choke and range
 // are percent as Photoshop shows them; sizes are pixels and angles degrees.
-#include "compositor/layerstyle.h"
+#include "nekophoto/layerstyle.h"
 #include <nlohmann/json.hpp>
 #include <cstdio>
 #include <set>
@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -294,4 +294,4 @@ bool layerStyleFromJson(const std::string& text, LayerStyle& out, std::string* e
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

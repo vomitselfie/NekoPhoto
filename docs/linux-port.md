@@ -15,10 +15,14 @@ server name `nekophoto`). On the first launch after the rename the old settings
 file and data folder (model, imported brushes, G'MIC catalogue, recovery files)
 move to the new places, unless something is there already. Unchanged on
 purpose: the `.comp` format and its MIME type, which keep Mac projects opening
-(new projects are `.nekophoto` files, `application/vnd.nekophoto.document`, since 1.8.7);
-the `COMPOSITOR_*` environment variables and build options; and the C++
-`compositor` namespace. `tools/integrate-appimage.sh` removes a launcher that
-an older compositor-linux AppImage installed.
+(new projects are `.nekophoto` files, `application/vnd.nekophoto.document`, since 1.8.7).
+`tools/integrate-appimage.sh` removes a launcher that an older compositor-linux AppImage installed.
+
+The code kept the old name until 1.8.14, which renamed the rest: the C++ namespace and headers (`nekophoto::`,
+`src/core/include/nekophoto/`), the CMake targets, and the environment variables and build options, now
+`NEKOPHOTO_*`. The old `COMPOSITOR_*` spellings still work: an environment variable the program, the MCP bridge or
+the test scripts read, or a build option on the command line or in an old build folder's cache, sets its
+`NEKOPHOTO_*` namesake unless that is set too.
 
 ## Building
 
@@ -99,13 +103,13 @@ Under a Wayland session Qt picks the Wayland platform on its own; force it with
 `QT_QPA_PLATFORM=wayland` if needed. `QT_QPA_PLATFORM=xcb` runs under X11 or
 XWayland.
 
-Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
-`-DCOMPOSITOR_WITH_OPENCV=OFF` leaves out the Remove Background model;
-`-DCOMPOSITOR_WITH_MYPAINT=OFF` leaves out the MyPaint brushes (the round brush stays);
-`-DCOMPOSITOR_WITH_SQLITE=OFF` leaves out Clip Studio brush import;
-`-DCOMPOSITOR_WITH_QTPDF=OFF` leaves out PDF import;
-`-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses;
-`-DCOMPOSITOR_PCH=OFF` turns off the precompiled headers (on by default, off under MinGW), for a toolchain that
+Options: `-DNEKOPHOTO_BUILD_APP=OFF` builds only the core and tests;
+`-DNEKOPHOTO_WITH_OPENCV=OFF` leaves out the Remove Background model;
+`-DNEKOPHOTO_WITH_MYPAINT=OFF` leaves out the MyPaint brushes (the round brush stays);
+`-DNEKOPHOTO_WITH_SQLITE=OFF` leaves out Clip Studio brush import;
+`-DNEKOPHOTO_WITH_QTPDF=OFF` leaves out PDF import;
+`-DNEKOPHOTO_WARNINGS_AS_ERRORS=ON` is what CI uses;
+`-DNEKOPHOTO_PCH=OFF` turns off the precompiled headers (on by default, off under MinGW), for a toolchain that
 mishandles them or to check that every file includes what it uses.
 `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4` builds against the OpenCV that
 `tools/build-opencv.sh <prefix>` makes: a pinned 4.x, static, with only the
@@ -113,11 +117,11 @@ three modules the model needs and every optional dependency off. CI and the
 release jobs use that build (cached, so it is compiled once
 per runner image), which is how every platform ends up running the model on
 the same OpenCV; a local build takes the system OpenCV unless told otherwise.
-`-DCOMPOSITOR_QT_TOOL_DIR=<dir>` points the build at copies of `moc`, `uic`
+`-DNEKOPHOTO_QT_TOOL_DIR=<dir>` points the build at copies of `moc`, `uic`
 and `rcc` for shells that cannot execute binaries under `/usr/lib`.
 
 `nekophoto --download-model isnet` fetches a model without the GUI (into
-`COMPOSITOR_MODEL_DIR` when set); `--preferences` opens the Preferences dialog;
+`NEKOPHOTO_MODEL_DIR` when set); `--preferences` opens the Preferences dialog;
 One editor per user: a launch that carries only file names (a double-click in
 the file manager, `nekophoto photo.psd`) hands them to the running
 editor, which opens them as tabs and raises its window, and quits (with
@@ -139,9 +143,9 @@ the automation socket answers in English either way ([translating.md](translatin
 demo document, grabs the window and saves a project (a `.comp` folder when the path ends in `.comp`) without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
 
-`COMPOSITOR_DEBUG_LAYOUT=1` prints each toolbar's, dock's and central widget's
+`NEKOPHOTO_DEBUG_LAYOUT=1` prints each toolbar's, dock's and central widget's
 minimum size at startup, for chasing what stops the window from shrinking;
-`COMPOSITOR_WINDOW_SIZE=1000x700` forces the initial window size, for looking at
+`NEKOPHOTO_WINDOW_SIZE=1000x700` forces the initial window size, for looking at
 the layout as a laptop or a tiling window manager would show it.
 
 ## Installing
@@ -161,11 +165,11 @@ For an AppImage, `tools/integrate-appimage.sh <file>` copies it to
 
 Filter > G'MIC runs the `gmic` executable (an optional runtime dependency:
 `pacman -S gmic` / `apt install gmic`) on the active layer's pixels through a PNG round trip. The executable is
-looked for in this order: `COMPOSITOR_GMIC` (a specific binary); a `gmic` folder beside the app's executable
+looked for in this order: `NEKOPHOTO_GMIC` (a specific binary); a `gmic` folder beside the app's executable
 (`gmic/gmic.exe` on Windows, `gmic/gmic` elsewhere: G'MIC unzipped next to a portable NekoPhoto); the copy downloaded
 on Windows into the app's local data folder (`gmic/4.0.5/`, see the Windows section; `src/app/GmicStore.cpp`);
 then `PATH`. `app.info` reports which one is used (`gmic`: path, source, version). The download is offered only on
-Windows, where there is no package manager to install it from; `COMPOSITOR_GMIC_OFFER_DOWNLOAD=1` shows the offer
+Windows, where there is no package manager to install it from; `NEKOPHOTO_GMIC_OFFER_DOWNLOAD=1` shows the offer
 elsewhere for testing (the win64 build it fetches does not run there). The dialog lists
 a few essentials from G'MIC's core, and the whole catalogue once its definition
 file is available: Update Filters downloads `https://gmic.eu/update<version>.gmic`
@@ -176,7 +180,7 @@ declaration's separators and short notes become folding sections, long notes a
 Notes fold), lists filters under the catalogue's folders, shows the resulting
 command line, and previews on a reduced copy. Filters that change the
 image size are rejected. Over automation: `pixels.gmic` (filter names and
-numbers only, since G'MIC can run shell commands; `COMPOSITOR_GMIC_UNRESTRICTED=1`
+numbers only, since G'MIC can run shell commands; `NEKOPHOTO_GMIC_UNRESTRICTED=1`
 lifts that) and `gmic.filters`.
 
 The file gmic.eu serves is compressed (a one-image G'MIC file: two header
@@ -201,9 +205,9 @@ those unless Show all filters is on, and `gmic.filters` leaves them out unless
 rerun the sweep when G'MIC updates (`--gallery` also writes a captioned image
 per working filter).
 
-When the build is configured with `-DCOMPOSITOR_WITH_LIBGMIC=ON` and finds libgmic (off by
+When the build is configured with `-DNEKOPHOTO_WITH_LIBGMIC=ON` and finds libgmic (off by
 default, so an installed binary never depends on a library that a later upgrade may remove), setting
-`COMPOSITOR_GMIC_INPROCESS=1` runs filters in-process through one interpreter
+`NEKOPHOTO_GMIC_INPROCESS=1` runs filters in-process through one interpreter
 kept warm with the catalogue's commands, with no PNG round trip (12 MP through
 the executable costs about six seconds of encode and decode). It stays opt-in
 because libgmic 4.0.5 crashes inside `sharpen` when called as a library, and a
@@ -216,7 +220,7 @@ Edit > Preferences > Appearance: System, Dark or Light. Dark and Light use Qt's
 Fusion style with a fixed palette. System keeps the desktop's own Qt theme when
 it can load (a distribution package under KDE or GNOME), and otherwise asks the
 XDG desktop portal for the colour scheme, which is how the AppImage matches a
-dark desktop. `COMPOSITOR_THEME=dark|light|system` overrides for one run.
+dark desktop. `NEKOPHOTO_THEME=dark|light|system` overrides for one run.
 
 ## Automation
 
@@ -256,9 +260,9 @@ same version.
 
 ```
 CMakeLists.txt                  root build
-src/pixels/                     compositor_pixels: the existing C routines
-src/core/                       compositor_core: portable C++20 editor core
-    include/compositor/*.h      geometry, image, transform, document, history,
+src/pixels/                     nekophoto_pixels: the existing C routines
+src/core/                       nekophoto_core: portable C++20 editor core
+    include/nekophoto/*.h      geometry, image, transform, document, history,
                                 blend, render, brush, selection, png, project
 src/app/                        the Qt 6 Widgets application
 src/third_party/nlohmann/       JSON (MIT)
@@ -301,7 +305,7 @@ packaging/                      .desktop, icon, MIME type
   saved before belongs to its own `.nekophoto` file or `.comp` folder again,
   unsaved, so Save writes it back there in the same form. Headless, batch,
   demo and screenshot runs do not autosave. For tests,
-  `COMPOSITOR_AUTOSAVE_MS` sets the interval and `COMPOSITOR_RECOVERY_ANSWER`
+  `NEKOPHOTO_AUTOSAVE_MS` sets the interval and `NEKOPHOTO_RECOVERY_ANSWER`
   (recover, discard, later) answers the offer.
 - Size limits: 30,000 pixels a side and 100 megapixels for any one canvas,
   layer or mask, as on the Mac; up to a gigapixel for all layers together
@@ -432,7 +436,7 @@ packaging/                      .desktop, icon, MIME type
   fur in a band around the edge from foreground and background colour samples.
   The result is a layer mask, multiplied with any existing mask,
   limited to the selection when there is one. OpenCV is optional at build
-  time; `COMPOSITOR_MODEL_DIR` overrides where models are kept.
+  time; `NEKOPHOTO_MODEL_DIR` overrides where models are kept.
 
 ## Not ported
 

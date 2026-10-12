@@ -1,0 +1,58 @@
+// MyPaint brushes: the presets of the mypaint-brushes collection (.myb, JSON), painted by libmypaint's
+// engine onto a layer's pixels. libmypaint draws into 64-pixel tiles of 15-bit premultiplied RGBA that are
+// filled from the layer on first touch, so smudging and blending read the real paint; after every event the
+// changed area is written back to a BrushStroke's working image through the selection. The grid, the preview
+// and the commit stay the BrushStroke's, so a MyPaint stroke is undone, previewed and placed like any other.
+// Optional at build time (NEKOPHOTO_HAVE_MYPAINT).
+#pragma once
+#include "brush.h"
+#include "brushsample.h"
+#include <memory>
+#include <string>
+
+namespace nekophoto {
+
+/// Whether this build can paint MyPaint brushes.
+bool myPaintSupported();
+/// Paints one throwaway dab with `brushJson` on a tiny layer, so libmypaint's one-time setup (about 9 ms)
+/// happens before the first real stroke rather than during its press.
+void warmMyPaint(const std::string& brushJson);
+
+/// What a preset asks for by default: its radius (in pixels) and whether it is an eraser, read from the .myb.
+struct MyPaintPresetInfo { double radius = 2; bool eraser = false; bool valid = false; };
+MyPaintPresetInfo myPaintPresetInfo(const std::string& brushJson);
+
+class MyPaintStroke {
+public:
+    /// Paints onto `grid`, a stroke begun on a layer's pixels (not a mask), with the preset `brushJson`. The
+    /// colour, the size (`settings.diameter` in document pixels), the opacity (multiplying the preset's) and
+    /// erasing come from `settings`; the rest of the preset's behaviour is its own. `grid` keeps the preview,
+    /// the selection and the commit, and must outlive this object.
+    MyPaintStroke(BrushStroke& grid, const std::string& brushJson, const BrushSettings& settings);
+    ~MyPaintStroke();
+    MyPaintStroke(const MyPaintStroke&) = delete;
+    MyPaintStroke& operator=(const MyPaintStroke&) = delete;
+
+    bool isValid() const;
+    const std::string& error() const { return error_; }
+    /// The next sample of the stroke: its position, pressure (a mouse's 0.5 as in MyPaint), tilt (degrees, 60 read
+    /// as full tilt) and `dt`, the seconds since the previous sample, which BrushSampleTrack fills.
+    void strokeTo(const BrushSample& input);
+    /// Whether the brush has caught up with the pointer. Presets with slow position tracking follow the
+    /// pointer with a lag and only move on input, so while it is held still the caller repeats the last
+    /// input until this is true.
+    bool settled() const;
+    /// Lifts the pen: a last event at zero pressure, which some presets use to taper. Call before the grid's
+    /// commit.
+    void finish();
+
+private:
+    struct Engine;
+    BrushStroke& grid_;
+    std::unique_ptr<Engine> engine_;
+    std::string error_;
+    BrushSample last_;
+    bool started_ = false, finished_ = false;
+};
+
+} // namespace nekophoto

@@ -1,10 +1,10 @@
 // The Camera Raw panels, shared by Filter > Camera Raw Filter and the Camera Raw dialog a RAW file opens in. They follow upstream Compositor's Compositor/UI/CameraRawControls.swift,
 // CameraRawColorControls.swift, CameraRawDetailOpticsControls.swift, CameraRawGeometryCalibrationControls.swift
-// and RawDevelopSheet.swift (MIT, see LICENSES/MIT-Compositor.txt); the grade itself is compositor/cameraraw.h.
+// and RawDevelopSheet.swift (MIT, see LICENSES/MIT-Compositor.txt); the grade itself is nekophoto/cameraraw.h.
 #include "CameraRawPanels.h"
 #include "Names.h"
 #include "Style.h"
-#include "compositor/camerarawxmp.h"
+#include "nekophoto/camerarawxmp.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
@@ -28,7 +28,7 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

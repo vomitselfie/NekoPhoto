@@ -2,8 +2,8 @@
 #include "ActionLibrary.h"
 #include "GmicStore.h"
 #include "Style.h"
-#include "compositor/filters.h"
-#include "compositor/render.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/render.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <algorithm>
@@ -33,7 +33,7 @@
 #include <QVBoxLayout>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -271,9 +271,9 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : PixelDialog(se
     }
     loadCatalogue();
     fillTree({});
-    // Start on the first essential so the right side is never blank (COMPOSITOR_GMIC_FILTER names another, for screenshots).
+    // Start on the first essential so the right side is never blank (NEKOPHOTO_GMIC_FILTER names another, for screenshots).
     if (QTreeWidgetItem* first = tree_->topLevelItem(0); first && first->childCount() > 0) tree_->setCurrentItem(first->child(0));
-    QString wanted = qEnvironmentVariable("COMPOSITOR_GMIC_FILTER");
+    QString wanted = qEnvironmentVariable("NEKOPHOTO_GMIC_FILTER");
     if (!wanted.isEmpty()) showFilter(wanted);
 }
 

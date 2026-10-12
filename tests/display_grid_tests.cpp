@@ -7,12 +7,12 @@
 // a CMYK file, on the sweep through its own profile, without checking anything. DISPLAY_GRID_WORST=1 lists the pixels
 // more than a level off.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/psd.h"
-#include "compositor/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/render.h"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -9,7 +9,7 @@
 
 namespace app {
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -5,18 +5,18 @@
 // the document's channels and still shapes after Image > Mode; text rasters' colours through the profile with their
 // coverage kept.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/layerstyle.h"
-#include "compositor/project.h"
-#include "compositor/render.h"
-#include "compositor/vectorlayer.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/project.h"
+#include "nekophoto/render.h"
+#include "nekophoto/vectorlayer.h"
 #include <cmath>
 #include <cstdio>
 #include <functional>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -6,7 +6,7 @@
 #include <map>
 #include <stdexcept>
 
-namespace compositor::svgxml {
+namespace nekophoto::svgxml {
 namespace {
 
 // Hard caps against pathological input (billion-laughs entities, absurd
@@ -664,4 +664,4 @@ XmlNode parse_xml(std::span<const std::uint8_t> bytes) {
   }
 }
 
-}  // namespace compositor::svgxml
+}  // namespace nekophoto::svgxml

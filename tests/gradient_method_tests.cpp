@@ -4,19 +4,19 @@
 // AGPSD_FIXTURES pointing at ag-psd's test folder (MIT, https://github.com/Agamnentzar/ag-psd), its Photoshop-saved
 // Perceptual and Linear files are rendered against their merged images.
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/layerstyle.h"
-#include "compositor/psd.h"
-#include "compositor/psd_carry.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
-#include "compositor/shape.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
+#include "nekophoto/shape.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -1,9 +1,9 @@
-// The Camera Raw dialog a camera RAW file opens in (see RawDevelopDialog.h). The develop is compositor/raw.h: LibRaw's
-// decode at the white balance's multipliers, graded by the Camera Raw settings of compositor/cameraraw.h.
+// The Camera Raw dialog a camera RAW file opens in (see RawDevelopDialog.h). The develop is nekophoto/raw.h: LibRaw's
+// decode at the white balance's multipliers, graded by the Camera Raw settings of nekophoto/cameraraw.h.
 #include "RawDevelopDialog.h"
 #include "CameraRawPanels.h"
-#include "compositor/depth.h"
-#include "compositor/raw.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/raw.h"
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -14,7 +14,7 @@
 #include <QVBoxLayout>
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

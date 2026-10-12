@@ -4,7 +4,7 @@
 #include "render_exec_deep.inc"
 #include "render_modes.h"
 
-namespace compositor {
+namespace nekophoto {
 
 void executeRenderMode16(const RenderPlan& plan, const Rect& region, double scale, Image16& out, RenderCache* cache, uint64_t version) {
     if (plan.document.colorMode == ColorMode::CMYK) {
@@ -16,4 +16,4 @@ void executeRenderMode16(const RenderPlan& plan, const Rect& region, double scal
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

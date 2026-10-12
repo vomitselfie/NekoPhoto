@@ -4,8 +4,8 @@
 // estimate, so the estimate is the bytes the file will hold.
 #pragma once
 #include "ColorManagement.h"
-#include "compositor/document.h"
-#include "compositor/imaget.h"
+#include "nekophoto/document.h"
+#include "nekophoto/imaget.h"
 #include <QByteArray>
 #include <QColor>
 #include <QJsonObject>
@@ -65,23 +65,23 @@ QJsonObject commandParams(const QString& format, const Settings& settings, int w
 
 /// The document of one layer for Layer > Export As: the layer (with its contents when it is a folder) alone,
 /// visible, at the top level, over a transparent canvas of the document's size, mode, depth and profile.
-std::optional<compositor::Document> layerDocument(const compositor::Document& document, const compositor::Uuid& id, std::string* error);
+std::optional<nekophoto::Document> layerDocument(const nekophoto::Document& document, const nekophoto::Uuid& id, std::string* error);
 
 /// The composite flattened for a format, at full size: 16 bits where the format keeps them (PNG, TIFF when Qt writes
 /// 16-bit TIFF) and the document is deeper than 8, else 8; under `plan`. `trim` crops it to its visible pixels.
 struct Flat {
-    std::shared_ptr<compositor::Image> image8;
-    std::shared_ptr<compositor::Image16> image16;
+    std::shared_ptr<nekophoto::Image> image8;
+    std::shared_ptr<nekophoto::Image16> image16;
     int width() const { return image16 ? image16->width() : image8 ? image8->width() : 0; }
     int height() const { return image16 ? image16->height() : image8 ? image8->height() : 0; }
     bool empty() const { return width() <= 0 || height() <= 0; }
 };
-bool keepsSixteenBits(const QString& format, const compositor::Document& document);
-Flat flatten(const compositor::Document& document, const QString& format, const color::ExportPlan& plan, bool trim);
+bool keepsSixteenBits(const QString& format, const nekophoto::Document& document);
+Flat flatten(const nekophoto::Document& document, const QString& format, const color::ExportPlan& plan, bool trim);
 
 /// `image` at width × height with `r` (the image's edges kept opaque; no change at its own size).
-std::shared_ptr<compositor::Image> resampled(const std::shared_ptr<compositor::Image>& image, int width, int height, Resample r);
-std::shared_ptr<compositor::Image16> resampled(const std::shared_ptr<compositor::Image16>& image, int width, int height, Resample r);
+std::shared_ptr<nekophoto::Image> resampled(const std::shared_ptr<nekophoto::Image>& image, int width, int height, Resample r);
+std::shared_ptr<nekophoto::Image16> resampled(const std::shared_ptr<nekophoto::Image16>& image, int width, int height, Resample r);
 
 /// What an export writes, encoded: the file's bytes.
 struct Encoded {
@@ -101,7 +101,7 @@ struct Options {
 };
 /// Scales, mattes and encodes `flat`. `icc` is embedded where the format carries a profile (PNG, JPEG, WebP, TIFF);
 /// `document` gives an icon its exact-size layers.
-Encoded encode(const Flat& flat, const Options& options, const std::vector<uint8_t>& icc, const compositor::Document* document = nullptr);
+Encoded encode(const Flat& flat, const Options& options, const std::vector<uint8_t>& icc, const nekophoto::Document* document = nullptr);
 
 /// "about 1.2 MB", "34 KB", in the interface's words.
 QString sizeText(qint64 bytes, bool estimate);

@@ -1,5 +1,5 @@
 # Render hashes (FNV-1a 64 over width, height and RGBA/gray bytes), from tests/render_hash_tests.cpp.
-# Regenerate after an intentional rendering change: COMPOSITOR_UPDATE_RENDER_HASHES=1 build/tests/render_hash_tests
+# Regenerate after an intentional rendering change: NEKOPHOTO_UPDATE_RENDER_HASHES=1 build/tests/render_hash_tests
 adjust/black_&_white a82636aa35eaf081
 adjust/brightness/contrast 0de885277ee25cb8
 adjust/channel_mixer b590e249095157ae

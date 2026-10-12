@@ -3,7 +3,7 @@
 // is pinned by size and SHA-256, checked before anything is unpacked, unpacked with the core's ZIP reader into a
 // temporary folder and renamed into place whole, so the lookup (GmicRunner::locate) never sees half a copy.
 #pragma once
-#include "compositor/zipfile.h"
+#include "nekophoto/zipfile.h"
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -26,7 +26,7 @@ public:
     };
     /// The build on offer: G'MIC's win64 command-line zip.
     static const Build& pinned();
-    /// This platform gets a Download button (Windows; COMPOSITOR_GMIC_OFFER_DOWNLOAD=1 shows it elsewhere, for testing).
+    /// This platform gets a Download button (Windows; NEKOPHOTO_GMIC_OFFER_DOWNLOAD=1 shows it elsewhere, for testing).
     static bool offered();
     /// G'MIC can run (GmicRunner::available()).
     static bool available();
@@ -38,12 +38,12 @@ public:
     static bool remove(QString* error = nullptr);
 
     /// The limits an archive is unpacked under: the real one has about 35 entries and 40 MB.
-    static compositor::ZipLimits limits();
+    static nekophoto::ZipLimits limits();
     /// Checks `archive` against `build`'s size and SHA-256, then unpacks it into `root/<version>`, the archive's top
     /// folder stripped: into a temporary folder in `root` first, renamed into place once complete. The archive is
     /// deleted either way; on failure nothing is left in `root` and `error` says why.
     static bool install(const QString& archive, const Build& build, const QString& root, QString* error,
-                        const compositor::ZipLimits& limits = GmicStore::limits());
+                        const nekophoto::ZipLimits& limits = GmicStore::limits());
 
     explicit GmicStore(QObject* parent = nullptr);
     ~GmicStore() override;

@@ -1,0 +1,308 @@
+// A brush stroke on a layer's pixels or its mask. A port of the algorithm in
+// Document/BrushStroke.swift: dabs along a centripetal Catmull-Rom curve
+// through the pointer samples, per-stroke coverage that accumulates (max for
+// hard tips, screen for soft), and each pixel recomposed as
+//   original + colour x coverage x opacity
+// so overlapping dabs never exceed the stroke's opacity.
+#pragma once
+#include "brushsample.h"
+#include "colormgmt.h"
+#include "document.h"
+#include "shape.h"
+#include <algorithm>
+#include <functional>
+#include <memory>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+namespace nekophoto {
+
+struct BrushSettings {
+    double diameter = 40;   // document pixels, 1..2000
+    double hardness = 1;    // 0..1
+    double opacity = 1;     // 0.01..1
+    double red = 0, green = 0, blue = 0;
+    bool erasing = false;
+    /// Painting a mask: the gray value painted (1 reveals, 0 hides).
+    double maskValue = 1;
+    /// Spot Healing: the stroke shows a dark wash while painting and rebuilds the area from its
+    /// surroundings when it ends (mode 0 Content-Aware, 1 Create Texture, 2 Proximity Match).
+    bool healing = false;
+    int healingMode = 0;
+    uint32_t healingSeed = 0;
+    /// Dabs on a grid aligned with the document come from a precomputed tile at a quarter-pixel phase;
+    /// off, every dab is computed per pixel (the reference the stamps are held to in tests).
+    bool stampedDabs = true;
+};
+
+/// A document-sized image made a tile at a time, on demand: the processed layer the Blur, Sharpen, Dodge, Burn
+/// and Sponge tools paint from, so a stroke's start costs a tile rather than the whole canvas. `compute` fills
+/// `out` (sized to the rectangle) with the image's pixels over document pixels [x, x + w) x [y, y + h); it must give
+/// each pixel the value the whole image would have (a filter reads a margin around the rectangle to do so).
+/// `Img` is `Image` (TiledSource) or `Image16` (TiledSource16, a 16-bit document's).
+template <class Img>
+class TiledSourceOf {
+public:
+    using Sample = std::remove_cv_t<std::remove_pointer_t<decltype(std::declval<const Img&>().data())>>;
+    using Compute = std::function<void(int x, int y, int w, int h, Img& out)>;
+    /// `channels`: samples per pixel of each tile (5 for 8-bit CMYK's ImageC8; `Image` is always 4).
+    TiledSourceOf(int width, int height, Compute compute, int tile = 256, int channels = 4)
+        : width_(std::max(0, width)), height_(std::max(0, height)), tile_(std::max(16, tile)), channels_(channels), compute_(std::move(compute)) {
+        columns_ = (width_ + tile_ - 1) / tile_;
+        rows_ = (height_ + tile_ - 1) / tile_;
+        tiles_.resize(size_t(columns_) * size_t(rows_));
+    }
+    int width() const { return width_; }
+    int height() const { return height_; }
+    /// Makes every tile meeting the document rectangle [x0, x1) x [y0, y1) (not thread-safe; call before reading).
+    void ensure(int x0, int y0, int x1, int y1) {
+        const int tx0 = std::max(0, x0 / tile_), ty0 = std::max(0, y0 / tile_);
+        const int tx1 = std::min(columns_ - 1, (std::max(x0, x1) - 1) / tile_), ty1 = std::min(rows_ - 1, (std::max(y0, y1) - 1) / tile_);
+        if (x1 <= 0 || y1 <= 0 || x0 >= width_ || y0 >= height_) return;
+        for (int ty = ty0; ty <= ty1; ty++)
+            for (int tx = tx0; tx <= tx1; tx++) {
+                auto& slot = tiles_[size_t(ty) * size_t(columns_) + size_t(tx)];
+                if (slot) continue;
+                const int x = tx * tile_, y = ty * tile_, w = std::min(tile_, width_ - x), h = std::min(tile_, height_ - y);
+                std::unique_ptr<Img> image;
+                if constexpr (std::is_constructible_v<Img, int, int, int>) image = std::make_unique<Img>(w, h, channels_);
+                else image = std::make_unique<Img>(w, h);
+                compute_(x, y, w, h, *image);
+                slot = std::move(image);
+            }
+    }
+    /// A pixel of an ensured tile; null outside the image or in a tile not made yet.
+    const Sample* pixel(int x, int y) const {
+        if (x < 0 || y < 0 || x >= width_ || y >= height_) return nullptr;
+        const Img* t = tiles_[size_t(y / tile_) * size_t(columns_) + size_t(x / tile_)].get();
+        return t ? t->pixel(x % tile_, y % tile_) : nullptr;
+    }
+    /// How many tiles have been made (for tests and benches).
+    int madeTiles() const {
+        int n = 0;
+        for (auto& t : tiles_) n += t ? 1 : 0;
+        return n;
+    }
+
+private:
+    int width_, height_, tile_, channels_, columns_, rows_;
+    Compute compute_;
+    std::vector<std::unique_ptr<Img>> tiles_;
+};
+using TiledSource = TiledSourceOf<Image>;
+using TiledSource16 = TiledSourceOf<Image16>;
+using TiledSourceF = TiledSourceOf<ImageF>;
+using TiledSourceC8 = TiledSourceOf<ImageC8>;
+
+/// `document` flattened at 1:1 and then `process`ed, as a TiledSource: each tile is rendered and processed with
+/// `margin` document pixels around it (a filter's reach), so it matches processing the whole flattened image.
+std::shared_ptr<TiledSource> tiledProcessedDocument(Document document, std::function<void(Image&)> process, int margin);
+/// The same for a 16-bit document, rendered and processed at 16 bits.
+std::shared_ptr<TiledSource16> tiledProcessedDocument16(Document document, std::function<void(Image16&)> process, int margin);
+/// The same at a document's own layout: a 32-bit document rendered in linear float, a CMYK or Lab one at its mode's
+/// samples (`Img`: ImageF; ImageC8 for 8-bit CMYK; Image for 8-bit Lab; Image16 for 16-bit CMYK and Lab).
+template <class Img>
+std::shared_ptr<TiledSourceOf<Img>> tiledProcessedNative(Document document, std::function<void(Img&)> process, int margin);
+template <> std::shared_ptr<TiledSourceOf<ImageF>> tiledProcessedNative<ImageF>(Document, std::function<void(ImageF&)>, int);
+template <> std::shared_ptr<TiledSourceOf<Image>> tiledProcessedNative<Image>(Document, std::function<void(Image&)>, int);
+template <> std::shared_ptr<TiledSourceOf<Image16>> tiledProcessedNative<Image16>(Document, std::function<void(Image16&)>, int);
+template <> std::shared_ptr<TiledSourceOf<ImageC8>> tiledProcessedNative<ImageC8>(Document, std::function<void(ImageC8&)>, int);
+
+/// Clone Stamp: a document-sized image to copy from, and the offset from each painted point to its source.
+/// `tiled` instead of `image`: the same, made on demand. A stroke on a 16-bit document reads `image16` or `tiled16`
+/// (16-bit CMYK: 5 channels), a 32-bit one `imageF` or `tiledF`, an 8-bit CMYK one `imageC8` or `tiledC8`; an 8-bit Lab
+/// one reads `image` holding L, a, b. The pixels are at the document's layout.
+struct CloneSource {
+    std::shared_ptr<const Image> image;
+    Point offset;
+    std::shared_ptr<TiledSource> tiled;
+    std::shared_ptr<const Image16> image16;
+    std::shared_ptr<TiledSource16> tiled16;
+    std::shared_ptr<const ImageF> imageF;
+    std::shared_ptr<TiledSourceF> tiledF;
+    std::shared_ptr<const ImageC8> imageC8;
+    std::shared_ptr<TiledSourceC8> tiledC8;
+    /// The source at any layout.
+    void setImage(const AnyImage& any) {
+        if (any.f32()) imageF = any.f32();
+        else if (any.c8()) imageC8 = any.c8();
+        else if (any.u16()) image16 = any.u16();
+        else image = any.u8();
+    }
+};
+
+/// Soft-brush falloff across the band between the hardness radius and the rim.
+double brushFalloff(double u);
+
+template <class Ops> class StrokeRasterOf;
+template <SampleType S> struct StrokeOps;
+template <SampleType S> struct CmykStrokeOps;
+
+class BrushStroke {
+public:
+    /// Begins a stroke on `layer` (its pixels, or its mask when `mask`). The working grid is the
+    /// layer's pixel grid grown to cover `canvas` so paint can go past the layer's edges.
+    BrushStroke(const Layer& layer, bool mask, BrushSettings settings, Size canvas, const GrayImage* selection = nullptr);
+    /// The same at a document's depth: `depth` U16 makes a 16-bit stroke (its pixels or mask, coverage and selection at
+    /// 0..32768; the 16-bit accessors below), taking the 16-bit `selection`. U8 is the constructor above.
+    BrushStroke(const Layer& layer, bool mask, BrushSettings settings, Size canvas, SampleType depth, const Gray16* selection);
+    /// A stroke at `document`'s depth and colour mode, through its selection (docs/bit-depth.md, docs/color-modes.md):
+    /// 8/16/32-bit RGB, 8/16-bit Lab (L, a, b as stored) and 8/16-bit CMYK (five samples). The paint colour
+    /// (settings.red, green, blue: straight RGB as the colour pickers hold it, the document's profile in RGB, sRGB in CMYK
+    /// and Lab) is put in the document's own model before anything is painted: linearised through the document's curve
+    /// at 32 bits, converted through its profile to CMYK inks (the profile's black generation) or Lab values with
+    /// `options` in CMYK and Lab. Masks stay one channel. An explicit empty selection makes an invalid stroke.
+    BrushStroke(const Layer& layer, bool mask, BrushSettings settings, const Document& document, const ConvertOptions& options = {});
+    ~BrushStroke();
+    BrushStroke(const BrushStroke&) = delete;
+    BrushStroke& operator=(const BrushStroke&) = delete;
+    /// The stroke's depth: its working pixels, mask, coverage and selection are all at it.
+    SampleType sampleType() const { return depth_; }
+    ColorMode colorMode() const { return mode_; }
+    /// A straight RGB colour (as settings.red..blue are) in the stroke's samples, as fractions of one: linear light at
+    /// 32 bits, stored inks (inverted) in CMYK, L and offset a, b in Lab; `out[3]` is CMYK's black. The same colour
+    /// in RGB at 8 and 16 bits.
+    void nativeColor(const float rgb[3], double out[4]) const;
+    /// The document's transfer curve, for a 32-bit stroke (what MyPaint's 15-bit round trip and the healers encode with).
+    const TransferCurve* transferCurve() const { return curve_ ? &*curve_ : nullptr; }
+    /// Clone Stamp: the sample painted through the tip instead of the colour. With `replaces`, the sample
+    /// replaces what is under the tip rather than drawing over it (so it can clear pixels too).
+    void setClone(CloneSource clone, bool replaces = false) { clone_ = std::move(clone); replacesWithClone_ = replaces; }
+    /// Painting a mask from a document-sized gray sample (the Blur tool on a mask) instead of a flat value.
+    void setMaskClone(std::shared_ptr<const GrayImage> sample);
+    void setMaskClone(std::shared_ptr<const Gray16> sample);
+    void setMaskClone(std::shared_ptr<const GrayF> sample);
+
+    // Moving selected pixels (the Move tool with a selection).
+    /// Cuts the selected pixels out of the original image. False when nothing is lifted.
+    bool liftSelection();
+    /// Rebuilds the working image: the selection becomes a transparent hole (unless duplicating) and the lifted
+    /// pixels are placed `offset` document pixels away.
+    void moveLifted(Point offset, bool duplicate);
+
+    /// Replaces this edit with a gradient over the whole canvas (or the selection) on the original pixels.
+    void fillGradientOver(int shape, Point from, Point to, const float startColor[4], const float endColor[4], double opacity);
+    /// The same with any stops (a multi-stop gradient preset).
+    void fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity);
+    /// Fills the selection (or the whole canvas) with a colour (straight 0..1; the red channel on masks).
+    void fillColor(double red, double green, double blue);
+    bool isValid() const { return valid_; }
+    const std::string& error() const { return error_; }
+
+    void append(Point documentPoint);
+    /// The round tip takes a brush sample's position; its size and opacity are the settings', whatever the pen does.
+    void append(const BrushSample& sample) { append(sample.position); }
+    /// Every point of a finished path at once: one recompose at the end instead of one per point.
+    void appendAll(const std::vector<Point>& documentPoints);
+    /// Replaces the provisional tail with the final curve piece. Safe to repeat.
+    void flush();
+
+    /// The layer's pixels (or mask) as the stroke leaves them, for the canvas while painting.
+    ImagePtr previewImage() const;
+    GrayPtr previewMask() const;
+    /// The same for a 16-bit stroke (null for an 8-bit one, whose 8-bit previews are null in turn).
+    Image16Ptr previewImage16() const;
+    Gray16Ptr previewMask16() const;
+    /// The working pixels or mask at any depth and layout.
+    AnyImage preview() const;
+    AnyGray previewMaskAny() const;
+    /// Where the working grid sits on the document.
+    const LayerTransform& paintTransform() const { return paintTransform_; }
+    /// The document area changed since the last call, then reset.
+    Rect takeDirtyRect();
+    /// Brings the renderer's reduced copies of the working pixels up to date over `grid` (takeDirtyRect does).
+    void refreshLevels(const Rect& grid) const;
+    bool touched() const { return touched_; }
+
+    struct Commit {
+        std::optional<Asset> asset;       // painted pixels, cropped to their alpha bounds
+        std::optional<MaskAsset> mask;    // painted mask (the whole grid)
+        LayerTransform transform;         // the layer's new transform
+        std::optional<LayerTransform> maskPlacement;
+    };
+    /// Finishes the stroke: the new raster cropped to its pixels, and the transform placing it.
+    Commit commit();
+
+    // Another paint engine on this stroke's grid (the MyPaint presets): it reads the original pixels, writes
+    // the working ones and reports what it changed; the preview, the selection and commit() stay this class's.
+    const Image* gridBase() const;
+    Image* gridWorking();
+    const GrayImage* gridSelection() const;
+    const Image16* gridBase16() const;
+    Image16* gridWorking16();
+    const Gray16* gridSelection16() const;
+    const ImageF* gridBaseF() const;
+    ImageF* gridWorkingF();
+    const GrayF* gridSelectionF() const;
+    const Affine& documentToGrid() const { return documentToPixel_; }
+    void markPainted(const Rect& gridRect) { painted_ = true; markDirty(gridRect); }
+    // Or an engine that stamps its own dabs (imported tip brushes) into this stroke's coverage: the colour,
+    // opacity, selection, erasing and masks then apply exactly as for the round tip.
+    // The coverage at 8 bits (8-bit RGB, Lab and CMYK strokes) or 16 (16-bit strokes, and a 32-bit stroke's 15-bit
+    // stand-in, which recomposeCovered brings into its float coverage).
+    GrayImage* gridCoverage();
+    Gray16* gridCoverage16();
+    const Affine& gridToDocument() const { return pixelToDocument_; }
+    const Rect& canvasRect() const { return canvas_; }
+    void recomposeCovered(const Rect& gridRect);
+
+private:
+    // The pixels, coverage and selection live in a StrokeRaster at the stroke's depth (stroke_raster.h); this class
+    // keeps the grid's geometry, the curve through the samples, the provisional tail and the dirty area.
+    template <class> friend class StrokeRasterOf;
+    template <class F> decltype(auto) withRaster(F&& f);
+    template <class F> decltype(auto) withRaster(F&& f) const;
+    void walk(Point to);
+    void dab(Point center);
+    void curve(Point from, Point to, Point before, Point after);
+    void recompose(const Rect& gridRect);
+    void markDirty(const Rect& gridRect);
+    void heal();
+    void restoreTail();
+
+    bool valid_ = false;
+    std::string error_;
+    bool isMask_;
+    BrushSettings settings_;
+    Rect canvas_;
+    int width_ = 0, height_ = 0;
+    Affine pixelToDocument_, documentToPixel_;
+    LayerTransform paintTransform_;
+    Rect sourceRect_;                 // where the original pixels sit in the grid
+    PixelBounds baseBounds_;          // where the original pixels have any alpha
+    Rect touchedGrid_;                // every grid pixel a dab or fill may have changed
+    std::vector<Point> samples_;
+    std::optional<Point> previous_;
+    double distanceToNext_ = 0;
+    Rect dirtyGrid_;
+    bool deferRecompose_ = false;
+    bool touched_ = false;
+    bool painted_ = false;   // another engine wrote the working pixels: never recompose them from the coverage
+    // A provisional straight tail is drawn to the newest sample and undone when the next arrives.
+    bool hasTail_ = false;
+    Rect tailRect_;
+    std::optional<Point> tailPrevious_;
+    double tailDistance_ = 0;
+    std::string name_;
+    LayerTransform layerTransform_;
+    std::optional<CloneSource> clone_;
+    bool replacesWithClone_ = false;
+    Rect liftedRect_;
+
+    SampleType depth_ = SampleType::U8;
+    ColorMode mode_ = ColorMode::RGB;
+    /// The paint colour into the document's model (fractions of one), for 32-bit, CMYK and Lab strokes; empty in RGB at
+    /// 8 and 16 bits, whose colour is the settings' as it is.
+    std::function<void(const float rgb[3], double out[4])> toNative_;
+    std::optional<TransferCurve> curve_;
+    void initRaster(const Layer& layer, bool mask, const AnyGray* selection);
+    // Exactly one is set: the raster at depth_ and mode_ (a mask stroke uses the plain raster of its depth).
+    std::unique_ptr<StrokeRasterOf<StrokeOps<SampleType::U8>>> raster8_;
+    std::unique_ptr<StrokeRasterOf<StrokeOps<SampleType::U16>>> raster16_;
+    std::unique_ptr<StrokeRasterOf<StrokeOps<SampleType::F32>>> rasterF_;
+    std::unique_ptr<StrokeRasterOf<CmykStrokeOps<SampleType::U8>>> rasterC8_;
+    std::unique_ptr<StrokeRasterOf<CmykStrokeOps<SampleType::U16>>> rasterC16_;
+};
+
+} // namespace nekophoto

@@ -2,15 +2,15 @@
 // far the flattened result is from the preview Affinity embedded (both reduced to the preview's size).
 //   affinity_check [--out DIR] file.af ...
 // With --out, writes <name>.png (the import, flattened) and <name>.preview.png (Affinity's preview) for a look.
-#include "compositor/affinity.h"
-#include "compositor/png.h"
-#include "compositor/render.h"
+#include "nekophoto/affinity.h"
+#include "nekophoto/png.h"
+#include "nekophoto/render.h"
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {

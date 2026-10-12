@@ -1,8 +1,8 @@
 # libFuzzer targets for the file parsers (docs/fuzzing.md). Clang only; configure a separate build with
-# -DCOMPOSITOR_BUILD_FUZZERS=ON and the sanitizer flags there, so the core is instrumented too.
+# -DNEKOPHOTO_BUILD_FUZZERS=ON and the sanitizer flags there, so the core is instrumented too.
 foreach(target fuzz_psd fuzz_psd_parts)
     add_executable(${target} ${target}.cpp)
-    target_link_libraries(${target} PRIVATE compositor::core)
+    target_link_libraries(${target} PRIVATE nekophoto::core)
     target_compile_options(${target} PRIVATE -fsanitize=fuzzer)
     target_link_options(${target} PRIVATE -fsanitize=fuzzer)
 endforeach()
@@ -10,7 +10,7 @@ set(fuzz_index 0)
 foreach(name tga ico gif aseprite affinity svg presets colorlookup svgimport)
     add_executable(fuzz_${name} fuzz_formats.cpp)
     target_compile_definitions(fuzz_${name} PRIVATE FUZZ_FORMAT=${fuzz_index})
-    target_link_libraries(fuzz_${name} PRIVATE compositor::core)
+    target_link_libraries(fuzz_${name} PRIVATE nekophoto::core)
     target_compile_options(fuzz_${name} PRIVATE -fsanitize=fuzzer)
     target_link_options(fuzz_${name} PRIVATE -fsanitize=fuzzer)
     math(EXPR fuzz_index "${fuzz_index} + 1")

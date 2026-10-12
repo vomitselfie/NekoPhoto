@@ -4,7 +4,7 @@
 #include "SelfTestSupport.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
-#include "compositor/vectorlayer.h"
+#include "nekophoto/vectorlayer.h"
 #include <QApplication>
 #include <QDialog>
 #include <QMenu>
@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <functional>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

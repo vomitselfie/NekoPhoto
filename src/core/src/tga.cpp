@@ -1,13 +1,13 @@
 // TGA reading and writing, ported from Patchy (MIT, src/third_party/patchy_psd/README.md):
-// src/formats/tga_document_io.cpp, adapted to premultiplied compositor::Image. The palette-mode writer is left
+// src/formats/tga_document_io.cpp, adapted to premultiplied nekophoto::Image. The palette-mode writer is left
 // out (NekoPhoto has no indexed documents).
-#include "compositor/tga.h"
-#include "compositor/document.h"
+#include "nekophoto/tga.h"
+#include "nekophoto/document.h"
 #include "format_io.h"
 #include <algorithm>
 #include <array>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -187,4 +187,4 @@ bool writeTgaImage(const std::string& path, const Image& image, std::string* err
     return encodeTgaImage(image, bytes, error) && format_io::writeFile(path, bytes, error);
 }
 
-} // namespace compositor
+} // namespace nekophoto

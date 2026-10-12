@@ -5,7 +5,7 @@
 #pragma once
 #include <QObject>
 #include <QString>
-#include "compositor/image.h"
+#include "nekophoto/image.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -48,7 +48,7 @@ public:
     static bool ready();
     static bool supported();
 
-    /// The models directory: $COMPOSITOR_MODEL_DIR, else the app data location.
+    /// The models directory: $NEKOPHOTO_MODEL_DIR, else the app data location.
     static QString directory();
     static QString pathFor(const ModelInfo& model);
     static bool isPresent(const ModelInfo& model);
@@ -59,11 +59,11 @@ public:
     struct Download { std::function<void()> cancel; };
     static Download download(const ModelInfo& model, QObject* context, std::function<void(qint64, qint64)> progress, std::function<void(QString path, QString error)> done);
 
-    /// The subject mask Remove Background works from: the model's whole-image mask (compositor::subjectMask, mirrored and
+    /// The subject mask Remove Background works from: the model's whole-image mask (nekophoto::subjectMask, mirrored and
     /// averaged with `mirror`), or with `detailWindows` above zero the detail pass over it on up to that many windows.
     /// The last of each is kept for the pixels it was made from, so the dialog's OK (pixels.removeBackground) takes the
     /// mask the dialog showed instead of running the model again. Safe from any thread. Null with `error` on failure.
-    static std::shared_ptr<compositor::GrayImage> subjectMask(const compositor::Image& image, const QString& modelPath, bool mirror, int detailWindows, std::string* error);
+    static std::shared_ptr<nekophoto::GrayImage> subjectMask(const nekophoto::Image& image, const QString& modelPath, bool mirror, int detailWindows, std::string* error);
 };
 
 } // namespace app

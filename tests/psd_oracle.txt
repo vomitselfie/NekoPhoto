@@ -1,7 +1,7 @@
 # Photoshop oracle over Patchy's fixtures (MIT, https://github.com/SethRobinson/Patchy, test-fixtures/psd) (tests/psd_composite_oracle.cpp): each file's status and
 # numbers (max and mean in 8-bit levels, the share of pixels more than 2 levels off) when this was written.
 # A pass that fails, a file no longer compared, or a failure whose mean grows by more than a level fails the test.
-# Rewrite it after a change: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus patchy
+# Rewrite it after a change: NEKOPHOTO_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus patchy
 corpus patchy
 commit 7d14d1f6ede2dc8fb52c11eefcc7cc8783473711
 compared 72

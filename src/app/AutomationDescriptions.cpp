@@ -5,13 +5,13 @@
 // layer id from layers.list), or one of a fixed set: `(a|b|c)` spelled out, `<blend>` etc. read from the code.
 #include "Automation.h"
 #include "AutomationHandlers.h"
-#include "compositor/document.h"
-#include "compositor/filters.h"
-#include "compositor/transform.h"
+#include "nekophoto/document.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/transform.h"
 #include <QRegularExpression>
 #include <map>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app::rpc {
 

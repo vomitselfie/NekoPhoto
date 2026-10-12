@@ -1,16 +1,16 @@
 #include <functional>
-#include "compositor/image.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/workcounters.h"
-#include "compositor/simd.h"
+#include "nekophoto/image.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/workcounters.h"
+#include "nekophoto/simd.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <mutex>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 /// Whether a size can be held as pixels: both sides within the per-side limit. A size that is not (a
@@ -204,7 +204,7 @@ inline void halvePairRGBA(const uint8_t* r0, const uint8_t* r1, uint8_t* o) {
     std::memcpy(&a, r0, 16); std::memcpy(&b, r1, 16);
     // Row sums in 16 bits, then each pair of neighbouring pixels.
     const u16x8 lo = widenLow(a) + widenLow(b), hi = widenHigh(a) + widenHigh(b);
-    const u16x8 left = COMPOSITOR_SHUFFLE(u16x8, lo, hi, 0, 1, 2, 3, 8, 9, 10, 11), right = COMPOSITOR_SHUFFLE(u16x8, lo, hi, 4, 5, 6, 7, 12, 13, 14, 15);
+    const u16x8 left = NEKOPHOTO_SHUFFLE(u16x8, lo, hi, 0, 1, 2, 3, 8, 9, 10, 11), right = NEKOPHOTO_SHUFFLE(u16x8, lo, hi, 4, 5, 6, 7, 12, 13, 14, 15);
     const u16x8 sum = (left + right + 2) >> 2;
     const u8x8 out = __builtin_convertvector(sum, u8x8);
     std::memcpy(o, &out, 8);
@@ -214,10 +214,10 @@ inline void halvePairRGBA(const uint8_t* r0, const uint8_t* r1, uint8_t* o) {
 inline void halveRunGray(const uint8_t* r0, const uint8_t* r1, uint8_t* o) {
     u8x16 a0, a1, b0, b1;
     std::memcpy(&a0, r0, 16); std::memcpy(&a1, r0 + 16, 16); std::memcpy(&b0, r1, 16); std::memcpy(&b1, r1 + 16, 16);
-    const u8x16 evens = COMPOSITOR_SHUFFLE(u8x16, a0, a1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
-    const u8x16 odds = COMPOSITOR_SHUFFLE(u8x16, a0, a1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
-    const u8x16 evensBelow = COMPOSITOR_SHUFFLE(u8x16, b0, b1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
-    const u8x16 oddsBelow = COMPOSITOR_SHUFFLE(u8x16, b0, b1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+    const u8x16 evens = NEKOPHOTO_SHUFFLE(u8x16, a0, a1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const u8x16 odds = NEKOPHOTO_SHUFFLE(u8x16, a0, a1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+    const u8x16 evensBelow = NEKOPHOTO_SHUFFLE(u8x16, b0, b1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const u8x16 oddsBelow = NEKOPHOTO_SHUFFLE(u8x16, b0, b1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
     const u16x8 lo = (widenLow(evens) + widenLow(odds) + widenLow(evensBelow) + widenLow(oddsBelow) + 2) >> 2;
     const u16x8 hi = (widenHigh(evens) + widenHigh(odds) + widenHigh(evensBelow) + widenHigh(oddsBelow) + 2) >> 2;
     const u8x8 outLo = __builtin_convertvector(lo, u8x8), outHi = __builtin_convertvector(hi, u8x8);
@@ -644,4 +644,4 @@ void MipCache::clear() {
     used_ = 0;
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -6,12 +6,12 @@
 //
 // A 16-bit document's images and folder masks are rendered at 16 bits and embedded as 16-bit PNGs, so the file keeps
 // the document's precision (an SVG <image> takes any PNG).
-#include "compositor/depth.h"
-#include "compositor/layerstyle.h"
-#include "compositor/png.h"
-#include "compositor/colormgmt.h"
-#include "compositor/render.h"
-#include "compositor/svg.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/png.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/render.h"
+#include "nekophoto/svg.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -21,7 +21,7 @@
 #include <sstream>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -550,4 +550,4 @@ bool exportSvg(const Document& document, const std::string& path, SvgExportSumma
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

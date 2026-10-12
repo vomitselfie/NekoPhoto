@@ -1,7 +1,7 @@
-#include "compositor/heal.h"
-#include "compositor/depth.h"
-#include "compositor/inpaint.h"
-#include "compositor/parallel.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/inpaint.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -13,7 +13,7 @@ extern "C" {
 #include "WandPixels.h"
 }
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -880,4 +880,4 @@ void healFrom(ImageC8& image, const ImageC8& source, const GrayImage& coverage, 
     if (image.channels() == 5) healFromInks<SampleType::U8>(image, source, coverage, opacity, visible);
 }
 
-} // namespace compositor
+} // namespace nekophoto

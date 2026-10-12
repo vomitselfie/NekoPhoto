@@ -1,8 +1,8 @@
-#include "compositor/whitebalance.h"
+#include "nekophoto/whitebalance.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -224,4 +224,4 @@ std::optional<std::array<double, 3>> CameraWhiteModel::neutralFromXy(Chromaticit
 std::array<double, 3> neutralFromMultipliers(const std::array<double, 3>& m) { return {m[1] / m[0], 1, m[1] / m[2]}; }
 std::array<double, 3> multipliersFromNeutral(const std::array<double, 3>& n) { return {n[1] / n[0], 1, n[1] / n[2]}; }
 
-} // namespace compositor
+} // namespace nekophoto

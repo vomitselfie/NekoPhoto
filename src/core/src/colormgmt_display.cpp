@@ -21,8 +21,8 @@
 // 2001 Coated): 33 nodes with the shadows taken exactly keep every one within a level of Little CMS; 33 nodes alone are
 // 3 levels off near the gamut's edge, and uniformly spaced nodes 3 levels off in the lightest tints.
 #include "colormgmt_display.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
 #include "lcms2.h"
 #include <algorithm>
 #include <cmath>
@@ -32,7 +32,7 @@
 #include <random>
 #include <tuple>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -431,4 +431,4 @@ ColorTransformPtr displayTransformBetween(const ColorProfile& from, const ColorP
     return made ? made : exact;
 }
 
-} // namespace compositor
+} // namespace nekophoto

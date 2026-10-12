@@ -35,19 +35,19 @@ protected:
     bool previewing() const;
 
     /// Shows `image`, computed from previewSource(), through the selection. Ignored once the dialog is done.
-    void showPreview(std::shared_ptr<compositor::Image> image, std::optional<compositor::LayerTransform> placement = std::nullopt);
-    void showPreview(std::shared_ptr<compositor::Image16> image, std::optional<compositor::LayerTransform> placement = std::nullopt);
-    void showPreview(std::shared_ptr<compositor::ImageF> image, std::optional<compositor::LayerTransform> placement = std::nullopt);
+    void showPreview(std::shared_ptr<nekophoto::Image> image, std::optional<nekophoto::LayerTransform> placement = std::nullopt);
+    void showPreview(std::shared_ptr<nekophoto::Image16> image, std::optional<nekophoto::LayerTransform> placement = std::nullopt);
+    void showPreview(std::shared_ptr<nekophoto::ImageF> image, std::optional<nekophoto::LayerTransform> placement = std::nullopt);
     /// In a CMYK or Lab document: `image` at the document's layout, computed from sourceNative().
-    void showPreviewNative(compositor::AnyImage image, std::optional<compositor::LayerTransform> placement = std::nullopt);
+    void showPreviewNative(nekophoto::AnyImage image, std::optional<nekophoto::LayerTransform> placement = std::nullopt);
     void clearPreview();
     /// Blends a full-size result computed from source() through the selection.
-    void throughSelection(compositor::Image& result) const;
-    void throughSelection(compositor::Image16& result) const;
-    void throughSelection(compositor::ImageF& result) const;
-    compositor::AnyImage throughSelectionNative(const compositor::AnyImage& result) const;
+    void throughSelection(nekophoto::Image& result) const;
+    void throughSelection(nekophoto::Image16& result) const;
+    void throughSelection(nekophoto::ImageF& result) const;
+    nekophoto::AnyImage throughSelectionNative(const nekophoto::AnyImage& result) const;
     /// Replaces the pinned layer's pixels as one undo step and marks the dialog finished.
-    void commit(compositor::AnyImage image, const compositor::LayerTransform& placement, const QString& name);
+    void commit(nekophoto::AnyImage image, const nekophoto::LayerTransform& placement, const QString& name);
     /// The command path (CONTRIBUTING.md, "Commands"): OK runs automation method `method` with `params` on the pinned
     /// layer instead of committing the dialog's own result, so the menu, automation and Actions share one edit. True
     /// when it ran (an error is shown by the window), false when the command path is not available here (another
@@ -61,46 +61,46 @@ protected:
     void done(int result) override;
 
     EditorSession* session() const { return session_; }
-    const std::shared_ptr<const compositor::Image>& source() const { return source_; }
-    const std::shared_ptr<const compositor::Image>& previewSource() const { return previewSource_; }
-    const std::shared_ptr<const compositor::Image16>& source16() const { return source16_; }
-    const std::shared_ptr<const compositor::Image16>& previewSource16() const { return previewSource16_; }
+    const std::shared_ptr<const nekophoto::Image>& source() const { return source_; }
+    const std::shared_ptr<const nekophoto::Image>& previewSource() const { return previewSource_; }
+    const std::shared_ptr<const nekophoto::Image16>& source16() const { return source16_; }
+    const std::shared_ptr<const nekophoto::Image16>& previewSource16() const { return previewSource16_; }
     /// In a 32-bit document, and the curve its colour is encoded with (for the adjustments and Add Noise).
-    const std::shared_ptr<const compositor::ImageF>& sourceF() const { return sourceF_; }
-    const std::shared_ptr<const compositor::ImageF>& previewSourceF() const { return previewSourceF_; }
-    const compositor::TransferCurve& curve() const { return curve_; }
+    const std::shared_ptr<const nekophoto::ImageF>& sourceF() const { return sourceF_; }
+    const std::shared_ptr<const nekophoto::ImageF>& previewSourceF() const { return previewSourceF_; }
+    const nekophoto::TransferCurve& curve() const { return curve_; }
     /// In a CMYK or Lab document the layer's own samples (modeedit.h), previewed at full size; the RGB accessors are
     /// null there, so no RGB kernel ever meets them.
-    const compositor::AnyImage& sourceNative() const { return sourceNative_; }
-    const compositor::AnyGray& coverageNative() const { return coverageNative_; }
-    compositor::ColorMode colorMode() const { return mode_; }
-    const compositor::ColorProfile& documentProfile() const { return profile_; }
+    const nekophoto::AnyImage& sourceNative() const { return sourceNative_; }
+    const nekophoto::AnyGray& coverageNative() const { return coverageNative_; }
+    nekophoto::ColorMode colorMode() const { return mode_; }
+    const nekophoto::ColorProfile& documentProfile() const { return profile_; }
     /// Whether the pinned layer's pixels were captured at all, at any depth.
     bool hasSource() const { return source_ || source16_ || sourceF_ || sourceNative_; }
     bool hasPreviewSource() const { return previewSource_ || previewSource16_ || previewSourceF_ || sourceNative_; }
-    const compositor::LayerTransform& placement() const { return transform_; }
+    const nekophoto::LayerTransform& placement() const { return transform_; }
     /// The selection on source()'s grid, or null when everything is selected.
-    const compositor::GrayImage* coverage() const { return coverage_.get(); }
-    const std::optional<compositor::Uuid>& layerId() const { return layerId_; }
+    const nekophoto::GrayImage* coverage() const { return coverage_.get(); }
+    const std::optional<nekophoto::Uuid>& layerId() const { return layerId_; }
     double previewScale() const { return previewScale_; }
     bool finished() const { return finished_; }
 
 private:
     QPointer<EditorSession> session_;   // the window destroys its sessions before Qt deletes child dialogs
-    std::optional<compositor::Uuid> layerId_;
-    std::shared_ptr<const compositor::Image> source_, previewSource_;
-    compositor::LayerTransform transform_;
+    std::optional<nekophoto::Uuid> layerId_;
+    std::shared_ptr<const nekophoto::Image> source_, previewSource_;
+    nekophoto::LayerTransform transform_;
     double previewScale_ = 1;
-    std::shared_ptr<compositor::GrayImage> coverage_, previewCoverage_;
-    std::shared_ptr<const compositor::Image16> source16_, previewSource16_;
-    std::shared_ptr<compositor::Gray16> coverage16_, previewCoverage16_;
-    std::shared_ptr<const compositor::ImageF> sourceF_, previewSourceF_;
-    std::shared_ptr<compositor::GrayF> coverageF_, previewCoverageF_;
-    compositor::TransferCurve curve_;
-    compositor::AnyImage sourceNative_;
-    compositor::AnyGray coverageNative_;
-    compositor::ColorMode mode_ = compositor::ColorMode::RGB;
-    compositor::ColorProfile profile_;
+    std::shared_ptr<nekophoto::GrayImage> coverage_, previewCoverage_;
+    std::shared_ptr<const nekophoto::Image16> source16_, previewSource16_;
+    std::shared_ptr<nekophoto::Gray16> coverage16_, previewCoverage16_;
+    std::shared_ptr<const nekophoto::ImageF> sourceF_, previewSourceF_;
+    std::shared_ptr<nekophoto::GrayF> coverageF_, previewCoverageF_;
+    nekophoto::TransferCurve curve_;
+    nekophoto::AnyImage sourceNative_;
+    nekophoto::AnyGray coverageNative_;
+    nekophoto::ColorMode mode_ = nekophoto::ColorMode::RGB;
+    nekophoto::ColorProfile profile_;
     QCheckBox* preview_ = nullptr;
     bool finished_ = false;
 };

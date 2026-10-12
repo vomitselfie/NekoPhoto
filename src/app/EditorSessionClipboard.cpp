@@ -5,9 +5,9 @@
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "ColorManagement.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QMimeData>
@@ -18,7 +18,7 @@
 
 namespace app {
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -2,10 +2,10 @@
 // rounded between the passes; colour above 1 is blurred as it is.
 #include "blur_impl.h"
 
-namespace compositor {
+namespace nekophoto {
 
 void gaussianBlur(ImageF& image, double sigma) { gaussianBlurImpl(image, sigma); }
 void gaussianBlur(GrayF& image, double sigma) { gaussianBlurImpl(image, sigma); }
 void motionBlur(ImageF& image, double distance, double angleDegrees) { motionBlurImpl(image, distance, angleDegrees); }
 
-} // namespace compositor
+} // namespace nekophoto

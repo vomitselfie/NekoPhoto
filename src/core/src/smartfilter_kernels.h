@@ -2,12 +2,12 @@
 // (smartfilter_render16.cpp): the Gaussian line plans with their Photoshop calibrations, the parameter checks and
 // Add Noise's position hash and Radial Blur's sample points. Internal to the core.
 #pragma once
-#include "compositor/smartfilter.h"
+#include "nekophoto/smartfilter.h"
 #include <cmath>
 #include <cstdint>
 #include <vector>
 
-namespace compositor::smartfilter_detail {
+namespace nekophoto::smartfilter_detail {
 
 struct GaussianLinePlan {
     bool direct = false;
@@ -58,4 +58,4 @@ inline void radialBlurSource(double dx, double dy, int32_t amount, int32_t sampl
     sy = dx * std::sin(angle) + dy * std::cos(angle);
 }
 
-} // namespace compositor::smartfilter_detail
+} // namespace nekophoto::smartfilter_detail

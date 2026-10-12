@@ -1,10 +1,10 @@
-#include "compositor/supports.h"
+#include "nekophoto/supports.h"
 #include "Bench.h"
 #include "BrushLibrary.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
-#include "compositor/image.h"
+#include "nekophoto/image.h"
 #include <QTextCharFormat>
 #include <QInputMethodEvent>
 #include <QApplication>
@@ -36,7 +36,7 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
     EditorSession* session = window.session();
     CanvasWidget* canvas = window.canvasAt(window.currentTabIndex());
     // A photo-like base layer (opaque gradient with detail) and a blank layer above it, as when painting.
-    auto base = std::make_shared<compositor::Image>(o.document.width(), o.document.height());
+    auto base = std::make_shared<nekophoto::Image>(o.document.width(), o.document.height());
     for (int y = 0; y < base->height(); y++) {
         uint8_t* row = base->row(y);
         for (int x = 0; x < base->width(); x++, row += 4) {
@@ -55,7 +55,7 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
     if (o.brushSize > 0) session->brushSettings.diameter = o.brushSize;
     session->brushErase = o.eraser;
     if (o.hardness >= 0) session->brushSettings.hardness = o.hardness;
-    compositor::BrushSmoothing smoothing;
+    nekophoto::BrushSmoothing smoothing;
     const QString mode = o.smoothing.toLower();
     if (mode == "input" || mode == "all") smoothing.input = 50;
     if (mode == "stabilizer" || mode == "pulled" || mode == "all") smoothing.stabilizer = 50;
@@ -181,7 +181,7 @@ int runTypeBench(MainWindow& window, const QString& screenshot) {
     // Select "rich text runs" (Shift+Ctrl+Left three times past the full stop) and make it bold and red, as the bar does.
     key(Qt::Key_Left, {});
     for (int i = 0; i < 3; i++) key(Qt::Key_Left, {}, Qt::ShiftModifier | Qt::ControlModifier);
-    compositor::TextRunPatch patch;
+    nekophoto::TextRunPatch patch;
     patch.bold = true;
     patch.color = std::array<double, 3>{0.85, 0.1, 0.1};
     canvas->applyTypeStyle(patch);
@@ -191,7 +191,7 @@ int runTypeBench(MainWindow& window, const QString& screenshot) {
     const auto layerId = session->activeLayerId();
     key(Qt::Key_Return, {}, Qt::ControlModifier);   // commit
     const auto undo = session->undoNames();
-    const compositor::Layer* layer = layerId ? session->document()->find(*layerId) : nullptr;
+    const nekophoto::Layer* layer = layerId ? session->document()->find(*layerId) : nullptr;
     std::printf("committed: %s, undo step \"%s\", %zu style runs, %d letters\n", layer && layer->text ? "yes" : "no",
                 undo.empty() ? "" : undo.back().c_str(), layer && layer->text ? layer->text->runs.size() : size_t(0),
                 layer && layer->text ? int(QString::fromStdString(layer->text->text).size()) : 0);
@@ -235,7 +235,7 @@ int runTypeBench(MainWindow& window, const QString& screenshot) {
     };
     auto layerText = [&] {
         const auto id = session->activeLayerId();
-        const compositor::Layer* l = id ? session->document()->find(*id) : nullptr;
+        const nekophoto::Layer* l = id ? session->document()->find(*id) : nullptr;
         return l && l->text ? QString::fromStdString(l->text->text) : QString();
     };
     compose(QStringLiteral("に"), {}, false);
@@ -267,14 +267,14 @@ int runViewBench(MainWindow& window, const ViewBenchOptions& o) {
     const int w = o.document.width(), h = o.document.height();
     // A photo-like base, then layers that each cover most of the canvas with soft, partly transparent paint,
     // one of them multiplied: every pixel of the view composites every layer.
-    auto base = std::make_shared<compositor::Image>(w, h);
+    auto base = std::make_shared<nekophoto::Image>(w, h);
     for (int y = 0; y < h; y++) {
         uint8_t* row = base->row(y);
         for (int x = 0; x < w; x++, row += 4) { row[0] = uint8_t(x * 255 / w); row[1] = uint8_t(y * 255 / h); row[2] = uint8_t((x ^ y) & 0xFF); row[3] = 255; }
     }
     session->insertImage(base, "Base");
     for (int l = 1; l < o.layers; l++) {
-        auto layer = std::make_shared<compositor::Image>(w, h);
+        auto layer = std::make_shared<nekophoto::Image>(w, h);
         const double cx = w * (0.3 + 0.1 * l), cy = h * (0.6 - 0.08 * l), r = std::min(w, h) * 0.45;
         for (int y = 0; y < h; y++) {
             uint8_t* row = layer->row(y);
@@ -352,14 +352,14 @@ int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
     CanvasWidget* canvas = window.canvasAt(window.currentTabIndex());
     const int w = o.document.width(), h = o.document.height();
     // The view bench's document: a photo-like base and soft, partly transparent layers over it.
-    auto base = std::make_shared<compositor::Image>(w, h);
+    auto base = std::make_shared<nekophoto::Image>(w, h);
     for (int y = 0; y < h; y++) {
         uint8_t* row = base->row(y);
         for (int x = 0; x < w; x++, row += 4) { row[0] = uint8_t(x * 255 / w); row[1] = uint8_t(y * 255 / h); row[2] = uint8_t((x ^ y) & 0xFF); row[3] = 255; }
     }
     session->insertImage(base, "Base");
     for (int l = 1; l < o.layers; l++) {
-        auto layer = std::make_shared<compositor::Image>(w, h);
+        auto layer = std::make_shared<nekophoto::Image>(w, h);
         const double cx = w * (0.3 + 0.1 * l), cy = h * (0.6 - 0.08 * l), r = std::min(w, h) * 0.45;
         for (int y = 0; y < h; y++) {
             uint8_t* row = layer->row(y);
@@ -373,9 +373,9 @@ int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
     }
     QString error;
     if (o.mode == "cmyk" || o.mode == "lab") {
-        if (!session->convertColorMode(o.mode == "cmyk" ? compositor::ColorMode::CMYK : compositor::ColorMode::Lab, &error)) { std::printf("mode: %s\n", qPrintable(error)); return 1; }
+        if (!session->convertColorMode(o.mode == "cmyk" ? nekophoto::ColorMode::CMYK : nekophoto::ColorMode::Lab, &error)) { std::printf("mode: %s\n", qPrintable(error)); return 1; }
     }
-    if (o.bits != 8 && !session->convertMode(o.bits == 16 ? compositor::SampleType::U16 : compositor::SampleType::F32, &error)) { std::printf("depth: %s\n", qPrintable(error)); return 1; }
+    if (o.bits != 8 && !session->convertMode(o.bits == 16 ? nekophoto::SampleType::U16 : nekophoto::SampleType::F32, &error)) { std::printf("depth: %s\n", qPrintable(error)); return 1; }
     session->fitView();
     QApplication::processEvents();
     auto pump = [] { QApplication::processEvents(QEventLoop::AllEvents); };
@@ -397,9 +397,9 @@ int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
     report("full view render (fit)", full);
     // A slider drag: the adjustment layer's settings change on each tick inside one edit, as the Properties
     // panel does, and the canvas repaints before the next.
-    auto drag = [&](compositor::AdjustmentKind kind, const char* label, auto&& tick) {
+    auto drag = [&](nekophoto::AdjustmentKind kind, const char* label, auto&& tick) {
         // A kind the mode lacks (Exposure in CMYK) is refused with a message; skip it rather than wait on that.
-        if (!compositor::unavailableReason(std::string("adjustment.") + compositor::adjustmentKindName(kind), session->sampleType(), session->colorMode()).empty()) {
+        if (!nekophoto::unavailableReason(std::string("adjustment.") + nekophoto::adjustmentKindName(kind), session->sampleType(), session->colorMode()).empty()) {
             std::printf("%-30s not available in this mode\n", label);
             return;
         }
@@ -424,10 +424,10 @@ int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
         session->undo();
         session->undo();
     };
-    drag(compositor::AdjustmentKind::Levels, "Levels: drag white input", [](compositor::AdjustmentSettings& s, int i) {
+    drag(nekophoto::AdjustmentKind::Levels, "Levels: drag white input", [](nekophoto::AdjustmentSettings& s, int i) {
         s.levels.ranges[0].white = 255 - i * 3;
     });
-    drag(compositor::AdjustmentKind::Exposure, "Exposure: drag exposure", [](compositor::AdjustmentSettings& s, int i) {
+    drag(nekophoto::AdjustmentKind::Exposure, "Exposure: drag exposure", [](nekophoto::AdjustmentSettings& s, int i) {
         s.exposure.exposure = 0.05 * (i + 1);
     });
     return 0;

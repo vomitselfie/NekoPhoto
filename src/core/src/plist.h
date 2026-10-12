@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace compositor::plist {
+namespace nekophoto::plist {
 
 struct Value {
     enum class Kind { Null, Bool, Integer, Real, String, Data, Uid, Array, Dict };
@@ -40,4 +40,4 @@ std::vector<std::string> keyedStrings(const Binary& archive, const Value& object
 struct XmlDict { std::map<std::string, std::string> strings; std::map<std::string, std::vector<std::string>> arrays; };
 std::optional<XmlDict> parseXmlDict(const std::string& xml);
 
-} // namespace compositor::plist
+} // namespace nekophoto::plist

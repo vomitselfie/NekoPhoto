@@ -1,0 +1,144 @@
+// The edge-aware Magic Wand: the click samples a small patch as a colour model in OKLab, image edges (at
+// three blur scales) are barriers, and the cost of reaching each pixel from the patch is computed once as a
+// field. Tolerance then only thresholds the field, so it can change without recomputing anything.
+//
+// The cost of a step is the pixel's perceptual distance from the patch (less the patch's own spread), its
+// alpha difference, and the edge strength there, in the classic wand's units: tolerance 32 means about what
+// it meant for the plain wand on flat colour. Two ways to accumulate it along a path:
+//   Bottleneck: a pixel costs the worst step on its best path from the seed. Its selection at a tolerance
+//               is the region the seed reaches without crossing anything costlier, like a flood fill, but
+//               with perceptual distances and edges as walls.
+//   Additive:   the steps' costs add up (a geodesic distance), so a long walk through a faint gradient
+//               also costs (and, with a toll, every step does).
+// See docs/smart-wand.md for the research behind it and how the two compare.
+#pragma once
+#include "image.h"
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+namespace nekophoto {
+
+enum class WandAccumulation { Bottleneck, Additive };
+
+struct SmartWandOptions {
+    WandAccumulation accumulation = WandAccumulation::Bottleneck;
+    double edgeWeight = 0;        // multi-scale gradient barrier; the neighbour step does this better (docs/smart-wand.md)
+    double alphaWeight = 1.0;
+    double stepToll = 0;          // Additive only: cost per pixel stepped, in tolerance units
+    /// How much the step from pixel to pixel counts, beside the distance from the click's colour: shading
+    /// changes little per pixel, a boundary a lot. 0 compares with the click only (the classic wand's way).
+    double neighbourWeight = 8;
+    /// With a textured click, how much a smoother neighbourhood costs (a textured fill should not run into
+    /// flat colour of the same mean).
+    double textureWeight = 2;
+    /// When the neighbour term is on, the share of the distance from the click still counted.
+    double seedWeight = 0.7;
+    /// A click textured at a coarser scale (a grid, a weave) also reaches pixels whose neighbourhood matches its
+    /// neighbourhood there and whose colour its coarse colour spread explains. 0 turns this off.
+    double regionWeight = 1;
+};
+
+/// Everything a wand needs from an image that does not depend on where it is clicked, computed once per image.
+class SmartWandImage {
+public:
+    /// `edges`: also prepare the multi-scale edge map (only an edgeWeight above zero reads it).
+    explicit SmartWandImage(const Image& pixels, bool edges = false);
+    int width() const { return width_; }
+    int height() const { return height_; }
+
+    /// The field for a click: each pixel's cost in quarter cost units (0..65534), 65535 beyond `limit` cost
+    /// units (see wandCost) or unreachable. `radius` is the sample patch's half size.
+    struct Field {
+        int width = 0, height = 0;
+        std::vector<uint16_t> cost;
+        int limit = 0;   // in cost units (wandCost): thresholds above it are not meaningful
+    };
+    /// `anywhere`: every region that looks like the click, not only the connected one (the wand with Contiguous
+    /// off): pixels close to the click's colours (the classic per-channel measure, against the patch and the
+    /// pattern's two colours) whose coarse neighbourhood matches the click's start the search, which then fills
+    /// each such region out to its edges.
+    Field propagate(int seedX, int seedY, int radius, int limit, const SmartWandOptions& options = {}, bool anywhere = false) const;
+
+    /// OKLab of pixel i, scaled: L 0..1 and a, b about -0.4..0.4, times 4096 (for tests and the patch model).
+    void oklab(size_t i, float out[3]) const { out[0] = lab_[i * 3] / 4096.0f; out[1] = lab_[i * 3 + 1] / 4096.0f; out[2] = lab_[i * 3 + 2] / 4096.0f; }
+
+private:
+    int width_ = 0, height_ = 0;
+    std::vector<int16_t> lab_;     // straight-colour OKLab, three per pixel, times 4096
+    std::vector<uint8_t> alpha_;
+    std::vector<uint8_t> rgb_;       // straight sRGB, three per pixel (the classic per-channel tolerance)
+    std::vector<uint16_t> edge_;   // multi-scale gradient magnitude of L, in tolerance units times four
+    std::vector<uint16_t> spread_; // local colour spread (5 x 5 window) in tolerance units times four
+    std::vector<int16_t> localMean_;   // local mean OKLab (the same window), times 4096: texture averaged out
+    /// Mean OKLab (times 4096) and spread (tolerance units times four) over about 20 and 36 pixel windows: a
+    /// pattern coarser than the click's patch, such as a grid, shows up here.
+    /// They are coarse by nature, so they live on a grid of 4 x 4 pixel cells (a pixel reads its cell's).
+    struct Scale { int radius = 0; std::vector<int16_t> mean; std::vector<uint16_t> spread; };
+    std::vector<Scale> scales_;
+    static constexpr int cell = 4;
+    int cellsWide_ = 0, cellsHigh_ = 0;
+    size_t cellOf(size_t pixel) const { return size_t((pixel / size_t(width_)) / cell) * size_t(cellsWide_) + (pixel % size_t(width_)) / cell; }
+};
+
+/// The field cost a tolerance (0..255) reaches: the same number up to 32, then growing with the square (about
+/// 2,000 at 255), so the slider's upper half reaches through strong boundaries instead of sitting on one
+/// selection. Fields should be propagated to wandCost(tolerance) or further.
+int wandCost(int tolerance);
+/// The lowest tolerance above `tolerance` at which these clicks' selection would grow, or -1 if none does.
+int wandNextTolerance(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative, int tolerance);
+
+/// Selects where the field is within `tolerance` (0..255): 255 inside, a two-level soft band just past it
+/// for antialiasing (`soft`), 0 elsewhere. Returns the count at or above half.
+long thresholdWandField(const SmartWandImage::Field& field, int tolerance, bool soft, GrayImage& mask);
+
+/// Several clicks at once: positive fields say what to select, negative ones what to keep out. A pixel is
+/// selected when its cheapest positive cost is within `tolerance` and below its cheapest negative cost, so
+/// the two kinds of evidence compete for pixels rather than one mask being cut from the other.
+long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
+                         int tolerance, bool soft, GrayImage& mask);
+/// The same with a tolerance per positive click (`tolerances[k]` for `positive[k]`): a pixel is selected when it is
+/// within the tolerance of a positive click that reaches it more cheaply than any negative one. Each Shift-click of a
+/// wand session keeps the tolerance it was made with; with every tolerance equal this is the function above exactly.
+long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<int>& tolerances,
+                         const std::vector<const SmartWandImage::Field*>& negative, bool soft, GrayImage& mask);
+
+/// How the confidence margin between positive and negative clicks is scaled (see wandMarginField).
+///   Difference: n - p, in tolerance units (0 where the two kinds of click reach a pixel equally cheaply).
+///   Relative:   (n - p) / (n + p + epsilon), -1..1: the same difference as a share of the costs.
+enum class WandMargin { Difference, Relative };
+
+/// The Smart Wand's confidence margin: per pixel, the cheapest negative cost minus the cheapest positive one
+/// (unreached counts as just past the fields' limit), scaled by `kind`. Strongly positive where the pixel clearly
+/// belongs with the clicks, strongly negative where it belongs with the Alt-clicks, near zero where the evidence
+/// competes: where another click would help and where refinement should look. It says which clicks a pixel
+/// resembles and connects to, not how much of it is covered: never use it as opacity.
+/// `epsilon` (tolerance units) keeps Relative stable where both costs are small. Relative with epsilon 1 is the
+/// default: on the wand benchmark's scenes (`wand_bench margin`) a small relative margin finds the pixels a click
+/// and an Alt-click decide wrongly far better than the raw difference (docs/smart-wand.md).
+std::vector<float> wandMarginField(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
+                                   WandMargin kind = WandMargin::Relative, float epsilon = 1);
+
+/// The relative margin under which a pixel counts as ambiguous: it takes 90% of the wrongly decided pixels on the
+/// benchmark's scenes and 6% of the rightly decided ones.
+constexpr float wandAmbiguousMargin = 0.5f;
+
+/// Where the margin is within `threshold` of zero, as 255 (0 elsewhere): the ambiguous areas, for an overlay.
+GrayImage wandAmbiguity(const std::vector<float>& margin, int width, int height, float threshold = wandAmbiguousMargin);
+
+/// Softens a wand selection's edge by unmixing: within `band` pixels of it (both sides), each pixel is taken as
+/// a mix of the selected colour nearby (the background it was clicked on, say) and the most different colour
+/// nearby (the line), pixel = a * selected + (1 - a) * other, and gets coverage a. Antialiased and smudged
+/// lines then come out with the fringe partly selected rather than left whole; `pixels` is the image the
+/// wand sampled (premultiplied), `mask` the selection, changed in place.
+/// `lineColours`, when given, receives for each pixel it unmixed the colour of the other part (straight RGB,
+/// packed as 0xRRGGBB with the top byte 1; 0 elsewhere), which clearDecontaminated can paint what is left with.
+void refineWandEdge(const Image& pixels, GrayImage& mask, int band = 3, std::vector<uint32_t>* lineColours = nullptr);
+
+/// Clears `coverage` from `pixels` (premultiplied, the same grid) and gives the half-cleared pixels the colour
+/// of what is left (the line, not the background it was mixed with): Delete after a refined wand selection
+/// leaves clean edges instead of a rim of the old background's colour. With the colours refineWandEdge found,
+/// those are used where it found one; elsewhere the colour is estimated (estimateForeground).
+void clearDecontaminated(Image& pixels, const GrayImage& coverage, const std::vector<uint32_t>* lineColours = nullptr);
+
+} // namespace nekophoto

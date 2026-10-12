@@ -1,11 +1,11 @@
 #include "Style.h"
 #include "Names.h"
 #include "AdjustmentsPanel.h"
-#include "compositor/modeedit.h"
-#include "compositor/histogram.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/histogram.h"
 #include <QVBoxLayout>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

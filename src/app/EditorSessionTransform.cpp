@@ -1,13 +1,13 @@
 // EditorSession: Free transform, distort and floating selections.
 #include "EditorSession.h"
-#include "compositor/depth.h"
+#include "nekophoto/depth.h"
 #include "QtGeometry.h"
-#include "compositor/blend.h"
-#include "compositor/modetransform.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/modetransform.h"
 #include <algorithm>
 #include <cstring>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

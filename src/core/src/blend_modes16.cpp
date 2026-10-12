@@ -1,10 +1,10 @@
 // The blend modes of 16-bit CMYK and Lab documents (docs/high-bit-depth-plan.md, P7 step C): blend_u16.cpp's kernels
 // on each channel (blend_modes.inc), and Lab's own non-separable modes. RGB documents never reach this file.
 #include "blend_modes.inc"
-#include "compositor/depth.h"
-#include "compositor/simd.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/simd.h"
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -39,4 +39,4 @@ void compositePixelAtMode16(BlendMode mode, ColorMode colorMode, const uint16_t*
     modes::pixelAt<Kernels16>(blendModeFor(mode, colorMode), colorMode, src, coverage, dst, x, y);
 }
 
-} // namespace compositor
+} // namespace nekophoto

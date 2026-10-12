@@ -3,7 +3,7 @@
 // own non-separable modes. blend_u8.cpp is not touched: RGB documents never reach this file.
 #include "blend_modes.inc"
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -77,4 +77,4 @@ void blendStraightMode(BlendMode mode, ColorMode colorMode, const float* cb, flo
     for (int k = 0; k < colours; k++) cs[k] = blendChannel16(mode, cb[k], cs[k]);
 }
 
-} // namespace compositor
+} // namespace nekophoto

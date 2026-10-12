@@ -30,18 +30,18 @@
 #pragma once
 #include "render_plan.h"
 #include "layerstyle_render.h"
-#include "compositor/adjustments.h"
-#include "compositor/blend.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/vectormask.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <functional>
 #include <optional>
 
-namespace compositor {
+namespace nekophoto {
 
 template <SampleType S> struct DeepOps;
 
@@ -79,7 +79,7 @@ struct DeepOps<SampleType::U16> {
     static void pixelCovered(BlendMode mode, const Sample* src, Sample coverage, Sample* dst) { compositePixelSteps16(mode, src, coverage, dst); }
 
     static void drawLayer(const Params& params, const Rect& region, double scale, const Gray* coverage, Image& out) {
-        compositor::drawLayer(params, region, scale, coverage, out);
+        nekophoto::drawLayer(params, region, scale, coverage, out);
     }
     static void sampleMask(const GrayPtr& mask, const LayerTransform& transform, const Rect& region, double scale, Gray& out) {
         sampleMaskCoverage(mask, transform, region, scale, 0, out, false);
@@ -114,12 +114,12 @@ struct DeepOps<SampleType::U16> {
     static std::shared_ptr<Image>& above(RenderCache& cache) { return cache.above16; }
     static void resetOtherDepths(RenderCache& cache) { cache.backdrop.reset(); cache.above.reset(); }
 
-    static std::shared_ptr<Image> widenFrom8(const compositor::Image& image) { return widenImage(image); }
-    static std::shared_ptr<compositor::Image> narrowTo8(const Image& image) { return narrowImage(image); }
-    static void toDisplay(const Image& deep, compositor::Image& out, const ColorTransform* display) {
+    static std::shared_ptr<Image> widenFrom8(const nekophoto::Image& image) { return widenImage(image); }
+    static std::shared_ptr<nekophoto::Image> narrowTo8(const Image& image) { return narrowImage(image); }
+    static void toDisplay(const Image& deep, nekophoto::Image& out, const ColorTransform* display) {
         if (display) convertImage16To8(deep, out, *display);
         else narrowInto(deep, out);
     }
 };
 
-} // namespace compositor
+} // namespace nekophoto

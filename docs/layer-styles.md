@@ -4,7 +4,7 @@ A PSD's layer styles (the effects Photoshop keeps in a layer's 'lfx2' block, 'lm
 'lfxs' on folders) are drawn around the layer, in the editor and in every export. They come from the file as it
 was carried (psd-roundtrip.md) and go back unchanged on PSD export, and Layer ▸ Layer Style edits them.
 
-- Model and parsing: `src/core/include/compositor/layerstyle.h`, `src/core/src/layerstyle.cpp` (with the global
+- Model and parsing: `src/core/include/nekophoto/layerstyle.h`, `src/core/src/layerstyle.cpp` (with the global
   light from image resources 1037/1049, the effects scale, the 'fxrp' reference point and the file's patterns).
 - Drawing: `src/core/src/layerstyle_render.cpp`, called by the renderer for a styled layer (`drawOwn`), a
   clipping base with a style, and a styled folder (exterior effects before its first child, the rest after its
@@ -74,7 +74,7 @@ Bevel & Emboss goes past Patchy in three places, each fitted to Photoshop's merg
 
 ## Blend If
 
-Blending Options' Blend If is drawn and editable (`src/core/include/compositor/blendif.h`). A layer, an adjustment
+Blending Options' Blend If is drawn and editable (`src/core/include/nekophoto/blendif.h`). A layer, an adjustment
 layer or a folder shows only where its own colours (This Layer) and the colours under it (Underlying Layer) fall
 within a black and a white point per channel; Alt-drag splits a point in two, and between the halves the layer fades.
 The channels are Photoshop's: Gray, Red, Green and Blue in RGB; Gray, Cyan, Magenta, Yellow and Black in CMYK;

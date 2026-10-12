@@ -155,4 +155,4 @@ ignore it, and a manifest without it is a still document, so no format version c
 origin and opacity show; each frame's `delay` is in milliseconds and `layers` holds each layer's visibility, transform
 origin (`x`, `y`) and opacity in that frame. A layer a frame does not list keeps its own state when the frame shows.
 Entries for layers that no longer exist are dropped on load, and a damaged `animation` object is dropped rather than
-refusing the project (see `src/core/include/compositor/animation.h`).
+refusing the project (see `src/core/include/nekophoto/animation.h`).

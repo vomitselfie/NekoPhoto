@@ -1,10 +1,10 @@
 // BrushStroke in a CMYK document (docs/high-bit-depth-plan.md, P7 E): StrokeRasterOf<CmykStrokeOps<S>>, the stroke of
 // its depth on five samples (the four inks stored inverted, then alpha). Lab documents paint with the RGB rasters of
 // their depth (four samples; L, a and b as stored). The colour arrives in the document's model (brush.cpp).
-#include "compositor/brush.h"
+#include "nekophoto/brush.h"
 #include "stroke_raster.h"
 
-namespace compositor {
+namespace nekophoto {
 
 template class StrokeRasterOf<CmykStrokeOps<SampleType::U8>>;
 template class StrokeRasterOf<CmykStrokeOps<SampleType::U16>>;
@@ -49,4 +49,4 @@ std::shared_ptr<TiledSourceOf<ImageC8>> tiledProcessedNative<ImageC8>(Document d
     return tiledNative<ImageC8>(std::move(document), std::move(process), margin);
 }
 
-} // namespace compositor
+} // namespace nekophoto

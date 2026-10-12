@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -448,13 +448,13 @@ QWidget* ToolOptionsBar::buildToningOptions() {
     auto* rangeLabel = new QLabel(tr("Range"));
     auto* spongeLabel = new QLabel(tr("Mode"));
     auto show = [=, this] {
-        const bool isSponge = session_->toning.kind == compositor::ToningKind::Sponge;
+        const bool isSponge = session_->toning.kind == nekophoto::ToningKind::Sponge;
         rangeLabel->setVisible(!isSponge); range->setVisible(!isSponge); protect->setVisible(!isSponge);
         spongeLabel->setVisible(isSponge); sponge->setVisible(isSponge);
     };
-    connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, show](int i) { session_->toning.kind = compositor::ToningKind(i); show(); });
+    connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, show](int i) { session_->toning.kind = nekophoto::ToningKind(i); show(); });
     syncers_.push_back([this, kind, show] { { QSignalBlocker b(kind); kind->setCurrentIndex(int(session_->toning.kind)); } show(); });
-    connect(range, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.range = compositor::ToneRange(i); });
+    connect(range, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.range = nekophoto::ToneRange(i); });
     connect(protect, &QCheckBox::toggled, this, [this](bool on) { session_->toning.protectTones = on; });
     connect(sponge, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.saturate = i == 1; });
     h->addWidget(new QLabel(tr("Tool")));
@@ -701,7 +701,7 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     auto* weight = numberField(0.5, 1000, 1, " px", tr("Line weight"));
     weight->setValue(st.lineWeight);
     auto* custom = new QComboBox;
-    for (const auto& n : compositor::customShapeNames()) custom->addItem(QString::fromStdString(n));
+    for (const auto& n : nekophoto::customShapeNames()) custom->addItem(QString::fromStdString(n));
     for (QWidget* x : std::initializer_list<QWidget*>{radiusLabel, radius, sidesLabel, sides, starLabel, star, weightLabel, weight, custom}) h->addWidget(x);
     auto showKind = [=, this] {
         const VectorShapeKind k = session_->shapeTool.kind;
@@ -807,7 +807,7 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     });
     connect(stroke, &QCheckBox::toggled, this, [this, apply](bool on) { session_->shapeTool.stroke.enabled = on; apply(tr("Shape Stroke"), [on](VectorShape& s) { s.stroke.enabled = on; }); });
     connect(strokeColour, &QToolButton::clicked, this, [this, apply, swatch, strokeColour] {
-        compositor::VectorStroke& t = session_->shapeTool.stroke;
+        nekophoto::VectorStroke& t = session_->shapeTool.stroke;
         const QColor c = QColorDialog::getColor(QColor(t.r, t.g, t.b), this, tr("Stroke"));
         if (!c.isValid()) return;
         t.r = uint8_t(c.red()); t.g = uint8_t(c.green()); t.b = uint8_t(c.blue());
@@ -836,14 +836,14 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
         session_->shapeTool.stroke.width = v; apply(tr("Shape Stroke"), [v](VectorShape& s) { s.stroke.width = v; });
     });
     connect(align, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, apply](int i) {
-        const auto a = i == 0 ? compositor::VectorStroke::Align::Inside : i == 2 ? compositor::VectorStroke::Align::Outside : compositor::VectorStroke::Align::Center;
+        const auto a = i == 0 ? nekophoto::VectorStroke::Align::Inside : i == 2 ? nekophoto::VectorStroke::Align::Outside : nekophoto::VectorStroke::Align::Center;
         session_->shapeTool.stroke.align = a; apply(tr("Shape Stroke"), [a](VectorShape& s) { s.stroke.align = a; });
     });
     connect(dash, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, apply](int i) {
         // Photoshop's presets, in stroke widths: dashes 4 on 2 off; dots 0 on 2 off with round caps.
-        auto set = [i](compositor::VectorStroke& t) {
+        auto set = [i](nekophoto::VectorStroke& t) {
             t.dashes = i == 1 ? std::vector<double>{4, 2} : i == 2 ? std::vector<double>{0, 2} : std::vector<double>{};
-            t.cap = i == 2 ? compositor::VectorStroke::Cap::Round : compositor::VectorStroke::Cap::Butt;
+            t.cap = i == 2 ? nekophoto::VectorStroke::Cap::Round : nekophoto::VectorStroke::Cap::Butt;
         };
         set(session_->shapeTool.stroke); apply(tr("Shape Stroke"), [set](VectorShape& s) { set(s.stroke); });
     });
@@ -923,13 +923,13 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
             liveW->setValue(live->box.width); liveH->setValue(live->box.height); liveX->setValue(live->box.x); liveY->setValue(live->box.y);
             for (size_t i = 0; i < 4; i++) liveR[i]->setValue(live->radii[i]);
         }
-        const compositor::VectorStroke& t = shape ? shape->stroke : session_->shapeTool.stroke;
+        const nekophoto::VectorStroke& t = shape ? shape->stroke : session_->shapeTool.stroke;
         fill->setChecked(shape ? shape->fill : session_->shapeTool.fill);
         swatch(fillColour, shape ? QColor(shape->r, shape->g, shape->b) : session_->foregroundColor);
         stroke->setChecked(t.enabled);
         swatch(strokeColour, QColor(t.r, t.g, t.b));
         strokeWidth->setValue(t.width);
-        align->setCurrentIndex(t.align == compositor::VectorStroke::Align::Inside ? 0 : t.align == compositor::VectorStroke::Align::Outside ? 2 : 1);
+        align->setCurrentIndex(t.align == nekophoto::VectorStroke::Align::Inside ? 0 : t.align == nekophoto::VectorStroke::Align::Outside ? 2 : 1);
         dash->setCurrentIndex(t.dashes.empty() ? 0 : t.dashes.front() == 0 ? 2 : 1);
     });
     h->addStretch();

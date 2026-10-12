@@ -1,12 +1,12 @@
-#include "compositor/smartwand.h"
-#include "compositor/parallel.h"
-#include "compositor/matte.h"
+#include "nekophoto/smartwand.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/matte.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -729,4 +729,4 @@ void clearDecontaminated(Image& pixels, const GrayImage& coverage, const std::ve
     }, 32);
 }
 
-} // namespace compositor
+} // namespace nekophoto

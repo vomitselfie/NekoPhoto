@@ -2,13 +2,13 @@
 // The expected values are Patchy's own pins (tests/core/smart_filter_pixels_tests.cpp), which it measured against
 // Photoshop 27.8, and the calibration facts in Patchy's docs/smart-filters-native.md.
 #include "check.h"
-#include "compositor/smartfilter.h"
-#include "compositor/depth.h"
-#include "compositor/png.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
-#include "compositor/smartobject_edit.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/png.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
+#include "nekophoto/smartobject_edit.h"
 
 #include <algorithm>
 #include <array>
@@ -23,7 +23,7 @@
 #define PATCHY_FIXTURES "../Patchy/test-fixtures/psd"
 #endif
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

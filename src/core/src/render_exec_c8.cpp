@@ -4,11 +4,11 @@
 #include "render_exec_deep.inc"
 #include "render_modes.h"
 
-namespace compositor {
+namespace nekophoto {
 
 void executeRenderMode(const RenderPlan& plan, const Rect& region, double scale, ImageC8& out, RenderCache* cache, uint64_t version) {
     RenderExecDeep<SampleType::U8, ModeOps<SampleType::U8, ColorMode::CMYK>> exec(plan, region, scale, out.width(), out.height());
     exec.run(out, cache, version);
 }
 
-} // namespace compositor
+} // namespace nekophoto

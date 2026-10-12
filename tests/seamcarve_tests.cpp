@@ -1,12 +1,12 @@
 // Seam carving: sizes, a uniform band carved first, protected pixels kept, growth, and a 12 MP timing.
 #include "check.h"
-#include "compositor/seamcarve.h"
+#include "nekophoto/seamcarve.h"
 #include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

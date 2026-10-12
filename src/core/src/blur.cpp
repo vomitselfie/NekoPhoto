@@ -1,11 +1,11 @@
-#include "compositor/blur.h"
-#include "compositor/parallel.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -364,4 +364,4 @@ void motionBlur(Image& image, double distance, double angleDegrees) {
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

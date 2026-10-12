@@ -1,8 +1,8 @@
 // The brush files the importer tests write byte by byte (a Photoshop .abr, a Procreate .brushset and a Clip
 // Studio .sut), shared with the brush parity harness so it can paint with what the importers make of them.
 #pragma once
-#include "compositor/image.h"
-#include "compositor/png.h"
+#include "nekophoto/image.h"
+#include "nekophoto/png.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -14,13 +14,13 @@
 #include <variant>
 #include <vector>
 #include <zlib.h>
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 #include <sqlite3.h>
 #endif
 
 namespace brushfixtures {
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 /// Writes `bytes` to a file in the temporary folder and returns its path.
@@ -207,7 +207,7 @@ inline std::vector<uint8_t> procreateBrushsetFile() {
     return file;
 }
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 
 // ---- Clip Studio .sut --------------------------------------------------------------------------------------------
 

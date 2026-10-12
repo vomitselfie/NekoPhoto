@@ -1,6 +1,6 @@
 # Camera Raw parity baseline: <chart>/<case> <mean ΔE00> <p95 ΔE00> against Camera Raw 18.7, from tests/camera_raw_parity.cpp.
 # A case fails when it is worse by more than 0.1 (mean) or 0.3 (p95). Regenerate after an intended change:
-# COMPOSITOR_BLESS_CAMERA_RAW_PARITY=1 build/tests/camera_raw_parity
+# NEKOPHOTO_BLESS_CAMERA_RAW_PARITY=1 build/tests/camera_raw_parity
 synthetic-d65/blacks+100 0.661 1.918
 synthetic-d65/blacks+50 0.344 0.990
 synthetic-d65/blacks-100 0.752 2.667

@@ -2,13 +2,13 @@
 // would write and checks the pixels. The calibration itself is checked against Photoshop's own renders by
 // build/tests/psd_roundtrip's sibling scripts over Patchy's fixtures (docs/layer-styles.md).
 #include "check.h"
-#include "compositor/document.h"
-#include "compositor/layerstyle.h"
-#include "compositor/psd_carry.h"
-#include "compositor/render.h"
+#include "nekophoto/document.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/render.h"
 #include "psd/psd_descriptor.hpp"
 
-using namespace compositor;
+using namespace nekophoto;
 namespace psd = patchy::psd;
 
 namespace {

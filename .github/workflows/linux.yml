@@ -35,7 +35,7 @@ jobs:
       - name: Configure
         run: |
           if [ "${{ matrix.compiler }}" = "clang" ]; then export CC=clang CXX=clang++; else export CC=gcc CXX=g++; fi
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNEKOPHOTO_WARNINGS_AS_ERRORS=ON -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4"
       - name: Build
         run: cmake --build build -j
       - name: Unit and golden tests

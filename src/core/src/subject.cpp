@@ -3,15 +3,15 @@
 // the 1024-pixel pass blurred away hair and thin structures (`subjectMaskDetailed`; the boundary-window
 // heuristics of LawDIS, PDFNet and SegRefiner). The window planner
 // and the frequency fusion are plain pixel maths and always available.
-#include "compositor/subject.h"
-#include "compositor/blur.h"
-#include "compositor/morphology.h"
-#include "compositor/parallel.h"
+#include "nekophoto/subject.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
 
-#ifdef COMPOSITOR_HAVE_OPENCV
+#ifdef NEKOPHOTO_HAVE_OPENCV
 #include <opencv2/core.hpp>
 #include <opencv2/dnn.hpp>
 #include <opencv2/imgproc.hpp>
@@ -19,7 +19,7 @@
 #include <mutex>
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
 bool promptModelPath(const std::string& modelPath) {
     const std::string name = modelPath.substr(modelPath.rfind('/') + 1);
@@ -94,7 +94,7 @@ std::shared_ptr<GrayImage> fuseDetail(const GrayImage& coarse, const GrayImage& 
     return out;
 }
 
-#ifdef COMPOSITOR_HAVE_OPENCV
+#ifdef NEKOPHOTO_HAVE_OPENCV
 
 bool subjectModelSupported() { return true; }
 
@@ -428,4 +428,4 @@ std::shared_ptr<GrayImage> subjectFromPrompts(const Image&, const std::string&, 
 
 #endif
 
-} // namespace compositor
+} // namespace nekophoto

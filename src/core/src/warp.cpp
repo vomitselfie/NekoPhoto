@@ -1,14 +1,14 @@
-#include "compositor/warp.h"
-#include "compositor/depth.h"
-#include "compositor/resample.h"
-#include "compositor/parallel.h"
+#include "nekophoto/warp.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <type_traits>
 #include <utility>
 
-namespace compositor {
+namespace nekophoto {
 
 Corners cornersOf(const LayerTransform& t) { return {t.point({0, 0}), t.point({1, 0}), t.point({1, 1}), t.point({0, 1})}; }
 
@@ -384,4 +384,4 @@ std::shared_ptr<GrayF> warpCoverage(const GrayF& coverage, const LayerTransform&
     return warpCoverageImpl(coverage, original, pixelWidth, pixelHeight, corners);
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,7 +1,7 @@
-#include "compositor/filters.h"
-#include "compositor/blur.h"
-#include "compositor/kernels.h"
-#include "compositor/parallel.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/kernels.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -11,7 +11,7 @@ extern "C" {
 #include "NoisePixels.h"
 }
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 double clampFinite(double v, double lo, double hi, double fallback) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : fallback; }
@@ -159,4 +159,4 @@ void blendThroughCoverage(GrayImage& adjusted, const GrayImage& original, const 
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

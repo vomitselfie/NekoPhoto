@@ -3,8 +3,8 @@
 // Every request runs on the main thread against the window's current tab and
 // is answered with a JSON object on one line. See docs/automation.md.
 #pragma once
-#include "compositor/colormodes.h"
-#include "compositor/layerstyle.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/layerstyle.h"
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
@@ -102,9 +102,9 @@ private:
 
 /// A layer style as layers.style answers and layers.setStyle takes it: the effects, Blend If's ranges (in the colour
 /// mode's channels) and the effects' reference point. The Layer Style dialog and Paste Layer Style send it.
-QJsonObject layerStyleRequest(const compositor::LayerStyle& style, compositor::ColorMode mode);
+QJsonObject layerStyleRequest(const nekophoto::LayerStyle& style, nekophoto::ColorMode mode);
 /// The reverse: `request` read into `style` (which keeps its reference point when the request names none). False with
 /// `error` when the request is not a style.
-bool layerStyleFromRequest(const QJsonObject& request, compositor::ColorMode mode, compositor::LayerStyle& style, QString* error);
+bool layerStyleFromRequest(const QJsonObject& request, nekophoto::ColorMode mode, nekophoto::LayerStyle& style, QString* error);
 
 } // namespace app

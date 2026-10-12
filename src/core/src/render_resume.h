@@ -19,7 +19,7 @@
 #include <memory>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 struct RenderResume {
     virtual ~RenderResume() = default;
@@ -121,4 +121,4 @@ void drawResumed(Exec& exec, Img& out, RenderCache& cache, uint64_t version, siz
     exec.stackResume = nullptr;
 }
 
-} // namespace compositor
+} // namespace nekophoto

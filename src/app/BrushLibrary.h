@@ -3,7 +3,7 @@
 // brushes folder, and the tip brushes imported from Photoshop, Procreate and other applications, each a
 // folder under brushes/imported/<set>/.
 #pragma once
-#include "compositor/tipbrush.h"
+#include "nekophoto/tipbrush.h"
 #include <QIcon>
 #include <QString>
 #include <QStringList>
@@ -26,12 +26,12 @@ struct BrushPreset {
 
     QIcon icon() const;
     /// Tip: the tip and its settings, read from the folder on first use.
-    std::shared_ptr<const compositor::TipPreset> tip() const;
+    std::shared_ptr<const nekophoto::TipPreset> tip() const;
     /// Tip: replaces the settings read from the folder (after they are saved).
-    void replaceTip(std::shared_ptr<const compositor::TipPreset> tip) const { tip_ = std::move(tip); }
+    void replaceTip(std::shared_ptr<const nekophoto::TipPreset> tip) const { tip_ = std::move(tip); }
 
 private:
-    mutable std::shared_ptr<const compositor::TipPreset> tip_;
+    mutable std::shared_ptr<const nekophoto::TipPreset> tip_;
 };
 
 class BrushLibrary {
@@ -48,7 +48,7 @@ public:
     /// Reads the folders again, after an import.
     static void reload();
     /// Writes a tip brush's changed settings to its folder (with a new preview) and uses them from the next stroke.
-    static bool saveTip(const QString& id, const compositor::TipPreset& preset, QString* error = nullptr);
+    static bool saveTip(const QString& id, const nekophoto::TipPreset& preset, QString* error = nullptr);
 };
 
 /// Paints a throwaway dab with a MyPaint preset, so the engine's one-time setup is not paid in the first

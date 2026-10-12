@@ -1,4 +1,4 @@
-#include "compositor/parallel.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -6,7 +6,7 @@
 #include <thread>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -130,4 +130,4 @@ void parallelFor(int begin, int end, int minRows, const std::function<void(int, 
     insideParallel = false;
 }
 
-} // namespace compositor
+} // namespace nekophoto

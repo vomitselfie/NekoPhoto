@@ -4,10 +4,10 @@
 // document to a smaller press and to sRGB with Preserve Numbers and the display options, the gamut warning on Lab),
 // and Convert to Profile on a CMYK document.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
 #include "lcms2.h"
 #include <algorithm>
 #include <array>
@@ -15,7 +15,7 @@
 #include <cstdio>
 #include <cstring>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

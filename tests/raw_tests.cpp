@@ -2,18 +2,18 @@
 // tests/fixtures/raw (tools/make_test_dng.py) develops as shot, half-size, graded, cancelled, and as a smart object
 // that keeps its file and settings through a project and a PSD.
 #include "check.h"
-#include "compositor/project.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/raw.h"
-#include "compositor/render.h"
-#include "compositor/smartobject_edit.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/raw.h"
+#include "nekophoto/render.h"
+#include "nekophoto/smartobject_edit.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

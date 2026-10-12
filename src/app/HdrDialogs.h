@@ -3,7 +3,7 @@
 // while they are open the canvas shows it (`preview`), which for HDR Toning is the conversion's result, since the view
 // and the conversion share the same maths.
 #pragma once
-#include "compositor/view32.h"
+#include "nekophoto/view32.h"
 #include <QString>
 #include <functional>
 #include <optional>
@@ -13,8 +13,8 @@ class QWidget;
 namespace app {
 
 /// View ▸ 32-bit Preview Options. Null when cancelled (the caller puts the view back).
-std::optional<compositor::View32> askPreviewOptions(QWidget* parent, const compositor::View32& initial, const std::function<void(const compositor::View32&)>& preview);
+std::optional<nekophoto::View32> askPreviewOptions(QWidget* parent, const nekophoto::View32& initial, const std::function<void(const nekophoto::View32&)>& preview);
 /// HDR Toning, going to `bits` (8 or 16) bits per channel. Null when cancelled.
-std::optional<compositor::View32> askHdrToning(QWidget* parent, int bits, const compositor::View32& initial, const std::function<void(const compositor::View32&)>& preview);
+std::optional<nekophoto::View32> askHdrToning(QWidget* parent, int bits, const nekophoto::View32& initial, const std::function<void(const nekophoto::View32&)>& preview);
 
 } // namespace app

@@ -3,7 +3,7 @@
 // shows on the layer at once; Cancel puts the layer back.
 #pragma once
 #include "EditorSession.h"
-#include "compositor/layerstyle.h"
+#include "nekophoto/layerstyle.h"
 #include <QDialog>
 #include <QPointer>
 #include <array>
@@ -19,7 +19,7 @@ class LayerStyleDialog : public QDialog {
     Q_OBJECT
 public:
     /// `page`: the effect to open on (0 Blending Options, then the list's order).
-    LayerStyleDialog(EditorSession* session, const compositor::Uuid& layer, QWidget* parent = nullptr, int page = 0);
+    LayerStyleDialog(EditorSession* session, const nekophoto::Uuid& layer, QWidget* parent = nullptr, int page = 0);
     ~LayerStyleDialog() override;
     /// Whether the dialog could start (the layer takes a style).
     bool started() const { return started_; }
@@ -33,28 +33,28 @@ protected:
 private:
     void changed();
     /// The style as it stands, without the effects the dialog made up and left off.
-    compositor::LayerStyle output() const;
+    nekophoto::LayerStyle output() const;
     bool& enabled(Effect e);
     void addEffectPages();
 
     // Row builders for the pages, bound to fields of `style_`.
     QFormLayout* newPage(const QString& title);
-    void blendRow(QFormLayout* form, const QString& label, compositor::EffectBlend* mode);
-    void colourRow(QFormLayout* form, const QString& label, compositor::StyleColor* colour);
+    void blendRow(QFormLayout* form, const QString& label, nekophoto::EffectBlend* mode);
+    void colourRow(QFormLayout* form, const QString& label, nekophoto::StyleColor* colour);
     void percentRow(QFormLayout* form, const QString& label, float* fraction, double max = 100);
     void numberRow(QFormLayout* form, const QString& label, float* value, double min, double max, const QString& suffix, int decimals = 0);
     void checkRow(QFormLayout* form, const QString& label, bool* value);
     void comboRow(QFormLayout* form, const QString& label, const QStringList& items, std::function<int()> get, std::function<void(int)> set);
     void lightRows(QFormLayout* form, float* angle, bool* global, float* altitude = nullptr);
-    void gradientRows(QFormLayout* form, compositor::StyleGradient* gradient);
+    void gradientRows(QFormLayout* form, nekophoto::StyleGradient* gradient);
     /// Blending Options' Advanced Blending Channels: a box per colour channel (R, G, B; C, M, Y, K; L, a, b).
     void channelRows(QFormLayout* form);
     /// Blending Options' Blend If: the channel and the two sliders, split handles by Alt-drag.
     void blendIfRows(QFormLayout* form);
 
     QPointer<EditorSession> session_;
-    compositor::Uuid layer_;
-    compositor::LayerStyle style_;
+    nekophoto::Uuid layer_;
+    nekophoto::LayerStyle style_;
     /// Blending Options' Fill Opacity: the layer's Fill, set only once the field is changed.
     std::optional<double> fill_;
     double fillBefore_ = 1;

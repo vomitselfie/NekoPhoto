@@ -1,10 +1,10 @@
-#include "compositor/rawtone.h"
-#include "compositor/cameraraw.h"
+#include "nekophoto/rawtone.h"
+#include "nekophoto/cameraraw.h"
 #include <algorithm>
 #include <cmath>
 #include <iterator>
 
-namespace compositor::rawtone {
+namespace nekophoto::rawtone {
 
 namespace {
 
@@ -665,4 +665,4 @@ void ToneStage::apply(float rgb[3]) const {
     for (int r = 0; r < 3; r++) rgb[r] = float(sqrtIndexed(encode, m[r][0] * c[0] + m[r][1] * c[1] + m[r][2] * c[2]));
 }
 
-} // namespace compositor::rawtone
+} // namespace nekophoto::rawtone

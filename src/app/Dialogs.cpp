@@ -129,7 +129,7 @@ std::optional<NewDocumentOptions> askNewDocument(QWidget* parent, NewDocumentOpt
     return NewDocumentOptions{width->value(), height->value(), resolution->value()};
 }
 
-std::optional<compositor::Guide> askNewGuide(QWidget* parent) {
+std::optional<nekophoto::Guide> askNewGuide(QWidget* parent) {
     QDialog dialog(parent);
     dialog.setWindowTitle(QObject::tr("New Guide"));
     auto* layout = new QVBoxLayout(&dialog);
@@ -139,7 +139,7 @@ std::optional<compositor::Guide> askNewGuide(QWidget* parent) {
     orientation->setObjectName("guideOrientation");
     auto* position = new QDoubleSpinBox;
     position->setObjectName("guidePosition");
-    position->setRange(-compositor::guideReach, compositor::guideReach);
+    position->setRange(-nekophoto::guideReach, nekophoto::guideReach);
     position->setDecimals(2);
     position->setSuffix(QObject::tr(" px"));
     form->addRow(QObject::tr("Orientation"), orientation);
@@ -150,7 +150,7 @@ std::optional<compositor::Guide> askNewGuide(QWidget* parent) {
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
     if (dialog.exec() != QDialog::Accepted) return std::nullopt;
-    return compositor::Guide{orientation->currentIndex() == 1 ? compositor::Guide::Orientation::Vertical : compositor::Guide::Orientation::Horizontal, position->value()};
+    return nekophoto::Guide{orientation->currentIndex() == 1 ? nekophoto::Guide::Orientation::Vertical : nekophoto::Guide::Orientation::Horizontal, position->value()};
 }
 
 std::optional<CanvasSizeOptions> askCanvasSize(QWidget* parent, int currentWidth, int currentHeight) {

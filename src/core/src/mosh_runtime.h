@@ -1,4 +1,4 @@
-// The shader runtime the Mosh effects run on (compositor/mosh.h): WGSL's vector types and built-ins in float, the
+// The shader runtime the Mosh effects run on (nekophoto/mosh.h): WGSL's vector types and built-ins in float, the
 // texture sampler OpenMosh binds (bilinear, clamp to edge), its common.wgsl helpers, and fragment passes run over
 // the worker pool. Ported from OpenMosh (MIT, crates/mosh-engine/shaders/common.wgsl; see THIRD-PARTY-NOTICES.md).
 //
@@ -8,16 +8,16 @@
 // -ffp-contract=off so the C++ compiler fuses nothing of its own. sin, cos and atan2 are computed here in double from fixed polynomials, not taken
 // from the C library, so the pixels are the same on every platform.
 #pragma once
-#include "compositor/image.h"
-#include "compositor/imaget.h"
-#include "compositor/parallel.h"
+#include "nekophoto/image.h"
+#include "nekophoto/imaget.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <vector>
 
-namespace compositor::mosh::rt {
+namespace nekophoto::mosh::rt {
 
 // ---- vectors ---------------------------------------------------------------------------------------------------
 
@@ -282,4 +282,4 @@ Frame toFrame(const Image16& image);
 void storePremultiplied(uint8_t* p, vec4 c);
 void storePremultiplied(uint16_t* p, vec4 c);
 
-} // namespace compositor::mosh::rt
+} // namespace nekophoto::mosh::rt

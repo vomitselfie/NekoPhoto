@@ -2,14 +2,14 @@
 #include "Automation.h"
 #include "AutomationHandlers.h"
 #include "BrushImporter.h"
-#include "compositor/supports.h"
+#include "nekophoto/supports.h"
 #include "BrushLibrary.h"
 #include "PresetLibrary.h"
 #include <QFileInfo>
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {

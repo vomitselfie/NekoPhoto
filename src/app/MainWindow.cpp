@@ -49,7 +49,7 @@
 #include <QVBoxLayout>
 #include <QTimer>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -274,8 +274,8 @@ MainWindow::MainWindow() {
         resize(target);
         move(avail.center() - QPoint(target.width() / 2, target.height() / 2));
     }
-    // COMPOSITOR_WINDOW_SIZE=WxH forces the initial size, for checking layouts at other sizes.
-    QStringList forced = qEnvironmentVariable("COMPOSITOR_WINDOW_SIZE").split('x');
+    // NEKOPHOTO_WINDOW_SIZE=WxH forces the initial size, for checking layouts at other sizes.
+    QStringList forced = qEnvironmentVariable("NEKOPHOTO_WINDOW_SIZE").split('x');
     if (forced.size() == 2) resize(forced[0].toInt(), forced[1].toInt());
     if (!restoreState(settings.value("window/state").toByteArray()))
         QTimer::singleShot(0, this, [this] { resizeDocks({layersDock_, adjustDock_}, {3, 1}, Qt::Vertical); });
@@ -411,8 +411,8 @@ void MainWindow::offerRecovery() {
     QPushButton* discard = box.addButton(tr("Discard"), QMessageBox::DestructiveRole);
     QPushButton* later = box.addButton(tr("Later"), QMessageBox::RejectRole);
     box.setDefaultButton(recover);
-    // COMPOSITOR_RECOVERY_ANSWER (recover, discard or later) answers without asking, for tests.
-    const QString answer = qEnvironmentVariable("COMPOSITOR_RECOVERY_ANSWER");
+    // NEKOPHOTO_RECOVERY_ANSWER (recover, discard or later) answers without asking, for tests.
+    const QString answer = qEnvironmentVariable("NEKOPHOTO_RECOVERY_ANSWER");
     if (answer == "recover") recover->click();
     else if (answer == "discard") discard->click();
     else if (!answer.isEmpty()) later->click();
@@ -675,8 +675,8 @@ void MainWindow::maskCommand(const QJsonObject& params) {
     if (session_->activeLayerId()) runCommand("layers.mask", params, tr("Layer Mask"));
 }
 
-void MainWindow::samplingCommand(compositor::Sampling sampling) {
-    if (session_->activeLayerId()) runCommand("layers.set", {{"sampling", QString::fromUtf8(compositor::samplingName(sampling))}}, tr("Resampling"));
+void MainWindow::samplingCommand(nekophoto::Sampling sampling) {
+    if (session_->activeLayerId()) runCommand("layers.set", {{"sampling", QString::fromUtf8(nekophoto::samplingName(sampling))}}, tr("Resampling"));
 }
 
 void MainWindow::trimCommand(const QJsonObject& params) {
@@ -734,7 +734,7 @@ void MainWindow::selectSubject() {
     if (!session_->hasDocument() || !ModelStore::promptReady()) return;
     // Photoshop finds the subject with no prompt; the click model is given a box just inside the canvas (one
     // around the whole canvas reads as "everything" and comes back empty).
-    const compositor::Document& d = *session_->document();
+    const nekophoto::Document& d = *session_->document();
     const int dx = d.width / 20, dy = d.height / 20;
     runCommand("selection.subject", {{"box", QJsonArray{dx, dy, d.width - dx, d.height - dy}}}, tr("Subject"));
 }

@@ -14,8 +14,8 @@ ctest --test-dir build --output-on-failure
 ./build/src/app/nekophoto
 ```
 
-Configure with `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` to build as CI does. The common standard and Qt headers are
-precompiled (`COMPOSITOR_PCH`, on by default except under MinGW); a build with `-DCOMPOSITOR_PCH=OFF` shows a file
+Configure with `-DNEKOPHOTO_WARNINGS_AS_ERRORS=ON` to build as CI does. The common standard and Qt headers are
+precompiled (`NEKOPHOTO_PCH`, on by default except under MinGW); a build with `-DNEKOPHOTO_PCH=OFF` shows a file
 that leans on them for an include of its own. The other options (building without OpenCV, MyPaint, SQLite or Qt PDF)
 are in [docs/linux-port.md](docs/linux-port.md#building).
 
@@ -43,7 +43,7 @@ QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto --demo --tool brush --dialog
 python3 tools/rpc_smoke.py /tmp/np.sock
 ```
 
-`COMPOSITOR_WINDOW_SIZE=1000x700` forces the window size and `QT_SCALE_FACTOR=2` a scale, for checking layouts.
+`NEKOPHOTO_WINDOW_SIZE=1000x700` forces the window size and `QT_SCALE_FACTOR=2` a scale, for checking layouts.
 `--call <method> --params '{...}' --rpc-socket <path>` sends one automation request from the shell;
 `--headless --batch script.jsonl` runs a file of them. On Linux the socket path must stay under 107 bytes.
 
@@ -51,7 +51,7 @@ python3 tools/rpc_smoke.py /tmp/np.sock
 
 ```
 src/pixels/   the original C pixel routines
-src/core/     compositor_core: the editor core in portable C++20, no Qt
+src/core/     nekophoto_core: the editor core in portable C++20, no Qt
               (document, layers, render, blend, brushes, selections, filters, file formats: PSD, CLIP, ABR, SUT, ...)
 src/app/      the Qt 6 Widgets application: windows, panels, dialogs, canvas, EditorSession, automation
 mcp/          nekophoto_mcp.py, the MCP server that bridges AI agents to the automation socket
@@ -61,11 +61,11 @@ translations/ Qt Linguist files (Japanese is complete)
 docs/         design notes per feature; docs/linux-port-architecture.md maps the code
 ```
 
-- **The core is Qt-free.** `src/core` builds and tests without Qt (`-DCOMPOSITOR_BUILD_APP=OFF`). Keep Qt types
+- **The core is Qt-free.** `src/core` builds and tests without Qt (`-DNEKOPHOTO_BUILD_APP=OFF`). Keep Qt types
   out of it; the app converts at the boundary (`src/app/ImageConvert.h`, `QtGeometry.h`).
 - **Pixels** are premultiplied, top-down, with an explicit stride, at the document's depth: `AnyImage` / `AnyGray`
   over 8-bit `Image`, 16-bit `ImageT<U16>` (0..32768) or 32-bit float, in RGB, CMYK or Lab. `.u8()` is null on a
-  deeper buffer, so gate a feature with `supports()` (`compositor/supports.h`; [docs/bit-depth.md](docs/bit-depth.md)).
+  deeper buffer, so gate a feature with `supports()` (`nekophoto/supports.h`; [docs/bit-depth.md](docs/bit-depth.md)).
 - **`EditorSession`** (`src/app/EditorSession*.cpp`) owns the open document and its undo history; the widgets and
   the automation handlers both go through it.
 - **The original macOS app** is [Compositor](https://github.com/robbietilton/Compositor). Its Swift sources were in
@@ -92,8 +92,8 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
   `tests/render_hashes.txt` and `golden_tests` compares against `tests/golden/*.png`. When a pull request changes
   rendering on purpose, regenerate and say why in the description:
   ```bash
-  COMPOSITOR_UPDATE_RENDER_HASHES=1 build/tests/render_hash_tests
-  COMPOSITOR_UPDATE_GOLDEN=1 build/tests/golden_tests
+  NEKOPHOTO_UPDATE_RENDER_HASHES=1 build/tests/render_hash_tests
+  NEKOPHOTO_UPDATE_GOLDEN=1 build/tests/golden_tests
   ```
 - **The PSD round trip stays clean.** With a checkout of [Patchy](https://github.com/SethRobinson/Patchy) beside
   this one, `build/tests/psd_roundtrip ../Patchy/test-fixtures/psd` must report `0 failed`; run it for any change
@@ -137,7 +137,7 @@ items. A command is one row, written with `Spec`:
   in camel case (`edit.undo`, `file.saveAs`, `layer.mask.revealAll`, `filter.blur.gaussianBlur`; `commandSlug` makes
   the last part from English words). The label is translated, with its accelerator. The keys are Photoshop's defaults;
   no two actions may share one.
-- **`.document(feature)`**: it needs a document, and the `supports()` feature it is (`compositor/supports.h`): the
+- **`.document(feature)`**: it needs a document, and the `supports()` feature it is (`nekophoto/supports.h`): the
   depth and colour mode grey it, saying why. Without a feature it is 8-bit RGB only.
 - **`.request(method, params, title)`**: it is that automation request; `params` returns the parameters, or nothing when
   there is nothing to do now (no active layer, nothing to merge). An error is shown in a dialog titled `title`.
@@ -274,7 +274,7 @@ The design notes in `docs/` explain the choices behind most features; read the o
 ## Submitting a pull request
 
 1. Branch from `main` and keep the change focused; one topic per pull request.
-2. Build with `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` and run `ctest --test-dir build --output-on-failure`.
+2. Build with `-DNEKOPHOTO_WARNINGS_AS_ERRORS=ON` and run `ctest --test-dir build --output-on-failure`.
    For automation changes, also run `tools/rpc_smoke.py` against a headless instance.
 3. Add or update tests, the doc for the feature, and the Japanese translation of any new text.
 4. In the description, say what changed and how you checked it; attach a screenshot for UI changes, and say why

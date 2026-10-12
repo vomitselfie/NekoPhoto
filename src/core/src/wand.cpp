@@ -1,10 +1,10 @@
-#include "compositor/wand.h"
-#include "compositor/parallel.h"
+#include "nekophoto/wand.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cstring>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -84,4 +84,4 @@ long wandMask(const Image& pixels, int seedX, int seedY, int radius, int toleran
     return count;
 }
 
-} // namespace compositor
+} // namespace nekophoto

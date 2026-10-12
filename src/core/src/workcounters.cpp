@@ -1,7 +1,7 @@
 // Work counters (workcounters.h, docs/work-counters.md).
-#include "compositor/workcounters.h"
+#include "nekophoto/workcounters.h"
 
-namespace compositor::work {
+namespace nekophoto::work {
 
 std::array<std::atomic<uint64_t>, counterCount> counters{};
 
@@ -48,4 +48,4 @@ void reset() {
     for (auto& c : counters) c.store(0, std::memory_order_relaxed);
 }
 
-} // namespace compositor::work
+} // namespace nekophoto::work

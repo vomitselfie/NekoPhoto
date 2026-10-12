@@ -11,12 +11,12 @@
 // originals, edc/<n> embedded documents); each sits behind a "#Fil" tag, stored raw, zlib or zstd, with optional
 // byte or u16 delta predictors and a CRC32 of the decoded bytes. At the thumbnail offset: FFFFFFFF "Thmb", then a
 // PNG of the flattened document.
-#include "compositor/affinity.h"
+#include "nekophoto/affinity.h"
 #include "affinity_tree.h"
-#include "compositor/colour.h"
-#include "compositor/png.h"
-#include "compositor/render.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/colour.h"
+#include "nekophoto/png.h"
+#include "nekophoto/render.h"
+#include "nekophoto/vectormask.h"
 #include "lcms2.h"
 #include <algorithm>
 #include <array>
@@ -30,11 +30,11 @@
 #include <unordered_map>
 #include <zlib.h>
 
-#ifdef COMPOSITOR_HAVE_ZSTD
+#ifdef NEKOPHOTO_HAVE_ZSTD
 #include <zstd.h>
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
 using affinity::Class;
 using affinity::Reader;
@@ -43,7 +43,7 @@ using ClassList = std::vector<std::shared_ptr<Class>>;
 using Affine6 = std::array<double, 6>;   // [a, b, tx, c, d, ty]: x' = a x + b y + tx, y' = c x + d y + ty
 
 bool affinityZstdSupported() {
-#ifdef COMPOSITOR_HAVE_ZSTD
+#ifdef NEKOPHOTO_HAVE_ZSTD
     return true;
 #else
     return false;
@@ -304,7 +304,7 @@ std::vector<uint8_t> extractStream(std::span<const uint8_t> bytes, const Stream&
         inflateEnd(&z);
         if (rc != Z_STREAM_END || out.size() != expected) fail("Affinity stream '" + name + "' failed to decompress.");
     } else if (algorithm == 2) {
-#ifdef COMPOSITOR_HAVE_ZSTD
+#ifdef NEKOPHOTO_HAVE_ZSTD
         ZSTD_DStream* z = ZSTD_createDStream();
         if (!z) fail("Affinity stream '" + name + "' failed to decompress.");
         ZSTD_inBuffer in{source, size_t(stored), 0};
@@ -2694,4 +2694,4 @@ std::optional<PsdImport> importAffinity(const std::string& path, std::string* er
     return importAffinityBytes(bytes, error, options);
 }
 
-} // namespace compositor
+} // namespace nekophoto

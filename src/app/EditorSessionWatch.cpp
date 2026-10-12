@@ -5,7 +5,7 @@
 // until the next change; unsaved work is never replaced without asking. After upstream
 // Compositor's ProjectWatcher / ProjectDigest / ProjectController+ExternalChanges (MIT, LICENSES/MIT-Compositor.txt).
 #include "EditorSession.h"
-#include "compositor/zipfile.h"
+#include "nekophoto/zipfile.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -20,10 +20,10 @@ namespace {
 
 /// A .nekophoto file's fingerprint: its directory, which names every entry with its size and checksum.
 QByteArray documentFileDigest(const QString& path) {
-    compositor::ZipFileReader zip;
+    nekophoto::ZipFileReader zip;
     if (!zip.openFile(path.toStdString())) return {};
     QCryptographicHash hash(QCryptographicHash::Sha256);
-    for (const compositor::ZipFileEntry& e : zip.entries()) {
+    for (const nekophoto::ZipFileEntry& e : zip.entries()) {
         hash.addData(QByteArray::fromStdString(e.name));
         const quint64 fields[2] = {e.size, e.crc};
         hash.addData(QByteArrayView(reinterpret_cast<const char*>(fields), sizeof fields));
@@ -152,7 +152,7 @@ bool EditorSession::reloadProject() {
     auto project = readProject(projectPath_, nullptr);
     if (!project) return false;
     commitTransform();
-    const std::optional<compositor::Uuid> active = activeLayerId_;
+    const std::optional<nekophoto::Uuid> active = activeLayerId_;
     previewBase_.reset();
     document_ = std::move(project->document);
     setActiveLayer(active && document_->find(*active) ? active : project->activeLayer);

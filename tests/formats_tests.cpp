@@ -1,16 +1,16 @@
 // TGA, ICO, animated GIF and Aseprite: TGA and ICO round-trip through the writers; GIF and Aseprite files are
 // built here byte by byte (the GIF's LZW encoder follows Patchy's, MIT, src/formats/gif_document_io.cpp).
 #include "check.h"
-#include "compositor/animation.h"
-#include "compositor/aseprite.h"
-#include "compositor/gif.h"
-#include "compositor/ico.h"
-#include "compositor/tga.h"
+#include "nekophoto/animation.h"
+#include "nekophoto/aseprite.h"
+#include "nekophoto/gif.h"
+#include "nekophoto/ico.h"
+#include "nekophoto/tga.h"
 #include <cstring>
 #include <map>
 #include <zlib.h>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

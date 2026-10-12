@@ -1,12 +1,12 @@
-// A vector path (compositor/vectormask.h) as a QPainterPath, each point mapped by `map` (document to view).
+// A vector path (nekophoto/vectormask.h) as a QPainterPath, each point mapped by `map` (document to view).
 #pragma once
-#include "compositor/vectormask.h"
+#include "nekophoto/vectormask.h"
 #include <QPainterPath>
 #include <functional>
 
 namespace app {
 
-inline QPainterPath painterPath(const compositor::VectorPath& path, const std::function<QPointF(double, double)>& map) {
+inline QPainterPath painterPath(const nekophoto::VectorPath& path, const std::function<QPointF(double, double)>& map) {
     QPainterPath out;
     out.setFillRule(Qt::WindingFill);
     for (const auto& s : path.subpaths) {

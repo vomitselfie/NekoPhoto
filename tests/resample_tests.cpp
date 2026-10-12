@@ -1,16 +1,16 @@
 // The fixed-point samplers against their float formulas, the separable resample against exact cases,
 // the vectorised halving against the scalar one, and the mip cache's budget.
 #include "check.h"
-#include "compositor/depth.h"
-#include "compositor/resample.h"
-#include "compositor/render.h"
-#include "compositor/warp.h"
-#include "compositor/kernels.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/render.h"
+#include "nekophoto/warp.h"
+#include "nekophoto/kernels.h"
 #include <cmath>
 #include <cstring>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

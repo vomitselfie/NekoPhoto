@@ -2,8 +2,8 @@
 #include "ContentFillDialog.h"
 #include "ActionLibrary.h"
 #include "ImageConvert.h"
-#include "compositor/inpaint.h"
-#include "compositor/render.h"
+#include "nekophoto/inpaint.h"
+#include "nekophoto/render.h"
 #include <QApplication>
 #include <QButtonGroup>
 #include <QComboBox>
@@ -18,7 +18,7 @@
 #include <QVBoxLayout>
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -60,7 +60,7 @@ ContentFillDialog::ContentFillDialog(EditorSession* session, QWidget* parent) : 
     if (doc.selection && doc.selection->coverage.u8()) selection = toQImage(*doc.selection->coverage.u8()).convertToFormat(QImage::Format_Grayscale8).scaled(size);
     canvas_ = new SamplingCanvas(picture, selection);
     // The areas the fill searches: the window scanned around each patch, reaching that far past the selection
-    // (compositor/inpaint.h: the search radius plus a patch).
+    // (nekophoto/inpaint.h: the search radius plus a patch).
     if (doc.selection) {
         const Rect b = doc.selection->bounds();
         const InpaintOptions defaults;

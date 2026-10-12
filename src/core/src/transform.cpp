@@ -1,7 +1,7 @@
-#include "compositor/transform.h"
+#include "nekophoto/transform.h"
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 const char* samplingName(Sampling s) {
     switch (s) {
@@ -182,4 +182,4 @@ SnapResult snapOffset(const Rect& box, const std::vector<double>& xs, const std:
     return {h.move, v.move, h.found, v.found, h.target, v.target};
 }
 
-} // namespace compositor
+} // namespace nekophoto

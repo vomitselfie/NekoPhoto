@@ -1,11 +1,11 @@
 // The run of a row's output pixels whose sample point lies well inside a layer, where drawLayer's edge antialias,
 // clamp(min(ex, ey) + 0.5, 0, 1) with ex = min(p.x, w - p.x) / sx (and ey alike), is exactly 1.
 #pragma once
-#include "compositor/geometry.h"
+#include "nekophoto/geometry.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 /// Pixels [from, to) of a row of `count` starting at `x0`, whose sample point starts at `p0` and moves by `dp` per pixel
 /// (accumulated, p = p + dp), keep at least half a source pixel plus a margin from every edge of a `w` x `h` layer, so
@@ -34,4 +34,4 @@ inline void edgeInterior(Point p0, Point dp, double sx, double sy, int w, int h,
     to = x0 + std::clamp(b, 0, count);
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -5,10 +5,10 @@
 // painting with white does. Leaving turns the mask back into the selection and takes the layer away; saving and
 // exporting leave it first, so it is never written.
 #include "EditorSession.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

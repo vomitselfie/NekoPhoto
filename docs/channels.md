@@ -3,7 +3,7 @@
 Window ▸ Channels is Photoshop's Channels panel: the colour channels of the image (RGB, Red, Green, Blue) as views,
 then the document's alpha and spot channels, then Quick Mask while it is on. Alpha channels are saved selections;
 spot channels hold a spot colour's ink and are kept from PSD files, shown, and written back. Everything here works
-at 8, 16 and 32 bits ([bit-depth.md](bit-depth.md)) and in CMYK and Lab documents (below). The code: `src/core/include/compositor/channels.h` (the model, Save and Load Selection, the canvas
+at 8, 16 and 32 bits ([bit-depth.md](bit-depth.md)) and in CMYK and Lab documents (below). The code: `src/core/include/nekophoto/channels.h` (the model, Save and Load Selection, the canvas
 view, single-channel editing), `src/core/src/psd_channels.cpp` (PSD), `src/app/EditorSessionChannels.cpp`,
 `ChannelsPanel.cpp`, `ChannelDialogs.cpp`.
 

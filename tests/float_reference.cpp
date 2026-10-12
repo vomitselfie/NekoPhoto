@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <functional>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace float_reference {
 

@@ -2,7 +2,7 @@
 // statistics). Counted on a worker thread from a reduced render (the cache level) after the document changes,
 // throttled, so the canvas never waits for it; Uncached Refresh counts every pixel once.
 #pragma once
-#include "compositor/histogram.h"
+#include "nekophoto/histogram.h"
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
@@ -37,18 +37,18 @@ public:
 
     /// What a request counts, taken on the UI thread; computeHistogram runs on any thread.
     struct Request {
-        std::optional<compositor::Document> document;   // rendered (Entire Image, Adjustment Composite)
-        compositor::AnyImage layer;                     // counted (Selected Layer)
-        compositor::ColorMode mode = compositor::ColorMode::RGB;
-        compositor::TransferCurve curve = compositor::TransferCurve::srgb();
+        std::optional<nekophoto::Document> document;   // rendered (Entire Image, Adjustment Composite)
+        nekophoto::AnyImage layer;                     // counted (Selected Layer)
+        nekophoto::ColorMode mode = nekophoto::ColorMode::RGB;
+        nekophoto::TransferCurve curve = nekophoto::TransferCurve::srgb();
         bool uncached = false;
     };
     /// Fills a request for `session`'s document and `source`; false when there is nothing to count (no document, no
     /// pixels in the active layer, no adjustment layer active for Adjustment Composite).
     static bool makeRequest(const EditorSession& session, Source source, bool uncached, Request& request);
-    static compositor::ImageHistogram computeHistogram(const Request& request);
+    static nekophoto::ImageHistogram computeHistogram(const Request& request);
     /// The bins one channel code shows (Colors: the composite, or Lab's lightness).
-    static const std::vector<double>& binsFor(const compositor::ImageHistogram& histogram, int channel);
+    static const std::vector<double>& binsFor(const nekophoto::ImageHistogram& histogram, int channel);
 
 protected:
     void showEvent(QShowEvent* event) override;
@@ -56,7 +56,7 @@ protected:
 private:
     void schedule();
     void start(bool uncached);
-    void finished(compositor::ImageHistogram histogram, uint64_t generation);
+    void finished(nekophoto::ImageHistogram histogram, uint64_t generation);
     void rebuildChannels();
     void refreshView();
     void refreshStats();
@@ -79,8 +79,8 @@ private:
     std::thread worker_;
     bool busy_ = false, pending_ = false, pendingUncached_ = false, stale_ = true, expanded_ = false, showStats_ = true;
     uint64_t generation_ = 0;
-    std::optional<compositor::ImageHistogram> data_;
-    compositor::ColorMode builtMode_ = compositor::ColorMode::RGB;
+    std::optional<nekophoto::ImageHistogram> data_;
+    nekophoto::ColorMode builtMode_ = nekophoto::ColorMode::RGB;
     bool channelsBuilt_ = false;
     int from_ = -1, to_ = -1;
 };

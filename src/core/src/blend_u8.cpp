@@ -1,9 +1,9 @@
-#include "compositor/blend.h"
+#include "nekophoto/blend.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -357,4 +357,4 @@ void compositeImage(BlendMode mode, const Image& source, double opacity, Image& 
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,13 +1,13 @@
 // EditorSession: Adjustment layers and the destructive adjustments and filters on pixels.
 #include "EditorSession.h"
 #include "Names.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/filters.h"
-#include "compositor/modeedit.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/modeedit.h"
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

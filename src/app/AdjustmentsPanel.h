@@ -17,7 +17,7 @@ private:
     EditorSession* session_;
     AdjustmentEditor* editor_;
     QLabel* title_;
-    std::optional<compositor::Uuid> layerId_;
+    std::optional<nekophoto::Uuid> layerId_;
     bool editing_ = false;
 };
 

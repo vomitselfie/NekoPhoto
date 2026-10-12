@@ -17,17 +17,17 @@
 // - Selective Color (CMYK, its home): each colour range's cyan, magenta, yellow and black move those inks, black on
 //   the black plate.
 // These are the published formulas adapted to each mode; none is checked against Photoshop's own output yet.
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/modeedit.h"
-#include "compositor/parallel.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -430,4 +430,4 @@ AnyImage adjustedInMode(const AdjustmentSettings& settings, const AnyImage& imag
     return {};
 }
 
-} // namespace compositor
+} // namespace nekophoto

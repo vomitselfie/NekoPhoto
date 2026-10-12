@@ -4,8 +4,8 @@
 #include "Automation.h"
 #include "CommandPalette.h"
 #include "CommandRegistry.h"
-#include "compositor/channels.h"
-#include "compositor/vectorlayer.h"
+#include "nekophoto/channels.h"
+#include "nekophoto/vectorlayer.h"
 #include <QRegularExpression>
 #include "ContentFillDialog.h"
 #include "ChannelDialogs.h"
@@ -25,7 +25,7 @@
 #include <QFormLayout>
 #include <QDialogButtonBox>
 #include "LayerStyleDialog.h"
-#include "compositor/raw.h"
+#include "nekophoto/raw.h"
 #include "WarpDialog.h"
 #include "CanvasFrame.h"
 #include "Dialogs.h"
@@ -34,7 +34,7 @@
 #include "CameraRawDialog.h"
 #include "FilterDialog.h"
 #include "GridFilters.h"
-#include "compositor/smartfilter.h"
+#include "nekophoto/smartfilter.h"
 #include <random>
 #include "MoshDialog.h"
 #include "GmicDialog.h"
@@ -52,7 +52,7 @@
 #include <QJsonObject>
 #include <QShortcutEvent>
 #include <functional>
-#include "compositor/project.h"
+#include "nekophoto/project.h"
 #include <QActionGroup>
 #include <QApplication>
 #include <QColorDialog>
@@ -67,7 +67,7 @@
 #include <QSettings>
 #include <QToolBar>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -205,7 +205,7 @@ void MainWindow::buildToolRail() {
     // Shift+letter (the next tool or kind of the letter's group) springs back the same way, to the tool and kind before.
     struct ToolState {
         Tool tool; bool erase; MarqueeKind marquee; LassoKind lasso; VectorShapeKind shape; int spotHealing, spotHealingType;
-        compositor::ToningKind toning; BlurToolMode blur;
+        nekophoto::ToningKind toning; BlurToolMode blur;
         bool operator==(const ToolState&) const = default;
     };
     auto toolState = [this] {
@@ -297,7 +297,7 @@ void MainWindow::buildToolRail() {
     });
     // The O group: Dodge, Burn, Sponge.
     kindKey("tool.next.toning", tr("Next in the Dodge group (Dodge, Burn, Sponge)"), "Shift+O", [this] {
-        session_->toning.kind = compositor::ToningKind((int(session_->toning.kind) + 1) % 3);
+        session_->toning.kind = nekophoto::ToningKind((int(session_->toning.kind) + 1) % 3);
         toolActions_[Tool::Dodge]->trigger();
         emit session_->toolChanged();
     });
@@ -313,7 +313,7 @@ void MainWindow::buildToolRail() {
 
 void MainWindow::updateColorSwatches() {
     // Document values, shown through the monitor profile (the identity when none is known).
-    const compositor::ColorProfile profile = session_->hasDocument() ? session_->document()->profile : compositor::ColorProfile{};
+    const nekophoto::ColorProfile profile = session_->hasDocument() ? session_->document()->profile : nekophoto::ColorProfile{};
     // On a mask they paint their greys, which Photoshop's swatches show there (the colours themselves are kept).
     if (session_->paintsMask()) {
         auto grey = [](const QColor& c) { const double g = EditorSession::maskGrey(c); return QColor::fromRgbF(float(g), float(g), float(g)); };
@@ -378,7 +378,7 @@ void MainWindow::buildMenus() {
     add(file, Spec("file.importPresets", tr("I&mport Presets…")).runs([this] { importPresetsInteractively(this, session_); }, "presets.import"));
     add(file, Spec("file.placeEmbedded", tr("Place &Embedded…")).document("edit.smartObject").runs([this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Place Embedded"), QSettings().value("lastDir").toString(),
-                                                          tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
+                                                          tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(nekophoto::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
         if (path.isEmpty()) return;
         QSettings().setValue("lastDir", QFileInfo(path).path());
         runCommand("smartObject.place", {{"path", path}}, tr("Couldn’t place %1").arg(QFileInfo(path).fileName()));
@@ -490,10 +490,10 @@ void MainWindow::buildMenus() {
     // Colour management (docs/color-management.md), as in Photoshop's Edit menu.
     edit->addSeparator();
     add(edit, Spec("edit.colorSettings", tr("Color Settings…"), {QKeySequence("Ctrl+Shift+K")}).runs([this] { color::showColorSettings(this); }, "color.settings"));
-    auto profileKey = [](const compositor::ColorProfile& p) -> QString {
+    auto profileKey = [](const nekophoto::ColorProfile& p) -> QString {
         if (p.empty()) return QStringLiteral("none");
-        auto s = compositor::matchingWorkingSpace(p);
-        return s && p == compositor::builtinProfile(*s) ? QString::fromLatin1(compositor::workingSpaceKey(*s)) : QString();
+        auto s = nekophoto::matchingWorkingSpace(p);
+        return s && p == nekophoto::builtinProfile(*s) ? QString::fromLatin1(nekophoto::workingSpaceKey(*s)) : QString();
     };
     add(edit, Spec("edit.assignProfile", tr("Assign Profile…")).document("document.profile").runs([this, profileKey] {
         auto profile = color::askAssignProfile(this, session_->document()->profile);
@@ -509,7 +509,7 @@ void MainWindow::buildMenus() {
         const QString key = profileKey(choice->profile);
         QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
         if (!key.isEmpty()) {
-            runCommand("document.profile", {{"action", "convert"}, {"profile", key}, {"intent", QString::fromLatin1(compositor::renderingIntentKey(choice->options.intent))},
+            runCommand("document.profile", {{"action", "convert"}, {"profile", key}, {"intent", QString::fromLatin1(nekophoto::renderingIntentKey(choice->options.intent))},
                                             {"blackPointCompensation", choice->options.blackPointCompensation}}, tr("Convert to Profile"));
             QApplication::restoreOverrideCursor();
             return;
@@ -730,7 +730,7 @@ void MainWindow::buildMenus() {
         if (!session_->activeLayerHasStyle()) return;
         const auto answer = runCommand("layers.style", {}, tr("Copy Layer Style"));
         if (!answer) return;
-        compositor::LayerStyle style;
+        nekophoto::LayerStyle style;
         if (QString error; layerStyleFromRequest(answer->toObject(), session_->document()->colorMode, style, &error)) session_->setStyleClipboard(style);
         else showError(tr("Copy Layer Style"), error);
     }, "layers.style"))->setObjectName("command.layers.copyStyle");
@@ -778,7 +778,7 @@ void MainWindow::buildMenus() {
     }, "smartObject.editContents")))->setObjectName("command.smartObject.editContents");
     nameAction("smart.replace", add(smart, Spec("layer.smartObject.replace", tr("&Replace Contents…")).document("edit.smartObject").runs([this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Replace Contents"), QSettings().value("lastDir").toString(),
-                                                          tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
+                                                          tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(nekophoto::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
         if (path.isEmpty()) return;
         runCommand("smartObject.replace", {{"path", path}}, tr("Couldn’t replace the contents"));
     }, "smartObject.replace")));
@@ -815,12 +815,12 @@ void MainWindow::buildMenus() {
     QMenu* vectorMask = layer->addMenu(tr("&Vector Mask"));
     auto addVector = [this](const char* kind) -> std::optional<QJsonObject> {
         const Layer* l = session_->activeLayer();
-        if (l && compositor::hasLayerVectorMask(*l)) { QMessageBox::information(this, tr("Vector Mask"), EditorSession::tr("The layer has a vector mask already.")); return std::nullopt; }
+        if (l && nekophoto::hasLayerVectorMask(*l)) { QMessageBox::information(this, tr("Vector Mask"), EditorSession::tr("The layer has a vector mask already.")); return std::nullopt; }
         return QJsonObject{{"mode", kind}};
     };
     auto ownVectorMask = [this]() -> std::optional<QJsonObject> {
         const Layer* l = session_->activeLayer();
-        if (!l || !compositor::hasLayerVectorMask(*l)) return std::nullopt;
+        if (!l || !nekophoto::hasLayerVectorMask(*l)) return std::nullopt;
         return QJsonObject{};
     };
     add(vectorMask, Spec("layer.vectorMask.revealAll", tr("Reveal All")).document("edit.vector").request("vectorMask.set", [addVector] { return addVector("revealAll"); }, tr("Vector Mask")).when(hasLayer))
@@ -952,7 +952,7 @@ void MainWindow::buildMenus() {
     // kernels draw. The rest change pixels, so on a smart object they ask to rasterize first.
     auto smartCapable = [](FilterKind kind) {
         return kind == FilterKind::GaussianBlur || kind == FilterKind::MotionBlur || kind == FilterKind::AddNoise
-               || compositor::smartFilterParametersFor(kind, compositor::FilterSettings::defaults(kind)).has_value();
+               || nekophoto::smartFilterParametersFor(kind, nekophoto::FilterSettings::defaults(kind)).has_value();
     };
     auto filterAction = [this, &add, smartCapable](QMenu* menu, const QString& group, const QString& label, FilterKind kind) {
         add(menu, Spec(QStringLiteral("filter.") + group + commandSlug(QString::fromUtf8(filterKindName(kind))), label)
@@ -960,10 +960,10 @@ void MainWindow::buildMenus() {
             if (smartCapable(kind) && session_->canAddSmartFilter()) { (new FilterDialog(session_, kind, this, true))->show(); return; }
             if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
-            if (compositor::filterRunsDirectly(kind)) {
+            if (nekophoto::filterRunsDirectly(kind)) {
                 // No dialog, as in Photoshop: Clouds draws a new pattern each time.
                 const uint32_t seed = uint32_t(std::random_device{}() % 1000000000u);
-                runCommand("pixels.filter", gridFilterStep(kind, compositor::FilterSettings::defaults(kind), seed), names::filterKind(kind));
+                runCommand("pixels.filter", gridFilterStep(kind, nekophoto::FilterSettings::defaults(kind), seed), names::filterKind(kind));
                 return;
             }
             (new FilterDialog(session_, kind, this))->show();
@@ -1016,13 +1016,13 @@ void MainWindow::buildMenus() {
     filter->addSeparator();
     // OpenMosh's glitch, distortion and retro effects (docs/mosh.md), a submenu per category; OK runs pixels.mosh.
     QMenu* moshMenu = filter->addMenu(tr("M&osh"));
-    for (int c = 0; c < compositor::mosh::categoryCount; c++) {
-        const auto category = compositor::mosh::Category(c);
+    for (int c = 0; c < nekophoto::mosh::categoryCount; c++) {
+        const auto category = nekophoto::mosh::Category(c);
         QMenu* sub = nullptr;
-        for (const compositor::mosh::EffectSpec& spec : compositor::mosh::effects()) {
+        for (const nekophoto::mosh::EffectSpec& spec : nekophoto::mosh::effects()) {
             if (spec.category != category) continue;
-            if (!sub) sub = moshMenu->addMenu(names::mosh(compositor::mosh::categoryName(category)));
-            const compositor::mosh::EffectSpec* effect = &spec;
+            if (!sub) sub = moshMenu->addMenu(names::mosh(nekophoto::mosh::categoryName(category)));
+            const nekophoto::mosh::EffectSpec* effect = &spec;
             add(sub, Spec(QStringLiteral("filter.mosh.") + commandSlug(QString::fromUtf8(spec.id.data(), qsizetype(spec.id.size()))), tr("%1…").arg(names::mosh(spec.name)))
                          .document("filter.Mosh").runs([this, effect] {
                 if (session_->smartObjectBlocksPixels(true)) return;

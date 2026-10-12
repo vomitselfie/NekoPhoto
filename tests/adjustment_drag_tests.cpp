@@ -7,13 +7,13 @@
 // document changes some other way (a layer below shown, hidden, faded) with the version moved on, the region and scale
 // change, and a pixel layer's edit takes the cache for a while: each frame must still equal the uncached one.
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/blendif.h"
-#include "compositor/colormgmt.h"
-#include "compositor/document.h"
-#include "compositor/layerstyle.h"
-#include "compositor/render.h"
-#include "compositor/workcounters.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/blendif.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/document.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/render.h"
+#include "nekophoto/workcounters.h"
 
 #include <cstring>
 #include <functional>
@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 using work::Counter;
 
 namespace {

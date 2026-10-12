@@ -1,8 +1,8 @@
-#include "compositor/brushdynamics.h"
+#include "nekophoto/brushdynamics.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -237,4 +237,4 @@ std::optional<DynamicsTarget> dynamicsTargetFromName(const std::string& name) {
     return std::nullopt;
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,9 +1,9 @@
-#include "compositor/shape.h"
-#include "compositor/parallel.h"
+#include "nekophoto/shape.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 std::shared_ptr<Image> shapeImage(ShapeKind kind, int width, int height, double red, double green, double blue, double cornerRadius) {
     auto out = std::make_shared<Image>(std::max(1, width), std::max(1, height));
@@ -232,4 +232,4 @@ void fillGradient(const Gray16& base, Gray16& out, const Affine& pixelToDocument
     });
 }
 
-} // namespace compositor
+} // namespace nekophoto

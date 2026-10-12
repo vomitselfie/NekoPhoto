@@ -1,0 +1,359 @@
+// Adjustment layers and the colour adjustments that share their math: Levels,
+// Curves, Hue/Saturation, Exposure, Gradient Map and Grain. Settings are the
+// Mac's Codable structures; the JSON encoding is the manifest's.
+#pragma once
+#include "document.h"
+#include "imaget.h"
+#include "shape.h"
+#include <array>
+#include <functional>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace nekophoto {
+
+// Channel indices: 0 RGB, 1 Red, 2 Green, 3 Blue. In CMYK 0 is the composite and 1 to 4 cyan, magenta, yellow and
+// black; in Lab 1 to 3 are lightness, a and b (Photoshop's Lab Levels and Curves have no composite, and 0 goes with
+// lightness). The manifest names the slot as RGB does ("RGB", "Red", "Green", "Blue", "Black"); the mode's own names
+// ("CMYK", "Cyan", ..., "Lightness", "a", "b") are read too.
+constexpr int levelsChannelCount = 5;
+const char* levelsChannelName(int channel);
+bool parseLevelsChannel(const std::string& name, int& out);
+/// The slot's name in a document of `mode` ("Cyan", "Lightness"), as Photoshop's channel menus show it; empty for a
+/// slot the mode has no channel for.
+const char* levelsChannelName(int channel, ColorMode mode);
+
+struct LevelsRange {
+    double black = 0, gamma = 1, white = 255, outputBlack = 0, outputWhite = 255;
+    bool operator==(const LevelsRange&) const = default;
+    LevelsRange normalized() const;
+    /// Output (0..1) for an input (0..1).
+    double apply(double value) const;
+};
+
+struct LevelsSettings {
+    int channel = 0;
+    std::array<LevelsRange, levelsChannelCount> ranges;
+    bool operator==(const LevelsSettings&) const = default;
+    bool isIdentity() const;
+    /// The channel's own range followed by the composite RGB range.
+    double apply(double value, int channel) const { return ranges[0].apply(ranges[size_t(channel)].apply(value)); }
+};
+
+struct CurvePoint { double x = 0, y = 0; bool operator==(const CurvePoint&) const = default; };
+
+struct CurvesSettings {
+    int channel = 0;
+    std::array<std::vector<CurvePoint>, levelsChannelCount> channels{{{{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}}};
+    bool operator==(const CurvesSettings&) const = default;
+    bool isValid() const;
+    bool isIdentity() const;
+    /// Photoshop's curve through the channel's points (NaturalCurve); `x` and the result are 0..255.
+    double value(double x, int channel) const;
+};
+
+/// A Curves channel as Photoshop draws it: the natural cubic spline through the points (second derivative 0 at both
+/// ends), flat beyond the end points, the result cut to 0..255. Rule after PhotoCraft's `curve_lut`
+/// (github.com/storytold/photocraft, crates/compose/src/adjust.rs at 88ffd89, MIT OR Apache-2.0, used under MIT).
+struct NaturalCurve {
+    std::vector<double> x, y, m2;   // m2: the second derivative at each point
+    explicit NaturalCurve(const std::vector<CurvePoint>& points);
+    /// The spline at `at` (0..255 in and out).
+    double operator()(double at) const;
+    /// The slope at the last point, approached from the left.
+    double endSlope() const;
+};
+
+struct ExposureSettings {
+    double exposure = 0, offset = 0, gamma = 1;
+    /// The power law the encoded values are linearised through at 8 and 16 bits: Photoshop's 2.2 in RGB (not the sRGB
+    /// curve), 1.732 in Grayscale (an Exposure layer read from a Grayscale PSD, which opens as RGB, keeps it). At 32 bits
+    /// the samples are linear already and taken as stored.
+    double toneGamma = 2.2;
+    bool operator==(const ExposureSettings&) const = default;
+    ExposureSettings normalized() const;
+    bool isIdentity() const { return exposure == 0 && offset == 0 && gamma == 1; }
+    /// Output (0..1) for an encoded input (0..1): (linear * 2^exposure + offset)^(1 / gamma), encoded again.
+    double at(double encoded) const;
+    /// Output (0..1) per input byte.
+    std::array<float, 256> table() const;
+};
+
+struct AdjustmentColor {
+    double red = 0, green = 0, blue = 0;
+    bool operator==(const AdjustmentColor&) const = default;
+    AdjustmentColor clamped() const;
+};
+
+struct GradientMapSettings {
+    AdjustmentColor shadows{0, 0, 0};
+    AdjustmentColor highlights{1, 1, 1};
+    bool reversed = false;
+    /// Photoshop's Method (Classic: the straight blend it always had).
+    GradientMethod method = GradientMethod::Classic;
+    bool operator==(const GradientMapSettings&) const = default;
+    /// 256 x 3 straight sRGB bytes, darkest first.
+    std::vector<uint8_t> table() const;
+    /// The ramp from the dark end to the light one (straight sRGB 0..1, Reverse applied) for a Perceptual or Linear
+    /// method: Classic stops sampled from it (GradientStops::baked).
+    GradientStops ramp() const;
+};
+
+struct GrainSettings {
+    double amount = 25, size = 1.5, roughness = 50;
+    uint32_t seed = 0;
+    bool operator==(const GrainSettings&) const = default;
+    GrainSettings normalized() const;
+};
+
+// Hue/Saturation. Ranges: 0 Master, 1 Reds, 2 Yellows, 3 Greens, 4 Cyans, 5 Blues, 6 Magentas.
+const char* colorRangeName(int range);
+bool parseColorRange(const std::string& name, int& out);
+
+struct HueBand {
+    double falloffStart = 0, rangeStart = 0, rangeEnd = 360, falloffEnd = 360;
+    bool operator==(const HueBand&) const = default;
+    static HueBand defaultBand(int range);
+    static double forward(double from, double to);
+    /// 1 inside the range, ramping through the shoulders, 0 outside.
+    double weight(double hue) const;
+    HueBand centered(double hue) const;
+    void include(double hue);
+    void exclude(double hue);
+    void setHandle(int index, double degrees);
+private:
+    void normalize();
+};
+
+struct RangeAdjustment { double hue = 0, saturation = 0, lightness = 0; bool operator==(const RangeAdjustment&) const = default; };
+
+struct HueSaturationSettings {
+    int range = 0;
+    bool colorize = false;
+    bool invertRange = false;
+    /// Photoshop's saturation curve instead of the Mac's plain scale: +100 reaches full saturation, -100 grey,
+    /// with the HSL lightness kept ("saturationCurve": "photoshop" in the manifest).
+    bool photoshopSaturation = false;
+    std::map<int, RangeAdjustment> adjustments;
+    std::map<int, HueBand> bands;
+    bool operator==(const HueSaturationSettings&) const = default;
+    HueSaturationSettings();
+    static HueSaturationSettings colorizeStart();
+    bool isIdentity() const;
+    RangeAdjustment& current() { return adjustments[range]; }
+    RangeAdjustment currentValue() const { auto it = adjustments.find(range); return it == adjustments.end() ? RangeAdjustment{} : it->second; }
+    HueBand band() const { auto it = bands.find(range); return it == bands.end() ? HueBand::defaultBand(range) : it->second; }
+    double weight(int colorRange, double hue) const;
+    /// One straight colour (0..1) adjusted.
+    void adjust(double& r, double& g, double& b) const;
+    /// adjust() with the per-hue response worked out once, for adjusting many colours.
+    std::function<void(double&, double&, double&)> adjuster() const;
+    /// The hue a spectrum swatch becomes.
+    double shiftedHue(double hue) const;
+};
+
+// ---- Photoshop's other adjustment layers ----------------------------------------------------------------------
+// Brightness/Contrast, Posterize and Threshold follow Patchy's calibration against Photoshop 2026 (MIT,
+// src/third_party/patchy_psd/README.md), as Hue/Saturation does; Color Balance is Photoshop's per-channel Levels
+// (adjustments_more.cpp); Black & White follows upstream Compositor's C (MIT, LICENSES/MIT-Compositor.txt); Vibrance,
+// Photo Filter, Channel Mixer and Selective Color are the published formulas, not yet checked against Photoshop
+// (docs/adjustment-layers.md).
+
+struct BrightnessContrastSettings {
+    int brightness = 0, contrast = 0;   // modern: -150..150 and -50..100; legacy: -100..100 each
+    bool legacy = false;
+    bool operator==(const BrightnessContrastSettings&) const = default;
+    BrightnessContrastSettings normalized() const;
+    uint8_t apply(uint8_t value) const;
+};
+struct PosterizeSettings { int levels = 4; bool operator==(const PosterizeSettings&) const = default; };   // 2..255
+struct ThresholdSettings { int level = 128; bool operator==(const ThresholdSettings&) const = default; };   // 1..255
+struct BlackWhiteSettings {
+    /// Percent of each hue's contribution, -200..300: reds, yellows, greens, cyans, blues, magentas.
+    std::array<double, 6> weights{40, 60, 40, 60, 20, 80};
+    bool tint = false;
+    AdjustmentColor tintColor{225 / 255.0, 211 / 255.0, 179 / 255.0};
+    bool operator==(const BlackWhiteSettings&) const = default;
+};
+struct ColorBalanceSettings {
+    /// Cyan-red, magenta-green, yellow-blue for shadows, midtones, highlights; -100..100.
+    std::array<std::array<double, 3>, 3> ranges{};
+    bool preserveLuminosity = true;
+    bool operator==(const ColorBalanceSettings&) const = default;
+};
+struct VibranceSettings { double vibrance = 0, saturation = 0; bool operator==(const VibranceSettings&) const = default; };   // -100..100
+struct PhotoFilterSettings {
+    AdjustmentColor color{236 / 255.0, 138 / 255.0, 0};   // Warming Filter (85)
+    double density = 25;                                  // percent
+    bool preserveLuminosity = true;
+    bool operator==(const PhotoFilterSettings&) const = default;
+};
+struct ChannelMixerSettings {
+    bool monochrome = false;
+    /// Output red, green, blue, and grey (monochrome): source red, green, blue percent (-200..200) and a constant
+    /// (-200..200 percent of white).
+    std::array<std::array<double, 4>, 4> rows{{{100, 0, 0, 0}, {0, 100, 0, 0}, {0, 0, 100, 0}, {40, 40, 20, 0}}};
+    /// In a CMYK document: output cyan, magenta, yellow and black from source cyan, magenta, yellow and black ink percent
+    /// (-200..200) and a constant (-200..200 percent of full ink). Monochrome makes black alone, from the black row.
+    std::array<std::array<double, 5>, 4> inks{{{100, 0, 0, 0, 0}, {0, 100, 0, 0, 0}, {0, 0, 100, 0, 0}, {0, 0, 0, 100, 0}}};
+    bool operator==(const ChannelMixerSettings&) const = default;
+};
+struct SelectiveColorSettings {
+    bool absolute = false;
+    /// Reds, yellows, greens, cyans, blues, magentas, whites, neutrals, blacks: cyan, magenta, yellow, black, -100..100.
+    std::array<std::array<double, 4>, 9> ranges{};
+    bool operator==(const SelectiveColorSettings&) const = default;
+};
+
+/// Color Lookup: a 3D table from a LUT file Photoshop embeds (a .cube or .3dl's text) or an ICC profile (abstract or
+/// device link, base64 here), applied with trilinear interpolation (colorlookup.cpp).
+struct ColorLookupSettings {
+    std::string name;                  // the LUT's file name, as Photoshop shows it
+    std::string format;                // "cube", "3dl" or "icc"; empty: none loaded
+    std::string data;                  // the file's text, or the profile's bytes in base64
+    bool dither = false;
+    bool operator==(const ColorLookupSettings&) const = default;
+};
+/// Whether the settings hold a LUT NekoPhoto can read.
+bool colorLookupReadable(const ColorLookupSettings& settings);
+void applyColorLookup(Image& image, const ColorLookupSettings& settings);
+std::string toBase64(const std::vector<uint8_t>& bytes);
+std::optional<std::vector<uint8_t>> fromBase64(const std::string& text);
+
+void applyThreshold(Image& image, const ThresholdSettings& settings);
+void applyBlackWhite(Image& image, const BlackWhiteSettings& settings);
+void applyColorBalance(Image& image, const ColorBalanceSettings& settings);
+void applyVibrance(Image& image, const VibranceSettings& settings);
+void applyPhotoFilter(Image& image, const PhotoFilterSettings& settings);
+void applyChannelMixer(Image& image, const ChannelMixerSettings& settings);
+void applySelectiveColor(Image& image, const SelectiveColorSettings& settings);
+
+/// Every adjustment layer setting, decoded from the manifest's "adjustment" object.
+struct AdjustmentSettings {
+    AdjustmentKind kind = AdjustmentKind::Levels;
+    LevelsSettings levels;
+    CurvesSettings curves;
+    HueSaturationSettings hsv;
+    ExposureSettings exposure;
+    GradientMapSettings gradientMap;
+    GrainSettings grain;
+    BrightnessContrastSettings brightnessContrast;
+    PosterizeSettings posterize;
+    ThresholdSettings threshold;
+    BlackWhiteSettings blackWhite;
+    ColorBalanceSettings colorBalance;
+    VibranceSettings vibrance;
+    PhotoFilterSettings photoFilter;
+    ChannelMixerSettings channelMixer;
+    SelectiveColorSettings selectiveColor;
+    ColorLookupSettings colorLookup;
+    /// Unknown fields, kept for the round trip.
+    std::string extraJson;
+    bool operator==(const AdjustmentSettings&) const = default;
+
+    static AdjustmentSettings defaults(AdjustmentKind kind);
+    /// Parses the manifest object; unknown kinds or malformed settings fail.
+    static bool parse(const std::string& json, AdjustmentSettings& out);
+    std::string toJson() const;
+    LayerAdjustment toLayerAdjustment() const { return {kind, toJson()}; }
+    bool isValid() const;
+    bool isIdentity() const;
+};
+
+/// A per-channel transfer: output (0..1) at each of the 256 straight input levels. Levels, Curves and
+/// Exposure are transfers, so a run of them composes into one table applied in a single pass.
+using Transfer = std::array<std::array<float, 256>, 3>;
+Transfer identityTransfer();
+Transfer levelsTransfer(const LevelsSettings& settings);
+Transfer curvesTransfer(const CurvesSettings& settings);
+Transfer exposureTransfer(const ExposureSettings& settings);
+Transfer invertTransfer();
+Transfer brightnessContrastTransfer(const BrightnessContrastSettings& settings);
+Transfer posterizeTransfer(const PosterizeSettings& settings);
+/// `second` applied after `first`, evaluated in float (linear between `second`'s entries) so the pair quantises once.
+Transfer composeTransfer(const Transfer& first, const Transfer& second);
+/// Quantises to bytes and applies; an identity table is skipped.
+void applyTransfer(Image& image, const Transfer& transfer);
+
+// Applying to premultiplied RGBA in place.
+void applyLevels(Image& image, const LevelsSettings& settings);
+void applyCurves(Image& image, const CurvesSettings& settings);
+void applyExposure(Image& image, const ExposureSettings& settings);
+void applyGradientMap(Image& image, const GradientMapSettings& settings);
+/// `origin` and `unitsPerPixel` place the image's pixels in document space, so the pattern stays put.
+void applyGrain(Image& image, const GrainSettings& settings, Point origin = {}, double unitsPerPixel = 1);
+void applyHueSaturation(Image& image, const HueSaturationSettings& settings);
+void applyInvert(Image& image);
+void applyInvert(GrayImage& mask);
+
+/// Applies `settings` to `image` (the document area `region` at `scale`, for Grain).
+bool applyAdjustment(const AdjustmentSettings& settings, Image& image, const Rect& region, double scale);
+bool applyAdjustment(const LayerAdjustment& adjustment, Image& image, const Rect& region, double scale);
+/// The transfer of a table-driven adjustment (Levels, Curves, Exposure); empty for the other kinds.
+std::optional<Transfer> adjustmentTransfer(const AdjustmentSettings& settings);
+
+/// The default settings JSON for a new adjustment layer of `kind`.
+std::string defaultAdjustmentJson(AdjustmentKind kind);
+
+// ---- 16 bits (0..32768) ----------------------------------------------------------------------------------------
+// Every kind works on the exact straight colour: the table-driven ones (Levels, Curves, Exposure, Invert,
+// Brightness/Contrast, Posterize) through 32769-entry tables per channel built from their functions, the others
+// with their per-pixel maths in double (adjustments_u16.cpp). Posterize and Threshold decide as the 8-bit kernels
+// do on an 8-bit image converted to 16 bits.
+
+bool applyAdjustment(const AdjustmentSettings& settings, Image16& image, const Rect& region, double scale);
+bool applyAdjustment(const LayerAdjustment& adjustment, Image16& image, const Rect& region, double scale);
+void applyInvert(Image16& image);
+void applyInvert(Gray16& mask);
+void applyThreshold(Image16& image, const ThresholdSettings& settings);
+void applyBlackWhite(Image16& image, const BlackWhiteSettings& settings);
+void applyColorBalance(Image16& image, const ColorBalanceSettings& settings);
+void applyVibrance(Image16& image, const VibranceSettings& settings);
+void applyPhotoFilter(Image16& image, const PhotoFilterSettings& settings);
+void applyChannelMixer(Image16& image, const ChannelMixerSettings& settings);
+void applySelectiveColor(Image16& image, const SelectiveColorSettings& settings);
+void applyColorLookup(Image16& image, const ColorLookupSettings& settings);
+/// Brightness/Contrast's curve at a straight value (0..1), unrounded.
+double brightnessContrastAt(const BrightnessContrastSettings& settings, double value);
+/// The Levels histograms of a 16-bit image, in the same 256 bins.
+std::array<std::vector<double>, 4> levelsHistogram(const Image16& image, const Gray16* coverage);
+
+// ---- 32 bits (premultiplied linear float) -----------------------------------------------------------------------
+// Photoshop's 32-bit set (adjustments_f32.cpp): Levels, Curves, Exposure, Hue/Saturation, Color Balance, Black & White,
+// Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and Color Lookup. The pixels stay linear and unclamped;
+// each kind's function works on the colour encoded through `curve` (the document's, encodedTransfer), continued above 1
+// (encodeExtended), except Exposure, an exact multiply in linear light. Levels and Curves go on above 1 (Levels without
+// its clamp at white, Curves along its end tangent); the colour kinds adjust a colour brighter than white as the same
+// colour at white and scale it back up. docs/bit-depth.md lists the choices.
+
+class TransferCurve;
+/// Whether Photoshop offers `kind` in a 32-bit document (not Brightness/Contrast, Posterize, Threshold, Selective Color
+/// or Grain).
+bool adjustmentAt32(AdjustmentKind kind);
+/// Applies `settings` at 32 bits; false for a kind adjustmentAt32 does not offer (the pixels are left alone).
+bool applyAdjustment(const AdjustmentSettings& settings, ImageF& image, const Rect& region, double scale, const TransferCurve& curve);
+bool applyAdjustment(const LayerAdjustment& adjustment, ImageF& image, const Rect& region, double scale, const TransferCurve& curve);
+void applyInvert(ImageF& image, const TransferCurve& curve);
+void applyInvert(GrayF& mask);
+void applyBlackWhite(ImageF& image, const BlackWhiteSettings& settings, const TransferCurve& curve);
+void applyColorBalance(ImageF& image, const ColorBalanceSettings& settings, const TransferCurve& curve);
+void applyVibrance(ImageF& image, const VibranceSettings& settings, const TransferCurve& curve);
+void applyPhotoFilter(ImageF& image, const PhotoFilterSettings& settings, const TransferCurve& curve);
+void applyChannelMixer(ImageF& image, const ChannelMixerSettings& settings, const TransferCurve& curve);
+void applyColorLookup(ImageF& image, const ColorLookupSettings& settings, const TransferCurve& curve);
+/// The colour kinds' frame: each pixel's straight linear colour divided by its brightest channel when that is above 1,
+/// encoded, through `f` (0..1 in; the result cut to 0..1), linearised and scaled back up.
+void forEachEncodedColour(ImageF& image, const TransferCurve& curve, const std::function<void(double&, double&, double&)>& f);
+/// The Levels histograms of a 32-bit image: its colour encoded at exposure 0 into the same 256 bins.
+std::array<std::vector<double>, 4> levelsHistogram(const ImageF& image, const GrayF* coverage, const TransferCurve& curve);
+
+/// Levels helpers: the four histograms (RGB mean, R, G, B) of an image, optionally weighted by coverage.
+std::array<std::vector<double>, 4> levelsHistogram(const Image& image, const GrayImage* coverage);
+enum class LevelsAuto { Contrast, Color, Neutral };
+LevelsSettings autoLevels(LevelsAuto mode, const std::array<std::vector<double>, 4>& histogram);
+enum class LevelsSample { Black, Gray, White };
+LevelsSettings sampleLevels(const LevelsSettings& settings, double r, double g, double b, LevelsSample mode);
+
+} // namespace nekophoto

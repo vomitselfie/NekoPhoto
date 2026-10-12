@@ -2,7 +2,7 @@
 // depth and colour mode. `mode_matrix` prints it; `mode_matrix --write <file>` writes it; `mode_matrix --check <file>`
 // fails when the committed file differs from what supports() says now (a ctest test), so the doc cannot drift.
 #include <algorithm>
-#include "compositor/supports.h"
+#include "nekophoto/supports.h"
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

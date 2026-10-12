@@ -7,11 +7,11 @@
 // with the mask selected, so every mask tool (brushes, fills, gradients, filters, Invert) works on it; endEdit writes
 // the mask into the stack inside the same step. Selecting another layer, saving or exporting takes the layer away.
 #include "EditorSession.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -50,7 +50,7 @@ bool EditorSession::setSmartFilters(const Uuid& id, const SmartFilterStack& stac
     const auto carry = document_->psdCarry;
     beginEdit(name);
     std::string why;
-    if (!compositor::setSmartFilters(*document_, *layer, stack, &why)) {
+    if (!nekophoto::setSmartFilters(*document_, *layer, stack, &why)) {
         *layer = before;
         document_->psdCarry = carry;
         endEdit();
@@ -264,7 +264,7 @@ void EditorSession::syncFilterMask() {
     const Layer before = *layer;
     const auto carry = document_->psdCarry;
     std::string why;
-    if (!compositor::setSmartFilters(*document_, *layer, *stack, &why)) {
+    if (!nekophoto::setSmartFilters(*document_, *layer, *stack, &why)) {
         *layer = before;
         document_->psdCarry = carry;
         emit error(QString::fromStdString(why));

@@ -2,7 +2,7 @@
 #include "Automation.h"
 #include "Names.h"
 #include "PresetLibrary.h"
-#include "compositor/blend.h"
+#include "nekophoto/blend.h"
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
@@ -23,7 +23,7 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -242,8 +242,8 @@ void LayerStyleDialog::accept() {
     if (!finished_ && session_ && touched_ && session_->commandsRouted() && session_->document() && session_->document()->find(layer_)) {
         // The command path: the layer goes back as it was and layers.setStyle gives it the style the dialog shows, as
         // one step named Layer Style (the layer by id only when it is not the active one, so an action stays portable).
-        const compositor::LayerStyle style = output();
-        const compositor::ColorMode mode = session_->document()->colorMode;
+        const nekophoto::LayerStyle style = output();
+        const nekophoto::ColorMode mode = session_->document()->colorMode;
         session_->endLayerStyleEdit(false);
         finished_ = true;
         QJsonObject params{{"style", layerStyleRequest(style, mode)}};
@@ -402,7 +402,7 @@ void LayerStyleDialog::addEffectPages() {
             auto* s = firstOf(style_.strokes, madeUp_[e]);
             numberRow(f, tr("Size"), &s->size, 1, 250, QStringLiteral(" px"));
             comboRow(f, tr("Position"), {tr("Outside"), tr("Inside"), tr("Center")},
-                     [s] { return int(s->position); }, [s](int i) { s->position = compositor::Stroke::Position(i); });
+                     [s] { return int(s->position); }, [s](int i) { s->position = nekophoto::Stroke::Position(i); });
             blendRow(f, tr("Blend mode"), &s->mode);
             percentRow(f, tr("Opacity"), &s->opacity);
             checkRow(f, tr("Overprint"), &s->overprint);

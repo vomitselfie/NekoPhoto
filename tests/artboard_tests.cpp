@@ -1,24 +1,24 @@
 // Artboards and slices: the Photoshop blocks both ways, the renderer's clip and background, and the round trip
 // through PSD and the project package.
 #include <algorithm>
-#include "compositor/gif.h"
-#include "compositor/depth.h"
+#include "nekophoto/gif.h"
+#include "nekophoto/depth.h"
 #include "check.h"
-#include "compositor/artboard.h"
-#include "compositor/project.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
-#include "compositor/animation.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/artboard.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
+#include "nekophoto/animation.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
 #include "psd/psd_descriptor.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace psd = patchy::psd;
 
 namespace {

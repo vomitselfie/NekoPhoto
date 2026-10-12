@@ -3,18 +3,18 @@
 // colour transform), masks, folders and clipping in these modes, mode conversion (pixels, stored colours, dormant
 // adjustment layers, per-channel settings), thumbnails and mip levels of 5-channel buffers.
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/blend.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/render.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/render.h"
+#include "nekophoto/vectormask.h"
 #include <cmath>
 #include <cstdio>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

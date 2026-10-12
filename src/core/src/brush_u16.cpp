@@ -3,10 +3,10 @@
 // build-up rules and the recompose follow the 8-bit code step for step, with 15-bit samples in place of bytes, so an
 // 8-bit-sourced layer painted here and reduced to 8 bits lands within a level of the 8-bit stroke
 // (tests/depth_paint_tests.cpp).
-#include "compositor/brush.h"
+#include "nekophoto/brush.h"
 #include "stroke_raster.h"
 
-namespace compositor {
+namespace nekophoto {
 
 /// Half-open bounds of the pixels with any alpha within `within`: each row scanned in from both ends, rows in parallel.
 PixelBounds StrokeOps<SampleType::U16>::bounds(const Image16& image, const PixelBounds& within) {
@@ -60,4 +60,4 @@ std::shared_ptr<TiledSource16> tiledProcessedDocument16(Document document, std::
     });
 }
 
-} // namespace compositor
+} // namespace nekophoto

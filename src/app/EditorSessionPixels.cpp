@@ -1,13 +1,13 @@
-#include "compositor/seamcarve.h"
+#include "nekophoto/seamcarve.h"
 #include "EditorSession.h"
-#include "compositor/depth.h"
+#include "nekophoto/depth.h"
 #include "ColorManagement.h"
 #include "ImageConvert.h"
 #include "QtGeometry.h"
-#include "compositor/filters.h"
-#include "compositor/inpaint.h"
-#include "compositor/contentmove.h"
-#include "compositor/seamcarve.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/inpaint.h"
+#include "nekophoto/contentmove.h"
+#include "nekophoto/seamcarve.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QMimeData>
@@ -17,7 +17,7 @@
 #include <set>
 #include <type_traits>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -651,15 +651,15 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
         bool moved = false;
         if (source.u16() && coverage.u16()) {
             auto image = std::make_shared<Image16>(*source.u16());
-            moved = compositor::contentAwareMove(*image, *coverage.u16(), gdx, gdy, options, visible.u16().get());
+            moved = nekophoto::contentAwareMove(*image, *coverage.u16(), gdx, gdy, options, visible.u16().get());
             out = Image16Ptr(image);
         } else if (source.c8() && coverage.u8()) {
             auto image = std::make_shared<ImageC8>(*source.c8());
-            moved = compositor::contentAwareMove(*image, *coverage.u8(), gdx, gdy, options, visible.u8().get());
+            moved = nekophoto::contentAwareMove(*image, *coverage.u8(), gdx, gdy, options, visible.u8().get());
             out = ImageC8Ptr(image);
         } else if (source.u8() && coverage.u8()) {
             auto image = std::make_shared<Image>(*source.u8());
-            moved = compositor::contentAwareMove(*image, *coverage.u8(), gdx, gdy, options, visible.u8().get());
+            moved = nekophoto::contentAwareMove(*image, *coverage.u8(), gdx, gdy, options, visible.u8().get());
             out = ImagePtr(image);
         }
         if (!moved) return failWith(tr("Nothing could be moved there: the selection must land on the layer and leave opaque pixels around it to fill from."));
@@ -698,7 +698,7 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
         ContentMoveOptions options;
         options.extend = contentMoveExtend;
         options.adaptation = contentMoveAdaptation;
-        if (!compositor::contentAwareMove(*out, *coverage, gdx, gdy, options, visible.get()))
+        if (!nekophoto::contentAwareMove(*out, *coverage, gdx, gdy, options, visible.get()))
             return failWith(tr("Nothing could be moved there: the selection must land on the layer and leave opaque pixels around it to fill from."));
         LayerTransform placed;
         auto trimmed = trimToPixels(*out, grown, placed);
@@ -733,7 +733,7 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
     ContentMoveOptions options;
     options.extend = contentMoveExtend;
     options.adaptation = contentMoveAdaptation;
-    if (!compositor::contentAwareMove(*out, *coverage, gdx, gdy, options, visible.get()))
+    if (!nekophoto::contentAwareMove(*out, *coverage, gdx, gdy, options, visible.get()))
         return failWith(tr("Nothing could be moved there: the selection must land on the layer and leave opaque pixels around it to fill from."));
     LayerTransform placed;
     auto trimmed = trimToPixels(*out, grown, placed);

@@ -18,10 +18,10 @@
 #include "render_deep_ops.h"
 #include "render_plan.h"
 #include "layerstyle_render.h"
-#include "compositor/blend.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/vectormask.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -29,14 +29,14 @@
 #include <optional>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 template <SampleType S, ColorMode M>
 struct ModeOps {
     static_assert(M != ColorMode::RGB && S != SampleType::F32, "CMYK and Lab exist at 8 and 16 bits");
     static constexpr bool deep = S == SampleType::U16;
     using Sample = SampleOf<S>;
-    using Image = std::conditional_t<deep, Image16, std::conditional_t<M == ColorMode::CMYK, ImageC8, compositor::Image>>;
+    using Image = std::conditional_t<deep, Image16, std::conditional_t<M == ColorMode::CMYK, ImageC8, nekophoto::Image>>;
     using Gray = GrayOf<S>;
     using ImagePtr = std::shared_ptr<const Image>;
     using GrayPtr = std::shared_ptr<const Gray>;
@@ -167,4 +167,4 @@ void executeRenderMode(const RenderPlan& plan, const Rect& region, double scale,
 void executeRenderLab8(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version);
 void executeRenderMode16(const RenderPlan& plan, const Rect& region, double scale, Image16& out, RenderCache* cache, uint64_t version);
 
-} // namespace compositor
+} // namespace nekophoto

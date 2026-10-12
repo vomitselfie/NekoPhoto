@@ -1,14 +1,14 @@
 // EditorSession: Layers: adding, grouping, clipping, masks, merging, ordering and their properties.
 #include "EditorSession.h"
-#include "compositor/depth.h"
-#include "compositor/colormgmt.h"
-#include "compositor/filters.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/filters.h"
 #include <algorithm>
 #include <functional>
 #include <map>
 #include <set>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

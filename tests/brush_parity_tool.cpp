@@ -8,8 +8,8 @@
 //   brush_parity_tool grain <folder>                  the moving-grain torture scenes (brush_grain_tests), the grain
 //                                                     itself, and each scene's dabs (centre, tangent, grain offset)
 #include "brush_harness.h"
-#include "compositor/brushimport.h"
-#include "compositor/png.h"
+#include "nekophoto/brushimport.h"
+#include "nekophoto/png.h"
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>

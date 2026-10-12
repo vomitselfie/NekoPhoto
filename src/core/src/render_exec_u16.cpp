@@ -4,7 +4,7 @@
 #include <mutex>
 #include <utility>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -63,4 +63,4 @@ void executeRender<SampleType::U16>(const RenderPlan& plan, const Rect& region, 
     exec.run(out, cache, version);
 }
 
-} // namespace compositor
+} // namespace nekophoto

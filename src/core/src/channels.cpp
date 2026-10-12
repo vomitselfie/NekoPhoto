@@ -1,16 +1,16 @@
 // Alpha and spot channels, and the colour channels as views (channels.h, docs/channels.md).
-#include "compositor/channels.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/render.h"
-#include "compositor/resample.h"
-#include "compositor/selection.h"
+#include "nekophoto/channels.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/render.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/selection.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -608,4 +608,4 @@ std::shared_ptr<GrayImage> channelThumbnail(const AnyGray& image, int maxSide) {
     return nullptr;
 }
 
-} // namespace compositor
+} // namespace nekophoto

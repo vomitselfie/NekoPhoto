@@ -3,8 +3,8 @@
 #include "AdjustmentEditor.h"
 #include "HistogramView.h"
 #include "ImageConvert.h"
-#include "compositor/histogram.h"
-#include "compositor/modeedit.h"
+#include "nekophoto/histogram.h"
+#include "nekophoto/modeedit.h"
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QFile>
@@ -26,7 +26,7 @@
 #include <QVBoxLayout>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

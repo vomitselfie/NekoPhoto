@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

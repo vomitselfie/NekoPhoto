@@ -3,14 +3,14 @@
 // composite); Color Balance fitted here to Photoshop's composites; Black & White from upstream Compositor's
 // AdjustPixels.c (MIT); Vibrance, Photo Filter, Channel Mixer and Selective Color from their
 // published formulas, unchecked against Photoshop (docs/adjustment-layers.md).
-#include "compositor/adjustments.h"
-#include "compositor/imaget.h"
-#include "compositor/modeedit.h"
-#include "compositor/parallel.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/imaget.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -391,4 +391,4 @@ double brightnessContrastAt(const BrightnessContrastSettings& settings, double v
     return std::clamp(out / 255, 0.0, 1.0);
 }
 
-} // namespace compositor
+} // namespace nekophoto

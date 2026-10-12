@@ -4,7 +4,7 @@
 
 **ISO Coated v2 300% (basICColor)**, a FOGRA39 characterisation (ISO 12647-2 offset on coated paper, total area
 coverage 300%) by basICColor GmbH. NekoPhoto's default Working CMYK (docs/color-management.md), compiled into the core
-(`compositor::defaultCmykProfile()`).
+(`nekophoto::defaultCmykProfile()`).
 
 - Licence: zlib/libpng, copyright (c) 2007-2010 basICColor GmbH: [LICENSES/basICColor-zlib.txt](../../../LICENSES/basICColor-zlib.txt).
 - Source: the `icc-profiles-basiccolor-printing2009` folder of Debian's `icc-profiles-free` 2.4 source package

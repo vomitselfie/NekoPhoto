@@ -7,13 +7,13 @@
 // summed over octaves. Rows run in parallel; each pixel depends on the source alone, so the result does not depend on
 // the thread count.
 #include "filters_photocraft.h"
-#include "compositor/parallel.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
 
-namespace compositor::photocraft {
+namespace nekophoto::photocraft {
 
 namespace {
 
@@ -419,4 +419,4 @@ float cloudsValue(float x, float y, float base, uint32_t seed) {
 
 float cloudsBase(int side) { return std::clamp(float(std::max(1, side)) / 4.0f, 16.0f, 512.0f); }
 
-} // namespace compositor::photocraft
+} // namespace nekophoto::photocraft

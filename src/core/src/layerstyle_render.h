@@ -1,13 +1,13 @@
 // The renderer's entry into layer styles (layerstyle_render.cpp).
 #pragma once
-#include "compositor/colormgmt.h"
-#include "compositor/document.h"
-#include "compositor/imaget.h"
-#include "compositor/layerstyle.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/document.h"
+#include "nekophoto/imaget.h"
+#include "nekophoto/layerstyle.h"
 #include <functional>
 #include <optional>
 
-namespace compositor {
+namespace nekophoto {
 
 struct StyledDraw {
     std::shared_ptr<const LayerStyle> style;
@@ -57,4 +57,4 @@ void drawStyledLayer(const StyledDraw& draw, ImageC8& target);
 void drawStyledLayer(const StyledDraw& draw, Image16& target);
 void drawStyledLayer(const StyledDraw& draw, ImageF& target);
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,17 +1,17 @@
 // Animated GIF export (gif.h): per-frame palettes (exact colours when they fit, else a median cut), transparency
 // below half alpha, and an LZW encoder following Patchy's (MIT, src/formats/gif_document_io.cpp; see
 // src/third_party/patchy_psd/README.md).
-#include "compositor/gif.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
+#include "nekophoto/gif.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <array>
 #include <climits>
 #include <fstream>
 #include <unordered_map>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -308,4 +308,4 @@ bool writeDocumentGif(const std::string& path, const Document& document, std::st
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

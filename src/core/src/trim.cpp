@@ -1,8 +1,8 @@
 // A port of upstream Compositor's ImageTrim.swift (MIT, LICENSES/MIT-Compositor.txt).
-#include "compositor/trim.h"
+#include "nekophoto/trim.h"
 #include <cstdlib>
 
-namespace compositor {
+namespace nekophoto {
 
 std::optional<Rect> trimRect(const Image& flat, const TrimOptions& o) {
     if (!o.any() || flat.isEmpty()) return std::nullopt;
@@ -34,4 +34,4 @@ std::optional<Rect> trimRect(const Image& flat, const TrimOptions& o) {
     return Rect(x0, y0, x1 - x0, y1 - y0);
 }
 
-} // namespace compositor
+} // namespace nekophoto

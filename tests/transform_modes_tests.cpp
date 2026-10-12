@@ -2,15 +2,15 @@
 // selection keep the inks (all five samples) and Lab's a and b; CMYK through two 4-sample passes agrees with the RGB
 // samplers channel by channel; the flat exports are the native composite through the profile to sRGB.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/modetransform.h"
-#include "compositor/render.h"
-#include "compositor/smartobject_edit.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/modetransform.h"
+#include "nekophoto/render.h"
+#include "nekophoto/smartobject_edit.h"
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

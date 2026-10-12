@@ -1,13 +1,13 @@
 // The transpose-free blurs against the straightforward float implementations they replaced.
 #include "check.h"
-#include "compositor/blur.h"
-#include "compositor/parallel.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/parallel.h"
 #include <cmath>
 #include <cstring>
 #include <random>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

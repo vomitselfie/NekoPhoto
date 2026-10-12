@@ -1,7 +1,7 @@
 # Content-Aware Fill and Content-Aware Move
 
 Both build on the same fill (`src/core/src/inpaint.cpp`: classic exemplar-based inpainting, Criminisi, Perez and
-Toyama 2003) and on the healing membrane (`compositor/heal.h`). The fill works inward from the selection's edge,
+Toyama 2003) and on the healing membrane (`nekophoto/heal.h`). The fill works inward from the selection's edge,
 most structured edge first; for each 9x9 patch it scores every candidate in a window of 96 pixels around it and copies
 the best, then a membrane on the low-pass band evens out the tone. It is deterministic: the same selection gives the
 same fill every time. It deliberately differs from Photoshop's fill (no patch rotation, scaling or mirroring, no
@@ -47,4 +47,4 @@ patch lands past its edge. A tight selection works best: background brought alon
 keeps its own colour in the patch's middle unless the Adaptation is loose.
 
 Automation: `pixels.contentAwareMove` with `dx`, `dy`, `mode` (`move` or `extend`) and `adaptation` (0..4).
-Core: `compositor::contentAwareMove` in `compositor/contentmove.h`, tested in `tests/heal_tests.cpp`.
+Core: `nekophoto::contentAwareMove` in `nekophoto/contentmove.h`, tested in `tests/heal_tests.cpp`.

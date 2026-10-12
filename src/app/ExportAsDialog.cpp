@@ -3,7 +3,7 @@
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "Style.h"
-#include "compositor/tga.h"
+#include "nekophoto/tga.h"
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
@@ -22,7 +22,7 @@
 #include <QVBoxLayout>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

@@ -1,9 +1,9 @@
-#include "compositor/brushsample.h"
+#include "nekophoto/brushsample.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -150,4 +150,4 @@ std::string recordedStrokeToJson(const RecordedStroke& stroke) {
     return j.dump(1);
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,12 +1,12 @@
-#include "compositor/kernels.h"
-#include "compositor/resample.h"
-#include "compositor/simd.h"
-#include "compositor/parallel.h"
+#include "nekophoto/kernels.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/simd.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-namespace compositor::kernels {
+namespace nekophoto::kernels {
 
 namespace {
 
@@ -177,9 +177,9 @@ void invertColors(Image& image) {
                 u8x16 v;
                 std::memcpy(&v, p, 16);
                 // Every lane takes its pixel's alpha; the alpha lanes then get their own value back.
-                const u8x16 a = COMPOSITOR_SHUFFLE(u8x16, v, v, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15);
+                const u8x16 a = NEKOPHOTO_SHUFFLE(u8x16, v, v, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15);
                 const u8x16 inverted = a - v;
-                const u8x16 result = COMPOSITOR_SHUFFLE(u8x16, inverted, v, 0, 1, 2, 19, 4, 5, 6, 23, 8, 9, 10, 27, 12, 13, 14, 31);
+                const u8x16 result = NEKOPHOTO_SHUFFLE(u8x16, inverted, v, 0, 1, 2, 19, 4, 5, 6, 23, 8, 9, 10, 27, 12, 13, 14, 31);
                 std::memcpy(p, &result, 16);
             }
             for (; x < image.width(); x++, p += 4) {
@@ -192,4 +192,4 @@ void invertColors(Image& image) {
     });
 }
 
-} // namespace compositor::kernels
+} // namespace nekophoto::kernels

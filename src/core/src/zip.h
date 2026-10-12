@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 class ZipArchive {
 public:
@@ -25,4 +25,4 @@ private:
     std::vector<Entry> entries_;
 };
 
-} // namespace compositor
+} // namespace nekophoto

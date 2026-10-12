@@ -1,16 +1,16 @@
 // Content-Aware Move: fill the source, place the patch with its tone adapted, resynthesise the seam.
-#include "compositor/contentmove.h"
-#include "compositor/depth.h"
-#include "compositor/heal.h"
-#include "compositor/inpaint.h"
-#include "compositor/morphology.h"
-#include "compositor/parallel.h"
+#include "nekophoto/contentmove.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/inpaint.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 bool contentAwareMove(Image& image, const GrayImage& selection, int dx, int dy, const ContentMoveOptions& options, const GrayImage* visible) {
     const int w = image.width(), h = image.height();
@@ -324,4 +324,4 @@ bool contentAwareMove(ImageC8& image, const GrayImage& selection, int dx, int dy
     return moveInks<SampleType::U8>(image, selection, dx, dy, options, visible);
 }
 
-} // namespace compositor
+} // namespace nekophoto

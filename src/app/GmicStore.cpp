@@ -48,7 +48,7 @@ bool GmicStore::offered() {
 #ifdef _WIN32
     return true;
 #else
-    return qEnvironmentVariableIntValue("COMPOSITOR_GMIC_OFFER_DOWNLOAD") == 1;
+    return qEnvironmentVariableIntValue("NEKOPHOTO_GMIC_OFFER_DOWNLOAD") == 1;
 #endif
 }
 
@@ -75,15 +75,15 @@ bool GmicStore::remove(QString* error) {
     return true;
 }
 
-compositor::ZipLimits GmicStore::limits() {
-    compositor::ZipLimits limits;
+nekophoto::ZipLimits GmicStore::limits() {
+    nekophoto::ZipLimits limits;
     limits.entries = 500;
     limits.entryBytes = 128ull << 20;
     limits.totalBytes = 512ull << 20;
     return limits;
 }
 
-bool GmicStore::install(const QString& archive, const Build& build, const QString& root, QString* error, const compositor::ZipLimits& limits) {
+bool GmicStore::install(const QString& archive, const Build& build, const QString& root, QString* error, const nekophoto::ZipLimits& limits) {
     struct RemoveArchive {
         QString path;
         ~RemoveArchive() { QFile::remove(path); }
@@ -103,12 +103,12 @@ bool GmicStore::install(const QString& archive, const Build& build, const QStrin
     if (bytes.size() != build.bytes) return fail(tr("Couldn’t read the downloaded file %1.").arg(archive));
 
     const QString unreadable = tr("The downloaded G'MIC archive could not be unpacked: %1");
-    compositor::ZipFileReader zip;
+    nekophoto::ZipFileReader zip;
     std::string why;
     if (!zip.openMemory(std::vector<uint8_t>(bytes.begin(), bytes.end()), &why, limits)) return fail(unreadable.arg(QString::fromStdString(why)));
     // Everything sits in one top folder (gmic-4.0.5-cli-win64/), which is left out.
     std::string top;
-    for (const compositor::ZipFileEntry& entry : zip.entries()) {
+    for (const nekophoto::ZipFileEntry& entry : zip.entries()) {
         const size_t slash = entry.name.find('/');
         if (slash == std::string::npos || slash == 0) return fail(unreadable.arg(tr("it is not laid out as expected")));
         const std::string first = entry.name.substr(0, slash);
@@ -121,10 +121,10 @@ bool GmicStore::install(const QString& archive, const Build& build, const QStrin
     removeLeftovers(root);
     QTemporaryDir unpack(root + QStringLiteral("/.unpack-XXXXXX"));
     if (!unpack.isValid()) return fail(tr("Couldn’t create a folder in %1.").arg(root));
-    for (const compositor::ZipFileEntry& entry : zip.entries()) {
+    for (const nekophoto::ZipFileEntry& entry : zip.entries()) {
         const std::string inside = entry.name.substr(top.size() + 1);
         if (inside.empty()) continue;   // the top folder's own entry
-        if (!compositor::isSafeZipEntryName(inside)) return fail(unreadable.arg(QString::fromStdString(entry.name)));
+        if (!nekophoto::isSafeZipEntryName(inside)) return fail(unreadable.arg(QString::fromStdString(entry.name)));
         const QString path = unpack.path() + '/' + QString::fromStdString(inside);
         if (entry.isDirectory()) {
             if (!QDir().mkpath(path)) return fail(tr("Couldn’t create the folder %1.").arg(path));

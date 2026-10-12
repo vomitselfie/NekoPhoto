@@ -3,10 +3,10 @@
 // atan2 and pow by hash on Linux only (MinGW's maths library rounds them differently) and by sampled values within a
 // level everywhere.
 #include "check.h"
-#include "compositor/depth.h"
-#include "compositor/filters.h"
-#include "compositor/smartfilter.h"
-#include "compositor/supports.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/supports.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -15,7 +15,7 @@
 #include <string>
 #include <utility>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 
@@ -51,10 +51,10 @@ uint64_t hashOf(const AnyImage& image) {
     return h;
 }
 
-/// COMPOSITOR_PRINT_FILTER_HASHES=1 prints the hashes to paste in.
+/// NEKOPHOTO_PRINT_FILTER_HASHES=1 prints the hashes to paste in.
 void checkHash(const char* name, const AnyImage& image, uint64_t expected) {
     const uint64_t h = hashOf(image);
-    if (std::getenv("COMPOSITOR_PRINT_FILTER_HASHES")) std::fprintf(stderr, "    %s 0x%016llxull\n", name, static_cast<unsigned long long>(h));
+    if (std::getenv("NEKOPHOTO_PRINT_FILTER_HASHES")) std::fprintf(stderr, "    %s 0x%016llxull\n", name, static_cast<unsigned long long>(h));
     if (h != expected) check::fail(__FILE__, __LINE__, std::string(name) + " hash changed");
 }
 
@@ -274,7 +274,7 @@ TEST_CASE(distortion_values) {
     const AnyImage p = run(FilterKind::PolarCoordinates, ImagePtr(img), defaults(FilterKind::PolarCoordinates));
     const AnyImage z = run(FilterKind::ZigZag, ImagePtr(img), defaults(FilterKind::ZigZag));
     const AnyImage s = run(FilterKind::Spherize, ImagePtr(img), defaults(FilterKind::Spherize));
-    if (std::getenv("COMPOSITOR_PRINT_FILTER_HASHES"))
+    if (std::getenv("NEKOPHOTO_PRINT_FILTER_HASHES"))
         for (const AnyImage* i : {&t, &w, &p, &z, &s}) {
             const uint8_t* q = i->u8()->pixel(20, 12);
             std::fprintf(stderr, "    sample %d %d %d %d\n", q[0], q[1], q[2], q[3]);

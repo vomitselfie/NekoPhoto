@@ -2,23 +2,23 @@
 // premultiplied linear float, and the entry points that render a 32-bit document (the deep depths' render_deep.inc).
 // The 16-bit forms (render_u16.cpp) with nothing quantised: coverage and colour stay float from the source to the
 // blend.
-#include "compositor/render.h"
+#include "nekophoto/render.h"
 #include "render_plan.h"
 #include "render_deep_ops_f32.h"
 #include "render_deep.inc"
-#include "compositor/blend.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/workcounters.h"
-#include "compositor/warp.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/workcounters.h"
+#include "nekophoto/warp.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <optional>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -377,4 +377,4 @@ bool resizeDocumentF(Document& document, int width, int height, double resolutio
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

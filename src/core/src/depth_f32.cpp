@@ -1,17 +1,17 @@
 // The float primitives of a 32-bit document (depth.h, "32 bits"): linearising and encoding colour through the
 // document's transfer curve, coverage in float, halvings, point samplers, crops, bounds, fingerprints, thumbnails and
 // the cleaning of NaN and infinities.
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/view32.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/view32.h"
 #include <cmath>
 #include <cstring>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -409,4 +409,4 @@ float decodeExtended(const TransferCurve& curve, float encoded) {
     return encoded;
 }
 
-} // namespace compositor
+} // namespace nekophoto

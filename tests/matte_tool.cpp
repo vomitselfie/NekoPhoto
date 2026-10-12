@@ -32,11 +32,11 @@
 //       writes <prefix>-tiles.csv (per tile: band and soft-pixel counts, summed residual, candidate instability,
 //       local alpha variance and colour-normalised residual, refined and raw SAD) and <prefix>-pixels.csv (a band
 //       sample with each signal and the error), for ranking regions of a second refinement pass.
-#include "compositor/blur.h"
-#include "compositor/png.h"
-#include "compositor/matte.h"
-#include "compositor/scribble.h"
-#include "compositor/subject.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/png.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/scribble.h"
+#include "nekophoto/subject.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -55,7 +55,7 @@
 #include <thread>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 namespace {

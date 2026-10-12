@@ -1,7 +1,7 @@
 # The portable C pixel routines from upstream Compositor's Compositor/Rendering (MIT, LICENSES/MIT-Compositor.txt),
 # kept as they were. Nothing here depends on Apple frameworks.
 
-add_library(compositor_pixels STATIC
+add_library(nekophoto_pixels STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/AdjustPixels.c
     ${CMAKE_CURRENT_SOURCE_DIR}/BrushPixels.c
     ${CMAKE_CURRENT_SOURCE_DIR}/ContentFill.c
@@ -14,10 +14,10 @@ add_library(compositor_pixels STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/CameraRawPixels.c
     ${CMAKE_CURRENT_SOURCE_DIR}/CameraRawPixelsFloat.c
 )
-add_library(compositor::pixels ALIAS compositor_pixels)
+add_library(nekophoto::pixels ALIAS nekophoto_pixels)
 
-target_include_directories(compositor_pixels PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(nekophoto_pixels PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # M_PI is a POSIX extension, hidden under strict -std=c11.
-target_compile_definitions(compositor_pixels PRIVATE _DEFAULT_SOURCE)
-target_link_libraries(compositor_pixels PRIVATE compositor_warnings m)
-set_target_properties(compositor_pixels PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_definitions(nekophoto_pixels PRIVATE _DEFAULT_SOURCE)
+target_link_libraries(nekophoto_pixels PRIVATE nekophoto_warnings m)
+set_target_properties(nekophoto_pixels PROPERTIES POSITION_INDEPENDENT_CODE ON)

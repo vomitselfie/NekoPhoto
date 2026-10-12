@@ -160,7 +160,7 @@ defaults on a 4000x3000 layer, straight-colour conversion in and out included.
 The multi-pass effects keep their frames between passes at 16 bits a channel.
 
 The fingerprints of every effect (defaults, seeded settings, a translucent layer) are in `tests/mosh_hashes.txt`,
-checked by `mosh_tests`; `COMPOSITOR_UPDATE_MOSH_HASHES=1 build/tests/mosh_tests fingerprints` rewrites them.
+checked by `mosh_tests`; `NEKOPHOTO_UPDATE_MOSH_HASHES=1 build/tests/mosh_tests fingerprints` rewrites them.
 
 ## Worst-case brush
 
@@ -241,7 +241,7 @@ for the u16 d80 lines, two of `bench_core 3 worst`): the median of the round med
 The worst case now paints 287 472 dabs in about 2.1 s (about 135 000 dabs a second): the 10-second stroke paints in a
 fifth of the time it took to draw, at either depth, with the same peak memory (80 and 160 MiB).
 
-Brush latency through the canvas (`--bench-brush`, 1086 x 1448, `COMPOSITOR_WINDOW_SIZE=1400x1000
+Brush latency through the canvas (`--bench-brush`, 1086 x 1448, `NEKOPHOTO_WINDOW_SIZE=1400x1000
 QT_SCALE_FACTOR=2.25`, eight alternating rounds, medians of the per-run medians; press / move p50 / move p95 /
 release, ms):
 
@@ -288,5 +288,5 @@ The matching correctness gate is `render_hash_tests` (in ctest): 711 scenes (8-,
 `tests/render_hashes.txt`, each rendered on the worker pool and serially. After an intentional rendering change:
 
 ```bash
-COMPOSITOR_UPDATE_RENDER_HASHES=1 build/tests/render_hash_tests
+NEKOPHOTO_UPDATE_RENDER_HASHES=1 build/tests/render_hash_tests
 ```

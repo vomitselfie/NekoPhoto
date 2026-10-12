@@ -3,9 +3,9 @@
 // stored in those two files predates the settings they carry), photoshop-color-balance{,-full}.psd against the merged
 // image. Without the fixtures those cases are skipped; the rules they pin are also checked on synthetic colours.
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/psd.h"
-#include "compositor/render.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -1,25 +1,25 @@
 // The renderer's 16-bit primitives (docs/high-bit-depth-plan.md, P2): mask coverage, drawing a layer and resampling
 // at 0..32768, and the entry points that render a 16-bit document (written once for the deep depths in
 // render_deep.inc). In a file of their own so the 8-bit renderer (render.cpp) compiles as it did.
-#include "compositor/render.h"
+#include "nekophoto/render.h"
 #include "render_plan.h"
 #include "edge_interior.h"
 #include "render_deep.inc"
-#include "compositor/blend.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/workcounters.h"
-#include "compositor/resample.h"
-#include "compositor/warp.h"
-#include "compositor/modetransform.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/workcounters.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/warp.h"
+#include "nekophoto/modetransform.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <optional>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -431,4 +431,4 @@ bool resizeDocument16(Document& document, int width, int height, double resoluti
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

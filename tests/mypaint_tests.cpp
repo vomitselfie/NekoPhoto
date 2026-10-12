@@ -1,12 +1,12 @@
 // The MyPaint engine against the presets the app ships (src/app/brushes/mypaint).
 #include "check.h"
-#include "compositor/mypaint.h"
+#include "nekophoto/mypaint.h"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 namespace {

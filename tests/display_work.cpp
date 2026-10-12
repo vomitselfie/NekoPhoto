@@ -5,11 +5,11 @@
 // full: the 3840 x 2160 document at 100 %; pan: the strips a pan by 64 device pixels renders (eight of 3840 x 64);
 // zoom: the whole document at 50 %; native: the full frame at the document's layout, not transformed. "exact" draws
 // through the Little CMS transform, "grid" through displayTransformBetween (its `none` run includes building it).
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/render.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -17,7 +17,7 @@
 #include <memory>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

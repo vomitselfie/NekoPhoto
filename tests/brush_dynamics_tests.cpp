@@ -1,15 +1,15 @@
 // Brush dynamics (brushdynamics.h): curves, the combination rule, circular targets, and presets saved before mappings.
 #include "check.h"
-#include "compositor/brushdynamics.h"
-#include "compositor/png.h"
-#include "compositor/tipbrush.h"
-#include "compositor/warpstroke.h"
+#include "nekophoto/brushdynamics.h"
+#include "nekophoto/png.h"
+#include "nekophoto/tipbrush.h"
+#include "nekophoto/warpstroke.h"
 #include <memory>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 namespace {

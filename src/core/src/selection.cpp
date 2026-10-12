@@ -1,7 +1,7 @@
-#include "compositor/selection.h"
-#include "compositor/depth.h"
-#include "compositor/morphology.h"
-#include "compositor/render.h"
+#include "nekophoto/selection.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -13,7 +13,7 @@ extern "C" {
 #include "WandPixels.h"
 }
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -464,4 +464,4 @@ std::shared_ptr<GrayF> coverageFromLayerF(const Document& document, const Layer&
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

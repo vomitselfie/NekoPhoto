@@ -1,24 +1,24 @@
 // Timings for the pixel pipeline on a 4000 x 3000 document, for checking the effect of kernel work.
-// Not a test: `build/tests/compositor_bench [filter]` prints milliseconds per operation.
-#include "compositor/adjustments.h"
-#include "compositor/blend.h"
-#include "compositor/document.h"
-#include "compositor/filters.h"
-#include "compositor/kernels.h"
-#include "compositor/morphology.h"
-#include "compositor/brush.h"
-#include "compositor/warp.h"
-#include "compositor/wand.h"
-#include "compositor/resample.h"
-#include "compositor/heal.h"
-#include "compositor/inpaint.h"
-#include "compositor/warpstroke.h"
-#include "compositor/matte.h"
-#include "compositor/scribble.h"
-#include "compositor/render.h"
-#include "compositor/selection.h"
-#include "compositor/png.h"
-#include "compositor/vectorlayer.h"
+// Not a test: `build/tests/nekophoto_bench [filter]` prints milliseconds per operation.
+#include "nekophoto/adjustments.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/document.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/kernels.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/warp.h"
+#include "nekophoto/wand.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/inpaint.h"
+#include "nekophoto/warpstroke.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/scribble.h"
+#include "nekophoto/render.h"
+#include "nekophoto/selection.h"
+#include "nekophoto/png.h"
+#include "nekophoto/vectorlayer.h"
 extern "C" {
 #include "HealPixels.h"
 #include "ContentFill.h"
@@ -31,7 +31,7 @@ extern "C" {
 #include <random>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 
@@ -268,9 +268,9 @@ int main(int argc, char** argv) {
     }
     if (want("scribble")) {
         // Quick Select: a foreground stroke across the middle and a background stroke along the top.
-        // Noise is the worst case for a graph cut; COMPOSITOR_BENCH_PHOTO=<png> times a real photo instead.
+        // Noise is the worst case for a graph cut; NEKOPHOTO_BENCH_PHOTO=<png> times a real photo instead.
         std::shared_ptr<Image> photo;
-        if (const char* path = std::getenv("COMPOSITOR_BENCH_PHOTO")) photo = readPngImage(path);
+        if (const char* path = std::getenv("NEKOPHOTO_BENCH_PHOTO")) photo = readPngImage(path);
         const Image& source = photo ? *photo : base;
         const int sw = source.width(), sh = source.height();
         GrayImage labels(sw, sh, 0);
@@ -283,9 +283,9 @@ int main(int argc, char** argv) {
         }
     }
     if (want("png")) {
-        // Project saves and PNG export; noise is incompressible, so COMPOSITOR_BENCH_PHOTO gives the real case.
+        // Project saves and PNG export; noise is incompressible, so NEKOPHOTO_BENCH_PHOTO gives the real case.
         std::shared_ptr<Image> photo;
-        if (const char* path = std::getenv("COMPOSITOR_BENCH_PHOTO")) photo = readPngImage(path);
+        if (const char* path = std::getenv("NEKOPHOTO_BENCH_PHOTO")) photo = readPngImage(path);
         const Image& source = photo ? *photo : base;
         std::vector<uint8_t> bytes;
         report("png encode", timeMs([&] { (void)encodePngImage(source, bytes); }, 1));

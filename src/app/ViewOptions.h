@@ -1,5 +1,5 @@
 // The View menu's guide and snapping switches (Photoshop's View > Show, Lock Guides, Snap and Snap To), shared by
-// every tab and kept between runs. The guides themselves belong to the document (compositor/guides.h).
+// every tab and kept between runs. The guides themselves belong to the document (nekophoto/guides.h).
 #pragma once
 #include <QSettings>
 

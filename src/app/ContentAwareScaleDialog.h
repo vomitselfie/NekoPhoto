@@ -9,7 +9,7 @@ class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
 
-namespace compositor { class Image; class GrayImage; }
+namespace nekophoto { class Image; class GrayImage; }
 
 namespace app {
 
@@ -32,8 +32,8 @@ private:
     QLabel* preview_ = nullptr;
     QLabel* size_ = nullptr;
     QTimer timer_;
-    std::shared_ptr<compositor::Image> thumb_;
-    std::shared_ptr<compositor::GrayImage> thumbProtect_;
+    std::shared_ptr<nekophoto::Image> thumb_;
+    std::shared_ptr<nekophoto::GrayImage> thumbProtect_;
     int pixelWidth_ = 0, pixelHeight_ = 0;
 };
 

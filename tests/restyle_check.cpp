@@ -2,9 +2,9 @@
 // written again as a fresh 'lfx2' and put back on the layer; the document must render as before, and writing
 // the rewritten style once more must give the same bytes. `restyle_check FILE_OR_DIR...`; exit 1 on a difference.
 // Patchy's fixtures (Photoshop-saved) are the corpus: restyle_check ../Patchy/test-fixtures/psd
-#include "compositor/layerstyle.h"
-#include "compositor/psd.h"
-#include "compositor/render.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -13,7 +13,7 @@
 #include <vector>
 
 namespace fs = std::filesystem;
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

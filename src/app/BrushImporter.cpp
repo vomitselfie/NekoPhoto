@@ -3,7 +3,7 @@
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "MainWindow.h"
-#include "compositor/brushimport.h"
+#include "nekophoto/brushimport.h"
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -23,21 +23,21 @@ BrushImportResult importBrushFiles(const QStringList& paths) {
     for (const QString& path : paths) {
         const QFileInfo info(path);
         std::string error;
-        std::optional<compositor::BrushImport> import = compositor::importBrushFile(path.toStdString(), &error);
+        std::optional<nekophoto::BrushImport> import = nekophoto::importBrushFile(path.toStdString(), &error);
         // A raster image the core does not decode itself becomes one tip through Qt's readers.
         if (!import && !QImageReader::imageFormat(path).isEmpty()) {
             QImageReader reader(path);
             reader.setAutoTransform(true);
             const QImage image = reader.read();
             if (!image.isNull()) {
-                if (auto preset = compositor::presetFromImage(*fromQImage(image), info.completeBaseName().toStdString()))
-                    import = compositor::BrushImport{"Images", {*preset}, {}};
+                if (auto preset = nekophoto::presetFromImage(*fromQImage(image), info.completeBaseName().toStdString()))
+                    import = nekophoto::BrushImport{"Images", {*preset}, {}};
                 else error = QCoreApplication::translate("app::BrushImporter", "nothing in the image would paint").toStdString();
             }
         }
         if (!import) { result.errors << QObject::tr("%1: %2").arg(info.fileName(), QString::fromStdString(error)); continue; }
         std::vector<std::string> written;
-        if (!compositor::saveBrushImport(*import, root, &written, &error)) { result.errors << QObject::tr("%1: %2").arg(info.fileName(), QString::fromStdString(error)); continue; }
+        if (!nekophoto::saveBrushImport(*import, root, &written, &error)) { result.errors << QObject::tr("%1: %2").arg(info.fileName(), QString::fromStdString(error)); continue; }
         for (const std::string& folder : written) {
             const QFileInfo brush(QString::fromStdString(folder));
             result.ids << QStringLiteral("imported/%1/%2").arg(brush.dir().dirName(), brush.fileName());

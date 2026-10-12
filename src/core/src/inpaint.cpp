@@ -7,10 +7,10 @@
 // The fill works on the document's own samples: RGB's red, green and blue, Lab's L, a and b, CMYK's four inks (as
 // stored, inverted), each with alpha last. Nothing is converted: in CMYK a hole fills with the inks of the patches it
 // copies, so K-only black stays K-only.
-#include "compositor/inpaint.h"
-#include "compositor/depth.h"
-#include "compositor/heal.h"
-#include "compositor/parallel.h"
+#include "nekophoto/inpaint.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -20,7 +20,7 @@
 #include <mutex>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -409,4 +409,4 @@ bool contentFill(Image16& image, const Gray16& hole, const InpaintOptions& optio
     return contentFill16(image, hole8, options, visible8.get());
 }
 
-} // namespace compositor
+} // namespace nekophoto

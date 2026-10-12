@@ -1,14 +1,14 @@
 // EditorSession: artboards (folders with a rectangle and a background) and slices (named export rectangles).
 #include "EditorSession.h"
 #include "ImageConvert.h"
-#include "compositor/depth.h"
-#include "compositor/png.h"
-#include "compositor/render.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/png.h"
+#include "nekophoto/render.h"
 #include <QDir>
 #include <QPainter>
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

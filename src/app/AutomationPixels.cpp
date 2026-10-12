@@ -5,15 +5,15 @@
 #include "GridFilters.h"
 #include "ModelStore.h"
 #include "MoshDialog.h"
-#include "compositor/cameraraw.h"
-#include "compositor/depth.h"
-#include "compositor/matte.h"
-#include "compositor/modeedit.h"
-#include "compositor/subject.h"
+#include "nekophoto/cameraraw.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/subject.h"
 #include <QJsonDocument>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {
@@ -246,7 +246,7 @@ void AutomationServer::registerPixelsHandlers() {
         return applied;
     });
     add("pixels.cameraRaw", [session, document](const QJsonObject& p) {
-        // Filter > Camera Raw Filter: `settings` has the model's keys (compositor/cameraraw.h); omitted keys keep their defaults.
+        // Filter > Camera Raw Filter: `settings` has the model's keys (nekophoto/cameraraw.h); omitted keys keep their defaults.
         refuseSmartObject(session());
         document();
         EditorSession* s = session();

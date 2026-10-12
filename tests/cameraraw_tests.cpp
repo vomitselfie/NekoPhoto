@@ -4,16 +4,16 @@
 #include <functional>
 #include <cstdio>
 #include <cstdlib>
-#include "compositor/depth.h"
+#include "nekophoto/depth.h"
 #include "check.h"
-#include "compositor/cameraraw.h"
-#include "compositor/camerarawxmp.h"
+#include "nekophoto/cameraraw.h"
+#include "nekophoto/camerarawxmp.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -4,7 +4,7 @@
 // src/third_party/patchy_psd/README.md): formats/svg_document_read.cpp and formats/vector_fill_rule.cpp.
 //
 // Ordering: SVG paints first to last, bottom to top, as Document::layers runs; a folder comes before its contents.
-#include "compositor/svg.h"
+#include "nekophoto/svg.h"
 #include "svg_xml.h"
 #include <zlib.h>
 #include <algorithm>
@@ -20,7 +20,7 @@
 #include <stdexcept>
 #include <unordered_map>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -1353,4 +1353,4 @@ std::optional<SvgImport> importSvgFile(const std::string& path, std::string* err
     return importSvg(bytes, error);
 }
 
-} // namespace compositor
+} // namespace nekophoto

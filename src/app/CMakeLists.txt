@@ -6,25 +6,25 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Network Svg)
 if(NOT WIN32)
     find_package(Qt6 6.4 QUIET COMPONENTS DBus)
 endif()
-option(COMPOSITOR_WITH_QTPDF "Open PDF files through Qt PDF when it is installed" ON)
-if(COMPOSITOR_WITH_QTPDF)
+option(NEKOPHOTO_WITH_QTPDF "Open PDF files through Qt PDF when it is installed" ON)
+if(NEKOPHOTO_WITH_QTPDF)
     find_package(Qt6 6.4 QUIET OPTIONAL_COMPONENTS Pdf)
 endif()
 
 # Some locked-down shells cannot execute binaries under /usr/lib. Point this at a
 # directory holding copies of moc, uic and rcc to build there anyway.
-set(COMPOSITOR_QT_TOOL_DIR "" CACHE PATH "Directory with moc/uic/rcc to use instead of Qt's own")
-if(COMPOSITOR_QT_TOOL_DIR)
+set(NEKOPHOTO_QT_TOOL_DIR "" CACHE PATH "Directory with moc/uic/rcc to use instead of Qt's own")
+if(NEKOPHOTO_QT_TOOL_DIR)
     foreach(tool moc uic rcc)
-        if(TARGET Qt6::${tool} AND EXISTS "${COMPOSITOR_QT_TOOL_DIR}/${tool}")
+        if(TARGET Qt6::${tool} AND EXISTS "${NEKOPHOTO_QT_TOOL_DIR}/${tool}")
             set_target_properties(Qt6::${tool} PROPERTIES
-                IMPORTED_LOCATION "${COMPOSITOR_QT_TOOL_DIR}/${tool}"
-                IMPORTED_LOCATION_RELEASE "${COMPOSITOR_QT_TOOL_DIR}/${tool}"
-                IMPORTED_LOCATION_DEBUG "${COMPOSITOR_QT_TOOL_DIR}/${tool}"
-                IMPORTED_LOCATION_RELWITHDEBINFO "${COMPOSITOR_QT_TOOL_DIR}/${tool}"
-                IMPORTED_LOCATION_MINSIZEREL "${COMPOSITOR_QT_TOOL_DIR}/${tool}")
+                IMPORTED_LOCATION "${NEKOPHOTO_QT_TOOL_DIR}/${tool}"
+                IMPORTED_LOCATION_RELEASE "${NEKOPHOTO_QT_TOOL_DIR}/${tool}"
+                IMPORTED_LOCATION_DEBUG "${NEKOPHOTO_QT_TOOL_DIR}/${tool}"
+                IMPORTED_LOCATION_RELWITHDEBINFO "${NEKOPHOTO_QT_TOOL_DIR}/${tool}"
+                IMPORTED_LOCATION_MINSIZEREL "${NEKOPHOTO_QT_TOOL_DIR}/${tool}")
             string(TOUPPER ${tool} upper)
-            set(QT_${upper}_EXECUTABLE "${COMPOSITOR_QT_TOOL_DIR}/${tool}" CACHE FILEPATH "" FORCE)
+            set(QT_${upper}_EXECUTABLE "${NEKOPHOTO_QT_TOOL_DIR}/${tool}" CACHE FILEPATH "" FORCE)
         endif()
     endforeach()
 endif()
@@ -226,16 +226,16 @@ qt_add_executable(nekophoto
     Names.cpp
 )
 
-target_compile_definitions(nekophoto PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")
-# The Qt and standard headers most of the app includes (COMPOSITOR_PCH): a chosen few rather than all of <QtWidgets>,
+target_compile_definitions(nekophoto PRIVATE NEKOPHOTO_VERSION="${NEKOPHOTO_VERSION_STRING}")
+# The Qt and standard headers most of the app includes (NEKOPHOTO_PCH): a chosen few rather than all of <QtWidgets>,
 # which takes twice as long to parse and makes a PCH that every file is slower to load.
-compositor_precompile_headers(nekophoto
+nekophoto_precompile_headers(nekophoto
     algorithm cmath functional map memory optional set vector
     QApplication QCheckBox QComboBox QDialog QDialogButtonBox QDir QDoubleSpinBox QFile QFileInfo QFormLayout QHBoxLayout
     QJsonArray QJsonDocument QJsonObject QKeyEvent QLabel QLineEdit QMenu QMessageBox QMouseEvent QPainter QPointer
     QPushButton QSettings QSpinBox QString QStringList QTimer QToolButton QVBoxLayout QWidget)
 # The MyPaint brush presets (CC0) are compiled in, so every package and a plain build tree have them.
-file(GLOB_RECURSE COMPOSITOR_BRUSH_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+file(GLOB_RECURSE NEKOPHOTO_BRUSH_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*.myb ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*_prev.png)
 # G'MIC filters that do not work here at their defaults (tools/gmic-sweep.py makes the list).
 qt_add_resources(nekophoto "welcome" PREFIX "/" FILES images/welcome.jpg)
@@ -248,7 +248,7 @@ qt_add_resources(nekophoto "gothkitty" PREFIX "/gothkitty" BASE theme/gothkitty 
     theme/gothkitty/cursor.svg theme/gothkitty/busy.svg theme/gothkitty/forbidden.svg
     theme/gothkitty/spin-up.svg theme/gothkitty/spin-down.svg)
 qt_add_resources(nekophoto "gmic_lists" PREFIX "/" FILES gmic/unsupported.txt)
-qt_add_resources(nekophoto "mypaint_brushes" PREFIX "/" FILES ${COMPOSITOR_BRUSH_FILES} brushes/mypaint/order.conf)
+qt_add_resources(nekophoto "mypaint_brushes" PREFIX "/" FILES ${NEKOPHOTO_BRUSH_FILES} brushes/mypaint/order.conf)
 # Translations (Qt Linguist): translations/nekophoto_<lang>.ts is compiled to .qm and embedded under :/i18n, so
 # every package carries it. Optional: without Qt LinguistTools the app builds, in English only.
 # `cmake --build build --target update_translations` refreshes the .ts from the sources (docs/translating.md).
@@ -263,15 +263,15 @@ if(TARGET Qt6::lrelease AND TARGET Qt6::lupdate)
 else()
     message(STATUS "Translations: Qt LinguistTools not found (qt6-l10n-tools on Debian/Ubuntu, qt6-tools elsewhere); the app will be English only")
 endif()
-target_link_libraries(nekophoto PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
+target_link_libraries(nekophoto PRIVATE nekophoto::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg nekophoto_warnings)
 # dlopen for the X11 monitor profile (Platform.cpp).
 target_link_libraries(nekophoto PRIVATE ${CMAKE_DL_LIBS})
 # Qt PDF (PDFium, BSD-3 / LGPL Qt) renders PDF pages for File > Open. Optional: without it PDFs are refused with a
 # message. Found at the top as an optional component of the one Qt lookup (a separate find_package(Qt6Pdf) after the
 # target exists loaded Qt's packages a second time on Homebrew and left the app without its moc output).
-if(COMPOSITOR_WITH_QTPDF AND TARGET Qt6::Pdf)
+if(NEKOPHOTO_WITH_QTPDF AND TARGET Qt6::Pdf)
     target_link_libraries(nekophoto PRIVATE Qt6::Pdf)
-    target_compile_definitions(nekophoto PRIVATE COMPOSITOR_HAVE_QTPDF=1)
+    target_compile_definitions(nekophoto PRIVATE NEKOPHOTO_HAVE_QTPDF=1)
     message(STATUS "PDF: Qt PDF ${Qt6Pdf_VERSION}")
 else()
     message(STATUS "PDF: Qt PDF not found (or off), PDF import disabled")
@@ -279,14 +279,14 @@ endif()
 # Off by default: linking libgmic makes it a hard dependency of the binary, and an installed build then
 # refuses to start once the library is upgraded or removed, while the gmic executable serves the same
 # filters. In-process G'MIC is for people who build with it on and keep libgmic around.
-option(COMPOSITOR_WITH_LIBGMIC "Run G'MIC filters in-process through libgmic when it is installed" OFF)
-if(COMPOSITOR_WITH_LIBGMIC)
+option(NEKOPHOTO_WITH_LIBGMIC "Run G'MIC filters in-process through libgmic when it is installed" OFF)
+if(NEKOPHOTO_WITH_LIBGMIC)
     find_path(GMIC_INCLUDE_DIR gmic.h)
     find_library(GMIC_LIBRARY gmic)
     if(GMIC_INCLUDE_DIR AND GMIC_LIBRARY)
         target_include_directories(nekophoto PRIVATE ${GMIC_INCLUDE_DIR})
         target_link_libraries(nekophoto PRIVATE ${GMIC_LIBRARY})
-        target_compile_definitions(nekophoto PRIVATE COMPOSITOR_HAVE_LIBGMIC)
+        target_compile_definitions(nekophoto PRIVATE NEKOPHOTO_HAVE_LIBGMIC)
         message(STATUS "G'MIC: in-process through libgmic (${GMIC_LIBRARY})")
     else()
         message(STATUS "G'MIC: libgmic not found; filters run through the gmic executable when it is installed")
@@ -294,7 +294,7 @@ if(COMPOSITOR_WITH_LIBGMIC)
 endif()
 if(TARGET Qt6::DBus)
     target_link_libraries(nekophoto PRIVATE Qt6::DBus)
-    target_compile_definitions(nekophoto PRIVATE COMPOSITOR_HAVE_DBUS)
+    target_compile_definitions(nekophoto PRIVATE NEKOPHOTO_HAVE_DBUS)
     message(STATUS "Appearance: desktop colour scheme via the XDG portal (Qt DBus)")
 endif()
 if(WIN32)
@@ -302,16 +302,16 @@ if(WIN32)
     # console for --version, --help and --call (Platform.cpp). The resource file carries the icon, the version
     # information and the manifest (UTF-8 code page for the core's narrow file APIs).
     set_target_properties(nekophoto PROPERTIES WIN32_EXECUTABLE TRUE)
-    set(COMPOSITOR_WIN_ICON "${CMAKE_SOURCE_DIR}/packaging/windows/nekophoto.ico")
-    set(COMPOSITOR_WIN_MANIFEST "${CMAKE_SOURCE_DIR}/packaging/windows/nekophoto.manifest")
+    set(NEKOPHOTO_WIN_ICON "${CMAKE_SOURCE_DIR}/packaging/windows/nekophoto.ico")
+    set(NEKOPHOTO_WIN_MANIFEST "${CMAKE_SOURCE_DIR}/packaging/windows/nekophoto.manifest")
     # FILEVERSION wants four numbers; a pre-release suffix ("1.6.0-dev.abc") is dropped there and kept in the strings.
-    string(REGEX MATCHALL "[0-9]+" COMPOSITOR_WIN_VERSION_PARTS "${COMPOSITOR_VERSION_STRING}")
-    list(APPEND COMPOSITOR_WIN_VERSION_PARTS 0 0 0 0)
-    list(SUBLIST COMPOSITOR_WIN_VERSION_PARTS 0 4 COMPOSITOR_WIN_VERSION_PARTS)
-    string(REPLACE ";" "," COMPOSITOR_WIN_VERSION_COMMAS "${COMPOSITOR_WIN_VERSION_PARTS}")
+    string(REGEX MATCHALL "[0-9]+" NEKOPHOTO_WIN_VERSION_PARTS "${NEKOPHOTO_VERSION_STRING}")
+    list(APPEND NEKOPHOTO_WIN_VERSION_PARTS 0 0 0 0)
+    list(SUBLIST NEKOPHOTO_WIN_VERSION_PARTS 0 4 NEKOPHOTO_WIN_VERSION_PARTS)
+    string(REPLACE ";" "," NEKOPHOTO_WIN_VERSION_COMMAS "${NEKOPHOTO_WIN_VERSION_PARTS}")
     configure_file(${CMAKE_SOURCE_DIR}/packaging/windows/nekophoto.rc.in ${CMAKE_CURRENT_BINARY_DIR}/nekophoto.rc @ONLY)
     target_sources(nekophoto PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/nekophoto.rc)
-    set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/nekophoto.rc APPEND PROPERTY OBJECT_DEPENDS ${COMPOSITOR_WIN_ICON} ${COMPOSITOR_WIN_MANIFEST})
+    set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/nekophoto.rc APPEND PROPERTY OBJECT_DEPENDS ${NEKOPHOTO_WIN_ICON} ${NEKOPHOTO_WIN_MANIFEST})
 endif()
 
 # nekophoto on Linux (the command people type); NekoPhoto.app on the Mac, as apps there are named.
@@ -322,32 +322,32 @@ else()
 endif()
 
 # GPL-3.0 for the program, the MIT notice of the code it ports, and the third-party notices.
-set(COMPOSITOR_LICENSE_FILES ${CMAKE_SOURCE_DIR}/LICENSE ${CMAKE_SOURCE_DIR}/THIRD-PARTY-NOTICES.md)
-file(GLOB COMPOSITOR_LICENSE_TEXTS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/LICENSES/*.txt)
+set(NEKOPHOTO_LICENSE_FILES ${CMAKE_SOURCE_DIR}/LICENSE ${CMAKE_SOURCE_DIR}/THIRD-PARTY-NOTICES.md)
+file(GLOB NEKOPHOTO_LICENSE_TEXTS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/LICENSES/*.txt)
 
 if(APPLE)
     # An app bundle with the icon and document types; macdeployqt then adds Qt and the other dylibs.
-    set(COMPOSITOR_ICNS ${CMAKE_SOURCE_DIR}/packaging/nekophoto.icns)
-    target_sources(nekophoto PRIVATE ${COMPOSITOR_ICNS})
-    set_source_files_properties(${COMPOSITOR_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set(NEKOPHOTO_ICNS ${CMAKE_SOURCE_DIR}/packaging/nekophoto.icns)
+    target_sources(nekophoto PRIVATE ${NEKOPHOTO_ICNS})
+    set_source_files_properties(${NEKOPHOTO_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     # The licence texts travel inside the bundle, as they do in share/doc on Linux.
-    target_sources(nekophoto PRIVATE ${COMPOSITOR_LICENSE_FILES} ${COMPOSITOR_LICENSE_TEXTS})
-    set_source_files_properties(${COMPOSITOR_LICENSE_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/licenses)
-    set_source_files_properties(${COMPOSITOR_LICENSE_TEXTS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/licenses/LICENSES)
+    target_sources(nekophoto PRIVATE ${NEKOPHOTO_LICENSE_FILES} ${NEKOPHOTO_LICENSE_TEXTS})
+    set_source_files_properties(${NEKOPHOTO_LICENSE_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/licenses)
+    set_source_files_properties(${NEKOPHOTO_LICENSE_TEXTS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/licenses/LICENSES)
     set_target_properties(nekophoto PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/packaging/Info.plist.in
         MACOSX_BUNDLE_BUNDLE_NAME "NekoPhoto"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.vomitselfie.nekophoto"
         MACOSX_BUNDLE_ICON_FILE "nekophoto.icns"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "${COMPOSITOR_VERSION_STRING}"
-        MACOSX_BUNDLE_BUNDLE_VERSION "${COMPOSITOR_VERSION_STRING}")
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${NEKOPHOTO_VERSION_STRING}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${NEKOPHOTO_VERSION_STRING}")
     install(TARGETS nekophoto BUNDLE DESTINATION .)
 elseif(WIN32)
     # A portable folder: nekophoto.exe with its DLLs beside it (tools/package-windows.sh) and the licences.
     install(TARGETS nekophoto RUNTIME DESTINATION .)
-    install(FILES ${COMPOSITOR_LICENSE_FILES} DESTINATION .)
-    install(FILES ${COMPOSITOR_LICENSE_TEXTS} DESTINATION LICENSES)
+    install(FILES ${NEKOPHOTO_LICENSE_FILES} DESTINATION .)
+    install(FILES ${NEKOPHOTO_LICENSE_TEXTS} DESTINATION LICENSES)
 else()
     install(TARGETS nekophoto RUNTIME DESTINATION bin)
 endif()
@@ -357,6 +357,6 @@ if(NOT WIN32)
     install(FILES ${CMAKE_SOURCE_DIR}/packaging/nekophoto-mime.xml DESTINATION share/mime/packages RENAME nekophoto.xml)
 endif()
 if(NOT APPLE AND NOT WIN32)
-    install(FILES ${COMPOSITOR_LICENSE_FILES} DESTINATION share/doc/nekophoto)
-    install(FILES ${COMPOSITOR_LICENSE_TEXTS} DESTINATION share/doc/nekophoto/LICENSES)
+    install(FILES ${NEKOPHOTO_LICENSE_FILES} DESTINATION share/doc/nekophoto)
+    install(FILES ${NEKOPHOTO_LICENSE_TEXTS} DESTINATION share/doc/nekophoto/LICENSES)
 endif()

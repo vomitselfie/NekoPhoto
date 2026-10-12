@@ -1,10 +1,10 @@
 // Colour management through Little CMS (colormgmt.h, docs/color-management.md).
-#include "compositor/colormgmt.h"
+#include "nekophoto/colormgmt.h"
 #include "colormgmt_display.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/parallel.h"
-#include "compositor/view32.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/view32.h"
 #include "lcms2.h"
 #include <algorithm>
 #include <array>
@@ -15,7 +15,7 @@
 #include <tuple>
 #include <mutex>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace blobs {
 extern const unsigned char defaultCmykProfile[];
@@ -1153,4 +1153,4 @@ float peakLuminance(const ImageF& image, const std::array<float, 3>& weights) {
     return peak;
 }
 
-} // namespace compositor
+} // namespace nekophoto

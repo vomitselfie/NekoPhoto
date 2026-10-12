@@ -1,5 +1,5 @@
 # psd-tools' test files (MIT, https://github.com/psd-tools/psd-tools, tests/psd_files)
-# that tests/psd_composite_oracle.cpp measures: the commit and each file's SHA-256. Rewritten with COMPOSITOR_UPDATE_PSD_ORACLE=1.
+# that tests/psd_composite_oracle.cpp measures: the commit and each file's SHA-256. Rewritten with NEKOPHOTO_UPDATE_PSD_ORACLE=1.
 commit 96eb134c17b2c65edf4c4151c0f00b802ada86c2
 3ae85219dadb3028dab6f4f8f72e6e1a6ca4b5d40aeede8abf87ec24020150fa  tests/psd_files/0layers.psb
 0711306e56002f193e33aefe4a1e9ce89ceafaea04da243593bc0c1e697c7d64  tests/psd_files/0layers.psd

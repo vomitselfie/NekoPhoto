@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace compositor::photocraft {
+namespace nekophoto::photocraft {
 
 /// Where a sample past the reference rectangle comes from.
 enum class Edge { Transparent, Repeat, Wrap };
@@ -71,4 +71,4 @@ float cloudsValue(float x, float y, float base, uint32_t seed);
 /// Clouds' cell for a document whose longest side is `side`.
 float cloudsBase(int side);
 
-} // namespace compositor::photocraft
+} // namespace nekophoto::photocraft

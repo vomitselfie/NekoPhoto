@@ -1,14 +1,14 @@
 // The toning tools' full-strength images (toning.h): Dodge, Burn, Sponge and Sharpen.
 #include "check.h"
-#include "compositor/toning.h"
-#include "compositor/blur.h"
-#include "compositor/brush.h"
-#include "compositor/render.h"
+#include "nekophoto/toning.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/render.h"
 #include <cstdio>
 #include <functional>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -1,18 +1,18 @@
 // EditorSession: Selections: setting, combining, the magic wand, fill and clear, and the Select menu.
 #include "EditorSession.h"
-#include "compositor/bucket.h"
-#include "compositor/channels.h"
+#include "nekophoto/bucket.h"
+#include "nekophoto/channels.h"
 #include "ColorManagement.h"
-#include "compositor/smartwand.h"
-#include "compositor/morphology.h"
-#include "compositor/heal.h"
-#include "compositor/wand.h"
-#include "compositor/filters.h"
-#include "compositor/depth.h"
+#include "nekophoto/smartwand.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/wand.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/depth.h"
 #include <algorithm>
 #include <cstring>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -131,7 +131,7 @@ void EditorSession::reselect() {
 void EditorSession::invertSelection() {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection) return;
-    setSelection(compositor::invertSelection(*document_->selection, document_->width, document_->height), QT_TRANSLATE_NOOP("History", "Inverse"));
+    setSelection(nekophoto::invertSelection(*document_->selection, document_->width, document_->height), QT_TRANSLATE_NOOP("History", "Inverse"));
 }
 
 void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius, bool edgeAware, std::optional<bool> refineEdge) {

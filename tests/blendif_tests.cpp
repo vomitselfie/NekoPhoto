@@ -2,16 +2,16 @@
 // against Photoshop's own render of it (photoshop-blend-if-4b-render.bmp), when Patchy is beside this checkout; and
 // Advanced Blending's Channels (excluded channels) the same way (photoshop-channel-restrictions).
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/blendif.h"
-#include "compositor/colormgmt.h"
-#include "compositor/document.h"
-#include "compositor/layerstyle.h"
-#include "compositor/psd.h"
-#include "compositor/project.h"
-#include "compositor/psd_carry.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/blendif.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/document.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

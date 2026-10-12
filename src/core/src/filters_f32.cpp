@@ -4,17 +4,17 @@
 // Gaussian and Motion Blur average light as it is (blur_f32.cpp). Add Noise draws the 8- and 16-bit pattern for a seed
 // and adds it to the colour in the document's encoding (its curve, continued above 1), so a given amount looks as it
 // does at 8 bits; Lens Correction resamples the linear values with exact bilinear or Catmull-Rom weights.
-#include "compositor/filters.h"
-#include "compositor/adjustments.h"
-#include "compositor/blur.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -191,4 +191,4 @@ void blendThroughCoverage(GrayF& adjusted, const GrayF& original, const GrayF& c
         }
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,6 +1,6 @@
-#include "compositor/brushimport.h"
+#include "nekophoto/brushimport.h"
 #include "brushformats.h"
-#include "compositor/png.h"
+#include "nekophoto/png.h"
 #include <algorithm>
 #include <cmath>
 #include <cctype>
@@ -11,7 +11,7 @@
 #include <iterator>
 #include <set>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace fs = std::filesystem;
 
@@ -147,4 +147,4 @@ bool saveBrushImport(const BrushImport& import, const std::string& root, std::ve
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

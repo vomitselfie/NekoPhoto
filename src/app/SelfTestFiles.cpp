@@ -20,7 +20,7 @@
 #include <cstdio>
 #include <functional>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

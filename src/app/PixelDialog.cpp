@@ -1,12 +1,12 @@
 #include "PixelDialog.h"
-#include "compositor/filters.h"
-#include "compositor/modeedit.h"
-#include "compositor/render.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/render.h"
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QVBoxLayout>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

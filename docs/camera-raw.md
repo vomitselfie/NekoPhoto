@@ -6,7 +6,7 @@ destructive: on a smart object it asks first, like the other pixel filters, and 
 
 | Part | Upstream | Here |
 |---|---|---|
-| Settings, ranges, normalization, apply order | `Document/CameraRaw*.swift` | `src/core/include/compositor/cameraraw.h`, `src/core/src/cameraraw.cpp` |
+| Settings, ranges, normalization, apply order | `Document/CameraRaw*.swift` | `src/core/include/nekophoto/cameraraw.h`, `src/core/src/cameraraw.cpp` |
 | Pixel kernels (`adjust_camera_raw_*`: texture, glow, grain, defringe, profile corrections, detail, point colours, the clipping views) | `Rendering/AdjustPixels.c` | `src/pixels/CameraRawPixels.c`, extracted unchanged apart from warning fixes |
 | Tone and colour responses fitted to Camera Raw ([Fitted responses](#fitted-responses)) | none | `src/core/src/rawtone.cpp`, tables from `tools/camera_raw_fit.py` |
 | Panels | `UI/CameraRaw*.swift`, `UI/RawDevelopSheet.swift` | `src/app/CameraRawDialog.cpp` |
@@ -60,7 +60,7 @@ open document.
   Raw with those settings; OK develops it again and every layer placing it updates, as one undo step.
 - **Cancel** (or Escape) stops a decode that is running and opens nothing.
 
-The develop is `compositor/raw.h`: LibRaw demosaics with the white balance's multipliers (the camera's own for As
+The develop is `nekophoto/raw.h`: LibRaw demosaics with the white balance's multipliers (the camera's own for As
 Shot) and the camera's colour matrix into linear ProPhoto RGB at 16 bits, the raw white point at 1; a DNG's
 BaselineExposure scales it; the [default tone curve](#the-default-render) takes it to display light and sRGB. Then
 `applyCameraRaw` grades it with the settings, the same code as the filter (so the dialog's result equals Open with no
@@ -126,7 +126,7 @@ temperature) and **Tint** (−150…150, positive toward magenta). Moving either
 - **Custom** turns Temperature and Tint into a white point, the white point into the camera's neutral through the
   camera's colour matrix, and the neutral into multipliers for the develop.
 
-The conversions (`compositor/whitebalance.h`):
+The conversions (`nekophoto/whitebalance.h`):
 
 - Camera neutral ↔ white point: through the camera's XYZ → camera matrix, as the DNG specification describes. A DNG
   gives ColorMatrix1/2 (with CameraCalibration1/2 when present) for its two calibration illuminants, interpolated
@@ -185,10 +185,10 @@ The test develops the chart as File ▸ Open does (`developRaw`), once per case 
 the patches, the wide-gamut row left out. Cases for controls NekoPhoto has no counterpart for (Convert to Black & White
 and its mix, look profiles, Point Color) are listed and skipped. Every case is held to
 `tests/camera_raw_parity_baseline.txt`: one that gets worse by more than 0.1 on its mean or 0.3 on its 95th percentile
-fails. After an intended change, `COMPOSITOR_BLESS_CAMERA_RAW_PARITY=1 build/tests/camera_raw_parity` rewrites the
-baseline (commit its diff with the change); `COMPOSITOR_CAMERA_RAW_PARITY_DUMP=<file>` writes every case's patch values
-as JSON, for fitting; `COMPOSITOR_CAMERA_RAW_PARITY_ONLY=<text>` runs the cases whose name contains it and
-`COMPOSITOR_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>"` patches one case's settings, to try a mapping by hand. The
+fails. After an intended change, `NEKOPHOTO_BLESS_CAMERA_RAW_PARITY=1 build/tests/camera_raw_parity` rewrites the
+baseline (commit its diff with the change); `NEKOPHOTO_CAMERA_RAW_PARITY_DUMP=<file>` writes every case's patch values
+as JSON, for fitting; `NEKOPHOTO_CAMERA_RAW_PARITY_ONLY=<text>` runs the cases whose name contains it and
+`NEKOPHOTO_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>"` patches one case's settings, to try a mapping by hand. The
 test prints every case and a summary per control. Where Geometry or Distortion uncovers the layer (transparent here),
 the patches are measured over white, which is what Camera Raw renders there.
 
@@ -293,7 +293,7 @@ What does not match yet:
 
 **Load Preset…** (beside Reset All, in the filter and in the dialog a RAW file opens in) applies a Camera Raw or Lightroom
 preset, or a sidecar, as Photoshop's Camera Raw loads `.xmp` presets: the `crs:` settings it names replace the current
-ones and the rest stay (`compositor/camerarawxmp.h`; the parity test maps its cases through the same code). The preset's
+ones and the rest stay (`nekophoto/camerarawxmp.h`; the parity test maps its cases through the same code). The preset's
 settings are read as attributes or elements, the point curves as sequences.
 
 - Read: Exposure2012, Contrast2012, Highlights2012, Shadows2012, Whites2012, Blacks2012, Texture, Clarity2012, Dehaze,

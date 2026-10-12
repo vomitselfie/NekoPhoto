@@ -3,7 +3,7 @@
 #include <cstring>
 #include <utility>
 
-namespace compositor::affinity {
+namespace nekophoto::affinity {
 
 namespace {
 
@@ -350,4 +350,4 @@ Tree parseTree(std::span<const uint8_t> bytes) {
     return TreeReader(bytes, shared).parse();
 }
 
-} // namespace compositor::affinity
+} // namespace nekophoto::affinity

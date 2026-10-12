@@ -1,7 +1,7 @@
-#include "compositor/colour.h"
+#include "nekophoto/colour.h"
 #include "lcms2.h"
 
-namespace compositor {
+namespace nekophoto {
 
 std::shared_ptr<const CmykToSrgb> CmykToSrgb::fromProfile(const std::vector<uint8_t>& profile) {
     if (profile.size() < 128) return nullptr;
@@ -31,4 +31,4 @@ void CmykToSrgb::convert(const uint8_t* cmyk, uint8_t* rgb, size_t count) const 
     cmsDoTransform(static_cast<cmsHTRANSFORM>(transform_), cmyk, rgb, cmsUInt32Number(count));
 }
 
-} // namespace compositor
+} // namespace nekophoto

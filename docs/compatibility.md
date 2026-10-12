@@ -24,7 +24,7 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
 | Automation | **184 methods**, 183 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
-| Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` |
+| Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DNEKOPHOTO_WARNINGS_AS_ERRORS=ON` |
 
 | Mode | native | native, partly through RGB | greyed: Photoshop lacks | greyed: not yet |
 |---|---:|---:|---:|---:|
@@ -85,7 +85,7 @@ the Dissolve layers, since Photoshop's dissolve pattern is not public.
 Each corpus has an expectations file, `tests/psd_oracle.txt`, `tests/psd_oracle_photocraft.txt` and
 `tests/psd_oracle_psdtools.txt`, listing every file's status and numbers. A file that passed and fails now, one no
 longer compared, or a failing file whose mean grows by more than a level fails the test; a file that now passes is
-reported as an improvement, to record with `COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus
+reported as an improvement, to record with `NEKOPHOTO_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus
 <patchy|photocraft|psd-tools>`. A corpus that is not there is reported as SKIPPED (CTest counts it skipped, not
 passed). In a git worktree Patchy is still found beside the main checkout.
 

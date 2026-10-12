@@ -1,9 +1,9 @@
 // Pixel operations over a buffer of any depth and layout (docs/high-bit-depth-plan.md, P5c and P7 E): trimming a merge's
 // result and applying a layer mask, for 32-bit, CMYK and Lab documents as for 8- and 16-bit RGB.
-#include "compositor/filters.h"
+#include "nekophoto/filters.h"
 #include "stroke_raster.h"
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -84,4 +84,4 @@ AnyImage applyMaskAny(const AnyImage& image, const AnyGray& mask) {
     return {};
 }
 
-} // namespace compositor
+} // namespace nekophoto

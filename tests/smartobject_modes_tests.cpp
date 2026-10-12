@@ -3,24 +3,24 @@
 // converted to a smart object looking exactly as they did, warps and Smart Filters on the document's samples, and the
 // PSD and project round trips keeping the instances live and CMYK contents as their inks.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/modeedit.h"
-#include "compositor/png.h"
-#include "compositor/project.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
-#include "compositor/smartfilter.h"
-#include "compositor/smartobject_edit.h"
-#include "compositor/svg.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/png.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/smartobject_edit.h"
+#include "nekophoto/svg.h"
 #include "lcms2.h"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

@@ -1,12 +1,12 @@
 // Animated GIF import: a GIF87a/89a parser, an LZW decoder and the frame compositing (disposal methods 0-3,
 // transparency, interlacing, local colour tables), written for NekoPhoto from the GIF89a specification.
-#include "compositor/gif.h"
+#include "nekophoto/gif.h"
 #include "format_io.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -243,4 +243,4 @@ std::optional<PsdImport> importGif(const std::string& path, std::string* error) 
     return importGifBytes(bytes, error);
 }
 
-} // namespace compositor
+} // namespace nekophoto

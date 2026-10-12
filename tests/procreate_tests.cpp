@@ -1,9 +1,9 @@
 // Procreate import: a .brushset and a .brush written here byte by byte (a stored ZIP, an XML brushset.plist,
-// an NSKeyedArchiver binary plist, PNG shapes), and a real file when COMPOSITOR_PROCREATE_SAMPLE names one.
+// an NSKeyedArchiver binary plist, PNG shapes), and a real file when NEKOPHOTO_PROCREATE_SAMPLE names one.
 #include "check.h"
 #include "brush_import_fixtures.h"
-#include "compositor/brushimport.h"
-#include "compositor/png.h"
+#include "nekophoto/brushimport.h"
+#include "nekophoto/png.h"
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -13,7 +13,7 @@
 #include <variant>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 using namespace brushfixtures;
@@ -64,8 +64,8 @@ TEST_CASE(a_single_procreate_brush_and_damaged_archives) {
 }
 
 TEST_CASE(procreate_sample_file_when_available) {
-    const char* sample = std::getenv("COMPOSITOR_PROCREATE_SAMPLE");
-    if (!sample) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_PROCREATE_SAMPLE to a .brushset file)\n"); return; }
+    const char* sample = std::getenv("NEKOPHOTO_PROCREATE_SAMPLE");
+    if (!sample) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_PROCREATE_SAMPLE to a .brushset file)\n"); return; }
     std::string error;
     auto import = importBrushFile(sample, &error);
     REQUIRE(import.has_value());

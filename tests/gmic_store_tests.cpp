@@ -5,7 +5,7 @@
 #include "check.h"
 #include "Gmic.h"
 #include "GmicStore.h"
-#include "compositor/zipfile.h"
+#include "nekophoto/zipfile.h"
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QDir>
@@ -42,7 +42,7 @@ std::vector<Entry> realShape() {
 }
 
 bool writeZip(const QString& path, const std::vector<Entry>& entries, bool deflate) {
-    compositor::ZipFileWriter zip;
+    nekophoto::ZipFileWriter zip;
     if (!zip.open(path.toStdString())) return false;
     for (const Entry& e : entries)
         if (!zip.add(e.name, bytesOf(e.data), deflate && !e.data.empty())) return false;
@@ -207,7 +207,7 @@ TEST_CASE(hostile_archives_are_refused) {
         std::vector<Entry> entries = realShape();
         entries.push_back({top + "big.dll", std::string(64 * 1024, 'x')});
         REQUIRE(writeZip(archive, entries, true));
-        compositor::ZipLimits tight = GmicStore::limits();
+        nekophoto::ZipLimits tight = GmicStore::limits();
         tight.entryBytes = 32 * 1024;
         QString error;
         CHECK(!GmicStore::install(archive, buildFor(archive), root, &error, tight));
@@ -240,21 +240,21 @@ TEST_CASE(lookup_order) {
     const QString env = envDir + "/custom-" + name, beside = appDir + "/gmic/" + name, downloaded = dataDir + "/gmic/4.0.5/" + name,
                   onPath = pathDir + '/' + name;
     for (const QString& path : {env, beside, downloaded, onPath}) REQUIRE(makeExecutable(path));
-    const QByteArray oldPath = qgetenv("PATH"), oldEnv = qgetenv("COMPOSITOR_GMIC");
+    const QByteArray oldPath = qgetenv("PATH"), oldEnv = qgetenv("NEKOPHOTO_GMIC");
     GmicRunner::setSearchRootsForTesting(appDir, dataDir);
     qputenv("PATH", QDir::toNativeSeparators(pathDir).toLocal8Bit());
-    qputenv("COMPOSITOR_GMIC", QDir::toNativeSeparators(env).toLocal8Bit());
+    qputenv("NEKOPHOTO_GMIC", QDir::toNativeSeparators(env).toLocal8Bit());
 
     auto found = GmicRunner::locate();
     CHECK(found.source == "env");
     CHECK(QFileInfo(found.path) == QFileInfo(env));
 
-    // COMPOSITOR_GMIC naming something that is not there falls through to the next place.
-    qputenv("COMPOSITOR_GMIC", QDir::toNativeSeparators(envDir + "/missing-" + name).toLocal8Bit());
+    // NEKOPHOTO_GMIC naming something that is not there falls through to the next place.
+    qputenv("NEKOPHOTO_GMIC", QDir::toNativeSeparators(envDir + "/missing-" + name).toLocal8Bit());
     found = GmicRunner::locate();
     CHECK(found.source == "beside");
     CHECK(QFileInfo(found.path) == QFileInfo(beside));
-    qunsetenv("COMPOSITOR_GMIC");
+    qunsetenv("NEKOPHOTO_GMIC");
     CHECK(GmicRunner::locate().source == "beside");
 
     REQUIRE(QFile::remove(beside));
@@ -276,7 +276,7 @@ TEST_CASE(lookup_order) {
     CHECK(found.source.isEmpty());
 
     qputenv("PATH", oldPath);
-    if (!oldEnv.isEmpty()) qputenv("COMPOSITOR_GMIC", oldEnv);
+    if (!oldEnv.isEmpty()) qputenv("NEKOPHOTO_GMIC", oldEnv);
     GmicRunner::setSearchRootsForTesting({}, {});
 }
 
@@ -295,16 +295,16 @@ TEST_CASE(install_then_remove) {
     REQUIRE(GmicStore::install(archive, build, GmicStore::directory(), &error));
     CHECK(GmicStore::directory() == dataDir + "/gmic");
     CHECK(QFileInfo::exists(GmicRunner::downloadedDirectory() + '/' + build.executable));
-    const QByteArray oldPath = qgetenv("PATH"), oldEnv = qgetenv("COMPOSITOR_GMIC");
+    const QByteArray oldPath = qgetenv("PATH"), oldEnv = qgetenv("NEKOPHOTO_GMIC");
     qputenv("PATH", QDir::toNativeSeparators(dir.filePath("empty")).toLocal8Bit());
-    qunsetenv("COMPOSITOR_GMIC");
+    qunsetenv("NEKOPHOTO_GMIC");
     CHECK(GmicRunner::locate().source == "downloaded");
     CHECK(GmicStore::remove(&error));
     CHECK(!QFileInfo::exists(GmicRunner::downloadedDirectory()));
     CHECK(contents(GmicStore::directory()).isEmpty());
     CHECK(GmicRunner::locate().path.isEmpty());
     qputenv("PATH", oldPath);
-    if (!oldEnv.isEmpty()) qputenv("COMPOSITOR_GMIC", oldEnv);
+    if (!oldEnv.isEmpty()) qputenv("NEKOPHOTO_GMIC", oldEnv);
     GmicRunner::setSearchRootsForTesting({}, {});
 }
 

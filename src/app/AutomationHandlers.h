@@ -4,10 +4,10 @@
 #pragma once
 #include "EditorSession.h"
 #include "MainWindow.h"
-#include "compositor/document.h"
-#include "compositor/filters.h"
-#include "compositor/selection.h"
-#include "compositor/transform.h"
+#include "nekophoto/document.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/selection.h"
+#include "nekophoto/transform.h"
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
@@ -36,41 +36,41 @@ QString str(const QJsonObject& p, const char* key, std::optional<QString> fallba
 bool flag(const QJsonObject& p, const char* key, bool fallback);
 QJsonObject obj(const QJsonObject& p, const char* key);
 QString qs(const std::string& s);
-compositor::SelectionMode selectionMode(const QJsonObject& p);
+nekophoto::SelectionMode selectionMode(const QJsonObject& p);
 /// Every adjustment kind's name, comma separated (for messages).
 QString adjustmentKindList();
-std::optional<compositor::AdjustmentKind> adjustmentKindNamed(QString name);
-std::optional<compositor::FilterKind> filterKindNamed(QString name);
+std::optional<nekophoto::AdjustmentKind> adjustmentKindNamed(QString name);
+std::optional<nekophoto::FilterKind> filterKindNamed(QString name);
 /// "Color Dodge", "color dodge", "colorDodge" and "color-dodge" alike.
-std::optional<compositor::BlendMode> blendModeNamed(const QString& name);
+std::optional<nekophoto::BlendMode> blendModeNamed(const QString& name);
 QStringList blendModeNames();
 /// Nearest, Smooth or High quality, by any case or prefix ("high", "near").
-std::optional<compositor::Sampling> samplingNamed(const QString& name);
+std::optional<nekophoto::Sampling> samplingNamed(const QString& name);
 
 // ---- JSON views of the model --------------------------------------------------------------------
 
-QJsonObject rectJson(const compositor::Rect& r);
-QJsonObject transformJson(const compositor::LayerTransform& t);
-QJsonObject layerJson(const compositor::Layer& layer, int depth);
+QJsonObject rectJson(const nekophoto::Rect& r);
+QJsonObject transformJson(const nekophoto::LayerTransform& t);
+QJsonObject layerJson(const nekophoto::Layer& layer, int depth);
 /// An artboard folder (AutomationArtboards.cpp): its rectangle, background and name.
-QJsonObject artboardJson(const compositor::Layer& layer);
+QJsonObject artboardJson(const nekophoto::Layer& layer);
 /// A text style from request parameters over `base`: text, font, size, bold, italic, color (CSS), align
 /// (left, center, right), lineSpacing, letterSpacing.
-compositor::LayerText textFromParams(const QJsonObject& p, compositor::LayerText base);
-QJsonArray layersJson(const compositor::Document& doc);
+nekophoto::LayerText textFromParams(const QJsonObject& p, nekophoto::LayerText base);
+QJsonArray layersJson(const nekophoto::Document& doc);
 /// A smart object's Smart Filters (smartObject.filters): the stack, its mask and each entry in running order.
-QJsonObject smartFiltersJson(const EditorSession& session, const compositor::Uuid& id);
+QJsonObject smartFiltersJson(const EditorSession& session, const nekophoto::Uuid& id);
 /// Smart Filter settings from request keys (radius, threshold, amount, ...) over `parameters`; keys the filter does
 /// not take are ignored.
-void smartFilterSettingsFrom(const QJsonObject& p, compositor::SmartFilterParameters& parameters);
-QString base64Png(const compositor::Image& image);
+void smartFilterSettingsFrom(const QJsonObject& p, nekophoto::SmartFilterParameters& parameters);
+QString base64Png(const nekophoto::Image& image);
 /// Refuses (fails the request) a write to `path` outside the write roots, or to an existing file unless params.overwrite
 /// is true (AutomationGuard.h).
 void checkWrite(const QString& path, const QJsonObject& p);
 /// `image` as PNG: written to params.path when given (result carries the path; an existing file only with
 /// overwrite: true), else base64 in "png".
-QJsonObject deliverPng(const compositor::Image& image, const QJsonObject& p, QJsonObject result);
-std::shared_ptr<compositor::Image> scaledCopy(const compositor::Image& image, double maxSize);
+QJsonObject deliverPng(const nekophoto::Image& image, const QJsonObject& p, QJsonObject result);
+std::shared_ptr<nekophoto::Image> scaledCopy(const nekophoto::Image& image, double maxSize);
 
 // ---- Method descriptions (AutomationDescriptions.cpp) --------------------------------------------
 
@@ -100,25 +100,25 @@ struct SessionOf {
 /// The current tab's document; an error when none is open.
 struct DocumentOf {
     MainWindow* w;
-    const compositor::Document& operator()() const;
+    const nekophoto::Document& operator()() const;
 };
 
 /// The layer whose id is in `key`; an error when there is none.
 struct LayerOf {
     DocumentOf document;
-    const compositor::Layer& operator()(const QJsonObject& p, const char* key = "id") const;
+    const nekophoto::Layer& operator()(const QJsonObject& p, const char* key = "id") const;
 };
 
 /// The layer in "id", or the active layer when there is no id.
 struct LayerOrActive {
     MainWindow* w;
-    const compositor::Layer& operator()(const QJsonObject& p) const;
+    const nekophoto::Layer& operator()(const QJsonObject& p) const;
 };
 
 /// Runs `f` with `id` as the active layer, restoring the previous selection afterwards.
 struct WithActive {
     MainWindow* w;
-    template <class F> void operator()(const compositor::Uuid& id, F f) const {
+    template <class F> void operator()(const nekophoto::Uuid& id, F f) const {
         EditorSession* s = w->session();
         auto previous = s->activeLayerId();
         bool previousMask = s->isMaskSelected();

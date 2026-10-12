@@ -1,15 +1,15 @@
 // ICO / CUR reading and ICO writing, ported from Patchy (MIT, src/third_party/patchy_psd/README.md):
-// src/formats/ico_document_io.cpp, adapted to compositor::Document (a layer per size) and to NekoPhoto's own
+// src/formats/ico_document_io.cpp, adapted to nekophoto::Document (a layer per size) and to NekoPhoto's own
 // PNG codec for PNG-compressed entries. Cursor hotspots are not kept.
-#include "compositor/ico.h"
-#include "compositor/png.h"
+#include "nekophoto/ico.h"
+#include "nekophoto/png.h"
 #include "format_io.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <set>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -330,4 +330,4 @@ bool writeIco(const std::string& path, const Image& flattened, const std::vector
     return encodeIco(flattened, sizes, bytes, error, document) && format_io::writeFile(path, bytes, error);
 }
 
-} // namespace compositor
+} // namespace nekophoto

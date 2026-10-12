@@ -3,17 +3,17 @@
 // estimation on the inks or L, a and b. Nothing here passes through RGB: what is written comes from the source samples,
 // what is not touched stays bit for bit, and 16-bit values that no 8-bit level widens to survive.
 #include "check.h"
-#include "compositor/colormodes.h"
-#include "compositor/contentmove.h"
-#include "compositor/heal.h"
-#include "compositor/inpaint.h"
-#include "compositor/matte.h"
-#include "compositor/seamcarve.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/contentmove.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/inpaint.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/seamcarve.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

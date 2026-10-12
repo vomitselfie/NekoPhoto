@@ -1,14 +1,14 @@
 // Frame animation (animation.h): frames as per-layer states over one shared set of layers.
-#include "compositor/animation.h"
-#include "compositor/document.h"
-#include "compositor/render.h"
+#include "nekophoto/animation.h"
+#include "nekophoto/document.h"
+#include "nekophoto/render.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
 
 using json = nlohmann::json;
 
-namespace compositor {
+namespace nekophoto {
 
 AnimationFrame captureFrame(const Document& document, int delayMs) {
     AnimationFrame frame;
@@ -189,4 +189,4 @@ std::optional<Animation> parseAnimationJson(const std::string& text) {
     return a;
 }
 
-} // namespace compositor
+} // namespace nekophoto

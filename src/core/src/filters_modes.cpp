@@ -5,15 +5,15 @@
 // alpha) put back together: the same kernels, the alpha computed identically in both halves. Add Noise has its own
 // loop: every ink, or L, a and b, each its own noise; monochromatic the same noise on every ink, or on L alone (a
 // Lab pixel's colour stays where it was).
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/modeedit.h"
-#include "compositor/parallel.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -210,4 +210,4 @@ AnyImage blendThroughCoverageAny(const AnyImage& adjusted, const AnyImage& origi
     return adjusted;
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,11 +1,11 @@
 // Resampling pixels of any layout (modetransform.h): CMYK through two 4-sample passes, everything else as it is.
-#include "compositor/modetransform.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
+#include "nekophoto/modetransform.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -208,4 +208,4 @@ AnyImage placeInAny(const AnyImage& image, int width, int height, int x, int y) 
     return {};
 }
 
-} // namespace compositor
+} // namespace nekophoto

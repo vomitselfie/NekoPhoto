@@ -1,7 +1,7 @@
 # Smart objects
 
 A smart object is a source (an embedded file, or a linked one) that layers place without owning it; each
-instance has its own placement. The model is NekoPhoto's (`src/core/include/compositor/smartobject.h`), not a
+instance has its own placement. The model is NekoPhoto's (`src/core/include/nekophoto/smartobject.h`), not a
 wrapper around Photoshop's blocks: PSD is one mapping of it. Sources are shared by identity and nesting is
 bounded.
 

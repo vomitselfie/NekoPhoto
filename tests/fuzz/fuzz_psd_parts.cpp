@@ -1,17 +1,17 @@
 // libFuzzer target: each block parser on its own (the first byte picks one), so the fuzzer reaches their depths
 // without first building a valid PSD around them.
-#include "compositor/layerstyle.h"
-#include "compositor/psd.h"
-#include "compositor/psd_carry.h"
-#include "compositor/smartfilter.h"
-#include "compositor/smartobject.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/smartobject.h"
+#include "nekophoto/vectormask.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     if (size < 1) return 0;

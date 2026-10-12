@@ -1,4 +1,4 @@
-#include "compositor/camerarawxmp.h"
+#include "nekophoto/camerarawxmp.h"
 #include "svg_xml.h"
 #include <algorithm>
 #include <cmath>
@@ -9,7 +9,7 @@
 #include <span>
 #include <stdexcept>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -321,4 +321,4 @@ std::optional<CameraRawXmp> readCameraRawXmp(const std::vector<uint8_t>& bytes, 
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

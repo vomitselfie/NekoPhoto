@@ -201,7 +201,7 @@ def tables():
         + (f"every method but {skipped}" if skipped else "every method")
         + " sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |",
         f"| Fuzz targets | **{fuzz} libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |",
-        "| Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` |",
+        "| Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DNEKOPHOTO_WARNINGS_AS_ERRORS=ON` |",
         "",
         "| Mode | native | native, partly through RGB | greyed: Photoshop lacks | greyed: not yet |",
         "|---|---:|---:|---:|---:|",

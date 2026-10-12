@@ -1,19 +1,19 @@
 // Text in a 16-bit document (docs/bit-depth.md): painted at 16 bits per channel, it is within a level of the 8-bit
 // raster reduced to 8 bits, rich text and Warp Text included; a 16-bit document with a text layer goes out to PSD as a
 // Photoshop type layer at 16 bits and comes back as editable text; and a text layer's outlines are the same at both
-// depths. COMPOSITOR_REPORT_U16_CALIBRATION=1 prints the worst difference for each.
+// depths. NEKOPHOTO_REPORT_U16_CALIBRATION=1 prints the worst difference for each.
 #include "check.h"
 #include "TextLayer.h"
-#include "compositor/depth.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
 #include <QGuiApplication>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 
@@ -44,7 +44,7 @@ int worstApart(const LayerText& text, const char* what) {
     int worst = 0;
     for (int y = 0; y < eight->height(); y++)
         for (int i = 0; i < eight->width() * 4; i++) worst = std::max(worst, std::abs(int(eight->row(y)[i]) - int(reduced->row(y)[i])));
-    if (std::getenv("COMPOSITOR_REPORT_U16_CALIBRATION")) std::fprintf(stderr, "  %-24s worst %d\n", what, worst);
+    if (std::getenv("NEKOPHOTO_REPORT_U16_CALIBRATION")) std::fprintf(stderr, "  %-24s worst %d\n", what, worst);
     return worst;
 }
 

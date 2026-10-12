@@ -2,17 +2,17 @@
 // which holds L*a*b* for these modes (a Lab document's own values, a CMYK one's composite through its profile), and
 // never write the document's pixels; loading a CMYK layer's pixels as a selection reads its fifth sample, alpha.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
-#include "compositor/scribble.h"
-#include "compositor/selection.h"
-#include "compositor/wand.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
+#include "nekophoto/scribble.h"
+#include "nekophoto/selection.h"
+#include "nekophoto/wand.h"
 #include <cstdlib>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

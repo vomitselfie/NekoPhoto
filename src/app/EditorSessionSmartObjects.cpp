@@ -1,18 +1,18 @@
 // Smart objects in the editor: the menu commands over the core's operations (smartobject_edit.h), each one undo
 // step, and a contents tab sending its document back to the smart object it came from.
-#include "compositor/vectorlayer.h"
+#include "nekophoto/vectorlayer.h"
 #include "ColorManagement.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "TextLayer.h"
 #include <QJsonArray>
 #include <QJsonObject>
-#include "compositor/affinity.h"
-#include "compositor/depth.h"
-#include "compositor/png.h"
-#include "compositor/psd.h"
-#include "compositor/render.h"
-#include "compositor/smartobject_edit.h"
+#include "nekophoto/affinity.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/png.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/render.h"
+#include "nekophoto/smartobject_edit.h"
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QColorSpace>
@@ -21,7 +21,7 @@
 #include <QImage>
 #include <QImageWriter>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -98,7 +98,7 @@ bool EditorSession::convertToSmartObject(QString* error) {
     if (ids.empty() && activeLayerId_) ids.push_back(*activeLayerId_);
     Document next = *document_;
     std::string why;
-    auto id = compositor::convertToSmartObject(next, ids, &why, psdExportOptions());
+    auto id = nekophoto::convertToSmartObject(next, ids, &why, psdExportOptions());
     if (!id) { if (error) *error = QString::fromStdString(why); return false; }
     endOpacityEdit();
     beginEdit(QT_TRANSLATE_NOOP("History", "Convert to Smart Object"));
@@ -120,7 +120,7 @@ bool EditorSession::newSmartObjectViaCopy(QString* error) {
     Document next = *document_;
     std::string why;
     const std::string name = QCoreApplication::translate("Names", "%1 copy").arg(QString::fromStdString(layer->name)).toStdString();
-    auto id = compositor::newSmartObjectViaCopy(next, layer->id, name, &why);
+    auto id = nekophoto::newSmartObjectViaCopy(next, layer->id, name, &why);
     if (!id) { if (error) *error = QString::fromStdString(why); return false; }
     endOpacityEdit();
     beginEdit(QT_TRANSLATE_NOOP("History", "New Smart Object via Copy"));
@@ -194,14 +194,14 @@ bool EditorSession::redevelopRawSmartObject(const CameraRawSettings& settings, c
     if (!smartObjectContentsEditable(*document_, source->id, &why)) { if (error) *error = QString::fromStdString(why); return false; }
     endOpacityEdit();
     beginEdit(QT_TRANSLATE_NOOP("History", "Camera Raw"));
-    const int changed = compositor::redevelopRawSmartObject(*document_, source->id, settings, image);
+    const int changed = nekophoto::redevelopRawSmartObject(*document_, source->id, settings, image);
     endEdit();
     notifyDocument();
     if (!changed) { if (error) *error = tr("The smart object could not be developed again."); return false; }
     return true;
 }
 
-bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* error) {
+bool EditorSession::warpActiveLayer(const nekophoto::TextWarp& warp, QString* error) {
     if (refusedAtDepth("edit.distort", tr("Warping a layer"), error)) return false;
     Layer* layer = activeLayerMutable();
     if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
@@ -211,7 +211,7 @@ bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* e
     Layer before = *layer;
     beginEdit(QT_TRANSLATE_NOOP("History", "Warp"));
     std::string why;
-    bool ok = compositor::warpLayer(*document_, *layer, warp, &why);
+    bool ok = nekophoto::warpLayer(*document_, *layer, warp, &why);
     if (ok && layer->text) ok = redrawText(*layer);
     if (!ok) {
         *layer = before;
@@ -231,12 +231,12 @@ bool EditorSession::beginWarpCage(QString* error) {
     if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
     if (isMaskSelected_) { if (error) *error = tr("Warp the layer, not its mask."); return false; }
     std::string why;
-    auto cage = compositor::layerWarpCage(*document_, *layer, &why);
+    auto cage = nekophoto::layerWarpCage(*document_, *layer, &why);
     if (!cage) { if (error) *error = QString::fromStdString(why); return false; }
     commitTransform();
     warpCage_ = cage;
     warpCageLayer_ = layer->id;
-    if (compositor::isVectorShapeLayer(*layer)) {
+    if (nekophoto::isVectorShapeLayer(*layer)) {
         // A shape previews exactly: its bent path is applied as the cage moves, in one open undo step.
         endOpacityEdit();
         warpCageShapeBefore_ = *layer;
@@ -252,7 +252,7 @@ void EditorSession::previewWarpCage() {
         if (!shape) return;
         *shape = *warpCageShapeBefore_;
         std::string why;
-        compositor::warpLayerToCage(*document_, *shape, *warpCage_, &why);
+        nekophoto::warpLayerToCage(*document_, *shape, *warpCage_, &why);
         emit documentChanged({});
         emit transformChanged();
         return;
@@ -260,7 +260,7 @@ void EditorSession::previewWarpCage() {
     const Layer* layer = document_ ? document_->find(warpCageLayer_) : nullptr;
     if (!warpCage_ || !layer) return;
     // A reduced draw while dragging; Apply draws at full size.
-    auto preview = compositor::previewWarpCageAny(*document_, *layer, *warpCage_, 1024);
+    auto preview = nekophoto::previewWarpCageAny(*document_, *layer, *warpCage_, 1024);
     if (preview) setPixelPreview(preview->image, preview->transform, warpCageLayer_);
     emit transformChanged();
 }
@@ -272,7 +272,7 @@ void EditorSession::moveWarpCagePoint(int index, QPointF p) {
     previewWarpCage();
 }
 
-void EditorSession::setWarpCage(const compositor::WarpMesh& cage) {
+void EditorSession::setWarpCage(const nekophoto::WarpMesh& cage) {
     if (refusedAtDepth("edit.distort", tr("Warping a layer"))) return;
     if (!warpCage_ || cage.xs.size() != warpCage_->xs.size()) return;
     warpCage_ = cage;
@@ -281,12 +281,12 @@ void EditorSession::setWarpCage(const compositor::WarpMesh& cage) {
 
 bool EditorSession::commitWarpCage(QString* error) {
     if (!warpCage_) return false;
-    const compositor::WarpMesh cage = *warpCage_;
+    const nekophoto::WarpMesh cage = *warpCage_;
     warpCage_.reset();
     if (warpCageShapeBefore_) {
         // Already applied as it moved: the step closes.
         Layer* shape = document_ ? document_->find(warpCageLayer_) : nullptr;
-        if (shape) { *shape = *warpCageShapeBefore_; std::string why; compositor::warpLayerToCage(*document_, *shape, cage, &why); }
+        if (shape) { *shape = *warpCageShapeBefore_; std::string why; nekophoto::warpLayerToCage(*document_, *shape, cage, &why); }
         warpCageShapeBefore_.reset();
         endEdit();
         notifyDocument();
@@ -300,7 +300,7 @@ bool EditorSession::commitWarpCage(QString* error) {
     const Layer before = *layer;
     beginEdit(QT_TRANSLATE_NOOP("History", "Warp"));
     std::string why;
-    if (!compositor::warpLayerToCage(*document_, *layer, cage, &why)) {
+    if (!nekophoto::warpLayerToCage(*document_, *layer, cage, &why)) {
         *layer = before;
         endEdit();
         if (error) *error = QString::fromStdString(why);
@@ -315,7 +315,7 @@ bool EditorSession::commitWarpCage(QString* error) {
 
 bool EditorSession::commitWarpCageCommand(QString* error) {
     if (!warpCage_) return false;
-    const compositor::WarpMesh cage = *warpCage_;
+    const nekophoto::WarpMesh cage = *warpCage_;
     // The method warps the active layer from scratch: the cage must be over it, with its 16 points.
     if (!commandsRouted() || activeLayerId_ != warpCageLayer_ || cage.xs.size() != 16 || cage.ys.size() != 16 || isMaskSelected_) return commitWarpCage(error);
     QJsonArray points;
@@ -345,7 +345,7 @@ bool EditorSession::canAddSmartFilter() const {
     return canEditLayers() && layer && layer->isLiveSmartObject() && !layer->smartObject->locked() && !isMaskSelected_;
 }
 
-bool EditorSession::addSmartFilter(const compositor::SmartFilterEntry& entry, QString* error) {
+bool EditorSession::addSmartFilter(const nekophoto::SmartFilterEntry& entry, QString* error) {
     if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     Layer* layer = activeLayerMutable();
     if (!canAddSmartFilter() || !layer) { if (error) *error = tr("Select an editable smart object."); return false; }
@@ -354,7 +354,7 @@ bool EditorSession::addSmartFilter(const compositor::SmartFilterEntry& entry, QS
     const auto carry = document_->psdCarry;
     beginEdit(QT_TRANSLATE_NOOP("History", "Smart Filter"));
     std::string why;
-    if (!compositor::addSmartFilter(*document_, *layer, entry, &why)) {
+    if (!nekophoto::addSmartFilter(*document_, *layer, entry, &why)) {
         *layer = before;
         document_->psdCarry = carry;
         endEdit();
@@ -372,7 +372,7 @@ bool EditorSession::rasterizeSmartObject() {
     if (!canEditLayers() || !layer || !layer->smartObject) return false;
     endOpacityEdit();
     beginEdit(QT_TRANSLATE_NOOP("History", "Rasterize Smart Object"));
-    compositor::rasterizeSmartObject(*layer);
+    nekophoto::rasterizeSmartObject(*layer);
     endEdit();
     notifyDocument();
     return true;

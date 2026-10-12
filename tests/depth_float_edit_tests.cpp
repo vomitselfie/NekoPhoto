@@ -4,22 +4,22 @@
 // bits to an 8-bit-sourced document and converted back at exposure 0 against the 8-bit result.
 #include "check.h"
 #include "float_reference.h"
-#include "compositor/adjustments.h"
-#include "compositor/blur.h"
-#include "compositor/channels.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/filters.h"
-#include "compositor/morphology.h"
-#include "compositor/render.h"
-#include "compositor/resample.h"
-#include "compositor/selection.h"
-#include "compositor/warp.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/channels.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/render.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/selection.h"
+#include "nekophoto/warp.h"
 #include <cmath>
 #include <cstdio>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace ref = float_reference;
 
 namespace {

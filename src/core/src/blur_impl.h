@@ -1,16 +1,16 @@
 // The kernels of blur.cpp templated over the buffer, for the 16- and 32-bit blurs (blur_u16.cpp, blur_f32.cpp). blur.cpp keeps its own
 // 8-bit copy, so the 8-bit build is exactly what it was; a change to a kernel belongs in both.
 #pragma once
-#include "compositor/blur.h"
-#include "compositor/imaget.h"
-#include "compositor/parallel.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/imaget.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <type_traits>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -379,4 +379,4 @@ void motionBlurImpl(T& image, double distance, double angleDegrees) {
 
 } // namespace
 
-} // namespace compositor
+} // namespace nekophoto

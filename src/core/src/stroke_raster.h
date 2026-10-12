@@ -22,18 +22,18 @@
 //   depth's integer arithmetic on each. The colour arrives as inks through the document's CMYK profile.
 // `channels` is a compile-time constant of each policy, so the RGB loops are the code they were.
 #pragma once
-#include "compositor/brush.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/heal.h"
-#include "compositor/parallel.h"
-#include "compositor/render.h"
-#include "compositor/shape.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/render.h"
+#include "nekophoto/shape.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace stroke {
 /// Pixels in a w x h area, without overflow.
@@ -1122,4 +1122,4 @@ void StrokeRasterOf<OpsT>::commit(BrushStroke::Commit& result) {
     result.transform = t;
 }
 
-} // namespace compositor
+} // namespace nekophoto

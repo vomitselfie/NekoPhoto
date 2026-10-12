@@ -1,0 +1,299 @@
+// Colour management (docs/color-management.md, docs/high-bit-depth-plan.md section 5), following Photoshop's model:
+// a document is in one profile; colours are converted only at the edges (Assign and Convert to Profile, the display,
+// soft proofing, export, import policy). Little CMS (vendored, src/third_party/lcms2) does the work; this file is the
+// only one that builds transforms for documents, and keeps them in a small thread-safe LRU cache.
+//
+// Pixels are premultiplied, as everywhere in the core: a transform unpremultiplies, converts and premultiplies again
+// (Little CMS's premultiplied-alpha layouts), and alpha passes through. 16-bit pixels are the document's 0..32768; they
+// are widened to 0..65535 for Little CMS and narrowed back, which is exact for every 15-bit level.
+//
+// CMYK and Lab pixels (colormodes.h) have their own layouts: CMYK is Little CMS's reversed ("_REV") CMYK, as PSD
+// stores inverted ink, with alpha after it; Lab's a and b are offset (128 at 8 bits, 16384 at 16), which the transform
+// maps to and from Little CMS's own Lab encodings. Every layout is made straight around the transform, as RGB is.
+#pragma once
+#include "colormodes.h"
+#include "colorprofile.h"
+#include "image.h"
+#include "imaget.h"
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace nekophoto {
+
+struct Document;
+struct ToneMap;
+struct Layer;
+struct LayerText;
+enum class AdjustmentKind;
+
+// ---- Profiles ------------------------------------------------------------------------------------------------------
+
+/// The RGB working spaces Edit > Color Settings offers (Photoshop's usual four).
+enum class WorkingSpace { SRGB, AdobeRGB, DisplayP3, ProPhoto };
+/// "srgb", "adobe-rgb", "display-p3", "prophoto" (automation and settings), and back.
+const char* workingSpaceKey(WorkingSpace space);
+std::optional<WorkingSpace> workingSpaceFromKey(const std::string& key);
+/// The profile's name as the menus show it: "sRGB IEC61966-2.1", "Adobe RGB (1998)", "Display P3", "ProPhoto RGB".
+const char* workingSpaceName(WorkingSpace space);
+
+/// A built-in working-space profile, made by Little CMS from the published primaries, white point and tone curve (no
+/// ICC file is bundled): the same bytes every time.
+const ColorProfile& builtinProfile(WorkingSpace space);
+/// sRGB: what an untagged document is treated as.
+inline const ColorProfile& srgbProfile() { return builtinProfile(WorkingSpace::SRGB); }
+/// Lab D50, made by Little CMS (a v4 Lab identity profile, D50 white): what a Lab document's values are in, and the
+/// same bytes every time.
+const ColorProfile& labProfile();
+/// The default Working CMYK: ISO Coated v2 300% (basICColor), FOGRA39, compiled in (src/third_party/icc). An untagged
+/// CMYK document is treated as this profile, as Photoshop treats one as its Working CMYK.
+const ColorProfile& defaultCmykProfile();
+
+/// A profile from ICC bytes, with its description and model; nullopt when Little CMS cannot read them.
+std::optional<ColorProfile> profileFromIcc(const std::vector<uint8_t>& icc);
+std::optional<ColorProfile> profileFromIcc(const uint8_t* data, size_t size);
+/// The profile an untagged document stands for (sRGB), else the profile itself.
+const ColorProfile& effectiveProfile(const ColorProfile& profile);
+/// The same for values of `model`: sRGB for RGB, the default CMYK for CMYK, Lab D50 for Lab.
+const ColorProfile& effectiveProfile(const ColorProfile& profile, ColorModel model);
+/// Whether two profiles give the same colours: the same bytes, or matrix-shaper profiles whose conversion between
+/// them is the identity at 16 bits (sRGB by another vendor, say). Untagged counts as sRGB. Cached.
+bool equivalentProfiles(const ColorProfile& a, const ColorProfile& b, double levels = 0.25);
+/// The working space the profile is, when it is equivalent to one.
+std::optional<WorkingSpace> matchingWorkingSpace(const ColorProfile& profile);
+
+// ---- Transforms ----------------------------------------------------------------------------------------------------
+
+enum class RenderingIntent { Perceptual = 0, RelativeColorimetric = 1, Saturation = 2, AbsoluteColorimetric = 3 };
+const char* renderingIntentKey(RenderingIntent intent);   // "perceptual", "relative", "saturation", "absolute"
+std::optional<RenderingIntent> renderingIntentFromKey(const std::string& key);
+
+struct ConvertOptions {
+    RenderingIntent intent = RenderingIntent::RelativeColorimetric;
+    bool blackPointCompensation = true;
+};
+
+/// The pixel layouts a transform reads and writes.
+enum class PixelFormat {
+    RGBA8,      // premultiplied bytes (Image)
+    RGBA16,     // premultiplied 0..32768 (Image16)
+    RGBFloat,   // three straight floats, 0..1 (single colours)
+    CMYKA8,     // premultiplied bytes, inverted ink, then alpha: 5 samples (ImageC8)
+    CMYKA16,    // premultiplied 0..32768, inverted ink, then alpha: 5 samples (Image16 with 5 channels)
+    LabA8,      // premultiplied bytes, a and b offset by 128 (Image in a Lab document)
+    LabA16,     // premultiplied 0..32768, a and b offset by 16384 (Image16 in a Lab document)
+    CMYKFloat,  // four straight floats, ink 0..100 as Little CMS counts it (single colours)
+    LabFloat,   // three floats: L 0..100, a and b signed (single colours)
+    RGBAFloat,  // premultiplied linear float, colour unbounded (ImageF, a 32-bit document); read as input only
+};
+/// The layout of a document's pixels at `type` in `mode` (U8 or U16; F32 in RGB is RGBAFloat).
+PixelFormat pixelFormatFor(SampleType type, ColorMode mode);
+/// The colour model a layout's values are in, its samples per pixel, and whether it is a single straight colour.
+ColorModel pixelFormatModel(PixelFormat format);
+int pixelFormatChannels(PixelFormat format);
+bool isColorFormat(PixelFormat format);
+
+struct DisplayGrid;
+
+/// A Little CMS transform with fixed layouts. Thread-safe to apply from several threads at once.
+class ColorTransform {
+public:
+    ~ColorTransform();
+    ColorTransform(const ColorTransform&) = delete;
+    ColorTransform& operator=(const ColorTransform&) = delete;
+    PixelFormat input() const { return input_; }
+    PixelFormat output() const { return output_; }
+    /// `count` pixels from `in` to `out` (which may be `in` when the layouts have the same size).
+    void apply(const void* in, void* out, size_t count) const;
+
+    /// Whether this is the display's precalculated form (displayTransformBetween) rather than Little CMS itself.
+    bool precalculated() const { return bool(grid_); }
+
+private:
+    friend struct TransformFactory;
+    ColorTransform() = default;
+    void applyStaged(const void* in, void* out, size_t count) const;
+    void* context_ = nullptr;
+    void* transform_ = nullptr;
+    PixelFormat input_ = PixelFormat::RGBA8, output_ = PixelFormat::RGBA8;
+    bool staged_ = false;   // a CMYK or Lab layout on either side: made straight here, colours only for Little CMS
+    std::shared_ptr<const DisplayGrid> grid_;   // set: the display's grid, not Little CMS (colormgmt_display.cpp)
+};
+using ColorTransformPtr = std::shared_ptr<const ColorTransform>;
+
+/// `from` to `to` (untagged = sRGB for RGB layouts, the default CMYK for CMYK ones, Lab D50 for Lab); null when the
+/// profiles are equivalent and the layouts the same (nothing to do), or either cannot be used (a profile of another
+/// model than its layout, say). Transforms come from a cache shared by every thread (the last 24 kept).
+ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options,
+                                   PixelFormat input, PixelFormat output);
+
+/// The canvas's form of transformBetween(from, to, options, input, RGBA8), for drawing on screen only: for 16-bit CMYK
+/// and Lab it is precalculated once per profiles and options (docs/color-management.md, "The display grid") and costs a
+/// fraction of Little CMS's float pipeline, within one 8-bit level of it on its sweep (display_grid_tests); Lab a = b =
+/// 0 stays exactly neutral. CMYK goes through a 33-point grid in the monitor's linear light, Lab through its own formula
+/// and the monitor's matrix; colours with a channel so near black that the monitor's steep curve there would show the
+/// grid's error are taken through Little CMS. Any other layout, or a monitor profile that is not a matrix-shaper, gets
+/// transformBetween itself. Exports, pickers, readouts and conversions use transformBetween, never this.
+ColorTransformPtr displayTransformBetween(const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options, PixelFormat input);
+
+/// A soft proof (View > Proof Colors): `document` through `proof`, as `display` shows it, on the document's own layout
+/// (RGB, CMYK or Lab at 8 or 16 bits, RGB float at 32) to RGBA8, always through Little CMS. `intent` and
+/// `blackPointCompensation` are how the document goes to the proofing profile (Customize Proof Condition's Rendering
+/// Intent and Black Point Compensation). The proof goes to the display as Photoshop's display options say: relative
+/// colorimetric with black point compensation; with Simulate Black Ink without it (the proof's black as it prints);
+/// with Simulate Paper Color absolute colorimetric (its paper white too, and its black). With `gamutWarning`, colours
+/// outside the proofing profile's gamut are shown as `warning` (RGB bytes). Never null for usable profiles.
+struct ProofSettings {
+    ColorProfile profile;
+    RenderingIntent intent = RenderingIntent::RelativeColorimetric;
+    bool blackPointCompensation = true;
+    bool gamutWarning = false;
+    uint8_t warning[3] = {128, 128, 128};
+    /// Preserve Numbers: the document's values go to the proof device as they are, unconverted, as if they were the
+    /// device's own (so nothing is out of its gamut). Only when the proof's colour model is the document's: otherwise
+    /// the document is converted to the proof as usual (proofPreservesNumbers says which).
+    bool preserveNumbers = false;
+    bool simulatePaper = false, simulateBlackInk = false;
+};
+/// Whether `proof` sends `input`'s values to the device unconverted: Preserve Numbers on, and the same colour model.
+bool proofPreservesNumbers(const ProofSettings& proof, PixelFormat input);
+ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfile& display, const ProofSettings& proof,
+                                 PixelFormat input, PixelFormat output);
+
+/// Color Lookup with an ICC profile in a document of `format`'s model: an abstract profile run from the document's
+/// profile through it and back, or a device link from that colour space to itself, perceptual. Null when `lookup` is
+/// neither (a 3DLUT file, an RGB link in a CMYK document) or cannot be read.
+ColorTransformPtr lookupTransform(const ColorProfile& document, const std::vector<uint8_t>& lookup, PixelFormat format);
+
+/// Drops every cached transform (tests; the cache otherwise keeps the most recently used).
+void clearTransformCache();
+size_t transformCacheSize();
+
+// ---- Converting pixels and colours ---------------------------------------------------------------------------------
+
+/// Converts in place through `transform` (made for RGBA8 to RGBA8, or RGBA16 to RGBA16), rows in parallel. A null
+/// transform leaves the pixels as they are. The ImageC8 form takes CMYKA8 to CMYKA8; the Image16 one also CMYKA16 to
+/// CMYKA16 and LabA16 to LabA16 (the layouts must have the image's channel count), the Image one LabA8 to LabA8.
+void convertImage(Image& image, const ColorTransform* transform);
+void convertImage(Image16& image, const ColorTransform* transform);
+void convertImage(ImageC8& image, const ColorTransform* transform);
+/// Any layout to any other at the same depth: `image`'s values in `fromMode` and `from` to `toMode` and `to` (untagged
+/// profiles as transformBetween takes them), in a new buffer (5 channels for CMYK). The same buffer when there is nothing
+/// to do; null when the depth is 32-bit, the buffer's channels are not `fromMode`'s, or a profile cannot be used.
+AnyImage convertImage(const AnyImage& image, ColorMode fromMode, const ColorProfile& from, ColorMode toMode, const ColorProfile& to,
+                      const ConvertOptions& options = {});
+/// The same from `from` to `to`; false when either profile cannot be used (the pixels are then unchanged).
+bool convertImage(Image& image, const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options = {});
+bool convertImage(Image16& image, const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options = {});
+/// A 16-bit image to 8 bits through `transform` (RGBA16 to RGBA8) in one pass: the canvas's display reduction fused
+/// with the display transform.
+void convertImage16To8(const Image16& in, Image& out, const ColorTransform& transform);
+/// Any layout to 8-bit RGBA through `transform` (made from the image's layout to RGBA8) in one pass: the display of an
+/// RGB, CMYK or Lab document at either depth. False, leaving `out` as it was, when the transform's input is not the
+/// buffer's layout (its depth and channel count).
+bool convertImageTo8(const AnyImage& in, Image& out, const ColorTransform& transform);
+
+/// One straight colour (0..1 each) from `from` to `to`.
+void convertColor(const ColorProfile& from, const ColorProfile& to, double rgb[3], const ConvertOptions& options = {});
+void convertColor(const ColorProfile& from, const ColorProfile& to, uint8_t rgb[3], const ConvertOptions& options = {});
+
+/// Convert to Profile over a whole document (one undo step for the caller): every raster layer's pixels (masks are
+/// not colour), and the colours stored as values: text and shape colours, vector shape fills and strokes, artboard
+/// backgrounds, layer style colours and gradients, Photo Filter and Gradient Map colours. Smart objects keep their
+/// source; their placed pixels are converted. The document then carries `to`. False, with `why`, when a profile
+/// cannot be used (nothing is changed).
+bool convertDocumentProfile(Document& document, const ColorProfile& to, const ConvertOptions& options, std::string* why = nullptr);
+
+// ---- Colour modes (colormode_convert.cpp) -------------------------------------------------------------------------
+
+/// Image > Mode > RGB Color, CMYK Color or Lab Color over a whole document (one undo step for the caller): every raster
+/// layer's pixels from the document's mode and profile to `to` in `target` (empty: the bundled Working CMYK for CMYK,
+/// untagged Lab D50 for Lab, untagged sRGB for RGB), with `options`' intent and black-point compensation (black
+/// generation is the CMYK profile's). The colours stored as values (text, shapes, artboards, layer styles, Photo Filter
+/// and Gradient Map) are converted too: they stay RGB values, in the document's profile for RGB and in sRGB for CMYK and
+/// Lab, taken through the CMYK gamut when converting to CMYK. Levels and Curves lose their per-channel settings;
+/// an adjustment layer the target mode does not offer is kept, hidden and marked dormant, and wakes (visible as it
+/// was) when the document converts back to a mode that offers it. Masks, alpha channels and the selection are not
+/// colour and stay. False, with `why`, when the document would not fit the target's byte budget, the depth is 32-bit,
+/// or a profile cannot be used; the document is then unchanged.
+bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& target, const ConvertOptions& options, std::string* why = nullptr);
+/// A stored colour (straight RGB, 0..1) as convertDocumentMode converts it: the foreground and background colours.
+void convertModeColor(ColorMode from, const ColorProfile& fromProfile, ColorMode to, const ColorProfile& toProfile, const ConvertOptions& options,
+                      double rgb[3]);
+/// A text layer's raster in a CMYK or Lab document: `rgb` is the text as painted (16-bit sRGB, premultiplied), and
+/// each pixel's colour goes through `document`'s profile once (a run's own inks as they are, in CMYK) while its
+/// coverage stays as the glyphs left it, at the document's depth and in its channels. Null for an RGB document.
+AnyImage textRasterInMode(const Image16& rgb, const LayerText& text, const Document& document, const ConvertOptions& options = {});
+/// Whether Photoshop offers the adjustment kind in `mode` (docs/color-modes.md; every kind in RGB).
+bool adjustmentOfferedInMode(AdjustmentKind kind, ColorMode mode);
+/// An adjustment layer kept dormant by a mode conversion (hidden until the document returns to a mode offering it).
+bool isDormantAdjustment(const Layer& layer);
+/// An 8-bit sRGB thumbnail of a buffer in `mode` and `profile`, at most `maxSide` a side (the Layers panel's).
+ImagePtr modeThumbnail(const AnyImage& image, ColorMode mode, const ColorProfile& profile, int maxSide = 96);
+/// Every layer's thumbnail drawn again from its pixels in the document's mode and profile (CMYK and Lab documents).
+void refreshModeThumbnails(Document& document);
+/// The same for one layer (nothing in an RGB document).
+void refreshModeThumbnail(Layer& layer, const Document& document);
+
+// ---- Transfer curves (for code that works in linear light) -------------------------------------------------------
+
+/// A profile's tone curve (its red TRC; the working spaces use one curve for all three), tabulated both ways so
+/// callers can linearise and re-encode without Little CMS: sRGB's piecewise curve for sRGB and Display P3,
+/// gamma 2.2 (563/256) for Adobe RGB, 1.8 for ProPhoto, a table for anything else. An untagged document, and a
+/// profile without an RGB tone curve (a LUT profile), get sRGB's.
+class TransferCurve {
+public:
+    enum class Kind { SRGB, Gamma, Table };
+    Kind kind() const { return kind_; }
+    /// The gamma for Kind::Gamma, else Little CMS's estimate of the curve's overall gamma.
+    double gamma() const { return gamma_; }
+    /// 0..1 encoded to 0..1 linear light, and back.
+    float toLinear(float encoded) const;
+    float fromLinear(float linear) const;
+    /// fromLinear as the exact inverse of toLinear, which 32-bit documents encode with so that their 8- and 16-bit
+    /// levels come back exactly: for a table curve, the forward table's own interpolation inverted (the inverse
+    /// table is itself interpolated, a few 16-bit levels off); the formulas are exact as they are.
+    float fromLinearExact(float linear) const;
+
+    static TransferCurve srgb();
+    static TransferCurve ofProfile(const ColorProfile& profile);
+
+private:
+    Kind kind_ = Kind::SRGB;
+    double gamma_ = 2.2;
+    std::shared_ptr<const std::vector<float>> forward_, inverse_;   // Kind::Table: 4096 + 1 samples each way
+};
+/// The document's transfer curve (its profile's, sRGB when untagged).
+TransferCurve documentTransfer(const Document& document);
+
+// ---- 32 bits: linear profiles and the display (docs/bit-depth.md, "32 bits") --------------------------------------
+
+/// The linear version of an RGB matrix-shaper profile: the same primaries, white point and adaptation, a gamma 1.0 tone
+/// curve on each channel, "<description> (Linear)", and a fixed header date (the same bytes every time). Untagged is
+/// sRGB's; a profile that is not a matrix-shaper gives linear sRGB. A linear profile is returned as it is.
+ColorProfile linearProfile(const ColorProfile& profile);
+/// Whether every tone curve of an RGB matrix-shaper profile is the identity.
+bool isLinearProfile(const ColorProfile& profile);
+/// Back from a linear profile: the built-in working space whose linear version it is, else the same primaries with
+/// sRGB's curve. A profile that is not linear is returned as it is.
+ColorProfile gammaCounterpart(const ColorProfile& profile);
+/// The profile a document's values are encoded in at 8 and 16 bits: its own, or for a 32-bit document the one it came
+/// from (Document::encodedProfile), else its gamma counterpart. Empty: untagged.
+ColorProfile encodedProfileOf(const Document& document);
+/// The curve that encodes the document's colour at 8 and 16 bits (encodedProfileOf's curve).
+TransferCurve encodedTransfer(const Document& document);
+/// The linear luminance weights of a profile's primaries (their Y, summing to 1): Rec. 709's for sRGB and untagged.
+std::array<float, 3> luminanceWeights(const ColorProfile& profile);
+
+/// A 32-bit frame for the canvas: each pixel's straight linear colour tone-mapped (`tone`), then to 8 bits through
+/// `transform` (RGBAFloat to RGBA8, the document's linear profile to the monitor) or, without one, encoded with `curve`
+/// (the document's gamma counterpart, which then stands for the monitor as an 8-bit document's profile does), and
+/// premultiplied. `out` is sized to `in`.
+void toDisplayF(const ImageF& in, Image& out, const ToneMap& tone, const ColorTransform* transform, const TransferCurve& curve);
+/// The brightest luminance in a float image (its straight colour), for Highlight Compression's white point.
+float peakLuminance(const ImageF& image, const std::array<float, 3>& weights);
+
+} // namespace nekophoto

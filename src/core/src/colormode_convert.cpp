@@ -1,19 +1,19 @@
 // Image > Mode > RGB Color / CMYK Color / Lab Color (docs/color-modes.md, docs/high-bit-depth-plan.md "P7 plan"):
 // converting a whole document between colour modes, the colours it stores as values, the adjustment layers a mode
 // has no counterpart for, and the Layers panel's thumbnails of CMYK and Lab pixels.
-#include "compositor/adjustments.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/blendif.h"
-#include "compositor/layerstyle.h"
-#include "compositor/vectorlayer.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/blendif.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/vectorlayer.h"
 #include <nlohmann/json.hpp>
 #include <map>
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -310,4 +310,4 @@ AnyImage textRasterInMode(const Image16& rgb, const LayerText& text, const Docum
     return ImagePtr(outLab8);
 }
 
-} // namespace compositor
+} // namespace nekophoto

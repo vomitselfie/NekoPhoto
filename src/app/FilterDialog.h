@@ -3,7 +3,7 @@
 #pragma once
 #include "AdjustmentEditor.h"
 #include "PixelDialog.h"
-#include "compositor/matte.h"
+#include "nekophoto/matte.h"
 #include <thread>
 
 class QCheckBox;
@@ -15,25 +15,25 @@ namespace app {
 class PixelAdjustmentDialog : public PixelDialog {
     Q_OBJECT
 public:
-    PixelAdjustmentDialog(EditorSession* session, compositor::AdjustmentKind kind, QWidget* parent = nullptr);
+    PixelAdjustmentDialog(EditorSession* session, nekophoto::AdjustmentKind kind, QWidget* parent = nullptr);
 protected:
     bool apply() override;
 private:
     void refreshPreview();
-    std::shared_ptr<compositor::Image> run(const compositor::Image& source, double scale) const;
-    std::shared_ptr<compositor::Image16> run(const compositor::Image16& source, double scale) const;
-    std::shared_ptr<compositor::ImageF> run(const compositor::ImageF& source, double scale) const;
+    std::shared_ptr<nekophoto::Image> run(const nekophoto::Image& source, double scale) const;
+    std::shared_ptr<nekophoto::Image16> run(const nekophoto::Image16& source, double scale) const;
+    std::shared_ptr<nekophoto::ImageF> run(const nekophoto::ImageF& source, double scale) const;
     AdjustmentEditor* editor_;
 };
 
-/// Filter > Gaussian Blur / Motion Blur / Add Noise / Lens Correction, and the grid filters (compositor/filters.h,
+/// Filter > Gaussian Blur / Motion Blur / Add Noise / Lens Correction, and the grid filters (nekophoto/filters.h,
 /// applyGridFilter: Box Blur to Mosaic through the Smart Filter kernels, the PhotoCraft ports), which preview at full
 /// size on the layer's own buffer, a moment after the last change.
 class FilterDialog : public PixelDialog {
     Q_OBJECT
 public:
     /// `smart`: on a smart object, OK adds the filter as a Smart Filter instead of changing pixels.
-    FilterDialog(EditorSession* session, compositor::FilterKind kind, QWidget* parent = nullptr, bool smart = false);
+    FilterDialog(EditorSession* session, nekophoto::FilterKind kind, QWidget* parent = nullptr, bool smart = false);
     /// Add Noise's seed (random per dialog); for checks that compare runs.
     void setSeed(uint32_t seed) { seed_ = seed % 1000000000u; }
 protected:
@@ -42,18 +42,18 @@ private:
     void prepareSource();
     void refreshPreview();
     bool identity() const;
-    std::shared_ptr<compositor::Image> run(const compositor::Image& source, double scale) const;
-    std::shared_ptr<compositor::Image16> run(const compositor::Image16& source, double scale) const;
-    std::shared_ptr<compositor::ImageF> run(const compositor::ImageF& source, double scale) const;
-    compositor::FilterKind kind_;
+    std::shared_ptr<nekophoto::Image> run(const nekophoto::Image& source, double scale) const;
+    std::shared_ptr<nekophoto::Image16> run(const nekophoto::Image16& source, double scale) const;
+    std::shared_ptr<nekophoto::ImageF> run(const nekophoto::ImageF& source, double scale) const;
+    nekophoto::FilterKind kind_;
     bool smart_ = false;
-    compositor::FilterSettings settings_;
+    nekophoto::FilterSettings settings_;
     uint32_t seed_;
     int margin_ = -1;
     std::vector<std::function<void()>> syncers_;
     QTimer* gridTimer_ = nullptr;   // the grid filters' preview, coalesced
     void refreshGridPreview();
-    compositor::AnyImage runGrid() const;
+    nekophoto::AnyImage runGrid() const;
 };
 
 /// Filter > Remove Background: the subject mask from the model, refined live, applied as a layer mask.
@@ -68,17 +68,17 @@ protected:
 private:
     void refreshPreview();
     void startDetail();
-    std::shared_ptr<compositor::GrayImage> refined(int limit) const;
+    std::shared_ptr<nekophoto::GrayImage> refined(int limit) const;
     /// The refined matte as a float plane, for a 16-bit layer's 16-bit mask.
-    compositor::AlphaPlane refinedPlane(int limit) const;
+    nekophoto::AlphaPlane refinedPlane(int limit) const;
     QString modelPath_;
     /// What the model and the refinement see: the layer's pixels, reduced to 8 bits on a 16-bit layer.
-    std::shared_ptr<const compositor::Image> guide_;
+    std::shared_ptr<const nekophoto::Image> guide_;
     QWidget* advanced_;
     bool advancedMode_ = false;
-    compositor::MatteSettings settings_;
-    std::shared_ptr<compositor::GrayImage> raw_;        // the mask the sliders refine: coarse or detailed
-    std::shared_ptr<compositor::GrayImage> coarse_, detailed_;
+    nekophoto::MatteSettings settings_;
+    std::shared_ptr<nekophoto::GrayImage> raw_;        // the mask the sliders refine: coarse or detailed
+    std::shared_ptr<nekophoto::GrayImage> coarse_, detailed_;
     bool detail_ = false;
     bool mirror_ = false;   // Preferences' mirrored pass, as it was when the dialog opened
     QString error_;

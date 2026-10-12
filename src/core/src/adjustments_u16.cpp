@@ -4,15 +4,15 @@
 // 256 levels (so a smooth 16-bit gradient stays smooth through Levels or Curves); the colour kinds run their
 // per-pixel maths in double (adjustments_more.cpp, colorlookup.cpp); Hue/Saturation samples its 33-point cube in
 // float, without the 8-bit kernel's 8.8 fixed-point steps.
-#include "compositor/adjustments.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -251,4 +251,4 @@ std::array<std::vector<double>, 4> levelsHistogram(const Image16& image, const G
     return levelsHistogram(*narrow, cover.get());
 }
 
-} // namespace compositor
+} // namespace nekophoto

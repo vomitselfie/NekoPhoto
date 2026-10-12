@@ -1,21 +1,21 @@
 // Automation methods: document. Registered from AutomationServer::registerHandlers (Automation.cpp).
-#include "compositor/vectorlayer.h"
+#include "nekophoto/vectorlayer.h"
 #include "TextLayer.h"
 #include "Automation.h"
 #include "ColorManagement.h"
 #include "ExportAs.h"
-#include "compositor/gif.h"
+#include "nekophoto/gif.h"
 #include "AutomationGuard.h"
 #include "AutomationHandlers.h"
 #include "CanvasWidget.h"
 #include "ImageConvert.h"
 #include "MainWindow.h"
-#include "compositor/ico.h"
-#include "compositor/png.h"
-#include "compositor/raw.h"
-#include "compositor/psd_writer.h"
-#include "compositor/tga.h"
-#include "compositor/svg.h"
+#include "nekophoto/ico.h"
+#include "nekophoto/png.h"
+#include "nekophoto/raw.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/tga.h"
+#include "nekophoto/svg.h"
 #include "VectorFiles.h"
 #include "HistogramPanel.h"
 #include <QFileInfo>
@@ -26,7 +26,7 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {
@@ -111,7 +111,7 @@ void AutomationServer::registerDocumentHandlers() {
             if (l.isGroup) bits << "folder";
             else if (l.adjustment) bits << QString::fromUtf8(adjustmentKindName(l.adjustment->kind)) + " adjustment";
             else {
-                bits << (l.isLiveText() ? "text" : (l.isLiveShape() || compositor::isVectorShapeLayer(l)) ? "shape" : "pixels");
+                bits << (l.isLiveText() ? "text" : (l.isLiveShape() || nekophoto::isVectorShapeLayer(l)) ? "shape" : "pixels");
                 const Rect r = l.transform.bounds();
                 bits << QStringLiteral("%1 x %2 at (%3, %4)").arg(r.width).arg(r.height).arg(r.x).arg(r.y);
                 if (!l.asset || !l.asset->image) bits << "blank";
@@ -152,9 +152,9 @@ void AutomationServer::registerDocumentHandlers() {
             if (options.page < 1) { app::pdfOpenOptions() = {}; fail("page must be 1 or more", invalidParams); }
             if (options.resolution < 18 || options.resolution > 1200) { app::pdfOpenOptions() = {}; fail("resolution must be 18..1200", invalidParams); }
         } else if (has(p, "page") || has(p, "resolution")) fail("page and resolution apply to PDF files", invalidParams);
-        if (compositor::isRawPath(path.toStdString())) {
+        if (nekophoto::isRawPath(path.toStdString())) {
             // Camera RAW: developed without the dialog (as shot, or with `settings`), into a new tab.
-            if (!compositor::rawSupported()) fail("this build cannot open camera RAW files (LibRaw was not found)");
+            if (!nekophoto::rawSupported()) fail("this build cannot open camera RAW files (LibRaw was not found)");
             MainWindow::RawOpenRequest request;
             const QJsonObject given = obj(p, "settings");
             if (has(p, "settings")) {
@@ -164,9 +164,9 @@ void AutomationServer::registerDocumentHandlers() {
             {
                 // White balance against the file: kelvin, As Shot, the file's presets, Auto (docs/camera-raw.md).
                 std::string why;
-                const auto bytes = compositor::readRawFileBytes(path.toStdString(), &why);
+                const auto bytes = nekophoto::readRawFileBytes(path.toStdString(), &why);
                 if (bytes.empty()) fail(QString::fromStdString(why));
-                const std::string refused = compositor::resolveRawWhiteBalance(bytes, request.settings, given.contains("temperature"), given.contains("tint"));
+                const std::string refused = nekophoto::resolveRawWhiteBalance(bytes, request.settings, given.contains("temperature"), given.contains("tint"));
                 if (!refused.empty()) fail("settings: " + QString::fromStdString(refused), invalidParams);
             }
             request.asSmartObject = flag(p, "asSmartObject", false);
@@ -278,10 +278,10 @@ void AutomationServer::registerDocumentHandlers() {
         const bool gif = suffix == "gif";
         if (suffix == "svg" && floatDocument) fail("SVG export is not available for 32-bit documents yet");
         if (suffix == "svg") {
-            // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
+            // Shape layers as paths, folders as groups, the rest as embedded PNGs (nekophoto/svg.h).
             SvgExportSummary summary;
             std::string error;
-            if (!compositor::exportSvg(doc, path.toStdString(), &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
+            if (!nekophoto::exportSvg(doc, path.toStdString(), &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
             QJsonArray notes;
             for (auto& n : summary.notes) notes.append(qs(n));
             QJsonObject out{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"shapes", summary.shapes}, {"images", summary.images}, {"groups", summary.groups}, {"notes", notes},

@@ -1,7 +1,7 @@
 # The brush engine
 
 How a stroke gets from the pen to the pixels, what the brush dynamics are, how imported brushes land in them, and the
-harness that measures all of it. The code: `src/core/include/compositor/brushsample.h`, `brushsmoothing.h`, `brushdynamics.h`,
+harness that measures all of it. The code: `src/core/include/nekophoto/brushsample.h`, `brushsmoothing.h`, `brushdynamics.h`,
 `tipbrush.h`, `brush.h` (the round tip and the stroke's grid), `mypaint.h`, the importers in `src/core/src/abr.cpp`,
 `procreate.cpp` and `sut.cpp`, and the harness in `tests/brush_harness.*`.
 
@@ -466,7 +466,7 @@ stations along it (pixels at 10% alpha or more), the peak alpha at each, the mea
 must agree), and holds each render's FNV-1a hash to `tests/brush_parity_baseline.txt`, which also carries the
 measurements so a change shows how a stroke moved, not only that it did. A second section, `u16/<fixture>/<preset>`,
 holds the same scenes painted on a 16-bit layer (see 16 bits above); each test rewrites only its own section.
-`COMPOSITOR_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity` rewrites it after an intentional change. GCC and Clang
+`NEKOPHOTO_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity` rewrites it after an intentional change. GCC and Clang
 builds produce the same file. The test
 also checks sample derivation (unwrapping, speed, progress), the density option across 2–50% spacing, and the mouse
 speed option.

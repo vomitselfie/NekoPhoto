@@ -3,15 +3,15 @@
 #include "Names.h"
 #include "FilterDialog.h"
 #include "GridFilters.h"
-#include "compositor/smartfilter.h"
+#include "nekophoto/smartfilter.h"
 #include <QTimer>
-#include "compositor/depth.h"
-#include "compositor/modeedit.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/modeedit.h"
 #include "ActionLibrary.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include "ModelStore.h"
-#include "compositor/subject.h"
+#include "nekophoto/subject.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QMessageBox>
@@ -25,7 +25,7 @@
 #include <cmath>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

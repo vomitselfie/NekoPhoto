@@ -3,8 +3,8 @@
 // too), a .3dl (an input shaper line, then integer triplets, blue fastest) or an ICC profile (an abstract profile run
 // between sRGB and sRGB, or an RGB device link) through lcms2. Tables are cached by the LUT's content, never by where
 // its bytes happen to live.
-#include "compositor/adjustments.h"
-#include "compositor/parallel.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/parallel.h"
 #include "lcms2.h"
 #include <algorithm>
 #include <cmath>
@@ -16,7 +16,7 @@
 #include <sstream>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -287,4 +287,4 @@ void applyColorLookup(ImageF& image, const ColorLookupSettings& s, const Transfe
     });
 }
 
-} // namespace compositor
+} // namespace nekophoto

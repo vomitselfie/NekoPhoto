@@ -1,5 +1,5 @@
 # Brush parity baseline: <fixture>/<preset> <FNV-1a 64 of the layer's pixels> <measurements>, from tests/brush_parity.cpp.
-# Regenerate after an intentional brush change: COMPOSITOR_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity
+# Regenerate after an intentional brush change: NEKOPHOTO_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity
 azimuth_sweep/abr_leaf 23478e475664c36e box=26,57,268,81 total=8135.3 mean=0.8656 width=26.0/43.0/16.0/34.0/18.0/19.0/26.0/37.0/15.0/27.0 peak=1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00 edge=1.70 taper=1.00,1.04
 azimuth_sweep/eraser e801e86e6fd08188 box=20,90,280,20 total=5065.1 mean=0.9182 width=20.0/20.0/20.0/20.0/20.0/20.0/20.0/20.0/20.0/20.0 peak=1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00 edge=1.00 taper=1.00,1.00
 azimuth_sweep/mypaint_calligraphy 0bf88e4b467a8a06 box=21,91,275,18 total=3250.2 mean=0.8770 width=14.0/14.0/14.0/14.0/14.0/14.0/14.0/14.0/14.0/14.0 peak=1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00/1.00 edge=1.95 taper=1.00,1.00

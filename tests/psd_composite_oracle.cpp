@@ -32,7 +32,7 @@
 // A file that passed and fails now, a file no longer compared, or a failing file whose mean grew by more than a level
 // fails the test; a file that passes now and did not is reported as an improvement. After a change, rewrite it:
 //
-//   COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus photocraft
+//   NEKOPHOTO_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus photocraft
 //
 // The patchy corpus also rewrites tests/patchy-manifest.txt (the commit and each fixture's SHA-256) and psd-tools
 // tests/psd-tools-manifest.txt; a checkout that differs is reported, not failed. photocraft-corpus pins itself: a
@@ -40,10 +40,10 @@
 //
 // PSD_ORACLE_DUMP=<dir> writes, for every compared file, NekoPhoto's render, the reference and a difference map
 // (each pixel's largest channel difference, times 8) in 8-bit sRGB as PNGs: <name>-ours.png, -ps.png and -diff.png.
-#include "compositor/png.h"
-#include "compositor/psd.h"
-#include "compositor/psd_carry.h"
-#include "compositor/render.h"
+#include "nekophoto/png.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -67,7 +67,7 @@
 #endif
 
 namespace fs = std::filesystem;
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 
@@ -570,12 +570,12 @@ int run(const Corpus& corpus, const std::vector<std::string>& names, const std::
     for (const auto& [ref, n] : byRef) std::printf("  [%s] %d of %d\n", ref.c_str(), passByRef[ref], n);
     if (corpus.id.empty()) return 0;   // folders named on the command line: reported only
 
-    if (const char* update = std::getenv("COMPOSITOR_UPDATE_PSD_ORACLE"); update && *update && std::strcmp(update, "0") != 0) {
+    if (const char* update = std::getenv("NEKOPHOTO_UPDATE_PSD_ORACLE"); update && *update && std::strcmp(update, "0") != 0) {
         std::ofstream o(corpus.expectations, std::ios::binary);
         o << "# Photoshop oracle over " << corpus.description << " (tests/psd_composite_oracle.cpp): each file's status and\n"
           << "# numbers (max and mean in 8-bit levels, the share of pixels more than 2 levels off) when this was written.\n"
           << "# A pass that fails, a file no longer compared, or a failure whose mean grows by more than a level fails the test.\n"
-          << "# Rewrite it after a change: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus " << corpus.id << "\n"
+          << "# Rewrite it after a change: NEKOPHOTO_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus " << corpus.id << "\n"
           << "corpus " << corpus.id << "\n"
           << "commit " << commit << "\n"
           << "compared " << compared << "\n"
@@ -586,7 +586,7 @@ int run(const Corpus& corpus, const std::vector<std::string>& names, const std::
         if (!corpus.manifest.empty()) {
             std::ofstream m(corpus.manifest, std::ios::binary);
             m << "# " << corpus.description << "\n"
-              << "# that tests/psd_composite_oracle.cpp measures: the commit and each file's SHA-256. Rewritten with COMPOSITOR_UPDATE_PSD_ORACLE=1.\n"
+              << "# that tests/psd_composite_oracle.cpp measures: the commit and each file's SHA-256. Rewritten with NEKOPHOTO_UPDATE_PSD_ORACLE=1.\n"
               << "commit " << commit << "\n";
             for (const auto& [name, hash] : hashes) m << hash << "  " << name << "\n";
             std::printf("wrote %s\n", corpus.manifest.string().c_str());
@@ -601,7 +601,7 @@ int run(const Corpus& corpus, const std::vector<std::string>& names, const std::
     }
     const auto expected = readExpectations(corpus.expectations);
     if (expected.empty()) {
-        std::printf("FAIL: no expectations in %s; write them with COMPOSITOR_UPDATE_PSD_ORACLE=1\n", corpus.expectations.string().c_str());
+        std::printf("FAIL: no expectations in %s; write them with NEKOPHOTO_UPDATE_PSD_ORACLE=1\n", corpus.expectations.string().c_str());
         return 1;
     }
     std::vector<std::string> regressed, improved, fresh;
@@ -630,7 +630,7 @@ int run(const Corpus& corpus, const std::vector<std::string>& names, const std::
         for (const std::string& s : gone) std::printf("  %s\n", s.c_str());
     }
     if (!improved.empty()) {
-        std::printf("\nIMPROVED (pass now; record it with COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus %s):\n", corpus.id.c_str());
+        std::printf("\nIMPROVED (pass now; record it with NEKOPHOTO_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus %s):\n", corpus.id.c_str());
         for (const std::string& s : improved) std::printf("  %s\n", s.c_str());
     }
     if (!regressed.empty()) {

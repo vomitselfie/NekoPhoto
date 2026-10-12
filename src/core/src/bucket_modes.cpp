@@ -1,8 +1,8 @@
-#include "compositor/bucket.h"
+#include "nekophoto/bucket.h"
 #include <algorithm>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -56,4 +56,4 @@ long bucketMask(const AnyImage& image, int seedX, int seedY, int tolerance, bool
     return 0;
 }
 
-} // namespace compositor
+} // namespace nekophoto

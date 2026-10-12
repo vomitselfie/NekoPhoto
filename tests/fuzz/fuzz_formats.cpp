@@ -1,18 +1,18 @@
 // libFuzzer targets for the small format readers; FUZZ_FORMAT picks one per executable.
-#include "compositor/adjustments.h"
-#include "compositor/affinity.h"
-#include "compositor/aseprite.h"
-#include "compositor/gif.h"
-#include "compositor/ico.h"
-#include "compositor/presets.h"
-#include "compositor/svg.h"
-#include "compositor/tga.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/affinity.h"
+#include "nekophoto/aseprite.h"
+#include "nekophoto/gif.h"
+#include "nekophoto/ico.h"
+#include "nekophoto/presets.h"
+#include "nekophoto/svg.h"
+#include "nekophoto/tga.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     const std::vector<uint8_t> bytes(data, data + size);

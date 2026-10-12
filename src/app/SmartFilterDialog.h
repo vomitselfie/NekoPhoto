@@ -13,10 +13,10 @@ class SmartFilterDialog : public QDialog {
 public:
     enum class Page { Settings, Blending };
     /// Entry `index` (running order) of smart object `layerId`'s stack.
-    SmartFilterDialog(EditorSession* session, compositor::Uuid layerId, int index, Page page, QWidget* parent = nullptr);
+    SmartFilterDialog(EditorSession* session, nekophoto::Uuid layerId, int index, Page page, QWidget* parent = nullptr);
     ~SmartFilterDialog() override;
     /// Whether the entry is one this dialog can edit (a filter drawn here, on a stack that can change).
-    static bool canEdit(const EditorSession* session, const compositor::Uuid& layerId, int index);
+    static bool canEdit(const EditorSession* session, const nekophoto::Uuid& layerId, int index);
 
 protected:
     void done(int result) override;
@@ -25,9 +25,9 @@ private:
     void schedulePreview();
     void preview();
     QPointer<EditorSession> session_;
-    compositor::Uuid layerId_;
+    nekophoto::Uuid layerId_;
     int index_;
-    compositor::SmartFilterEntry entry_;
+    nekophoto::SmartFilterEntry entry_;
     QTimer previewTimer_;
     bool previewing_ = false;
 };

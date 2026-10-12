@@ -14,13 +14,13 @@
 // the result by more than a level are: Linear Light's offset (-256/255, not -1), Vivid Light's halves (split at
 // 128/255, the source doubled as x 255/128 and x 255/127), and the choices Hard Mix, Darker Color and Lighter Color
 // make, which are taken on the pixels rounded to 8 bits.
-#include "compositor/blend.h"
-#include "compositor/depth.h"
-#include "compositor/simd.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/simd.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -237,4 +237,4 @@ float blendChannel16(BlendMode mode, float cb, float cs) {
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

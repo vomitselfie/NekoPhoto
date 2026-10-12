@@ -3,9 +3,9 @@
 // (src/psd/psd_text_write.cpp there, MIT; see src/third_party/patchy_psd), with the rules it pinned against
 // Photoshop: engine units are document pixels; fixed leading needs /AutoLeading false; tracking is an
 // integer; numbers stay short; the block's length stays even without a pad after its end-anchored tail.
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/warpmesh.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/warpmesh.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <array>
@@ -17,7 +17,7 @@
 #include <memory>
 #include <variant>
 
-namespace compositor {
+namespace nekophoto {
 namespace {
 
 using patchy::psd::BigEndianWriter;
@@ -561,4 +561,4 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

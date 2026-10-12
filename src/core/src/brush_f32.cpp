@@ -1,10 +1,10 @@
 // BrushStroke in a 32-bit document (docs/high-bit-depth-plan.md, P5c): StrokeRasterOf<StrokeOps<F32>>, the same stroke
 // as at 8 and 16 bits on premultiplied linear float. The dab profile, the stamps and the build-up are the lower depths'
 // without rounding; the colour is the pickers' colour linearised through the document's curve; colour above 1 is kept.
-#include "compositor/brush.h"
+#include "nekophoto/brush.h"
 #include "stroke_raster.h"
 
-namespace compositor {
+namespace nekophoto {
 
 template class StrokeRasterOf<StrokeOps<SampleType::F32>>;
 
@@ -25,4 +25,4 @@ std::shared_ptr<TiledSourceOf<ImageF>> tiledProcessedNative<ImageF>(Document doc
     });
 }
 
-} // namespace compositor
+} // namespace nekophoto

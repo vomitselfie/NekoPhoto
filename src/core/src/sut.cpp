@@ -14,7 +14,7 @@
 // embedded copies do not record, so the materials of each kind are matched to the brushes in the order the
 // brushes first use them.
 #include "brushformats.h"
-#include "compositor/png.h"
+#include "nekophoto/png.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -23,11 +23,11 @@
 #include <string_view>
 #include <zlib.h>
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 #include <sqlite3.h>
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -292,7 +292,7 @@ std::optional<ClipStudioMaterial> readClipStudioMaterial(const uint8_t* data, si
     return material;
 }
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 
 namespace {
 
@@ -518,4 +518,4 @@ std::optional<BrushImport> readClipStudio(const std::string&, const std::string&
 
 #endif
 
-} // namespace compositor
+} // namespace nekophoto

@@ -16,7 +16,7 @@
 #include <QVBoxLayout>
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

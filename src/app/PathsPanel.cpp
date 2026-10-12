@@ -8,7 +8,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

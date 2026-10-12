@@ -1,12 +1,12 @@
-#include "compositor/morphology.h"
-#include "compositor/blur.h"
-#include "compositor/imaget.h"
-#include "compositor/parallel.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/imaget.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -201,4 +201,4 @@ std::shared_ptr<GrayF> smoothSelection(const GrayF& coverage, int radius) { retu
 std::shared_ptr<GrayF> borderSelection(const GrayF& coverage, int width) { return borderSelectionImpl(coverage, width); }
 std::shared_ptr<GrayF> featherSelection(const GrayF& coverage, double radius) { return featherSelectionImpl(coverage, radius); }
 
-} // namespace compositor
+} // namespace nekophoto

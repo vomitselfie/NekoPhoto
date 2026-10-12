@@ -1,11 +1,11 @@
 // The depth-agnostic half of the document renderer (render_plan.h): what is drawn, in which order, and how the
 // layers group, clip and cache. No pixels here.
 #include "render_plan.h"
-#include "compositor/layerstyle.h"
+#include "nekophoto/layerstyle.h"
 #include <algorithm>
 #include <cstdint>
 
-namespace compositor {
+namespace nekophoto {
 
 bool RenderPlan::within(const Layer& layer, const Uuid& group) const {
     int depth = 0;
@@ -139,4 +139,4 @@ void RenderPlan::buildWithin(const RenderPlan& parent, const Uuid& group) {
     prepareGroupStyles();
 }
 
-} // namespace compositor
+} // namespace nekophoto

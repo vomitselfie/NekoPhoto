@@ -1,17 +1,17 @@
 // EditorSession: Quick Select: scribbles (GrabCut) and click prompts (EfficientSAM), run off the UI thread.
 #include "EditorSession.h"
 #include "ModelStore.h"
-#include "compositor/scribble.h"
-#include "compositor/matte.h"
-#include "compositor/morphology.h"
-#include "compositor/subject.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
+#include "nekophoto/scribble.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/subject.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <thread>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

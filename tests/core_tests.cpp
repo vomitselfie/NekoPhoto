@@ -1,33 +1,33 @@
 // Unit tests for the portable core: geometry, transforms, blending, history,
 // compositing semantics, brush strokes, PNG and the .comp round trip.
-#include "compositor/depth.h"
+#include "nekophoto/depth.h"
 #include "check.h"
 #include <climits>
-#include "compositor/trim.h"
-#include "compositor/adjustments.h"
+#include "nekophoto/trim.h"
+#include "nekophoto/adjustments.h"
 #include <cstring>
-#include "compositor/blend.h"
-#include "compositor/filters.h"
-#include "compositor/brush.h"
-#include "compositor/animation.h"
-#include "compositor/document.h"
-#include "compositor/history.h"
-#include "compositor/png.h"
-#include "compositor/project.h"
-#include "compositor/render.h"
-#include "compositor/selection.h"
-#include "compositor/shape.h"
-#include "compositor/smartwand.h"
-#include "compositor/matte.h"
-#include "compositor/subject.h"
-#include "compositor/scribble.h"
-#include "compositor/warp.h"
-#include "compositor/warpstroke.h"
-#include "compositor/transform.h"
-#include "compositor/parallel.h"
-#include "compositor/psd_carry.h"
-#include "compositor/fill_cache.h"
-#include "compositor/smartobject.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/animation.h"
+#include "nekophoto/document.h"
+#include "nekophoto/history.h"
+#include "nekophoto/png.h"
+#include "nekophoto/project.h"
+#include "nekophoto/render.h"
+#include "nekophoto/selection.h"
+#include "nekophoto/shape.h"
+#include "nekophoto/smartwand.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/subject.h"
+#include "nekophoto/scribble.h"
+#include "nekophoto/warp.h"
+#include "nekophoto/warpstroke.h"
+#include "nekophoto/transform.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/fill_cache.h"
+#include "nekophoto/smartobject.h"
 #include <thread>
 
 #include <atomic>
@@ -37,7 +37,7 @@
 #include <random>
 #include <thread>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 namespace {
@@ -2078,8 +2078,8 @@ TEST_CASE(foreground_estimation_removes_the_background_tint) {
 }
 
 TEST_CASE(subject_mask_from_model_when_available) {
-    const char* dir = std::getenv("COMPOSITOR_MODEL_DIR");
-    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_MODEL_DIR with u2netp.onnx to run)\n"); return; }
+    const char* dir = std::getenv("NEKOPHOTO_MODEL_DIR");
+    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_MODEL_DIR with u2netp.onnx to run)\n"); return; }
     std::string path = std::string(dir) + "/u2netp.onnx";
     if (!fs::exists(path)) { std::fprintf(stderr, "  (skipped: %s not present)\n", path.c_str()); return; }
     // A bright disc on a dark field: the disc is the subject.
@@ -2094,8 +2094,8 @@ TEST_CASE(subject_mask_from_model_when_available) {
 TEST_CASE(subject_masks_on_two_threads_match_the_masks_run_alone) {
     // Runs on two threads share one network. forward() into a list copies its outputs out of the network's
     // buffers, so what a run reads after the model lock is released is its own; this keeps it that way.
-    const char* dir = std::getenv("COMPOSITOR_MODEL_DIR");
-    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_MODEL_DIR with u2netp.onnx to run)\n"); return; }
+    const char* dir = std::getenv("NEKOPHOTO_MODEL_DIR");
+    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_MODEL_DIR with u2netp.onnx to run)\n"); return; }
     std::string path = std::string(dir) + "/u2netp.onnx";
     if (!fs::exists(path)) { std::fprintf(stderr, "  (skipped: %s not present)\n", path.c_str()); return; }
     auto disc = [](int cx, int cy) {
@@ -2140,8 +2140,8 @@ TEST_CASE(subject_masks_on_two_threads_match_the_masks_run_alone) {
 }
 
 TEST_CASE(subject_from_prompts_when_the_model_is_available) {
-    const char* dir = std::getenv("COMPOSITOR_MODEL_DIR");
-    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_MODEL_DIR with efficientsam_ti_2025april.onnx to run)\n"); return; }
+    const char* dir = std::getenv("NEKOPHOTO_MODEL_DIR");
+    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_MODEL_DIR with efficientsam_ti_2025april.onnx to run)\n"); return; }
     std::string path = std::string(dir) + "/efficientsam_ti_2025april.onnx";
     if (!fs::exists(path)) { std::fprintf(stderr, "  (skipped: %s not present)\n", path.c_str()); return; }
     CHECK(promptModelPath(path));

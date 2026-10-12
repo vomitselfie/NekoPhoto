@@ -1,4 +1,4 @@
-#include "compositor/raw.h"
+#include "nekophoto/raw.h"
 #include "Automation.h"
 #include "FullScreen.h"
 #include "HidePanels.h"
@@ -11,8 +11,8 @@
 #include "LayersPanel.h"
 #include "ModelStore.h"
 #include "Gmic.h"
-#include "compositor/scribble.h"
-#include "compositor/supports.h"
+#include "nekophoto/scribble.h"
+#include "nekophoto/supports.h"
 #include <QApplication>
 #include <QDir>
 #include "Platform.h"
@@ -26,7 +26,7 @@
 #include <QTimer>
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {
@@ -43,7 +43,7 @@ AutomationServer::~AutomationServer() {
 }
 
 QString AutomationServer::defaultSocketPath() {
-    QString env = qEnvironmentVariable("COMPOSITOR_RPC_SOCKET");
+    QString env = qEnvironmentVariable("NEKOPHOTO_RPC_SOCKET");
     if (!env.isEmpty()) return env;
     return platform::defaultLocalSocket("nekophoto.sock");
 }
@@ -274,7 +274,7 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
         response["error"] = QJsonObject{{"code", invalidParams}, {"message", wrong + describeHint(method)}};
         return response;
     }
-    // A 16-bit document takes only what has been ported to it (compositor/supports.h).
+    // A 16-bit document takes only what has been ported to it (nekophoto/supports.h).
     if (EditorSession* s = window_->session(); s && !worksAtDepth(method, *s)) {
         const char* feature = depthFeature(method);
         const QString why = s->colorMode() != ColorMode::RGB
@@ -401,7 +401,7 @@ void AutomationServer::registerAppHandlers() {
         else if (GmicRunner::available()) gmic = QJsonObject{{"path", QJsonValue()}, {"source", "library"}, {"version", GmicRunner::version()}};
         return QJsonObject{{"name", "nekophoto"}, {"gmic", gmic}, {"version", QApplication::applicationVersion()}, {"protocolVersion", protocolVersion}, {"socket", path_},
                            {"platform", QApplication::platformName()}, {"tabs", w->tabCount()}, {"currentTab", w->currentTabIndex()},
-                           {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}, {"clickSelect", ModelStore::promptReady()}, {"raw", compositor::rawSupported()}, {"pdf", app::pdfSupported()}};
+                           {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}, {"clickSelect", ModelStore::promptReady()}, {"raw", nekophoto::rawSupported()}, {"pdf", app::pdfSupported()}};
     });
     add("events.subscribe", [this](const QJsonObject& p) {
         // Notifications on this connection: {"method":"event","params":{"kind":...,"tab":N}}, one per kind per event-loop turn.

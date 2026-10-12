@@ -1,6 +1,6 @@
 #include "CpuPower.h"
 #include "Platform.h"
-#include "compositor/parallel.h"
+#include "nekophoto/parallel.h"
 #include <QCoreApplication>
 #include <QSettings>
 #include <algorithm>
@@ -43,12 +43,12 @@ QString label(const QString& level) {
 }
 
 int cores(const QString& level) {
-    const int machine = std::min(64, compositor::hardwareThreads());
+    const int machine = std::min(64, nekophoto::hardwareThreads());
     return std::clamp(int(std::ceil(machine * share(level))), 1, machine);
 }
 
 QString describe(const QString& level) {
-    const int machine = std::min(64, compositor::hardwareThreads());
+    const int machine = std::min(64, nekophoto::hardwareThreads());
     const QString used = QCoreApplication::translate("CpuPower", "%1: %2 of %3 cores").arg(label(level)).arg(cores(level)).arg(machine);
     if (priorityDrop(level) == 0) return used;
     return QCoreApplication::translate("CpuPower", "%1, gives way to other programs").arg(used);
@@ -58,7 +58,7 @@ void apply() {
     QString level = valid(qEnvironmentVariable("NEKOPHOTO_CPU"));
     if (level.isEmpty()) level = setting();
     applied = level;
-    if (level != "all") compositor::setWorkerLimit(cores(level));
+    if (level != "all") nekophoto::setWorkerLimit(cores(level));
     platform::lowerProcessPriority(priorityDrop(level));
 }
 

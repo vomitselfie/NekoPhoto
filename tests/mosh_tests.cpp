@@ -1,16 +1,16 @@
-// The Mosh effects (compositor/mosh.h, docs/mosh.md): the registry, the runtime's maths, Pixel Sort's semantics, render
+// The Mosh effects (nekophoto/mosh.h, docs/mosh.md): the registry, the runtime's maths, Pixel Sort's semantics, render
 // fingerprints for every effect at its defaults and at seeded settings (tests/mosh_hashes.txt), the same pixels on one
 // thread and on the pool, and 16-bit against 8-bit.
 //
-// COMPOSITOR_UPDATE_MOSH_HASHES=1 rewrites the fingerprints after an intentional change.
+// NEKOPHOTO_UPDATE_MOSH_HASHES=1 rewrites the fingerprints after an intentional change.
 //
 // Also a tool for checking the ports against OpenMosh's own renders:
 //   mosh_tests --run <in.png> <effect-id> <out.png> [seed=<n>] [aux=<png>] [source=<png>] [<key>=<value> ...]
 #include "check.h"
-#include "compositor/depth.h"
-#include "compositor/mosh.h"
-#include "compositor/parallel.h"
-#include "compositor/png.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/mosh.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/png.h"
 #include "mosh_runtime.h"
 
 #include <algorithm>
@@ -25,7 +25,7 @@
 #include <sstream>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 
@@ -316,7 +316,7 @@ TEST_CASE(fingerprints) {
             }
     }
     const std::string path = MOSH_HASHES_FILE;
-    if (std::getenv("COMPOSITOR_UPDATE_MOSH_HASHES")) {
+    if (std::getenv("NEKOPHOTO_UPDATE_MOSH_HASHES")) {
         std::ofstream out(path);
         out << "# Mosh render fingerprints (tests/mosh_tests.cpp): FNV-1a 64 of the 8-bit pixels.\n";
         for (const auto& [name, h] : got) { char line[32]; std::snprintf(line, sizeof line, "%016" PRIx64, h); out << name << ' ' << line << '\n'; }

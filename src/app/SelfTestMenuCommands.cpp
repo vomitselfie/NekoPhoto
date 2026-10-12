@@ -26,7 +26,7 @@
 #include "PathsPanel.h"
 #include "PresetLibrary.h"
 #include "WarpDialog.h"
-#include "compositor/warpmesh.h"
+#include "nekophoto/warpmesh.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -56,7 +56,7 @@
 #include <utility>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -560,11 +560,11 @@ int menuCommands(MainWindow& w) {
              dialog->accept();
          }, {"pixels.cameraRaw"}},
         {"Mosh", "Background", {}, [](MainWindow& w, EditorSession& s) {
-             auto* dialog = new MoshDialog(&s, *compositor::mosh::findEffect("wave"), &w);
+             auto* dialog = new MoshDialog(&s, *nekophoto::mosh::findEffect("wave"), &w);
              dialog->accept();
              QApplication::processEvents();
              return true;
-         }, [window](EditorSession& s, auto&) { (new MoshDialog(&s, *compositor::mosh::findEffect("wave"), window))->accept(); }, {"pixels.mosh"}},
+         }, [window](EditorSession& s, auto&) { (new MoshDialog(&s, *nekophoto::mosh::findEffect("wave"), window))->accept(); }, {"pixels.mosh"}},
         {"Load Selection", "Background", [](EditorSession& s) { s.deselect(); }, [](MainWindow& w, EditorSession& s) {
              auto* dialog = new LoadSelectionDialog(&s, &w);
              auto* source = dialog->findChild<QComboBox*>();

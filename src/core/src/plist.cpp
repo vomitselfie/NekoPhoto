@@ -1,7 +1,7 @@
 #include "plist.h"
 #include <cstring>
 
-namespace compositor::plist {
+namespace nekophoto::plist {
 
 namespace {
 
@@ -207,4 +207,4 @@ std::optional<XmlDict> parseXmlDict(const std::string& xml) {
     return out;
 }
 
-} // namespace compositor::plist
+} // namespace nekophoto::plist

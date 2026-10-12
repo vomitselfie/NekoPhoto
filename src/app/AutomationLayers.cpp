@@ -1,14 +1,14 @@
 // Automation methods: layers. Registered from AutomationServer::registerHandlers (Automation.cpp).
-#include "compositor/smartobject_edit.h"
+#include "nekophoto/smartobject_edit.h"
 #include "Automation.h"
-#include "compositor/blend.h"
-#include "compositor/depth.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/depth.h"
 #include "AutomationHandlers.h"
 #include "PresetLibrary.h"
-#include "compositor/warpmesh.h"
+#include "nekophoto/warpmesh.h"
 #include "ImageConvert.h"
-#include "compositor/render.h"
-#include "compositor/raw.h"
+#include "nekophoto/render.h"
+#include "nekophoto/raw.h"
 #include "MainWindow.h"
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {
@@ -202,7 +202,7 @@ void AutomationServer::registerLayersHandlers() {
     });
     add("layers.warp", [session, layerOrActive, withActive](const QJsonObject& p) {
         const Uuid id = layerOrActive(p).id;
-        compositor::TextWarp warp;
+        nekophoto::TextWarp warp;
         warp.style = str(p, "style").toStdString();
         if (!warp.style.empty() && warp.style.rfind("warp", 0) != 0) {
             // Plain names too: "arc lower" is warpArcLower.
@@ -216,7 +216,7 @@ void AutomationServer::registerLayersHandlers() {
             warp.style = id2;
         }
         if (warp.style == "warpNone") warp.style.clear();
-        if (!warp.style.empty() && !compositor::warpStyleBakes(warp.style)) fail("style must be one of Photoshop's presets (arc, arc lower, arc upper, arch, bulge, shell lower, shell upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist)", invalidParams);
+        if (!warp.style.empty() && !nekophoto::warpStyleBakes(warp.style)) fail("style must be one of Photoshop's presets (arc, arc lower, arc upper, arch, bulge, shell lower, shell upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist)", invalidParams);
         warp.bend = std::clamp(num(p, "bend", 50), -100.0, 100.0);
         warp.horizontal = std::clamp(num(p, "horizontal", 0), -100.0, 100.0);
         warp.vertical = std::clamp(num(p, "vertical", 0), -100.0, 100.0);
@@ -230,8 +230,8 @@ void AutomationServer::registerLayersHandlers() {
     add("smartObject.addFilter", [session, layerOrActive, withActive](const QJsonObject& p) {
         const Uuid id = layerOrActive(p).id;
         const QString kind = str(p, "kind").toLower().remove(' ').remove('_').remove('&');
-        using namespace compositor::smartfilter;
-        compositor::SmartFilterEntry entry;
+        using namespace nekophoto::smartfilter;
+        nekophoto::SmartFilterEntry entry;
         // Defaults a first use of each filter starts from (Photoshop's).
         if (kind == "gaussianblur") entry.parameters = GaussianBlur{2};
         else if (kind == "highpass") entry.parameters = HighPass{10};
@@ -263,7 +263,7 @@ void AutomationServer::registerLayersHandlers() {
         if (!stack) fail("that layer has no Smart Filters", invalidParams);
         return *stack;
     };
-    auto indexOf = [](const QJsonObject& p, const compositor::SmartFilterStack& stack) {
+    auto indexOf = [](const QJsonObject& p, const nekophoto::SmartFilterStack& stack) {
         if (!has(p, "index")) fail("index is required", invalidParams);
         const int index = int(num(p, "index", -1));
         if (index < 0 || index >= int(stack.entries.size())) fail(QString("index must be 0..%1").arg(int(stack.entries.size()) - 1), invalidParams);
@@ -284,7 +284,7 @@ void AutomationServer::registerLayersHandlers() {
             return smartFiltersJson(*session(), id);
         }
         const int index = indexOf(p, stack);
-        compositor::SmartFilterEntry entry = stack.entries[size_t(index)];
+        nekophoto::SmartFilterEntry entry = stack.entries[size_t(index)];
         if (std::holds_alternative<std::monostate>(entry.parameters)) fail("NekoPhoto does not draw that filter, so it cannot be changed", invalidParams);
         smartFilterSettingsFrom(p, entry.parameters);
         if (has(p, "enabled")) entry.enabled = flag(p, "enabled", true);
@@ -341,7 +341,7 @@ void AutomationServer::registerLayersHandlers() {
                 const QJsonObject given = obj(p, "settings");
                 if (!CameraRawSettings::parse(QJsonDocument(given).toJson(QJsonDocument::Compact).toStdString(), settings, &why)) fail("settings." + QString::fromStdString(why), invalidParams);
                 // White balance against the file: kelvin, As Shot, the file's presets, Auto (docs/camera-raw.md).
-                const std::string refused = compositor::resolveRawWhiteBalance(*session()->activeRawSmartObject()->bytes, settings,
+                const std::string refused = nekophoto::resolveRawWhiteBalance(*session()->activeRawSmartObject()->bytes, settings,
                                                                                given.contains("temperature"), given.contains("tint"));
                 if (!refused.empty()) fail("settings: " + QString::fromStdString(refused), invalidParams);
             }
@@ -419,7 +419,7 @@ void AutomationServer::registerLayersHandlers() {
     add("layers.cage", [session, layer](const QJsonObject& p) {
         // The warp cage a layer has now: 16 [x, y] points, row by row (flat over it, or a smart object's own warp).
         std::string why;
-        auto cage = compositor::layerWarpCage(*session()->document(), layer(p), &why);
+        auto cage = nekophoto::layerWarpCage(*session()->document(), layer(p), &why);
         if (!cage) fail(QString::fromStdString(why), invalidParams);
         QJsonArray points;
         for (size_t i = 0; i < cage->xs.size(); i++) points.append(QJsonArray{cage->xs[i], cage->ys[i]});
@@ -433,7 +433,7 @@ void AutomationServer::registerLayersHandlers() {
         QString error;
         s->cancelWarpCage();   // one left open in the window gives way
         if (!s->beginWarpCage(&error)) fail(error);
-        compositor::WarpMesh cage = *s->warpCage();
+        nekophoto::WarpMesh cage = *s->warpCage();
         for (int i = 0; i < 16; i++) { const QJsonArray xy = points[i].toArray(); cage.xs[size_t(i)] = xy.at(0).toDouble(); cage.ys[size_t(i)] = xy.at(1).toDouble(); }
         s->setWarpCage(cage);
         if (!s->commitWarpCage(&error)) fail(error.isEmpty() ? QStringLiteral("the warp could not be applied") : error);
@@ -548,8 +548,8 @@ void AutomationServer::registerLayersHandlers() {
         const Uuid id = layerOrActive(p).id;
         QString error;
         if (!session()->textToWorkPath(id, &error)) fail(error.isEmpty() ? QStringLiteral("couldn't make a path from the text") : error, invalidParams);
-        const auto work = compositor::documentPath(*session()->document(), compositor::kWorkPathId);
-        return QJsonObject{{"id", int(compositor::kWorkPathId)}, {"subpaths", work ? int(work->path.subpaths.size()) : 0}};
+        const auto work = nekophoto::documentPath(*session()->document(), nekophoto::kWorkPathId);
+        return QJsonObject{{"id", int(nekophoto::kWorkPathId)}, {"subpaths", work ? int(work->path.subpaths.size()) : 0}};
     });
     add("text.toShape", [session, layerOrActive](const QJsonObject& p) {
         // Type > Convert to Shape: the text layer becomes a shape layer of its glyph outlines, in its colour.

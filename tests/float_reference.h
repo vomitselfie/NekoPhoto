@@ -9,10 +9,10 @@
 // share nothing with the kernels but the settings' own definitions (LevelsRange::normalized, the Curves points,
 // HueSaturationSettings::adjust, FilterSettings::normalized).
 #pragma once
-#include "compositor/adjustments.h"
-#include "compositor/document.h"
-#include "compositor/filters.h"
-#include "compositor/resample.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/document.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/resample.h"
 #include <array>
 #include <vector>
 
@@ -33,16 +33,16 @@ double encode(const Encoding& encoding, double linear);
 double decode(const Encoding& encoding, double encoded);
 
 /// B(cb, cs) for a separable mode, in double (inputs clamped to 0..1 for the modes outside Photoshop's 32-bit set).
-double blendChannel(compositor::BlendMode mode, double cb, double cs);
+double blendChannel(nekophoto::BlendMode mode, double cb, double cs);
 /// One source pixel (premultiplied) over one backdrop pixel with coverage `k`, in `mode`; `luma` are the Y weights.
-void composite(compositor::BlendMode mode, const double src[4], double k, double dst[4], const std::array<double, 3>& luma);
+void composite(nekophoto::BlendMode mode, const double src[4], double k, double dst[4], const std::array<double, 3>& luma);
 /// The document (32-bit) drawn as described above. Layers the reference does not model are an error (empty result).
-Canvas render(const compositor::Document& document, const std::array<double, 3>& luma, const Encoding& encoding = {});
+Canvas render(const nekophoto::Document& document, const std::array<double, 3>& luma, const Encoding& encoding = {});
 
 /// A float image as a canvas.
-Canvas canvasOf(const compositor::ImageF& image);
+Canvas canvasOf(const nekophoto::ImageF& image);
 /// A 32-bit adjustment on premultiplied linear colour (adjustments_f32.cpp's rules); false for a kind not modelled.
-bool adjust(Canvas& canvas, const compositor::AdjustmentSettings& settings, const Encoding& encoding);
+bool adjust(Canvas& canvas, const nekophoto::AdjustmentSettings& settings, const Encoding& encoding);
 /// Gaussian blur with the kernel's taps (radius ceil(3 sigma), weights normalised), zero outside.
 void gaussianBlur(Canvas& canvas, double sigma);
 /// The recursive Gaussian the kernel uses above sigma 6: Deriche's fourth-order fit, causal and anticausal, zero outside.
@@ -54,7 +54,7 @@ void addNoise(Canvas& canvas, double amount, bool gaussian, bool monochromatic, 
 /// Lens Correction's remove-distortion resampling, zero outside.
 void lensCorrection(Canvas& canvas, double distortion, bool bicubic);
 /// The separable resampler (resample.h) with exact weights.
-Canvas resample(const Canvas& canvas, int width, int height, double originX, double stepX, double originY, double stepY, compositor::ResampleFilter filter);
+Canvas resample(const Canvas& canvas, int width, int height, double originX, double stepX, double originY, double stepY, nekophoto::ResampleFilter filter);
 
 /// One round brush dab on a layer at 1:1 at the origin (P5c, the 32-bit brush), in double with the profile written out:
 /// a hard tip's rim antialiased over one pixel, a soft tip's falloff between the hardness radius and the rim (the
@@ -66,6 +66,6 @@ void brushDab(Canvas& canvas, double cx, double cy, double diameter, double hard
 
 /// The largest difference between the renderer's output and the reference, scaled as |a - b| / (1e-5 + 1e-5 |b|): at
 /// most 1 means within 1e-5 absolute plus 1e-5 relative everywhere.
-double worstError(const compositor::ImageF& image, const Canvas& reference);
+double worstError(const nekophoto::ImageF& image, const Canvas& reference);
 
 } // namespace float_reference

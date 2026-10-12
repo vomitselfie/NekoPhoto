@@ -1,13 +1,13 @@
 // The separable resampler at 16 bits (resample.h). Its taps are resample.cpp's, copied here so the 8-bit
 // translation unit is built exactly as it was; a change to the kernels or the taps belongs in both.
-#include "compositor/resample.h"
-#include "compositor/parallel.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -155,4 +155,4 @@ std::shared_ptr<Gray16> resampleAxisAligned(const Gray16& mask, int width, int h
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -4,15 +4,15 @@
 // merged image), then by NekoPhoto's reader. These are constructed files, a weaker check than files Photoshop saved:
 // the only Photoshop-saved CMYK file in the corpus is Patchy's photoshop-cmyk-style-colors.psd (psd_roundtrip).
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/channels.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/psd.h"
-#include "compositor/psd_carry.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/channels.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -20,7 +20,7 @@
 #include <stdexcept>
 #include <zlib.h>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

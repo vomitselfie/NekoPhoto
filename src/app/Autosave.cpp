@@ -1,7 +1,7 @@
 #include <QSet>
 #include "Autosave.h"
 #include "EditorSession.h"
-#include "compositor/project.h"
+#include "nekophoto/project.h"
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -38,8 +38,8 @@ void Autosave::restart() { setInterval(intervalMinutes()); }
 
 void Autosave::setInterval(int minutes) {
     minutes = std::clamp(minutes, 0, 120);
-    // COMPOSITOR_AUTOSAVE_MS overrides the interval, for tests.
-    const int override = qEnvironmentVariableIntValue("COMPOSITOR_AUTOSAVE_MS");
+    // NEKOPHOTO_AUTOSAVE_MS overrides the interval, for tests.
+    const int override = qEnvironmentVariableIntValue("NEKOPHOTO_AUTOSAVE_MS");
     if (override > 0) timer_->start(override);
     else if (minutes > 0) timer_->start(minutes * 60 * 1000);
     else timer_->stop();
@@ -84,8 +84,8 @@ void Autosave::tick() {
         entry.dirty = false;
         entry.saving = true;
         // The copy shares the layers' pixels with the document; the worker only reads it.
-        auto document = std::make_shared<const compositor::Document>(session->documentToSave());   // never playback's frame
-        const std::optional<compositor::Uuid> active = session->activeLayerId();
+        auto document = std::make_shared<const nekophoto::Document>(session->documentToSave());   // never playback's frame
+        const std::optional<nekophoto::Uuid> active = session->activeLayerId();
         const QString key = entry.key, dir = dir_, title = entry.title ? entry.title() : QString(), original = session->projectPath();
         const QJsonObject origin = session->source().toJson();   // the file File > Revert reads, for the recovered copy
         EditorSession* owner = session;
@@ -96,8 +96,8 @@ void Autosave::tick() {
             // `originalPath` names the document's own file or folder, which a recovered document saves back to.
             const QString saving = dir + "/" + key + ".saving.comp", final = dir + "/" + key + ".comp", previous = dir + "/" + key + ".old.comp";
             QDir(saving).removeRecursively();
-            compositor::ProjectError error;
-            bool ok = compositor::saveProject(*document, active, saving.toStdString(), error);
+            nekophoto::ProjectError error;
+            bool ok = nekophoto::saveProject(*document, active, saving.toStdString(), error);
             if (ok) {
                 // The description first, so even a first copy is offered if the rename is the last thing that happens.
                 QFile meta(dir + "/" + key + ".json");

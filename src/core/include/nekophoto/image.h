@@ -1,0 +1,212 @@
+// Pixel buffers. The one canonical in-memory format, matching the Mac app:
+//   RGBA, 8 bits per channel, premultiplied alpha, sRGB, rows top-down, explicit byte stride.
+// Masks and coverage are 8-bit gray, white = full.
+// Buffers are immutable once shared (ImagePtr / GrayPtr), so undo snapshots and
+// renders can hold them without copying.
+#pragma once
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <memory>
+#include <new>
+#include <utility>
+#include <mutex>
+#include <vector>
+#include "sampletype.h"
+
+namespace nekophoto {
+
+template <SampleType S> class ImageT;
+template <SampleType S> class GrayImageT;
+
+/// The largest side a pixel buffer may have. It is the document's own limit, kept here because the buffer
+/// classes enforce it: with the side bounded, `width * 4` cannot overflow an int, so a stride can never
+/// disagree with the buffer behind it. A size beyond it yields an empty image rather than a short buffer.
+inline constexpr int maxImageSide = 30000;
+
+/// Pixel memory from calloc. A large block comes from the kernel as untouched zero pages, so a blank image
+/// costs nothing until something is written to it (a brush stroke on a blank 4096 x 4096 layer used to fill
+/// 64 MB with zeros twice before its first dab). Value-initialising an element is a no-op, since calloc zeroed
+/// it; copies go through the buffer classes' own copy, which copies in bulk.
+template <class T>
+struct ZeroedAllocator {
+    using value_type = T;
+    ZeroedAllocator() = default;
+    template <class U> ZeroedAllocator(const ZeroedAllocator<U>&) noexcept {}
+    T* allocate(size_t n) {
+        void* p = std::calloc(n ? n : 1, sizeof(T));
+        if (!p) throw std::bad_alloc();
+        return static_cast<T*>(p);
+    }
+    void deallocate(T* p, size_t) noexcept { std::free(p); }
+    template <class U> void construct(U*) noexcept {}
+    template <class U, class... A> void construct(U* p, A&&... args) { ::new (static_cast<void*>(p)) U(std::forward<A>(args)...); }
+    friend bool operator==(const ZeroedAllocator&, const ZeroedAllocator&) { return true; }
+};
+using PixelBytes = std::vector<uint8_t, ZeroedAllocator<uint8_t>>;
+
+class Image {
+public:
+    Image() = default;
+    /// Transparent black, from zero pages that cost nothing until written.
+    Image(int width, int height);
+    /// Large images copy on every core.
+    Image(const Image& other);
+    Image& operator=(const Image& other);
+    Image(Image&&) noexcept = default;
+    Image& operator=(Image&&) noexcept = default;
+    int width() const { return width_; }
+    int height() const { return height_; }
+    /// Bytes per row.
+    int stride() const { return stride_; }
+    bool isEmpty() const { return width_ <= 0 || height_ <= 0; }
+    uint8_t* data() { return pixels_.data(); }
+    const uint8_t* data() const { return pixels_.data(); }
+    uint8_t* row(int y) { return pixels_.data() + size_t(y) * stride_; }
+    const uint8_t* row(int y) const { return pixels_.data() + size_t(y) * stride_; }
+    uint8_t* pixel(int x, int y) { return row(y) + x * 4; }
+    const uint8_t* pixel(int x, int y) const { return row(y) + x * 4; }
+    size_t byteCount() const { return pixels_.size(); }
+    void fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+    void clear() { fill(0, 0, 0, 0); }
+    bool operator==(const Image& other) const { return width_ == other.width_ && height_ == other.height_ && pixels_ == other.pixels_; }
+
+private:
+    int width_ = 0, height_ = 0, stride_ = 0;
+    PixelBytes pixels_;
+};
+
+class GrayImage {
+public:
+    GrayImage() = default;
+    GrayImage(int width, int height, uint8_t value = 0);
+    GrayImage(const GrayImage& other);
+    GrayImage& operator=(const GrayImage& other);
+    GrayImage(GrayImage&&) noexcept = default;
+    GrayImage& operator=(GrayImage&&) noexcept = default;
+    int width() const { return width_; }
+    int height() const { return height_; }
+    int stride() const { return width_; }
+    bool isEmpty() const { return width_ <= 0 || height_ <= 0; }
+    uint8_t* data() { return pixels_.data(); }
+    const uint8_t* data() const { return pixels_.data(); }
+    uint8_t* row(int y) { return pixels_.data() + size_t(y) * width_; }
+    const uint8_t* row(int y) const { return pixels_.data() + size_t(y) * width_; }
+    uint8_t at(int x, int y) const { return row(y)[x]; }
+    uint8_t& at(int x, int y) { return row(y)[x]; }
+    size_t byteCount() const { return pixels_.size(); }
+    void fill(uint8_t value);
+    bool operator==(const GrayImage& other) const { return width_ == other.width_ && height_ == other.height_ && pixels_ == other.pixels_; }
+
+private:
+    int width_ = 0, height_ = 0;
+    PixelBytes pixels_;
+};
+
+using ImagePtr = std::shared_ptr<const Image>;
+using GrayPtr = std::shared_ptr<const GrayImage>;
+
+/// Half-open bounds of the pixels with nonzero alpha: {x0, y0, x1, y1}; all zero when empty.
+struct PixelBounds { int x0 = 0, y0 = 0, x1 = 0, y1 = 0; bool isEmpty() const { return x1 <= x0 || y1 <= y0; } };
+PixelBounds alphaBounds(const Image& image);
+/// The same, scanning only `within` (pixel bounds); useful when everything outside is known to be unchanged.
+PixelBounds alphaBounds(const Image& image, const PixelBounds& within);
+PixelBounds nonzeroBounds(const GrayImage& image);
+
+std::shared_ptr<Image> cropImage(const Image& image, int x, int y, int width, int height);
+std::shared_ptr<GrayImage> cropGray(const GrayImage& image, int x, int y, int width, int height);
+
+/// Box-filtered halving (each output pixel the average of 2x2 inputs), the sharp reduction the Mac uses for large scale-downs;
+/// rows in parallel, four pixels per vector step.
+std::shared_ptr<Image> halveImage(const Image& image);
+std::shared_ptr<GrayImage> halveGray(const GrayImage& image);
+/// `level` halvings built on the spot (nothing cached): for images that have no shared owner. Level 0 returns null.
+std::shared_ptr<Image> reduceImage(const Image& image, int level);
+std::shared_ptr<GrayImage> reduceGray(const GrayImage& image, int level);
+
+/// A reduction with the longest side at most `maxSide` pixels, box-filtered.
+std::shared_ptr<Image> makeThumbnail(const Image& image, int maxSide = 96);
+std::shared_ptr<GrayImage> makeGrayThumbnail(const GrayImage& image, int maxSide = 96);
+
+/// Straight (non-premultiplied) <-> premultiplied conversion, as when reading and writing PNGs.
+void premultiply(Image& image);
+void unpremultiply(Image& image);
+
+/// Power-of-two reductions of an image, built on demand and cached by image identity. The cache holds
+/// only weak references to the sources; the reductions it keeps are bounded by a byte budget (the Mac
+/// caps its cache at 400 MB). Over budget, the levels that only served to build a deeper one are released
+/// first (an image drawn at fit zoom keeps its level 2 or 3, not the level 1 that is four times larger),
+/// least recently used image first, and only then whole images, the least recently used going first.
+/// A released level is rebuilt from the nearest one kept when asked for again, to the same pixels.
+class MipCache {
+public:
+    static MipCache& shared();
+    /// `level` halvings of `image` (level 0 is the image itself).
+    ImagePtr level(const ImagePtr& image, int level);
+    GrayPtr level(const GrayPtr& image, int level);
+    /// The same at 16 bits: a 16-bit document's reductions keep its depth.
+    std::shared_ptr<const ImageT<SampleType::U16>> level(const std::shared_ptr<const ImageT<SampleType::U16>>& image, int level);
+    std::shared_ptr<const GrayImageT<SampleType::U16>> level(const std::shared_ptr<const GrayImageT<SampleType::U16>>& image, int level);
+    /// And in float, for a 32-bit document.
+    std::shared_ptr<const ImageT<SampleType::F32>> level(const std::shared_ptr<const ImageT<SampleType::F32>>& image, int level);
+    std::shared_ptr<const GrayImageT<SampleType::F32>> level(const std::shared_ptr<const GrayImageT<SampleType::F32>>& image, int level);
+    /// 8-bit CMYK (ImageC8, 5 samples a pixel); a 16-bit CMYK buffer takes the Image16 form.
+    std::shared_ptr<const ImageT<SampleType::U8>> level(const std::shared_ptr<const ImageT<SampleType::U8>>& image, int level);
+    /// The level for drawing an image at `factor` destination pixels per source pixel: halvings until the
+    /// final resample is at most 2x reduction, or, `rounded`, until it is nearest to 1x (between 0.7x
+    /// and 1.4x), which suits a bicubic final step.
+    static int levelFor(double factor, bool rounded = false);
+    /// After `image` was written in place (a stroke's working pixels, kept under the same pointer), brings the
+    /// part of each cached level under `pixelRect` up to date; the levels assume images never change.
+    void refresh(const Image* image, int x0, int y0, int x1, int y1);
+    void refresh(const GrayImage* image, int x0, int y0, int x1, int y1);
+    /// The same for a 16-bit stroke's pixels and mask.
+    void refresh(const ImageT<SampleType::U16>* image, int x0, int y0, int x1, int y1);
+    void refresh(const GrayImageT<SampleType::U16>* image, int x0, int y0, int x1, int y1);
+    /// And for a 32-bit stroke's, and an 8-bit CMYK one's (5 samples; a 16-bit CMYK buffer takes the Image16 form).
+    void refresh(const ImageT<SampleType::F32>* image, int x0, int y0, int x1, int y1);
+    void refresh(const GrayImageT<SampleType::F32>* image, int x0, int y0, int x1, int y1);
+    void refresh(const ImageT<SampleType::U8>* image, int x0, int y0, int x1, int y1);
+    void clear();
+    void setBudget(size_t bytes);
+    size_t budget() const { return budget_; }
+    size_t bytesUsed() const { return used_; }
+
+private:
+    template <typename Img>
+    struct Entry {
+        std::weak_ptr<const Img> source;
+        std::vector<std::shared_ptr<const Img>> levels;   // level k at index k - 1; null once released
+        size_t bytes = 0;
+        uint64_t lastUse = 0;
+        int wanted = 0;   // the level last asked for: the levels below it are intermediates
+    };
+    template <typename Img>
+    static bool hasIntermediate(const Entry<Img>& e);
+    template <typename Img>
+    void dropIntermediates(Entry<Img>& e);
+    template <typename Img>
+    void refreshWithGaps(Entry<Img>& e, const Img* image, int channels, int x0, int y0, int x1, int y1);
+    template <typename Img>
+    std::shared_ptr<const Img> levelOf(std::vector<Entry<Img>>& entries, const std::shared_ptr<const Img>& image, int level);
+    template <typename Img>
+    void refreshOf(std::vector<Entry<Img>>& entries, const Img* image, int x0, int y0, int x1, int y1);
+    template <typename Img>
+    void refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, int x0, int y0, int x1, int y1);
+    void enforceBudget(uint64_t keep);
+    std::vector<Entry<Image>> entries_;
+    std::vector<Entry<GrayImage>> grayEntries_;
+    std::mutex mutex_;
+    size_t budget_ = size_t(400) << 20;
+    size_t used_ = 0;
+    uint64_t clock_ = 0;
+    // A 16-bit document's reductions (after the 8-bit members, which keep their places).
+    std::vector<Entry<ImageT<SampleType::U16>>> entries16_;
+    std::vector<Entry<GrayImageT<SampleType::U16>>> grayEntries16_;
+    // A 32-bit document's.
+    std::vector<Entry<ImageT<SampleType::F32>>> entriesF_;
+    std::vector<Entry<GrayImageT<SampleType::F32>>> grayEntriesF_;
+    std::vector<Entry<ImageT<SampleType::U8>>> entriesC8_;
+};
+
+} // namespace nekophoto

@@ -7,7 +7,7 @@ adjustment layers (except Grain, which Photoshop lacks, and a Gradient Map made 
 pixel layer of their result, [psd-export.md](psd-export.md)). An imported one whose settings have not changed goes back as the file's own block, byte for byte
 (the carry keeps the settings as read); an edited or new one is written in Photoshop's layout.
 
-Model and maths: `src/core/include/compositor/adjustments.h`, `src/core/src/adjustments_more.cpp`. Invert,
+Model and maths: `src/core/include/nekophoto/adjustments.h`, `src/core/src/adjustments_more.cpp`. Invert,
 Brightness/Contrast and Posterize are per-channel tables, so a run of them with Levels, Curves and Exposure composes
 into one pass.
 

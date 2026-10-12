@@ -2,16 +2,16 @@
 // an 8-bit image converted to 16 bits, painted with the same stroke, then reduced to 8 bits, lands within one level of
 // the 8-bit result, or the test says where and by how much it does not, and why. The brush engines' own presets are
 // compared the same way, fixture by fixture, in brush_parity's 16-bit section.
-// COMPOSITOR_REPORT_U16_CALIBRATION=1 prints the worst difference and the share beyond a level for each.
+// NEKOPHOTO_REPORT_U16_CALIBRATION=1 prints the worst difference and the share beyond a level for each.
 #include "check.h"
-#include "compositor/blur.h"
-#include "compositor/brush.h"
-#include "compositor/depth.h"
-#include "compositor/heal.h"
-#include "compositor/render.h"
-#include "compositor/tipbrush.h"
-#include "compositor/toning.h"
-#include "compositor/warpstroke.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/render.h"
+#include "nekophoto/tipbrush.h"
+#include "nekophoto/toning.h"
+#include "nekophoto/warpstroke.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -20,7 +20,7 @@
 #include <set>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 
@@ -97,7 +97,7 @@ Apart apart(const GrayImage& eight, const Gray16& deep) {
 }
 
 void report(const std::string& what, const Apart& a) {
-    if (std::getenv("COMPOSITOR_REPORT_U16_CALIBRATION"))
+    if (std::getenv("NEKOPHOTO_REPORT_U16_CALIBRATION"))
         std::fprintf(stderr, "  %-40s worst %3d, beyond a level %.4f%%\n", what.c_str(), a.worst, a.beyondOne * 100);
 }
 
@@ -427,7 +427,7 @@ TEST_CASE(sixteen_bit_gradients_match_eight_bit) {
     ramp.fillGradientOver(0, {0, 0}, {4000, 0}, grey, 1);
     std::set<int> levels;
     for (int x = 0; x < 4000; x++) levels.insert(ramp.previewImage16()->pixel(x, 0)[0]);
-    if (std::getenv("COMPOSITOR_REPORT_U16_CALIBRATION")) std::fprintf(stderr, "  a 20%% to 40%% ramp over 4000 pixels: %zu levels at 16 bits (51 at 8)\n", levels.size());
+    if (std::getenv("NEKOPHOTO_REPORT_U16_CALIBRATION")) std::fprintf(stderr, "  a 20%% to 40%% ramp over 4000 pixels: %zu levels at 16 bits (51 at 8)\n", levels.size());
     CHECK(levels.size() > 3000);
 }
 
@@ -495,7 +495,7 @@ TEST_CASE(soft_stroke_differences_are_the_eight_bit_coverage_rounding) {
                 off8 += d8 > 1;
                 worst16 = std::max(worst16, std::abs(int(reduced->pixel(x, y)[3]) - exact));
             }
-        if (std::getenv("COMPOSITOR_REPORT_U16_CALIBRATION"))
+        if (std::getenv("NEKOPHOTO_REPORT_U16_CALIBRATION"))
             std::fprintf(stderr, "  soft stroke (%s) against its exact coverage: 8-bit worst %d (%.2f%% beyond a level), 16-bit worst %d\n",
                          stamped ? "stamped" : "per pixel", worst8, 100.0 * double(off8) / (W * H), worst16);
         CHECK(worst16 <= 1);

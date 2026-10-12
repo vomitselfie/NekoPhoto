@@ -3,13 +3,13 @@
 // sampleType. The 16-bit PSD is built here the way Photoshop lays one out (layers in an 'Lr16' block, zip with
 // prediction and raw channels, odd 16-bit values that 0..32768 cannot hold).
 #include "check.h"
-#include "compositor/depth.h"
-#include "compositor/png.h"
-#include "compositor/psd_carry.h"
-#include "compositor/project.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/png.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -18,7 +18,7 @@
 #include <unistd.h>
 #include <zlib.h>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 using Bytes = std::vector<uint8_t>;
 

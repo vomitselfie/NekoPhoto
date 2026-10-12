@@ -1,15 +1,15 @@
-#include "compositor/psd_writer.h"
-#include "compositor/colormgmt.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/colormgmt.h"
 #include "psd_channels.h"
-#include "compositor/smartfilter.h"
+#include "nekophoto/smartfilter.h"
 #include "psd/psd_descriptor.hpp"
-#include "compositor/adjustments.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/render.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/render.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -26,7 +26,7 @@
 #include <unistd.h>
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -1682,4 +1682,4 @@ bool exportPsd(const Document& document, const std::string& path, const PsdExpor
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

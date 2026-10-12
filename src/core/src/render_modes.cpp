@@ -4,13 +4,13 @@
 // without a colour transform, since a CMYK or Lab buffer is not RGB), the native render, and RGB for 16-bit exports.
 #include "render_modes.h"
 #include "edge_interior.h"
-#include "compositor/adjustments.h"
-#include "compositor/modeedit.h"
-#include "compositor/parallel.h"
-#include "compositor/workcounters.h"
-#include "compositor/render.h"
-#include "compositor/resample.h"
-#include "compositor/simd.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/workcounters.h"
+#include "nekophoto/render.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/simd.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -383,4 +383,4 @@ void renderModeAsRgb16(const Document& document, const RenderOptions& options, I
     else out = Image16(native.width(), native.height());
 }
 
-} // namespace compositor
+} // namespace nekophoto

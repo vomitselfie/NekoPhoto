@@ -1,6 +1,6 @@
-#include "compositor/png.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
+#include "nekophoto/png.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <atomic>
 #include <csetjmp>
@@ -11,7 +11,7 @@
 #include <png.h>
 #include <zlib.h>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -458,4 +458,4 @@ bool writePngGray(const std::string& path, const GrayImage& image, std::string* 
     return encodePng(image.width(), image.height(), 0, 1, copy, 0, pngCompressionLevel, bytes, error) && writeFile(path, bytes, error);
 }
 
-} // namespace compositor
+} // namespace nekophoto

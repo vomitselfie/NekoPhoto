@@ -2285,7 +2285,7 @@ def automation_limits(rpc, path, work):
 def write_roots(work):
     """--rpc-write-root and --rpc-log in an instance of their own (when the binary is at hand)."""
     import subprocess
-    binary = os.environ.get("COMPOSITOR_BIN") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "nekophoto")
+    binary = os.environ.get("NEKOPHOTO_BIN", os.environ.get("COMPOSITOR_BIN")) or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "nekophoto")
     if os.name == "nt" or not os.path.isfile(binary):
         print("write roots: no binary, skipped")
         return
@@ -2770,7 +2770,7 @@ def main():
 
     # The command-line client and batch mode.
     import subprocess
-    binary = os.environ.get("COMPOSITOR_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "nekophoto.exe" if os.name == "nt" else "nekophoto"))
+    binary = os.environ.get("NEKOPHOTO_BIN", os.environ.get("COMPOSITOR_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "nekophoto.exe" if os.name == "nt" else "nekophoto")))
     if os.path.exists(binary):
         env = dict(os.environ); env.pop("QT_QPA_PLATFORM", None)
         out = subprocess.run([binary, "--rpc-socket", path, "--call", "app.info"], capture_output=True, text=True, env=env, timeout=60)

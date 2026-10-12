@@ -8,7 +8,7 @@
 #include <QColor>
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {

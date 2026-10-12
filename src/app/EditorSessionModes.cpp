@@ -6,13 +6,13 @@
 #include "EditorSession.h"
 #include "ColorManagement.h"
 #include "ImageConvert.h"
-#include "compositor/depth.h"
-#include "compositor/modetransform.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/modetransform.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

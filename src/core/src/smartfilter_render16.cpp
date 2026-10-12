@@ -17,11 +17,11 @@
 // plain window histogram (32,769 bins, with its running group counts) updated a single pixel value at a time, and
 // Surface Blur uses no value histogram (direct accumulation at small radii, per-level box sums at large radii, the
 // levels being the 256 8-bit ones with each pixel's result interpolated between the two about its value).
-#include "compositor/smartfilter.h"
-#include "compositor/blend.h"
-#include "compositor/depth.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/depth.h"
 #include "smartfilter_kernels.h"
-#include "compositor/workcounters.h"
+#include "nekophoto/workcounters.h"
 
 #include <algorithm>
 #include <array>
@@ -32,7 +32,7 @@
 #include <utility>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -1193,4 +1193,4 @@ std::optional<PlacedRaster16> renderSmartFilterStack(const PlacedRaster16& place
     return toPlaced(applyStackMask(base, current, stack));
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,19 +1,19 @@
 // Vector masks: parsing Photoshop's path records and drawing them as antialiased coverage. Layout and combine
 // rules after Patchy (MIT; src/psd/psd_vector.cpp and core/vector_raster.cpp there).
-#include "compositor/vectormask.h"
-#include "compositor/document.h"
-#include "compositor/smartobject.h"
-#include "compositor/blur.h"
-#include "compositor/depth.h"
-#include "compositor/layerstyle.h"
-#include "compositor/parallel.h"
+#include "nekophoto/vectormask.h"
+#include "nekophoto/document.h"
+#include "nekophoto/smartobject.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/parallel.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -835,4 +835,4 @@ std::optional<VectorPath> layerVectorMask(const Layer& layer, const Document& do
     return parsed;
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,5 +1,5 @@
 #include "ModelStore.h"
-#include "compositor/subject.h"
+#include "nekophoto/subject.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -54,11 +54,11 @@ const ModelInfo& ModelStore::selected() {
 
 void ModelStore::setSelected(const QString& id) { if (modelById(id)) QSettings().setValue("ai/model", id); }
 
-bool ModelStore::supported() { return compositor::subjectModelSupported(); }
+bool ModelStore::supported() { return nekophoto::subjectModelSupported(); }
 bool ModelStore::ready() { return enabled() && supported() && isPresent(selected()); }
 
 QString ModelStore::directory() {
-    QString env = qEnvironmentVariable("COMPOSITOR_MODEL_DIR");
+    QString env = qEnvironmentVariable("NEKOPHOTO_MODEL_DIR");
     if (!env.isEmpty()) return env;
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models";
 }
@@ -127,7 +127,7 @@ struct MaskKey {
     bool operator==(const MaskKey&) const = default;
 };
 
-uint64_t pixelHash(const compositor::Image& image) {
+uint64_t pixelHash(const nekophoto::Image& image) {
     uint64_t h = 1469598103934665603ull;
     const uint8_t* bytes = image.data();
     const size_t n = image.byteCount();
@@ -145,7 +145,7 @@ uint64_t pixelHash(const compositor::Image& image) {
 struct MaskCache {
     std::mutex mutex;
     MaskKey coarseKey, detailKey;
-    std::shared_ptr<compositor::GrayImage> coarse, detail;
+    std::shared_ptr<nekophoto::GrayImage> coarse, detail;
 };
 
 MaskCache& maskCache() {
@@ -155,16 +155,16 @@ MaskCache& maskCache() {
 
 } // namespace
 
-std::shared_ptr<compositor::GrayImage> ModelStore::subjectMask(const compositor::Image& image, const QString& modelPath, bool mirror, int detailWindows, std::string* error) {
+std::shared_ptr<nekophoto::GrayImage> ModelStore::subjectMask(const nekophoto::Image& image, const QString& modelPath, bool mirror, int detailWindows, std::string* error) {
     MaskKey key{image.width(), image.height(), pixelHash(image), modelPath, mirror, 0};
     MaskCache& cache = maskCache();
-    std::shared_ptr<compositor::GrayImage> coarse;
+    std::shared_ptr<nekophoto::GrayImage> coarse;
     {
         std::lock_guard<std::mutex> lock(cache.mutex);
         if (cache.coarse && cache.coarseKey == key) coarse = cache.coarse;
     }
     if (!coarse) {
-        coarse = compositor::subjectMask(image, modelPath.toStdString(), error, mirror);
+        coarse = nekophoto::subjectMask(image, modelPath.toStdString(), error, mirror);
         if (!coarse) return nullptr;
         std::lock_guard<std::mutex> lock(cache.mutex);
         cache.coarseKey = key;
@@ -177,7 +177,7 @@ std::shared_ptr<compositor::GrayImage> ModelStore::subjectMask(const compositor:
         if (cache.detail && cache.detailKey == key) return cache.detail;
     }
     // The detail pass over the coarse mask, its windows unmirrored (the dialog's pass, as Remove Background has run it).
-    auto detail = compositor::subjectMaskDetailed(image, modelPath.toStdString(), coarse.get(), detailWindows, error);
+    auto detail = nekophoto::subjectMaskDetailed(image, modelPath.toStdString(), coarse.get(), detailWindows, error);
     if (!detail) return nullptr;
     std::lock_guard<std::mutex> lock(cache.mutex);
     cache.detailKey = key;

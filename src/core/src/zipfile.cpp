@@ -1,4 +1,4 @@
-#include "compositor/zipfile.h"
+#include "nekophoto/zipfile.h"
 #include <zlib.h>
 #include <algorithm>
 #include <cctype>
@@ -11,7 +11,7 @@
 #include <unistd.h>
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -328,4 +328,4 @@ bool ZipFileWriter::finish(std::string* error) {
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

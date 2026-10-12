@@ -5,12 +5,12 @@
 // as two RGBA pixels, (C, M, Y, alpha) and (K, K, K, alpha), whose alphas come out the same. Lab's non-separable
 // modes are their own (labNonSeparable). A policy `K` supplies the depth: `Sample`, `Steps`, `one`, `pixel(mode, src,
 // k, dst)` (an RGBA kernel with coverage steps), `normal(src, k, dst, channels)`, `stepsOf(coverage)`, `full`.
-#include "compositor/blend.h"
+#include "nekophoto/blend.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace modes {
 
@@ -208,4 +208,4 @@ void pixelAt(BlendMode mode, ColorMode colorMode, const typename K::Sample* src,
 
 } // namespace modes
 
-} // namespace compositor
+} // namespace nekophoto

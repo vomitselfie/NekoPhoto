@@ -1,14 +1,14 @@
-#include "compositor/project.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/png.h"
-#include "compositor/psd.h"
-#include "compositor/render.h"
-#include "compositor/zipfile.h"
+#include "nekophoto/project.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/png.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/render.h"
+#include "nekophoto/zipfile.h"
 #include <nlohmann/json.hpp>
 #include <zlib.h>
-#ifdef COMPOSITOR_HAVE_ZSTD
+#ifdef NEKOPHOTO_HAVE_ZSTD
 #include <zstd.h>
 #endif
 #include <cctype>
@@ -24,7 +24,7 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -654,7 +654,7 @@ AnyImage readCmykPlanes(const fs::path& file, SampleType type) {
         uLongf size = uLongf(raw.size());
         if (uncompress(raw.data(), &size, bytes.data() + planeHeader, uLong(bytes.size() - planeHeader)) != Z_OK || size != raw.size()) return nullptr;
     } else {
-#ifdef COMPOSITOR_HAVE_ZSTD
+#ifdef NEKOPHOTO_HAVE_ZSTD
         const size_t size = ZSTD_decompress(raw.data(), raw.size(), bytes.data() + planeHeader, bytes.size() - planeHeader);
         if (ZSTD_isError(size) || size != raw.size()) return nullptr;
 #else
@@ -1427,4 +1427,4 @@ bool writePackageFolder(const Document& document, const std::string& manifest, c
 
 } // namespace
 
-} // namespace compositor
+} // namespace nekophoto

@@ -2,7 +2,7 @@
 // with the same choices (a PSD's merged image, a PDF's page, Camera Raw's settings, the profile decision).
 #pragma once
 #include "ColorManagement.h"
-#include "compositor/cameraraw.h"
+#include "nekophoto/cameraraw.h"
 #include <QJsonObject>
 #include <QString>
 #include <optional>
@@ -22,12 +22,12 @@ struct DocumentSource {
     bool mergedOnly = false;                 // a PSD or PSB opened as its merged image
     int pdfPage = 1;                         // a PDF: the page and the resolution it was rendered at
     double pdfResolution = 150;
-    compositor::CameraRawSettings raw;       // camera RAW: the settings it was developed with
+    nekophoto::CameraRawSettings raw;       // camera RAW: the settings it was developed with
     bool rawAsObject = false;                // Open Object: a smart object keeping the RAW file
     int rawBits = 16;
     /// The profile the file embedded and what was decided for it as it opened (asked once, not again on Revert while
     /// the file embeds the same profile). Not kept across a crash: a recovered document decides again, without asking.
-    std::optional<compositor::ColorProfile> embedded;
+    std::optional<nekophoto::ColorProfile> embedded;
     std::optional<color::OpenDecision> colour;
 
     bool valid() const { return kind != Kind::None && !path.isEmpty(); }

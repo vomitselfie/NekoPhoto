@@ -3,12 +3,12 @@
 #include "check.h"
 #include <set>
 #include <array>
-#include "compositor/blend.h"
-#include "compositor/depth.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/depth.h"
 #include <cmath>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

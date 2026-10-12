@@ -10,11 +10,11 @@
 //       over the scenes (one threshold for all, as an overlay uses), and how many interior pixels an overlay that
 //       finds 80% of the boundary pixels also flags; DIR gets each scene's margin as a picture (blue: the click's
 //       side, red: the Alt-click's, white: ambiguous) and its ambiguous areas
-#include "compositor/png.h"
-#include "compositor/smartwand.h"
-#include "compositor/wand.h"
-#include "compositor/morphology.h"
-#include "compositor/selection.h"
+#include "nekophoto/png.h"
+#include "nekophoto/smartwand.h"
+#include "nekophoto/wand.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/selection.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

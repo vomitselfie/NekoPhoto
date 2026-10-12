@@ -8,7 +8,7 @@
 #include <numeric>
 #include <vector>
 
-namespace compositor::mosh {
+namespace nekophoto::mosh {
 
 namespace {
 
@@ -962,4 +962,4 @@ EffectFn effectFunction(std::string_view id) {
     return nullptr;
 }
 
-} // namespace compositor::mosh
+} // namespace nekophoto::mosh

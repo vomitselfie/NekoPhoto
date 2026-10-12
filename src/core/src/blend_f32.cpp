@@ -8,11 +8,11 @@
 // Photoshop's 32-bit modes take cb and cs unbounded; the others clamp them to 0..1 inside B only, so where a layer
 // has nothing under it its colour keeps its range. Nothing here rounds: the double-precision reference in
 // tests/float_reference.cpp follows the same formulas.
-#include "compositor/blend.h"
+#include "nekophoto/blend.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -204,4 +204,4 @@ float blendChannelF(BlendMode mode, float cb, float cs) {
     return separable(mode, cb, cs);
 }
 
-} // namespace compositor
+} // namespace nekophoto

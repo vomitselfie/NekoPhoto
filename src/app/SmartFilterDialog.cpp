@@ -10,7 +10,7 @@
 #include <cmath>
 #include <functional>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -135,7 +135,7 @@ void SmartFilterDialog::preview() {
     stack->entries[size_t(index_)] = entry_;
     Document copy = current;
     Layer* target = copy.find(layerId_);
-    if (!target || !compositor::setSmartFilters(copy, *target, *stack, nullptr)) return;
+    if (!target || !nekophoto::setSmartFilters(copy, *target, *stack, nullptr)) return;
     session_->setPixelPreview(target->asset->image, target->transform, layerId_);
     previewing_ = true;
 }

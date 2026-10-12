@@ -1,15 +1,15 @@
-#include "compositor/scribble.h"
+#include "nekophoto/scribble.h"
 #include <algorithm>
 #include <cmath>
 
-#ifdef COMPOSITOR_HAVE_OPENCV
+#ifdef NEKOPHOTO_HAVE_OPENCV
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
-#ifdef COMPOSITOR_HAVE_OPENCV
+#ifdef NEKOPHOTO_HAVE_OPENCV
 
 bool scribbleSelectionSupported() { return true; }
 
@@ -94,4 +94,4 @@ std::shared_ptr<GrayImage> scribbleSelection(const Image&, const GrayImage&, int
 
 #endif
 
-} // namespace compositor
+} // namespace nekophoto

@@ -6,7 +6,7 @@
 // and the core filters and adjustments. Every scene is rendered twice, once on the worker pool and once serially
 // (from inside a parallel loop, where nested loops run on the calling thread), and both must hash the same.
 //
-// COMPOSITOR_UPDATE_RENDER_HASHES=1 rewrites the baseline after an intentional rendering change; otherwise the
+// NEKOPHOTO_UPDATE_RENDER_HASHES=1 rewrites the baseline after an intentional rendering change; otherwise the
 // test prints every entry that changed, appeared or went missing.
 //
 // 16-bit scenes ("u16/..."): the same documents converted to 16 bits and rendered at that depth (render16), hashed
@@ -21,35 +21,35 @@
 // - Knockout: the engine has no knockout groups yet; an isolated (non pass-through) group stands in for it.
 // - Color Lookup: needs a LUT file; its interpolation is exercised by its own tests.
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/animation.h"
-#include "compositor/blendif.h"
-#include "compositor/blur.h"
-#include "compositor/brush.h"
-#include "compositor/cameraraw.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/filters.h"
-#include "compositor/mypaint.h"
-#include "compositor/parallel.h"
-#include "compositor/render.h"
-#include "compositor/colormgmt.h"
-#include "compositor/blend.h"
-#include "compositor/tipbrush.h"
-#include "compositor/toning.h"
-#include "compositor/layerstyle.h"
-#include "compositor/matte.h"
-#include "compositor/modeedit.h"
-#include "compositor/morphology.h"
-#include "compositor/presets.h"
-#include "compositor/png.h"
-#include "compositor/psd_carry.h"
-#include "compositor/smartfilter.h"
-#include "compositor/smartobject_edit.h"
-#include "compositor/svg.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
-#include "compositor/warp.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/animation.h"
+#include "nekophoto/blendif.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/cameraraw.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/mypaint.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/tipbrush.h"
+#include "nekophoto/toning.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/presets.h"
+#include "nekophoto/png.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/smartobject_edit.h"
+#include "nekophoto/svg.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
+#include "nekophoto/warp.h"
 
 #include <algorithm>
 #include <cctype>
@@ -65,7 +65,7 @@
 #include <string>
 #include <tuple>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 /// REQUIRE for the scene functions, which return a hash.
@@ -1916,10 +1916,10 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     std::fprintf(stderr, "  %zu scenes hashed (%d worker threads)\n", actual.size(), workerCount());
 
     const std::string path = RENDER_HASHES_FILE;
-    if (std::getenv("COMPOSITOR_UPDATE_RENDER_HASHES")) {
+    if (std::getenv("NEKOPHOTO_UPDATE_RENDER_HASHES")) {
         std::ofstream out(path);
         out << "# Render hashes (FNV-1a 64 over width, height and RGBA/gray bytes), from tests/render_hash_tests.cpp.\n"
-               "# Regenerate after an intentional rendering change: COMPOSITOR_UPDATE_RENDER_HASHES=1 build/tests/render_hash_tests\n";
+               "# Regenerate after an intentional rendering change: NEKOPHOTO_UPDATE_RENDER_HASHES=1 build/tests/render_hash_tests\n";
         for (auto& [name, h] : actual) out << name << ' ' << h << '\n';
         std::fprintf(stderr, "  wrote %s\n", path.c_str());
         return;
@@ -1962,7 +1962,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
             missing++;
         }
     if (changed || added || missing)
-        std::fprintf(stderr, "  %d changed, %d new, %d missing, %d not compared on this platform; COMPOSITOR_UPDATE_RENDER_HASHES=1 rewrites %s\n", changed, added, missing, unchecked, path.c_str());
+        std::fprintf(stderr, "  %d changed, %d new, %d missing, %d not compared on this platform; NEKOPHOTO_UPDATE_RENDER_HASHES=1 rewrites %s\n", changed, added, missing, unchecked, path.c_str());
     CHECK_EQ(changed, 0);
     CHECK_EQ(added, 0);
     CHECK_EQ(missing, 0);
@@ -2024,7 +2024,7 @@ TEST_CASE(sixteen_bit_renders_of_eight_bit_documents_are_within_a_level_in_every
         for (auto [doc, options, what] : {std::tuple{&single, RenderOptions(), "soft layer"}, std::tuple{&single, reducedRegion(), "soft layer @0.5"},
                                           std::tuple{&full, RenderOptions(), "blend scene"}, std::tuple{&full, reducedRegion(), "blend scene @0.5"}}) {
             const Apart apart = levelsApart(*doc, options);
-            if (std::getenv("COMPOSITOR_REPORT_U16_CALIBRATION"))
+            if (std::getenv("NEKOPHOTO_REPORT_U16_CALIBRATION"))
                 std::fprintf(stderr, "  %-20s %-17s worst %3d, beyond a level %.4f%%\n", blendModeName(mode), what, apart.worst, apart.beyondOne * 100);
             // A single layer: at most 1% of samples beyond a level. The stacked scene compounds the 8-bit rounding
             // through clipping (8-bit unpremultiplied bases) and an isolated folder, so it is held to 10%: a bound

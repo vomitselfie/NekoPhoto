@@ -5,16 +5,16 @@
 // 15-bit round trip keeping every float a dab did not change.
 #include "check.h"
 #include "float_reference.h"
-#include "compositor/brush.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/mypaint.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/mypaint.h"
 #include <cmath>
 #include <fstream>
 #include <sstream>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fr = float_reference;
 
 namespace {

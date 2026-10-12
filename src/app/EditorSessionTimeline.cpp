@@ -1,9 +1,9 @@
-// The Timeline's edits (frame animation, compositor/animation.h): each is one undo step; playback previews frames
+// The Timeline's edits (frame animation, nekophoto/animation.h): each is one undo step; playback previews frames
 // without touching history.
 #include "EditorSession.h"
-#include "compositor/animation.h"
+#include "nekophoto/animation.h"
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

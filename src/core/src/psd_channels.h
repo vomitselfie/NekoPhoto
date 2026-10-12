@@ -2,11 +2,11 @@
 // resources 1045 (Unicode) and 1006 (Pascal), shown as resource 1077 (or the older 1007) says, identified by 1053.
 // Shared by psd.cpp (reading) and psd_writer.cpp (writing); see docs/channels.md.
 #pragma once
-#include "compositor/document.h"
+#include "nekophoto/document.h"
 #include <cstdint>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 /// The channel resources as the file stored them (empty when it had none).
 struct PsdChannelResources {
@@ -38,4 +38,4 @@ std::vector<std::pair<uint16_t, std::vector<uint8_t>>> psdChannelResourceBlocks(
 /// samples while the channel is the one read from them.
 std::vector<uint8_t> psdChannelPlane(const Channel& channel, bool deep, int width, int height);
 
-} // namespace compositor
+} // namespace nekophoto

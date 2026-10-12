@@ -5,8 +5,8 @@
 #include "LayerStyleDialog.h"
 #include "SmartFilterDialog.h"
 #include "ImageConvert.h"
-#include "compositor/blend.h"
-#include "compositor/vectorlayer.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/vectorlayer.h"
 #include <QStandardItemModel>
 #include <QApplication>
 #include <QDrag>
@@ -33,7 +33,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -912,7 +912,7 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     if (!layer) return;
     auto* menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
-    // What has not been ported to a 16-bit document's depth is greyed, saying so (compositor/supports.h).
+    // What has not been ported to a 16-bit document's depth is greyed, saying so (nekophoto/supports.h).
     const bool deep = session_->featuresGated();
     menu->setToolTipsVisible(deep);
     auto gatedAtDepth = [&](QAction* a, const char* feature) {
@@ -928,7 +928,7 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
             gatedAtDepth(menu->addAction(tr("Copy Layer Style"), this, [this] {
                 if (!session_->commandsRouted()) { session_->copyLayerStyle(); return; }
                 const auto answer = session_->runCommand(QStringLiteral("layers.style"), {});
-                compositor::LayerStyle style;
+                nekophoto::LayerStyle style;
                 if (answer && layerStyleFromRequest(answer->toObject(), session_->document()->colorMode, style, nullptr)) session_->setStyleClipboard(style);
             }), "edit.style");
             gatedAtDepth(menu->addAction(tr("Clear Layer Style"), this, [this] {

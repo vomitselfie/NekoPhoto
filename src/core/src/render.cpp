@@ -1,14 +1,14 @@
-#include "compositor/render.h"
-#include "compositor/modetransform.h"
+#include "nekophoto/render.h"
+#include "nekophoto/modetransform.h"
 #include "render_plan.h"
-#include "compositor/blend.h"
-#include "compositor/colormgmt.h"
-#include "compositor/parallel.h"
-#include "compositor/workcounters.h"
-#include "compositor/resample.h"
-#include "compositor/warp.h"
-#include "compositor/depth.h"
-#include "compositor/imaget.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/workcounters.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/warp.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/imaget.h"
 #include <algorithm>
 #include <array>
 #include <type_traits>
@@ -17,7 +17,7 @@
 #include <cstring>
 #include <optional>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -525,4 +525,4 @@ std::shared_ptr<Image> renderFlattened(const Document& document) {
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

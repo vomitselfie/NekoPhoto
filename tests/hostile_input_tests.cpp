@@ -2,17 +2,17 @@
 // docs/fuzzing.md). Each must be refused cleanly or give a bounded result quickly, without allocating what the file
 // merely claims. Timings are generous; the point is that none of these take the seconds or gigabytes they once did.
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/aseprite.h"
-#include "compositor/gif.h"
-#include "compositor/ico.h"
-#include "compositor/presets.h"
-#include "compositor/project.h"
-#include "compositor/smartobject.h"
-#include "compositor/svg.h"
-#include "compositor/tga.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/zipfile.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/aseprite.h"
+#include "nekophoto/gif.h"
+#include "nekophoto/ico.h"
+#include "nekophoto/presets.h"
+#include "nekophoto/project.h"
+#include "nekophoto/smartobject.h"
+#include "nekophoto/svg.h"
+#include "nekophoto/tga.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/zipfile.h"
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -21,7 +21,7 @@
 #include <limits>
 #include <zlib.h>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

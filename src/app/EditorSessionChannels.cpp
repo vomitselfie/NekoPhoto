@@ -11,14 +11,14 @@
 // Photoshop); it is hidden from the Layers panel and never written.
 #include "EditorSession.h"
 #include "ImageConvert.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
 #include <QClipboard>
 #include <QGuiApplication>
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

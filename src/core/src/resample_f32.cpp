@@ -1,14 +1,14 @@
 // The separable resampler at 32 bits (resample.h): resample.cpp's filters and tap positions with exact weights (no 8.8
 // fixed point), on premultiplied linear float. Light above 1 is resampled as it is; the negative lobes of Catmull-Rom
 // and Lanczos are held at zero, alpha and coverage at 0..1.
-#include "compositor/resample.h"
-#include "compositor/parallel.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -139,4 +139,4 @@ std::shared_ptr<GrayF> resampleAxisAligned(const GrayF& mask, int width, int hei
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

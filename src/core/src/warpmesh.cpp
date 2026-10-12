@@ -1,11 +1,11 @@
 // A port of Patchy's core/warp_mesh (MIT; see warpmesh.h): the patch, the preset bakes and the lattice resampler.
-#include "compositor/warpmesh.h"
+#include "nekophoto/warpmesh.h"
 #include <algorithm>
 #include <cmath>
 #include <functional>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -453,4 +453,4 @@ std::optional<WarpedRaster16> renderWarpedOverBox(const Image16& image, const Wa
     });
 }
 
-} // namespace compositor
+} // namespace nekophoto

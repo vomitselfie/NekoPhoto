@@ -16,25 +16,25 @@
 #include <QJsonArray>
 #include <QLineEdit>
 #include <QProgressDialog>
-#include "compositor/raw.h"
-#include "compositor/smartobject_edit.h"
-#include "compositor/depth.h"
+#include "nekophoto/raw.h"
+#include "nekophoto/smartobject_edit.h"
+#include "nekophoto/depth.h"
 #include "RawDevelopDialog.h"
-#include "compositor/psd_writer.h"
+#include "nekophoto/psd_writer.h"
 #include "CanvasWidget.h"
 #include "Dialogs.h"
 #include "VectorFiles.h"
-#include "compositor/svg.h"
+#include "nekophoto/svg.h"
 #include "ImageConvert.h"
 #include "ExportAs.h"
 #include "ExportAsDialog.h"
-#include "compositor/aseprite.h"
-#include "compositor/affinity.h"
-#include "compositor/clip.h"
-#include "compositor/gif.h"
-#include "compositor/ico.h"
-#include "compositor/tga.h"
-#include "compositor/png.h"
+#include "nekophoto/aseprite.h"
+#include "nekophoto/affinity.h"
+#include "nekophoto/clip.h"
+#include "nekophoto/gif.h"
+#include "nekophoto/ico.h"
+#include "nekophoto/tga.h"
+#include "nekophoto/png.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QDialog>
@@ -57,7 +57,7 @@
 #include <QSettings>
 #include <QStatusBar>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -104,7 +104,7 @@ bool isVectorFilePath(const QString& path) {
 bool isLayeredPath(const QString& path) {
     if (hasSuffix(path, {".psd", ".psb", ".clip", ".ico", ".cur", ".ase", ".aseprite", ".afphoto", ".afdesign", ".afpub", ".af"}) || isVectorFilePath(path)) return true;
     // An animated GIF's frames become layers; a still one opens as an image.
-    return path.endsWith(".gif", Qt::CaseInsensitive) && QFileInfo(path).isFile() && compositor::gifFrameCount(path.toStdString()) > 1;
+    return path.endsWith(".gif", Qt::CaseInsensitive) && QFileInfo(path).isFile() && nekophoto::gifFrameCount(path.toStdString()) > 1;
 }
 
 void MainWindow::newDocument() {
@@ -115,14 +115,14 @@ void MainWindow::newDocument() {
 }
 
 void MainWindow::openAsDocument(const QString& path) {
-    if (isLayeredPath(path) || isProjectPath(path) || compositor::isRawPath(path.toStdString())) { openPath(path); return; }
+    if (isLayeredPath(path) || isProjectPath(path) || nekophoto::isRawPath(path.toStdString())) { openPath(path); return; }
     QString error;
     if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open the file"), error.isEmpty() ? path : error);
 }
 
 void MainWindow::openPath(const QString& path) {
     if (isLayeredPath(path)) { openLayeredFile(path); return; }
-    if (compositor::isRawPath(path.toStdString()) && QFileInfo(path).isFile()) {
+    if (nekophoto::isRawPath(path.toStdString()) && QFileInfo(path).isFile()) {
         // A camera RAW file always opens as a document of its own, through Camera Raw, as in Photoshop.
         QString error;
         if (!openRawFile(path, &error) && !error.isEmpty()) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error);
@@ -197,7 +197,7 @@ std::optional<bool> MainWindow::askPsdMergedOnly(const QString& path) {
     // A PSD or PSB is sized up from its records first: layers past the project budget, or more than the memory
     // free now, offer Photoshop's merged image instead (a new, untitled document, so Save cannot replace the file).
     std::string why;
-    auto e = compositor::estimatePsd(path.toStdString(), &why);
+    auto e = nekophoto::estimatePsd(path.toStdString(), &why);
     if (!e || !e->canvasFits) return false;
     const unsigned long long free = platform::availableMemory();
     const bool tooBig = !e->layersFit, tight = e->layersFit && free > 0 && e->bytes > free * 8 / 10;
@@ -223,7 +223,7 @@ void MainWindow::openFromMenu(const QString& path) {
     // would carry; everything else is document.open, an image as a document of its own (File > Open). A PSD too large
     // for its layers asks first whether to open its merged image, and the request carries the answer.
     const bool pdf = path.endsWith(".pdf", Qt::CaseInsensitive);
-    if (pdf || compositor::isRawPath(path.toStdString())) { openAsDocument(path); return; }
+    if (pdf || nekophoto::isRawPath(path.toStdString())) { openAsDocument(path); return; }
     QJsonObject params{{"path", path}, {"asDocument", true}};
     if (hasSuffix(path, {".psd", ".psb"}) && isVisible()) {
         const std::optional<bool> mergedOnly = askPsdMergedOnly(path);
@@ -250,34 +250,34 @@ std::optional<PsdImport> MainWindow::readLayeredSource(DocumentSource& source, Q
             if (imported) { source.pdfPage = used.page; source.pdfResolution = used.resolution; }
         } else imported = app::importSvgDocument(path, &message);
         error = message.toStdString();
-    } else if (clip) imported = compositor::importClip(file, &error);
-    else if (affinity) imported = compositor::importAffinity(file, &error, app::affinityImportOptions());
-    else if (ase) imported = compositor::importAseprite(file, &error);
-    else if (hasSuffix(path, {".ico", ".cur"})) imported = compositor::importIco(file, &error);
-    else if (hasSuffix(path, {".gif"})) imported = compositor::importGif(file, &error);
+    } else if (clip) imported = nekophoto::importClip(file, &error);
+    else if (affinity) imported = nekophoto::importAffinity(file, &error, app::affinityImportOptions());
+    else if (ase) imported = nekophoto::importAseprite(file, &error);
+    else if (hasSuffix(path, {".ico", ".cur"})) imported = nekophoto::importIco(file, &error);
+    else if (hasSuffix(path, {".gif"})) imported = nekophoto::importGif(file, &error);
     else {
-        compositor::PsdImportOptions options = app::psdImportOptions();
+        nekophoto::PsdImportOptions options = app::psdImportOptions();
         options.mergedOnly = source.mergedOnly;
-        imported = compositor::importPsd(file, &error, options);
+        imported = nekophoto::importPsd(file, &error, options);
     }
     QApplication::restoreOverrideCursor();
     if (!imported) { if (errorOut) *errorOut = QString::fromStdString(error); return std::nullopt; }
     // The same budgets as every other way in (each importer also stops early on its own limits).
-    if (const compositor::BudgetCheck check = compositor::Document::withinBudget(imported->document); !check) {
+    if (const nekophoto::BudgetCheck check = nekophoto::Document::withinBudget(imported->document); !check) {
         if (errorOut) *errorOut = EditorSession::budgetText(check);
         return std::nullopt;
     }
     if (psd) {
         app::finishPsdText(*imported);
         // The file's profile (resource 1039) by Color Settings' policy: kept, converted to the working space, or dropped.
-        const compositor::ColorProfile embedded = imported->document.profile;
+        const nekophoto::ColorProfile embedded = imported->document.profile;
         color::applyToDocument(imported->document, openDecision(source, embedded.empty() ? std::nullopt : std::optional(embedded)));
     }
     if (affinity) app::finishPendingText(*imported);
     return imported;
 }
 
-color::OpenDecision MainWindow::openDecision(DocumentSource& source, const std::optional<compositor::ColorProfile>& embedded) {
+color::OpenDecision MainWindow::openDecision(DocumentSource& source, const std::optional<nekophoto::ColorProfile>& embedded) {
     if (source.colour && source.embedded == embedded) return *source.colour;
     source.embedded = embedded;
     source.colour = color::decideOnOpen(embedded, this);
@@ -301,12 +301,12 @@ void MainWindow::importFile(const QString& path, std::optional<QPointF> at) {
 namespace {
 /// An image file's pixels: 16-bit PNG and TIFF files at 16 bits (they open as 16-bit documents), the rest at 8; with
 /// the profile the file embeds (PNG iCCP, JPEG APP2, TIFF), when it has a usable one.
-compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error, std::optional<compositor::ColorProfile>* embedded) {
-    if (compositor::isRawPath(path.toStdString())) {
+nekophoto::AnyImage readImageFileUnchecked(const QString& path, QString* error, std::optional<nekophoto::ColorProfile>* embedded) {
+    if (nekophoto::isRawPath(path.toStdString())) {
         // A camera RAW file, developed through LibRaw (a few seconds for a large sensor).
         QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
         std::string message;
-        auto developed = compositor::decodeRaw(path.toStdString(), &message);
+        auto developed = nekophoto::decodeRaw(path.toStdString(), &message);
         QApplication::restoreOverrideCursor();
         if (!developed && error) *error = QString::fromStdString(message);
         return developed;
@@ -314,18 +314,18 @@ compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error,
     // TGA through the core's reader, whichever Qt image plugins are installed.
     if (path.endsWith(".tga", Qt::CaseInsensitive)) {
         std::string why;
-        auto image = compositor::readTgaImage(path.toStdString(), &why);
+        auto image = nekophoto::readTgaImage(path.toStdString(), &why);
         if (!image && error) *error = QString::fromStdString(why);
         return image;
     }
     if (path.endsWith(".png", Qt::CaseInsensitive)) {
-        compositor::PngInfo info;
-        if (compositor::readPngInfo(path.toStdString(), info) && info.bitDepth == 16) {
+        nekophoto::PngInfo info;
+        if (nekophoto::readPngInfo(path.toStdString(), info) && info.bitDepth == 16) {
             *embedded = color::embeddedProfile(QByteArray(reinterpret_cast<const char*>(info.icc.data()), qsizetype(info.icc.size())));
             std::string why;
-            auto deep = compositor::readPngImage16(path.toStdString(), &why);
+            auto deep = nekophoto::readPngImage16(path.toStdString(), &why);
             if (!deep && error) *error = QString::fromStdString(why);
-            return compositor::Image16Ptr(deep);
+            return nekophoto::Image16Ptr(deep);
         }
     }
     QImageReader reader(path);
@@ -333,7 +333,7 @@ compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error,
     // The size from the header, when the format gives one, before anything is decoded (at 8 bits, the larger budget:
     // the decoded image is checked again at its own depth).
     if (const QSize size = reader.size(); size.isValid()) {
-        if (const compositor::BudgetCheck check = compositor::Document::canCreate(size.width(), size.height(), compositor::SampleType::U8); !check) {
+        if (const nekophoto::BudgetCheck check = nekophoto::Document::canCreate(size.width(), size.height(), nekophoto::SampleType::U8); !check) {
             if (error) *error = EditorSession::budgetText(check);
             return nullptr;
         }
@@ -342,15 +342,15 @@ compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error,
     if (image.isNull()) { if (error) *error = reader.errorString(); return nullptr; }
     if (image.colorSpace().isValid()) *embedded = color::embeddedProfile(image.colorSpace().iccProfile());
     // 16 bits per channel through Qt (a 16-bit TIFF): kept at 16 bits.
-    if (image.depth() == 64) return compositor::Image16Ptr(fromQImage16(image));
-    return compositor::ImagePtr(fromQImage(image));
+    if (image.depth() == 64) return nekophoto::Image16Ptr(fromQImage16(image));
+    return nekophoto::ImagePtr(fromQImage(image));
 }
 
 /// An image file's pixels, refused (saying why) when they break the budgets for a canvas or image at their depth.
-compositor::AnyImage readImageFile(const QString& path, QString* error, std::optional<compositor::ColorProfile>* embedded) {
-    compositor::AnyImage image = readImageFileUnchecked(path, error, embedded);
+nekophoto::AnyImage readImageFile(const QString& path, QString* error, std::optional<nekophoto::ColorProfile>* embedded) {
+    nekophoto::AnyImage image = readImageFileUnchecked(path, error, embedded);
     if (!image) return image;
-    if (const compositor::BudgetCheck check = compositor::Document::canCreate(image.width(), image.height(), image.sampleType()); !check) {
+    if (const nekophoto::BudgetCheck check = nekophoto::Document::canCreate(image.width(), image.height(), image.sampleType()); !check) {
         if (error) *error = EditorSession::budgetText(check);
         return nullptr;
     }
@@ -359,7 +359,7 @@ compositor::AnyImage readImageFile(const QString& path, QString* error, std::opt
 } // namespace
 
 bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at, QString* error) {
-    std::optional<compositor::ColorProfile> embedded;
+    std::optional<nekophoto::ColorProfile> embedded;
     auto image = readImageFile(path, error, &embedded);
     if (!image) return false;
     // Into a document: converted from the file's profile to the document's. A first image makes the document, and
@@ -370,9 +370,9 @@ bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at,
     source.path = path;
     color::OpenDecision decision;
     if (first) { decision = openDecision(source, embedded); image = color::applyToImage(image, decision); }
-    else if (session_->document()->colorMode != compositor::ColorMode::RGB) {
+    else if (session_->document()->colorMode != nekophoto::ColorMode::RGB) {
         // Into CMYK or Lab: converted once, from the file's profile (sRGB when untagged) through the document's.
-        image = session_->pixelsForDocument(image, compositor::ColorMode::RGB, embedded.value_or(compositor::ColorProfile{}));
+        image = session_->pixelsForDocument(image, nekophoto::ColorMode::RGB, embedded.value_or(nekophoto::ColorProfile{}));
         if (!image) { if (error) *error = tr("The image could not be converted to the document's colour mode."); return false; }
     } else image = color::convertForDocument(image, embedded, session_->document()->profile);
     if (!session_->insertImage(image, QFileInfo(path).completeBaseName(), at, error)) return false;   // at the document's depth
@@ -389,7 +389,7 @@ bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at,
 }
 
 bool MainWindow::openImageAsDocument(const QString& path, QString* error) {
-    std::optional<compositor::ColorProfile> embedded;
+    std::optional<nekophoto::ColorProfile> embedded;
     auto image = readImageFile(path, error, &embedded);
     if (!image) return false;
     DocumentSource source;
@@ -439,13 +439,13 @@ void MainWindow::importFiles() {
 
 bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenRequest* request) {
     std::string why;
-    auto bytes = std::make_shared<const std::vector<uint8_t>>(compositor::readRawFileBytes(path.toStdString(), &why));
+    auto bytes = std::make_shared<const std::vector<uint8_t>>(nekophoto::readRawFileBytes(path.toStdString(), &why));
     if (bytes->empty()) { if (error) *error = QString::fromStdString(why); return false; }
     const QString fileName = QFileInfo(path).fileName();
-    compositor::CameraRawSettings settings;
+    nekophoto::CameraRawSettings settings;
     bool asObject = false;
     int bits = RawDevelopDialog::workflowBits();
-    std::shared_ptr<compositor::Image16> developed;
+    std::shared_ptr<nekophoto::Image16> developed;
     if (!request && isVisible()) {
         RawDevelopDialog dialog(bytes, fileName, settings, RawDevelopDialog::Purpose::Open, this);
         if (dialog.exec() != QDialog::Accepted || dialog.choice() == RawDevelopDialog::Choice::Cancelled || !dialog.developed()) return false;
@@ -456,12 +456,12 @@ bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenR
     } else {
         if (request) { settings = request->settings.normalized(); asObject = request->asSmartObject; bits = request->bitsPerChannel; }
         QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
-        developed = compositor::developRaw(*bytes, settings, {}, &why);
+        developed = nekophoto::developRaw(*bytes, settings, {}, &why);
         QApplication::restoreOverrideCursor();
         if (!developed) { if (error) *error = QString::fromStdString(why); return false; }
     }
-    const compositor::SampleType type = bits == 8 ? compositor::SampleType::U8 : compositor::SampleType::U16;
-    if (const compositor::BudgetCheck check = compositor::Document::canCreate(developed->width(), developed->height(), type); !check) {
+    const nekophoto::SampleType type = bits == 8 ? nekophoto::SampleType::U8 : nekophoto::SampleType::U16;
+    if (const nekophoto::BudgetCheck check = nekophoto::Document::canCreate(developed->width(), developed->height(), type); !check) {
         if (error) *error = EditorSession::budgetText(check);
         return false;
     }
@@ -477,15 +477,15 @@ bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenR
     const QString stem = QFileInfo(path).completeBaseName();
     if (asObject) {
         // Open Object: the RAW file and the settings are the smart object's source; the contents stay at 16 bits.
-        auto object = compositor::makeRawSmartObjectSource(bytes, fileName.toStdString(), settings, compositor::Image16Ptr(developed));
+        auto object = nekophoto::makeRawSmartObjectSource(bytes, fileName.toStdString(), settings, nekophoto::Image16Ptr(developed));
         if (!object) { if (error) *error = tr("The RAW file could not be developed."); return false; }
         Tab& tab = addTab(true);
-        tab.session->adoptDocument(compositor::smartObjectDocument(object, type), stem);
+        tab.session->adoptDocument(nekophoto::smartObjectDocument(object, type), stem);
         tab.session->adoptProfile(decision.profile);
         tab.session->setSource(source);
         tab.defaultName = stem;
     } else {
-        compositor::AnyImage image = bits == 8 ? compositor::AnyImage(compositor::ImagePtr(compositor::narrowImage(*developed))) : compositor::AnyImage(compositor::Image16Ptr(developed));
+        nekophoto::AnyImage image = bits == 8 ? nekophoto::AnyImage(nekophoto::ImagePtr(nekophoto::narrowImage(*developed))) : nekophoto::AnyImage(nekophoto::Image16Ptr(developed));
         image = color::applyToImage(image, decision);
         Tab& tab = addTab(true);
         tab.session->insertImage(image, stem, std::nullopt);   // a first image makes the canvas, at its depth
@@ -499,14 +499,14 @@ bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenR
     return true;
 }
 
-bool MainWindow::editSmartObjectContents(QString* errorOut, const compositor::CameraRawSettings* rawSettings) {
-    compositor::CameraRawSettings current;
+bool MainWindow::editSmartObjectContents(QString* errorOut, const nekophoto::CameraRawSettings* rawSettings) {
+    nekophoto::CameraRawSettings current;
     if (auto raw = session_->activeRawSmartObject(&current)) {
         // Made with Open Object: the RAW file reopens in Camera Raw with its settings, and OK develops it again.
         QString error;
         auto fail = [&](const QString& why) { if (errorOut) *errorOut = why; else showError(tr("Couldn’t develop the RAW file"), why); return false; };
-        compositor::CameraRawSettings settings = rawSettings ? rawSettings->normalized() : current;
-        std::shared_ptr<compositor::Image16> developed;
+        nekophoto::CameraRawSettings settings = rawSettings ? rawSettings->normalized() : current;
+        std::shared_ptr<nekophoto::Image16> developed;
         if (!rawSettings && isVisible() && !errorOut) {
             RawDevelopDialog dialog(raw->bytes, QString::fromStdString(raw->fileName), current, RawDevelopDialog::Purpose::Redevelop, this);
             if (dialog.exec() != QDialog::Accepted || !dialog.developed()) return true;   // Cancel: nothing changes
@@ -515,11 +515,11 @@ bool MainWindow::editSmartObjectContents(QString* errorOut, const compositor::Ca
         } else {
             std::string why;
             QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
-            developed = compositor::developRaw(*raw->bytes, settings, {}, &why);
+            developed = nekophoto::developRaw(*raw->bytes, settings, {}, &why);
             QApplication::restoreOverrideCursor();
             if (!developed) return fail(QString::fromStdString(why));
         }
-        if (!session_->redevelopRawSmartObject(settings, compositor::Image16Ptr(developed), &error)) return fail(error);
+        if (!session_->redevelopRawSmartObject(settings, nekophoto::Image16Ptr(developed), &error)) return fail(error);
         statusBar()->showMessage(tr("Developed %1 again.").arg(QString::fromStdString(raw->fileName)), 5000);
         return true;
     }
@@ -583,42 +583,42 @@ std::optional<EditorSession::LoadedProject> MainWindow::readSource(DocumentSourc
         if (path.endsWith(".pdf", Qt::CaseInsensitive)) app::pdfOpenOptions() = app::PdfOpenOptions{source.pdfPage, source.pdfResolution, true};
         auto imported = readLayeredSource(source, error);
         if (!imported) return std::nullopt;
-        const std::optional<compositor::Uuid> active = EditorSession::defaultActiveLayer(imported->document);
+        const std::optional<nekophoto::Uuid> active = EditorSession::defaultActiveLayer(imported->document);
         return EditorSession::LoadedProject{std::move(imported->document), active, path};
     }
     case DocumentSource::Kind::Image:
     case DocumentSource::Kind::Raw: {
-        compositor::AnyImage image;
+        nekophoto::AnyImage image;
         color::OpenDecision decision;
         if (source.kind == DocumentSource::Kind::Image) {
-            std::optional<compositor::ColorProfile> embedded;
+            std::optional<nekophoto::ColorProfile> embedded;
             image = readImageFile(path, error, &embedded);
             if (!image) return std::nullopt;
             decision = openDecision(source, embedded);
         } else {
             // Developed again with the settings it opened with, at the same depth, as the same kind of document.
             std::string why;
-            auto bytes = std::make_shared<const std::vector<uint8_t>>(compositor::readRawFileBytes(path.toStdString(), &why));
+            auto bytes = std::make_shared<const std::vector<uint8_t>>(nekophoto::readRawFileBytes(path.toStdString(), &why));
             if (bytes->empty()) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
             QApplication::setOverrideCursor(themedCursor(Qt::BusyCursor));
-            std::shared_ptr<compositor::Image16> developed = compositor::developRaw(*bytes, source.raw, {}, &why);
+            std::shared_ptr<nekophoto::Image16> developed = nekophoto::developRaw(*bytes, source.raw, {}, &why);
             QApplication::restoreOverrideCursor();
             if (!developed) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
-            const compositor::SampleType type = source.rawBits == 8 ? compositor::SampleType::U8 : compositor::SampleType::U16;
-            if (const compositor::BudgetCheck check = compositor::Document::canCreate(developed->width(), developed->height(), type); !check) {
+            const nekophoto::SampleType type = source.rawBits == 8 ? nekophoto::SampleType::U8 : nekophoto::SampleType::U16;
+            if (const nekophoto::BudgetCheck check = nekophoto::Document::canCreate(developed->width(), developed->height(), type); !check) {
                 if (error) *error = EditorSession::budgetText(check);
                 return std::nullopt;
             }
             decision = openDecision(source, std::nullopt);
             if (source.rawAsObject) {
-                auto object = compositor::makeRawSmartObjectSource(bytes, QFileInfo(path).fileName().toStdString(), source.raw, compositor::Image16Ptr(developed));
+                auto object = nekophoto::makeRawSmartObjectSource(bytes, QFileInfo(path).fileName().toStdString(), source.raw, nekophoto::Image16Ptr(developed));
                 if (!object) { if (error) *error = tr("The RAW file could not be developed."); return std::nullopt; }
-                compositor::Document document = compositor::smartObjectDocument(object, type);
+                nekophoto::Document document = nekophoto::smartObjectDocument(object, type);
                 document.profile = decision.profile;
-                const std::optional<compositor::Uuid> active = EditorSession::defaultActiveLayer(document);
+                const std::optional<nekophoto::Uuid> active = EditorSession::defaultActiveLayer(document);
                 return EditorSession::LoadedProject{std::move(document), active, path};
             }
-            image = source.rawBits == 8 ? compositor::AnyImage(compositor::ImagePtr(compositor::narrowImage(*developed))) : compositor::AnyImage(compositor::Image16Ptr(developed));
+            image = source.rawBits == 8 ? nekophoto::AnyImage(nekophoto::ImagePtr(nekophoto::narrowImage(*developed))) : nekophoto::AnyImage(nekophoto::Image16Ptr(developed));
         }
         image = color::applyToImage(image, decision);
         // A first image makes the canvas, in a session of its own, exactly as in the tab it opened in.
@@ -768,11 +768,11 @@ void MainWindow::noteDitheredExport(const QString& path) {
 void MainWindow::exportPsd() {
     session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
-    const compositor::Document& doc = *session_->document();
+    const nekophoto::Document& doc = *session_->document();
     // Past PSD's 30,000 pixels a side only the large document format holds it, as in Photoshop.
-    const bool psbOnly = doc.width > compositor::psdMaxSide || doc.height > compositor::psdMaxSide;
+    const bool psbOnly = doc.width > nekophoto::psdMaxSide || doc.height > nekophoto::psdMaxSide;
     // What the file will hold, and what will not look or behave the same in Photoshop, before choosing where.
-    const compositor::PsdExportSummary plan = compositor::planPsdExport(doc, app::psdExportOptions());
+    const nekophoto::PsdExportSummary plan = nekophoto::planPsdExport(doc, app::psdExportOptions());
     if (!plan.warnings.empty()) {
         QString counts = tr("%n layer(s)", "", plan.layers + plan.adjustments);
         if (plan.folders) counts += tr(", %n folder(s)", "", plan.folders);
@@ -799,11 +799,11 @@ void MainWindow::exportPsd() {
     if (path.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
     QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
-    compositor::PsdExportSummary summary;
+    nekophoto::PsdExportSummary summary;
     std::string error;
-    compositor::PsdExportOptions options = app::psdExportOptions();
+    nekophoto::PsdExportOptions options = app::psdExportOptions();
     options.large = path.endsWith(".psb", Qt::CaseInsensitive);
-    const bool ok = compositor::exportPsd(doc, path.toStdString(), options, &summary, &error);
+    const bool ok = nekophoto::exportPsd(doc, path.toStdString(), options, &summary, &error);
     QApplication::restoreOverrideCursor();
     if (!ok) { showError(tr("Couldn’t export PSD"), QString::fromStdString(error)); return; }
     statusBar()->showMessage(tr("Exported %1").arg(QFileInfo(path).fileName()), 5000);
@@ -816,9 +816,9 @@ void MainWindow::exportSvg() {
     if (path.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
     QApplication::setOverrideCursor(themedCursor(Qt::WaitCursor));
-    compositor::SvgExportSummary summary;
+    nekophoto::SvgExportSummary summary;
     std::string error;
-    const bool ok = compositor::exportSvg(*session_->document(), path.toStdString(), &summary, &error);
+    const bool ok = nekophoto::exportSvg(*session_->document(), path.toStdString(), &summary, &error);
     QApplication::restoreOverrideCursor();
     if (!ok) { showError(tr("Couldn’t export SVG"), QString::fromStdString(error)); return; }
     statusBar()->showMessage(summary.images ? tr("Exported %1 (%n image(s) for what SVG cannot draw as paths)", nullptr, summary.images).arg(QFileInfo(path).fileName())
@@ -864,7 +864,7 @@ void MainWindow::exportGif() {
         converted = *session_->document();
         convertDocumentProfile(*converted, {}, {});
     }
-    const bool ok = compositor::writeDocumentGif(path.toStdString(), converted ? *converted : *session_->document(), &error);
+    const bool ok = nekophoto::writeDocumentGif(path.toStdString(), converted ? *converted : *session_->document(), &error);
     QApplication::restoreOverrideCursor();
     if (!ok) showError(tr("Couldn’t export the GIF"), QString::fromStdString(error));
     else if (session_->sampleType() != SampleType::U8) noteDitheredExport(path);
@@ -964,7 +964,7 @@ void MainWindow::dropEvent(QDropEvent* e) {
             QString path = url.toLocalFile();
             // Projects and layered files open in their own tab; an image dropped on the tab strip does too,
             // while one dropped on the canvas lands as a layer where it was dropped.
-            if (isProjectPath(path) || isLayeredPath(path) || compositor::isRawPath(path.toStdString())) openPath(path);
+            if (isProjectPath(path) || isLayeredPath(path) || nekophoto::isRawPath(path.toStdString())) openPath(path);
             else if (asDocument) { QString error; if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error); }
             else importFile(path, at);
         }

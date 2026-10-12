@@ -2,12 +2,12 @@
 // parameters, strokes, and the path following its layer on export. Photoshop's own renders are checked over
 // Patchy's fixtures (docs/vector-masks.md), as are the feathers of pixel masks, vector masks and stroked shapes.
 #include "check.h"
-#include "compositor/psd.h"
-#include "compositor/psd_carry.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -15,7 +15,7 @@
 #include <iterator>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

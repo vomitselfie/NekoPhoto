@@ -1,13 +1,13 @@
 // Photoshop presets (presets.h): multi-stop gradient fills, and .grd, .pat and .asl files written and read back,
 // with a document given the patterns a style uses.
 #include "check.h"
-#include "compositor/document.h"
-#include "compositor/presets.h"
-#include "compositor/psd_carry.h"
-#include "compositor/shape.h"
+#include "nekophoto/document.h"
+#include "nekophoto/presets.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/shape.h"
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

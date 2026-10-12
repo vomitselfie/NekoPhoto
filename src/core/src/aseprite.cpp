@@ -3,7 +3,7 @@
 // specification (https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md). Every frame: a layer per cel,
 // the timeline saying which show in which frame (animation.h); unknown
 // chunks are skipped by length. Compressed cels inflate through zlib instead of Patchy's vendored miniz.
-#include "compositor/aseprite.h"
+#include "nekophoto/aseprite.h"
 #include "format_io.h"
 #include <algorithm>
 #include <array>
@@ -11,7 +11,7 @@
 #include <map>
 #include <zlib.h>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -352,4 +352,4 @@ std::optional<PsdImport> importAseprite(const std::string& path, std::string* er
     return importAsepriteBytes(bytes, error);
 }
 
-} // namespace compositor
+} // namespace nekophoto

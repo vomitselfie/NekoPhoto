@@ -23,15 +23,15 @@
 //
 // Brightness/Contrast, Posterize, Threshold, Selective Color and Grain are not in Photoshop's 32-bit set: they return
 // false and are greyed ("Not available in 32-bit mode").
-#include "compositor/adjustments.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -276,4 +276,4 @@ std::array<std::vector<double>, 4> levelsHistogram(const ImageF& image, const Gr
     return levelsHistogram(*narrow, cover.get());
 }
 
-} // namespace compositor
+} // namespace nekophoto

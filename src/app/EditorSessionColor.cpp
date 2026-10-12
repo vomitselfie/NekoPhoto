@@ -1,8 +1,8 @@
 // EditorSession: Assign Profile and Convert to Profile (docs/color-management.md).
 #include "EditorSession.h"
-#include "compositor/colormgmt.h"
+#include "nekophoto/colormgmt.h"
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

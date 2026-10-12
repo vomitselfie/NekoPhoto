@@ -1,9 +1,9 @@
-#include "compositor/uuid.h"
+#include "nekophoto/uuid.h"
 #include <cctype>
 #include <cstdio>
 #include <random>
 
-namespace compositor {
+namespace nekophoto {
 
 Uuid makeUuid() {
     static std::mt19937_64 engine{std::random_device{}()};
@@ -32,4 +32,4 @@ bool parseUuid(const std::string& text, Uuid& out) {
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

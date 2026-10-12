@@ -1,5 +1,5 @@
 #include "Gmic.h"
-#include "compositor/png.h"
+#include "nekophoto/png.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -7,7 +7,7 @@
 #include <QDateTime>
 #include <QCoreApplication>
 #include <mutex>
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
 #include <gmic.h>
 #endif
 #include <QRegularExpression>
@@ -413,7 +413,7 @@ QString GmicRunner::downloadRoot() {
 QString GmicRunner::downloadedDirectory() { return downloadRoot() + '/' + downloadVersion(); }
 
 GmicRunner::Location GmicRunner::locate() {
-    const QString env = qEnvironmentVariable("COMPOSITOR_GMIC");
+    const QString env = qEnvironmentVariable("NEKOPHOTO_GMIC");
     if (!env.isEmpty() && runnable(env)) return {env, QStringLiteral("env")};
     if (const QString dir = besideDirectory(); !dir.isEmpty())
         if (const QString beside = dir + '/' + executableName(); runnable(beside)) return {beside, QStringLiteral("beside")};
@@ -426,10 +426,10 @@ GmicRunner::Location GmicRunner::locate() {
 QString GmicRunner::executable() { return locate().path; }
 
 bool GmicRunner::inProcess() {
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
     // Opt-in: libgmic 4.0.5 crashes inside `sharpen` (its default inverse-diffusion mode) when called as a
     // library although the executable handles it, and a crash in-process takes the editor down with it.
-    return qEnvironmentVariableIsSet("COMPOSITOR_GMIC_INPROCESS");
+    return qEnvironmentVariableIsSet("NEKOPHOTO_GMIC_INPROCESS");
 #else
     return false;
 #endif
@@ -438,7 +438,7 @@ bool GmicRunner::inProcess() {
 bool GmicRunner::available() { return inProcess() || !executable().isEmpty(); }
 
 QString GmicRunner::version() {
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
     if (inProcess()) return QString("%1.%2.%3").arg(gmic_version / 100).arg(gmic_version / 10 % 10).arg(gmic_version % 10);
 #endif
     // Asked once per executable: the one found changes when G'MIC is downloaded or removed while the editor runs.
@@ -476,7 +476,7 @@ QStringList GmicRunner::tokenize(const QString& command) {
 }
 
 bool GmicRunner::allowedForAutomation(const QString& command, QString* why) {
-    if (qEnvironmentVariableIntValue("COMPOSITOR_GMIC_UNRESTRICTED") == 1) {
+    if (qEnvironmentVariableIntValue("NEKOPHOTO_GMIC_UNRESTRICTED") == 1) {
         // Unrestricted lifts the language check, never the legal one.
         if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
             if (why) *why = QStringLiteral("\"%1\" is a patch-based command NekoPhoto does not run").arg(name);
@@ -572,7 +572,7 @@ QStringList argumentsFor(const QString& command, const QString& inPath, const QS
     return {"-v", "-1", "-m", script, inPath, "compositor_run", "cut", "0,255", "-o", outPath};
 }
 
-std::shared_ptr<compositor::Image> readResult(const QString& outPath, const compositor::Image& source, QString* error) {
+std::shared_ptr<nekophoto::Image> readResult(const QString& outPath, const nekophoto::Image& source, QString* error) {
     const int width = source.width(), height = source.height();
     std::string err;
     if (!QFileInfo::exists(outPath)) {
@@ -583,7 +583,7 @@ std::shared_ptr<compositor::Image> readResult(const QString& outPath, const comp
                                       : QObject::tr("G'MIC produced no image.");
         return nullptr;
     }
-    auto image = compositor::readPngImage(outPath.toStdString(), &err);
+    auto image = nekophoto::readPngImage(outPath.toStdString(), &err);
     if (!image) { if (error) *error = QObject::tr("G'MIC produced no image (%1).").arg(QString::fromStdString(err)); return nullptr; }
     if (image->width() != width || image->height() != height) {
         if (error) *error = QObject::tr("The filter changed the image size (%1 x %2 to %3 x %4); only filters that keep it are supported here.").arg(width).arg(height).arg(image->width()).arg(image->height());
@@ -621,7 +621,7 @@ float onScale(double value, double tolerance) {
 
 /// Planar straight RGBA floats, G'MIC's convention (0..255 for colour and alpha), from premultiplied 16-bit pixels,
 /// unrounded but for onScale.
-std::vector<float> planesFrom16(const compositor::Image16& source) {
+std::vector<float> planesFrom16(const nekophoto::Image16& source) {
     const int w = source.width(), h = source.height();
     const size_t plane = size_t(w) * size_t(h);
     std::vector<float> planes(plane * 4);
@@ -641,10 +641,10 @@ std::vector<float> planesFrom16(const compositor::Image16& source) {
 
 /// Premultiplied 16-bit pixels from G'MIC's planar result (`spectrum` planes on the 0..255 scale); a gray or RGB
 /// result keeps the source's alpha.
-std::shared_ptr<compositor::Image16> imageFromPlanes16(const float* o, int spectrum, const compositor::Image16& source) {
+std::shared_ptr<nekophoto::Image16> imageFromPlanes16(const float* o, int spectrum, const nekophoto::Image16& source) {
     const int w = source.width(), h = source.height();
     const size_t plane = size_t(w) * size_t(h);
-    auto result = std::make_shared<compositor::Image16>(w, h);
+    auto result = std::make_shared<nekophoto::Image16>(w, h);
     for (int y = 0; y < h; y++) {
         uint16_t* p = result->row(y);
         const uint16_t* src = source.row(y);
@@ -735,7 +735,7 @@ std::optional<CimgImage> readCimg(const QString& path, QString* error) {
     return image;
 }
 
-std::shared_ptr<compositor::Image16> readResult16(const QString& outPath, const compositor::Image16& source, QString* error) {
+std::shared_ptr<nekophoto::Image16> readResult16(const QString& outPath, const nekophoto::Image16& source, QString* error) {
     auto image = readCimg(outPath, error);
     if (!image) return nullptr;
     if (image->width != source.width() || image->height != source.height()) {
@@ -747,7 +747,7 @@ std::shared_ptr<compositor::Image16> readResult16(const QString& outPath, const 
 
 } // namespace
 
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
 namespace {
 
 /// One interpreter, kept between runs with the catalogue's definitions loaded (parsing them costs more
@@ -759,7 +759,7 @@ public:
     /// Asks the run in progress (if any) to stop; the interpreter polls the flag between commands.
     void abort() { abortFlag_ = true; }
 
-    std::shared_ptr<compositor::Image> run(const compositor::Image& source, const QString& command, QString* error) {
+    std::shared_ptr<nekophoto::Image> run(const nekophoto::Image& source, const QString& command, QString* error) {
         std::lock_guard<std::mutex> lock(mutex_);
         reload();
         abortFlag_ = false;
@@ -784,7 +784,7 @@ public:
         if (!interpret(images, names, command, w, h, error)) return nullptr;
         const gmic_image<float>& out = images[0];
         // Back to premultiplied bytes; a gray or RGB result keeps the source's alpha.
-        auto result = std::make_shared<compositor::Image>(w, h);
+        auto result = std::make_shared<nekophoto::Image>(w, h);
         const int spectrum = int(out._spectrum);
         const float* o = out._data;
         for (int y = 0; y < h; y++) {
@@ -804,7 +804,7 @@ public:
         return result;
     }
 
-    std::shared_ptr<compositor::Image16> run(const compositor::Image16& source, const QString& command, QString* error) {
+    std::shared_ptr<nekophoto::Image16> run(const nekophoto::Image16& source, const QString& command, QString* error) {
         std::lock_guard<std::mutex> lock(mutex_);
         reload();
         abortFlag_ = false;
@@ -868,12 +868,12 @@ private:
 } // namespace
 #endif
 
-std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& source, const QString& command, QString* error, int timeoutMs) {
+std::shared_ptr<nekophoto::Image> GmicRunner::runSync(const nekophoto::Image& source, const QString& command, QString* error, int timeoutMs) {
     if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
         if (error) *error = QObject::tr("%1 is a patch-based G'MIC command that NekoPhoto does not run.").arg(name);
         return nullptr;
     }
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
     if (inProcess()) return Interpreter::shared().run(source, command, error);
 #endif
     QString exe = executable();
@@ -882,7 +882,7 @@ std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& 
     if (!dir.isValid()) { if (error) *error = QObject::tr("Couldn't create a temporary folder."); return nullptr; }
     QString inPath = dir.filePath("in.png"), outPath = dir.filePath("out.png");
     std::string err;
-    if (!compositor::writePngImage(inPath.toStdString(), source, 0, &err)) { if (error) *error = QString::fromStdString(err); return nullptr; }
+    if (!nekophoto::writePngImage(inPath.toStdString(), source, 0, &err)) { if (error) *error = QString::fromStdString(err); return nullptr; }
     QProcess p;
     withoutDisplay(p);
     p.start(exe, argumentsFor(command, inPath, outPath));
@@ -895,12 +895,12 @@ std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& 
     return readResult(outPath, source, error);
 }
 
-std::shared_ptr<compositor::Image16> GmicRunner::runSync(const compositor::Image16& source, const QString& command, QString* error, int timeoutMs) {
+std::shared_ptr<nekophoto::Image16> GmicRunner::runSync(const nekophoto::Image16& source, const QString& command, QString* error, int timeoutMs) {
     if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
         if (error) *error = QObject::tr("%1 is a patch-based G'MIC command that NekoPhoto does not run.").arg(name);
         return nullptr;
     }
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
     if (inProcess()) return Interpreter::shared().run(source, command, error);
 #endif
     QString exe = executable();
@@ -921,14 +921,14 @@ std::shared_ptr<compositor::Image16> GmicRunner::runSync(const compositor::Image
     return readResult16(outPath, source, error);
 }
 
-void GmicRunner::start(std::shared_ptr<const compositor::Image16> source, const QString& command, int timeoutMs) {
+void GmicRunner::start(std::shared_ptr<const nekophoto::Image16> source, const QString& command, int timeoutMs) {
     cancel();
     if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
         const QString error = tr("%1 is a patch-based G'MIC command that NekoPhoto does not run.").arg(name);
         QMetaObject::invokeMethod(this, [this, error] { emit finished16(nullptr, error); }, Qt::QueuedConnection);
         return;
     }
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
     if (inProcess()) {
         const uint64_t run = ++run_;
         abort_ = std::make_shared<std::atomic<bool>>(false);
@@ -936,7 +936,7 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image16> source, const 
         worker_ = std::thread([this, source, command, run, abort] {
             if (abort->load()) return;
             QString error;
-            std::shared_ptr<compositor::Image16> result = Interpreter::shared().run(*source, command, &error);
+            std::shared_ptr<nekophoto::Image16> result = Interpreter::shared().run(*source, command, &error);
             if (abort->load()) return;
             QMetaObject::invokeMethod(this, [this, run, result, error] { if (run == run_) emit finished16(result, error); }, Qt::QueuedConnection);
         });
@@ -966,7 +966,7 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image16> source, const 
         if (limit_) limit_->stop();
         QProcess* p = process_;
         process_ = nullptr;
-        std::shared_ptr<compositor::Image16> result;
+        std::shared_ptr<nekophoto::Image16> result;
         QString error;
         if (status != QProcess::NormalExit || code != 0) {
             const QString text = errorLine(*p);
@@ -979,14 +979,14 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image16> source, const 
     process_->start(exe, argumentsFor(command, inPath, outPath));
 }
 
-void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QString& command, int timeoutMs) {
+void GmicRunner::start(std::shared_ptr<const nekophoto::Image> source, const QString& command, int timeoutMs) {
     cancel();
     if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
         const QString error = tr("%1 is a patch-based G'MIC command that NekoPhoto does not run.").arg(name);
         QMetaObject::invokeMethod(this, [this, error] { emit finished(nullptr, error); }, Qt::QueuedConnection);
         return;
     }
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
     if (inProcess()) {
         const uint64_t run = ++run_;
         abort_ = std::make_shared<std::atomic<bool>>(false);
@@ -994,7 +994,7 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QS
         worker_ = std::thread([this, source, command, run, abort] {
             if (abort->load()) return;
             QString error;
-            std::shared_ptr<compositor::Image> result = Interpreter::shared().run(*source, command, &error);
+            std::shared_ptr<nekophoto::Image> result = Interpreter::shared().run(*source, command, &error);
             if (abort->load()) return;
             QMetaObject::invokeMethod(this, [this, run, result, error] { if (run == run_) emit finished(result, error); }, Qt::QueuedConnection);
         });
@@ -1007,7 +1007,7 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QS
     if (!dir_->isValid()) { emit finished(nullptr, QObject::tr("Couldn't create a temporary folder.")); return; }
     QString inPath = dir_->filePath("in.png"), outPath = dir_->filePath("out.png");
     std::string err;
-    if (!compositor::writePngImage(inPath.toStdString(), *source, 0, &err)) { emit finished(nullptr, QString::fromStdString(err)); return; }
+    if (!nekophoto::writePngImage(inPath.toStdString(), *source, 0, &err)) { emit finished(nullptr, QString::fromStdString(err)); return; }
     source8_ = source;
     process_ = new QProcess(this);
     withoutDisplay(*process_);
@@ -1025,7 +1025,7 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QS
         if (limit_) limit_->stop();
         QProcess* p = process_;
         process_ = nullptr;
-        std::shared_ptr<compositor::Image> result;
+        std::shared_ptr<nekophoto::Image> result;
         QString error;
         if (status != QProcess::NormalExit || code != 0) {
             const QString text = errorLine(*p);
@@ -1045,7 +1045,7 @@ void GmicRunner::cancel() {
         // The interpreter polls its flag between commands and throws its way out.
         if (abort_) abort_->store(true);
         run_++;
-#ifdef COMPOSITOR_HAVE_LIBGMIC
+#ifdef NEKOPHOTO_HAVE_LIBGMIC
         Interpreter::shared().abort();
 #endif
         worker_.join();

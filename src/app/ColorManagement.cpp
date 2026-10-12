@@ -1,9 +1,9 @@
 #include "ColorManagement.h"
 #include "Platform.h"
 #include "Style.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/render.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/render.h"
 #include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -20,7 +20,7 @@
 #include <QVBoxLayout>
 #include <mutex>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app::color {
 

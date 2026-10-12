@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -77,7 +77,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
             const QRectF canvas(QPointF(0, 0), documentSize());
             crop_ = canvas;
             if (const auto& selection = session_->document()->selection) {
-                const compositor::Rect b = selection->bounds();
+                const nekophoto::Rect b = selection->bounds();
                 const QRectF bounds = QRectF(b.x, b.y, b.width, b.height).intersected(canvas);
                 if (bounds.width() >= 1 && bounds.height() >= 1) crop_ = bounds;
             }
@@ -177,25 +177,25 @@ void CanvasWidget::renderInto(QImage& target, QRect deviceRect, QPointF document
     options.scale = zoom;
     options.version = session_->documentRevision();
     // Document to monitor, or the soft proof (ColorManagement.h); null, the usual case, leaves the pixels as they are.
-    const compositor::ColorTransformPtr display = color::displayTransform(*session_->document());
+    const nekophoto::ColorTransformPtr display = color::displayTransform(*session_->document());
     options.display = display.get();
     // A 32-bit document through its view: exposure, gamma or Highlight Compression (View ▸ 32-bit Preview Options).
-    if (session_->sampleType() == compositor::SampleType::F32) {
+    if (session_->sampleType() == nekophoto::SampleType::F32) {
         options.view32 = session_->view32();
-        if (options.view32.method == compositor::ToneMethod::HighlightCompression) options.peak = session_->documentPeak();
+        if (options.view32.method == nekophoto::ToneMethod::HighlightCompression) options.peak = session_->documentPeak();
     }
     Image out;
     Overrides overrides = session_->renderOverrides();
-    compositor::render(*session_->document(), options, out, overrides.empty() ? nullptr : &overrides, &renderCache_);
+    nekophoto::render(*session_->document(), options, out, overrides.empty() ? nullptr : &overrides, &renderCache_);
     // The Channels panel's view: one colour channel in gray, some of them, alpha channels over the image.
-    if (compositor::ChannelView view = session_->channelView(); !view.isDefault()) {
+    if (nekophoto::ChannelView view = session_->channelView(); !view.isDefault()) {
         // In CMYK and Lab the colour channels are read from the frame at the document's layout.
-        if (view.mode != compositor::ColorMode::RGB && view.color != 0 && view.color != compositor::colorChannelsAllFor(view.mode)) {
+        if (view.mode != nekophoto::ColorMode::RGB && view.color != 0 && view.color != nekophoto::colorChannelsAllFor(view.mode)) {
             RenderOptions native = options;
             native.display = nullptr;
-            view.native = compositor::renderNative(*session_->document(), native, overrides.empty() ? nullptr : &overrides);
+            view.native = nekophoto::renderNative(*session_->document(), native, overrides.empty() ? nullptr : &overrides);
         }
-        compositor::applyChannelView(out, options.region, zoom, view);
+        nekophoto::applyChannelView(out, options.region, zoom, view);
     }
     target = toQImage(out);
 }

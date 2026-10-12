@@ -1,11 +1,11 @@
 // Distance-transform morphology and the coverage rasterizer against brute force and the previous code.
 #include "check.h"
-#include "compositor/morphology.h"
-#include "compositor/selection.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/selection.h"
 #include <cmath>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

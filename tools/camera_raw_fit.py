@@ -23,7 +23,7 @@ render's error), by grid or simplex search on the mean CIEDE2000 the parity test
     python3 tools/camera_raw_fit.py --write    rewrite src/core/src/rawtone_tables.inc (about a minute and a half)
 
 Only numpy is needed. The Transform, Distortion and Clarity constants in src/core/src/cameraraw.cpp were fitted by hand
-with the parity test's COMPOSITOR_CAMERA_RAW_PARITY_TRY and ONLY variables (docs/camera-raw.md#fitted-responses).
+with the parity test's NEKOPHOTO_CAMERA_RAW_PARITY_TRY and ONLY variables (docs/camera-raw.md#fitted-responses).
 """
 import itertools
 import json

@@ -33,7 +33,7 @@
 // QtGui's shortcut pass for a key press (SelfTest.cpp): true when a shortcut took the key.
 Q_GUI_EXPORT bool qt_sendShortcutOverrideEvent(QObject* o, ulong timestamp, int k, Qt::KeyboardModifiers mods, const QString& text, bool autorep, ushort count);
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

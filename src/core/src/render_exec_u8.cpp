@@ -2,18 +2,18 @@
 // It draws a RenderPlan into premultiplied RGBA8.
 #include <cstdlib>
 #include <cctype>
-#include "compositor/png.h"
+#include "nekophoto/png.h"
 #include "render_plan.h"
 #include "render_resume.h"
-#include "compositor/fill_cache.h"
-#include "compositor/layerstyle.h"
+#include "nekophoto/fill_cache.h"
+#include "nekophoto/layerstyle.h"
 #include "layerstyle_render.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
-#include "compositor/adjustments.h"
-#include "compositor/blend.h"
-#include "compositor/parallel.h"
-#include "compositor/workcounters.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/workcounters.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -29,7 +29,7 @@ extern "C" {
 #include "BrushPixels.h"
 }
 
-namespace compositor {
+namespace nekophoto {
 
 template <>
 struct RenderExec<SampleType::U8> {
@@ -867,4 +867,4 @@ void executeRender<SampleType::U8>(const RenderPlan& plan, const Rect& region, d
     exec.run(out, cache, version);
 }
 
-} // namespace compositor
+} // namespace nekophoto

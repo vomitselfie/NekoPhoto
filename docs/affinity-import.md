@@ -10,7 +10,7 @@ and `affinity_tree.{h,cpp}`, from Patchy's `src/formats/af_document_io.cpp` and 
 worked the format out from documents authored in a licensed Affinity and the MIT-licensed afread project's
 notes; the container walk, tile planes, blend table and placement rules are its findings, kept as it pinned
 them. Most documents from Affinity 2 on compress their streams with zstd, so the build needs libzstd
-(`libzstd-dev`, found through pkg-config; `-DCOMPOSITOR_WITH_ZSTD=OFF` leaves it out, and then such files are
+(`libzstd-dev`, found through pkg-config; `-DNEKOPHOTO_WITH_ZSTD=OFF` leaves it out, and then such files are
 refused with a message saying so).
 
 ## What is carried
@@ -72,7 +72,7 @@ shape land where Patchy's tests expect them.
 
 `tests/affinity_tests.cpp` checks the stream predictors, the blend table and transform composition, and opens a
 document written byte by byte in the test (container, stream table, doc.dat tree, tile streams). With
-`COMPOSITOR_AFFINITY_FIXTURES` naming a folder of documents (Patchy's `test-fixtures/af`, 33 small files made in
+`NEKOPHOTO_AFFINITY_FIXTURES` naming a folder of documents (Patchy's `test-fixtures/af`, 33 small files made in
 Affinity 2.6 and 3.2), it opens each and prints how far the flattened import is from the preview Affinity
 embedded, and requires the documents with nothing left out to come within 4/255 on average (they do: the Lab
 document at 3.5, where the conversion differs slightly; the rest under 2, the vector, mask, artboard, group,

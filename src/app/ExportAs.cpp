@@ -2,11 +2,11 @@
 // for the flat formats (flatten, trim, resample, matte, encode).
 #include "ExportAs.h"
 #include "ImageConvert.h"
-#include "compositor/gif.h"
-#include "compositor/ico.h"
-#include "compositor/png.h"
-#include "compositor/resample.h"
-#include "compositor/tga.h"
+#include "nekophoto/gif.h"
+#include "nekophoto/ico.h"
+#include "nekophoto/png.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/tga.h"
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QImageWriter>
@@ -16,7 +16,7 @@
 #include <cmath>
 #include <set>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app::exportas {
 

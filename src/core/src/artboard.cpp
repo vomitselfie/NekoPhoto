@@ -1,11 +1,11 @@
 // Artboards and slices (artboard.h). Descriptors go through Patchy's psd_descriptor (MIT, Seth A. Robinson).
-#include "compositor/artboard.h"
+#include "nekophoto/artboard.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cmath>
 #include <exception>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace psd = patchy::psd;
 
@@ -202,4 +202,4 @@ uint32_t nextSliceId(const std::vector<Slice>& slices) {
     return id + 1;
 }
 
-} // namespace compositor
+} // namespace nekophoto

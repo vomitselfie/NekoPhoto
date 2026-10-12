@@ -1,19 +1,19 @@
 // SVG and PDF files opened as layered documents (VectorFiles.h).
 #include "VectorFiles.h"
 #include "ImageConvert.h"
-#include "compositor/svg.h"
+#include "nekophoto/svg.h"
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QPainter>
 #include <QSvgRenderer>
 #include <algorithm>
 #include <cmath>
-#ifdef COMPOSITOR_HAVE_QTPDF
+#ifdef NEKOPHOTO_HAVE_QTPDF
 #include <QPdfDocument>
 #include <QPdfDocumentRenderOptions>
 #endif
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -126,7 +126,7 @@ PdfOpenOptions& pdfOpenOptions() {
 }
 
 bool pdfSupported() {
-#ifdef COMPOSITOR_HAVE_QTPDF
+#ifdef NEKOPHOTO_HAVE_QTPDF
     return true;
 #else
     return false;
@@ -136,7 +136,7 @@ bool pdfSupported() {
 std::optional<PsdImport> importPdfDocument(const QString& path, QString* error, QWidget* parent, PdfOpenOptions* used) {
     const PdfOpenOptions options = pdfOpenOptions();
     pdfOpenOptions() = PdfOpenOptions();   // one open only
-#ifdef COMPOSITOR_HAVE_QTPDF
+#ifdef NEKOPHOTO_HAVE_QTPDF
     QPdfDocument pdf;
     const QPdfDocument::Error status = pdf.load(path);
     if (status != QPdfDocument::Error::None) {

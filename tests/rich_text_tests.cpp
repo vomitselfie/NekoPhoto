@@ -7,7 +7,7 @@
 #include <QTextDocument>
 
 using namespace app;
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

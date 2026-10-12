@@ -104,7 +104,7 @@ snapped to the pixel grid (`gradientPosition` in `src/core/src/layerstyle.cpp`) 
 ArtCraft Team and the PhotoCraft contributors).
 
 Fill in Photoshop's special eight blend modes (`fillIsSpecial`, `blendAtFill` and `compositeAtFill` in
-`src/core/include/compositor/blend.h`: the source pulled toward the mode's neutral colour, Hard Mix's ramp, Opacity as
+`src/core/include/nekophoto/blend.h`: the source pulled toward the mode's neutral colour, Hard Mix's ramp, Opacity as
 coverage and Fill as coverage over transparency) is adapted from [PhotoCraft](https://github.com/storytold/photocraft)'s
 `crates/compose/src/psblend.rs` (`blend_rgb_fill`, `composite_fill`) at commit 88ffd89e9fe2b774023016c0f9024d3a2f6728b4
 (dual MIT / Apache-2.0, used under MIT, [PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt); Copyright (c) 2026 ArtCraft
@@ -143,7 +143,7 @@ follow Patchy's calibration notes (`docs/layer-effects-render.md`, MIT, above), 
 
 | Component | Licence | Notes |
 |---|---|---|
-| [G'MIC](https://gmic.eu) | CeCILL v2.1 (GPL-compatible) or CeCILL-C | Not shipped. Filter > G'MIC runs the `gmic` program if it is installed. On Windows the person can have NekoPhoto download G'MIC's command-line build (`gmic_4.0.5_cli_win64.zip`, CeCILL 2.1, with its own README and COPYING) from gmic.eu on request; it is fetched from gmic.eu, never redistributed by this project. Builds configured with `-DCOMPOSITOR_WITH_LIBGMIC=ON` link `libgmic` from the system instead; release builds do not |
+| [G'MIC](https://gmic.eu) | CeCILL v2.1 (GPL-compatible) or CeCILL-C | Not shipped. Filter > G'MIC runs the `gmic` program if it is installed. On Windows the person can have NekoPhoto download G'MIC's command-line build (`gmic_4.0.5_cli_win64.zip`, CeCILL 2.1, with its own README and COPYING) from gmic.eu on request; it is fetched from gmic.eu, never redistributed by this project. Builds configured with `-DNEKOPHOTO_WITH_LIBGMIC=ON` link `libgmic` from the system instead; release builds do not |
 | G'MIC filter catalogue (`update<version>.gmic`) | CeCILL v2.1 | Downloaded by Update Filters from gmic.eu |
 | IS-Net general use (DIS), via [rembg](https://github.com/danielgatis/rembg) | Apache-2.0 | Downloaded on request from Preferences (AI background removal) |
 | U²-Net human segmentation and U²-Netp, via rembg | Apache-2.0 | Downloaded on request |

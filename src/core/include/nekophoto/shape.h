@@ -1,0 +1,55 @@
+// The Shape tool's rasters and the Gradient tool's fills.
+#pragma once
+#include "document.h"
+#include "gradient_method.h"
+
+namespace nekophoto {
+
+/// A `width` x `height` raster of `kind` filling its box in `color` (straight sRGB 0..1), antialiased where it
+/// curves. A rectangle's corners round by `cornerRadius`, at most half its shorter side.
+std::shared_ptr<Image> shapeImage(ShapeKind kind, int width, int height, double red, double green, double blue, double cornerRadius);
+
+enum class GradientShape { Linear, Radial };
+
+/// A colour stop of a multi-stop gradient: `location` 0..1 along it; `midpoint` 0..1 of the way from the previous stop
+/// to this one is where their blend is half done (Photoshop's diamond, which it stores on the run's end stop).
+struct GradientColorStop { float location = 0; float rgb[3] = {0, 0, 0}; float midpoint = 0.5f; };
+struct GradientAlphaStop { float location = 0; float opacity = 1; float midpoint = 0.5f; };
+
+/// A gradient's colours (straight RGBA, 0..1). With no `colors`, a two-stop ramp from `start` to `end`; with them,
+/// the colour stops (sorted by location) and the opacity stops (none: opaque), each run blended linearly after its
+/// midpoint remap, the ends held beyond the outer stops.
+struct GradientStops {
+    float start[4] = {0, 0, 0, 1};
+    float end[4] = {0, 0, 0, 0};
+    std::vector<GradientColorStop> colors;
+    std::vector<GradientAlphaStop> alphas;
+    /// Photoshop's Method: Classic blends the runs linearly as above; Perceptual and Linear blend them in their own
+    /// space with the smoothness (0..1) easing them, as layer styles do (gradient_method.h).
+    GradientMethod method = GradientMethod::Classic;
+    float smoothness = 1;
+    /// The colour at `t` (0..1), Classic (a Perceptual or Linear gradient is drawn from `baked()`).
+    void sample(float t, float out[4]) const;
+    /// A Classic gradient that draws this one: its method's colours sampled at 257 even stops (the opacity stops
+    /// kept). A Classic gradient comes back as it is.
+    GradientStops baked() const;
+    /// The stops mirrored end for end (the Reverse option).
+    void reverse();
+};
+
+/// Where document point `p` falls along a gradient, 0..1 (linear from `from` to `to`, held beyond the ends; radial
+/// centred on `from` with `to` on its rim): what fillGradient samples the stops at.
+double gradientPositionAt(GradientShape shape, Point from, Point to, Point p);
+
+/// A gradient over `out` (premultiplied), whose pixels are placed on the document by `pixelToDocument`, drawn over
+/// `base` at `opacity` through the optional per-pixel `selection` (grid coverage). Linear runs from `from` to `to`
+/// (colours held beyond the ends); radial is centred on `from` with `to` on its rim.
+void fillGradient(const Image& base, Image& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const GrayImage* selection);
+/// The same on a mask (gray): the stops' red channel is the gray value.
+void fillGradient(const GrayImage& base, GrayImage& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const GrayImage* selection);
+/// Both at 16 bits (0..32768, the selection too): the colour of each pixel from the same stops, rounded to 15 bits, so a
+/// long gradient has 32,768 steps where 8 bits have 256.
+void fillGradient(const Image16& base, Image16& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const Gray16* selection);
+void fillGradient(const Gray16& base, Gray16& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const Gray16* selection);
+
+} // namespace nekophoto

@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace compositor::format_io {
+namespace nekophoto::format_io {
 
 inline bool readFile(const std::string& path, std::vector<uint8_t>& out, std::string* error) {
     std::ifstream in(path, std::ios::binary);
@@ -54,4 +54,4 @@ struct Writer {
     void append(const std::vector<uint8_t>& b) { bytes.insert(bytes.end(), b.begin(), b.end()); }
 };
 
-} // namespace compositor::format_io
+} // namespace nekophoto::format_io

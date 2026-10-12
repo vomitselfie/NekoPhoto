@@ -1,6 +1,6 @@
 #include "BrushLibrary.h"
-#include "compositor/mypaint.h"
-#include "compositor/png.h"
+#include "nekophoto/mypaint.h"
+#include "nekophoto/png.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -39,7 +39,7 @@ bool load(BrushPreset& preset, const QString& mybPath) {
     QFile file(mybPath);
     if (!file.open(QIODevice::ReadOnly)) return false;
     preset.json = file.readAll().toStdString();
-    compositor::MyPaintPresetInfo info = compositor::myPaintPresetInfo(preset.json);
+    nekophoto::MyPaintPresetInfo info = nekophoto::myPaintPresetInfo(preset.json);
     if (!info.valid) return false;
     preset.diameter = std::clamp(info.radius * 2, 1.0, 2000.0);
     preset.eraser = info.eraser;
@@ -114,24 +114,24 @@ void BrushLibrary::reload() { storage() = loadAll(); }
 
 QString BrushLibrary::importFolder() { return userFolder() + "/imported"; }
 
-std::shared_ptr<const compositor::TipPreset> BrushPreset::tip() const {
+std::shared_ptr<const nekophoto::TipPreset> BrushPreset::tip() const {
     if (engine != Engine::Tip) return nullptr;
     if (!tip_) {
         std::string error;
-        if (auto loaded = compositor::loadTipPreset(folder.toStdString(), &error)) tip_ = std::make_shared<const compositor::TipPreset>(std::move(*loaded));
+        if (auto loaded = nekophoto::loadTipPreset(folder.toStdString(), &error)) tip_ = std::make_shared<const nekophoto::TipPreset>(std::move(*loaded));
     }
     return tip_;
 }
 
-bool BrushLibrary::saveTip(const QString& id, const compositor::TipPreset& preset, QString* error) {
+bool BrushLibrary::saveTip(const QString& id, const nekophoto::TipPreset& preset, QString* error) {
     const BrushPreset* found = find(id);
     if (!found || found->engine != BrushPreset::Engine::Tip) { if (error) *error = QStringLiteral("no tip brush %1").arg(id); return false; }
     std::string message;
     const std::string folder = found->folder.toStdString();
-    if (!compositor::saveTipPreset(folder, preset, &message)) { if (error) *error = QString::fromStdString(message); return false; }
-    if (auto preview = compositor::renderTipPreview(preset, 256, 64))
-        compositor::writePngImage((QDir(found->folder).filePath("preview.png")).toStdString(), *preview);
-    found->replaceTip(std::make_shared<const compositor::TipPreset>(preset));
+    if (!nekophoto::saveTipPreset(folder, preset, &message)) { if (error) *error = QString::fromStdString(message); return false; }
+    if (auto preview = nekophoto::renderTipPreview(preset, 256, 64))
+        nekophoto::writePngImage((QDir(found->folder).filePath("preview.png")).toStdString(), *preview);
+    found->replaceTip(std::make_shared<const nekophoto::TipPreset>(preset));
     return true;
 }
 
@@ -152,7 +152,7 @@ QString BrushLibrary::userFolder() {
 
 void warmBrushEngines() {
     for (const BrushPreset& preset : BrushLibrary::presets())
-        if (preset.engine != BrushPreset::Engine::Tip && !preset.json.empty()) { compositor::warmMyPaint(preset.json); return; }
+        if (preset.engine != BrushPreset::Engine::Tip && !preset.json.empty()) { nekophoto::warmMyPaint(preset.json); return; }
 }
 
 } // namespace app

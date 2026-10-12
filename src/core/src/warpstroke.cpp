@@ -1,12 +1,12 @@
-#include "compositor/warpstroke.h"
-#include "compositor/depth.h"
-#include "compositor/resample.h"
-#include "compositor/parallel.h"
+#include "nekophoto/warpstroke.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 WarpStroke::WarpStroke(std::shared_ptr<Image> image, WarpMode mode, double diameter, double hardness, double strength)
     : image_(std::move(image)), mode_(mode), diameter_(std::max(2.0, diameter)), hardness_(std::min(0.98, std::max(0.0, hardness))),
@@ -264,4 +264,4 @@ void WarpStroke::push(Point a, Point b) {
     }, 16);
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -26,7 +26,7 @@ def texts(result):
 
 
 async def main(sock: str) -> None:
-    env = dict(os.environ, COMPOSITOR_RPC_SOCKET=sock, COMPOSITOR_MCP_LAUNCH="0")
+    env = dict(os.environ, NEKOPHOTO_RPC_SOCKET=sock, NEKOPHOTO_MCP_LAUNCH="0")
     server = StdioServerParameters(command=sys.executable, args=[BRIDGE], env=env)
     async with stdio_client(server) as (read, write), ClientSession(read, write) as session:
         init = await session.initialize()
@@ -98,4 +98,4 @@ async def main(sock: str) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("COMPOSITOR_RPC_SOCKET", "")))
+    asyncio.run(main(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("NEKOPHOTO_RPC_SOCKET", os.environ.get("COMPOSITOR_RPC_SOCKET", ""))))

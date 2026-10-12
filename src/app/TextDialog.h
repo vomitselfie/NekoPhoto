@@ -21,7 +21,7 @@ namespace app {
 class TextDialog : public QDialog {
     Q_OBJECT
 public:
-    TextDialog(EditorSession* session, compositor::Uuid layerId, QWidget* parent = nullptr);
+    TextDialog(EditorSession* session, nekophoto::Uuid layerId, QWidget* parent = nullptr);
     ~TextDialog() override;
 
 protected:
@@ -33,12 +33,12 @@ private:
     /// The Character section shown for the selection (or the cursor).
     void showCharacter();
     /// `patch` given to the selected letters, or all of them when none are.
-    void restyle(const compositor::TextRunPatch& patch);
+    void restyle(const nekophoto::TextRunPatch& patch);
 
     QPointer<EditorSession> session_;
-    compositor::Uuid layerId_;
-    compositor::LayerText original_;
-    compositor::TextRun fallback_;     // the style of text that holds none (the first run as opened)
+    nekophoto::Uuid layerId_;
+    nekophoto::LayerText original_;
+    nekophoto::TextRun fallback_;     // the style of text that holds none (the first run as opened)
     double displayScale_ = 1;
     bool syncing_ = false;
     QTextEdit* editor_;

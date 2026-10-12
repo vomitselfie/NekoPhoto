@@ -11,20 +11,20 @@
 #include "QtGeometry.h"
 #include "TextLayer.h"
 #include "ColorManagement.h"
-#include "compositor/toning.h"
-#include "compositor/blur.h"
-#include "compositor/depth.h"
-#include "compositor/psd_carry.h"
-#include "compositor/colormgmt.h"
-#include "compositor/filters.h"
-#include "compositor/render.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/toning.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/render.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
 #include <algorithm>
 #include <random>
 #include <set>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

@@ -2,9 +2,9 @@
 // record, and drawing an instance through its stack. The descriptor keys, ranges and cache layout follow Patchy's
 // psd_smart_objects.cpp and psd_filter_effects.cpp (MIT, src/third_party/patchy_psd/README.md); the kernels live in
 // smartfilter_render.cpp.
-#include "compositor/smartfilter.h"
-#include "compositor/colormgmt.h"
-#include "compositor/modetransform.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/modetransform.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@
 #include <iterator>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace psd = patchy::psd;
 using V = psd::DescriptorValue;
@@ -1130,5 +1130,5 @@ bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& en
     return setSmartFilters(document, layer, stack, error);
 }
 
-} // namespace compositor
+} // namespace nekophoto
 

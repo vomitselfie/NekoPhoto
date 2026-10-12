@@ -11,13 +11,13 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
 // ---- Input ----------------------------------------------------------------------------
 
-// A mouse is a pen at half pressure without tilt or twist (compositor::mouseSample); the brushes read the pen raw.
+// A mouse is a pen at half pressure without tilt or twist (nekophoto::mouseSample); the brushes read the pen raw.
 // Every sample carries the view's scale (screen points per document pixel), from which the brushes' screen speed comes;
 // the view has no rotation, and one would not change the scale.
 void CanvasWidget::mousePressEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); session_->pen.viewScale = session_->viewport.pointsPerPixel(); setFocus(); press(e->position(), e->button(), e->modifiers()); }
@@ -35,7 +35,7 @@ void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
         if (!hit || !hit->isLiveText()) {
             // Between the glyphs the pixel is transparent: the active text layer still counts inside its box.
             const Layer* active = session_->activeLayer();
-            if (active && active->isLiveText() && session_->displayedTransform(*active).contains(compositor::Point(doc.x(), doc.y()))) hit = active;
+            if (active && active->isLiveText() && session_->displayedTransform(*active).contains(nekophoto::Point(doc.x(), doc.y()))) hit = active;
         }
         if (hit && hit->isLiveText()) {
             if (session_->transformEdit()) session_->commitTransform();
@@ -212,14 +212,14 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
             if (auto path = session_->targetPath()) {
                 // Auto Add/Delete: an anchor clicked goes; a click on the outline adds one, dragged at once.
                 const double radius = 6 / std::max(1e-6, session_->viewport.zoom);
-                if (auto knot = compositor::nearestKnot(*path, toPoint(doc), radius)) {
-                    compositor::removeAnchor(*path, knot->first, knot->second);
+                if (auto knot = nekophoto::nearestKnot(*path, toPoint(doc), radius)) {
+                    nekophoto::removeAnchor(*path, knot->first, knot->second);
                     session_->setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Delete Anchor Point"));
                     return;
                 }
-                auto hit = compositor::nearestPathSegment(*path, toPoint(doc));
+                auto hit = nekophoto::nearestPathSegment(*path, toPoint(doc));
                 if (hit && hit->distance <= radius && session_->beginPathEdit(tr("Add Anchor Point"))) {
-                    const int added = compositor::insertAnchor(*path, hit->subpath, hit->segment, hit->t);
+                    const int added = nekophoto::insertAnchor(*path, hit->subpath, hit->segment, hit->t);
                     session_->updatePathEdit(*path);
                     pathDragStart_ = *path;
                     pathDrag_ = PathHit{hit->subpath, added, PathHit::Anchor};

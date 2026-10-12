@@ -1,0 +1,214 @@
+// Photoshop layer styles (drop and inner shadows, outer and inner glows, bevel and emboss, satin, colour,
+// gradient and pattern overlays, stroke), read from the 'lfx2' / 'lmfx' block a PSD layer carries
+// (psd_carry.h) and drawn by the renderer around the layer's pixels. The model and the calibrated render
+// rules follow Patchy (MIT, src/third_party/patchy_psd/README.md), which pinned them against Photoshop 2026;
+// see docs/layer-styles.md.
+#pragma once
+#include "blendif.h"
+#include "gradient_method.h"
+#include "image.h"
+#include <array>
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace nekophoto {
+
+struct Layer;
+struct Document;
+enum class BlendMode;
+
+/// Every Photoshop blend mode an effect can use (ours are a subset).
+enum class EffectBlend {
+    Normal, Dissolve, Darken, Multiply, ColorBurn, LinearBurn, DarkerColor, Lighten, Screen, ColorDodge, LinearDodge,
+    LighterColor, Overlay, SoftLight, HardLight, VividLight, LinearLight, PinLight, HardMix, Difference, Exclusion,
+    Subtract, Divide, Hue, Saturation, Color, Luminosity
+};
+
+/// An effect's colour: sRGB bytes, as colours are kept in every mode. `ink`: the C, M, Y and K (0..1) of a CMYK colour
+/// read from a file ('CMYC'), which a CMYK document draws as they are while r, g and b still equal their plain
+/// conversion (inkMatches); an edit or a mode conversion changes r, g and b and so retires them.
+struct StyleColor {
+    uint8_t r = 0, g = 0, b = 0;
+    std::optional<std::array<float, 4>> ink = std::nullopt;
+};
+/// The plain RGB a 'CMYC' colour is read as (no profile), which `ink` must still match to be used.
+StyleColor plainRgbOfInk(const std::array<float, 4>& ink);
+/// Whether `c` carries inks that still describe it.
+bool inkMatches(const StyleColor& c);
+
+struct StyleGradient {
+    enum class Type { Linear, Radial, Angle, Reflected, Diamond, ShapeBurst };
+    using Interpolation = GradientMethod;
+    /// `ink`: a CMYK stop's own C, M, Y and K (0..1 ink), which a CMYK document interpolates as they are.
+    struct ColorStop { float location = 0; StyleColor color; float midpoint = 0.5f; std::optional<std::array<float, 4>> ink; };
+    struct AlphaStop { float location = 0; float opacity = 1; float midpoint = 0.5f; };
+    std::vector<ColorStop> colors;
+    std::vector<AlphaStop> alphas;
+    float smoothness = 1;              // Intr / 4096
+    Interpolation interpolation = Interpolation::Classic;
+    Type type = Type::Linear;
+    float angle = 90, scale = 1, offsetX = 0, offsetY = 0;   // offsets in percent
+    bool reverse = false, dither = false, alignWithLayer = true;
+    /// A fill layer's gradient ('GdFl'): Photoshop spans it over the bounds' centre chord, unsnapped, and eases the
+    /// opacity ramp as it eases the colours (Patchy's calibration); layer styles keep the overlay geometry.
+    bool fillLayer = false;
+};
+
+/// A curve (0..255 both ways) remapping an effect's values; empty points are the identity.
+struct StyleContour {
+    struct Point { float x = 0, y = 0; bool corner = false; };
+    std::vector<Point> points;
+    bool linear() const;
+    std::array<uint8_t, 256> lut() const;
+};
+
+struct DropShadow {
+    EffectBlend mode = EffectBlend::Multiply; StyleColor color; float opacity = 0.75f;
+    float angle = 120, distance = 5, spread = 0, size = 5; bool useGlobalLight = false, layerConceals = true;
+    bool enabled = true;   // off: kept for the Layer Style dialog, not drawn
+};
+struct InnerShadow {
+    EffectBlend mode = EffectBlend::Multiply; StyleColor color; float opacity = 0.75f;
+    float angle = 120, distance = 5, choke = 0, size = 5; bool useGlobalLight = false;
+    bool enabled = true;   // off: kept for the Layer Style dialog, not drawn
+};
+struct OuterGlow {
+    EffectBlend mode = EffectBlend::Screen; StyleColor color{255, 255, 190}; float opacity = 0.75f;
+    float spread = 0, size = 5, range = 100; bool precise = false;
+    bool enabled = true;   // off: kept for the Layer Style dialog, not drawn
+};
+struct InnerGlow {
+    EffectBlend mode = EffectBlend::Screen; StyleColor color{255, 255, 190}; float opacity = 0.75f;
+    float choke = 0, size = 5, range = 100; bool precise = false, center = false;
+    bool enabled = true;   // off: kept for the Layer Style dialog, not drawn
+};
+struct ColorOverlay { EffectBlend mode = EffectBlend::Normal; StyleColor color{255, 0, 0}; float opacity = 1; bool enabled = true; };
+struct GradientOverlay { EffectBlend mode = EffectBlend::Normal; float opacity = 1; StyleGradient gradient; bool enabled = true; };
+struct PatternOverlay {
+    EffectBlend mode = EffectBlend::Normal; float opacity = 1, scale = 1, angle = 0; std::string patternId;
+    bool linkWithLayer = true; float phaseX = 0, phaseY = 0;
+    bool enabled = true;   // off: kept for the Layer Style dialog, not drawn
+};
+struct Satin {
+    EffectBlend mode = EffectBlend::Multiply; StyleColor color; float opacity = 0.5f;
+    float angle = 19, distance = 11, size = 14; bool invert = true;
+    bool enabled = true;   // off: kept for the Layer Style dialog, not drawn
+};
+struct Stroke {
+    enum class Position { Outside, Inside, Center };
+    EffectBlend mode = EffectBlend::Normal; StyleColor color; float opacity = 1, size = 3;
+    Position position = Position::Outside; bool gradientFill = false; StyleGradient gradient; bool overprint = false;
+    bool enabled = true;   // off: kept for the Layer Style dialog, not drawn
+};
+struct Bevel {
+    enum class Kind { Inner, Outer, Emboss, Pillow, StrokeEmboss };
+    enum class Technique { Smooth, ChiselHard, ChiselSoft };
+    EffectBlend highlightMode = EffectBlend::Screen; StyleColor highlight{255, 255, 255}; float highlightOpacity = 0.75f;
+    EffectBlend shadowMode = EffectBlend::Multiply; StyleColor shadow; float shadowOpacity = 0.75f;
+    float angle = 120, altitude = 30, depth = 1, size = 5, soften = 0; bool up = true, useGlobalLight = false;
+    Kind kind = Kind::Inner; Technique technique = Technique::Smooth;
+    StyleContour gloss; bool glossAntialiased = false;
+    bool useContour = false; StyleContour contour; bool contourAntialiased = false; float contourRange = 0.5f;
+    bool useTexture = false; std::string texturePattern; float textureScale = 1, textureDepth = 1;
+    bool textureInvert = false, textureLinkWithLayer = true; float texturePhaseX = 0, texturePhaseY = 0;
+    bool enabled = true;   // off: kept for the Layer Style dialog, not drawn
+};
+
+struct LayerStyle {
+    bool visible = true;               // masterFXSwitch
+    bool maskHidesEffects = false;     // lmgm
+    bool blendInteriorAsGroup = false; // infx
+    std::vector<DropShadow> dropShadows;
+    std::vector<InnerShadow> innerShadows;
+    std::vector<OuterGlow> outerGlows;
+    std::vector<InnerGlow> innerGlows;
+    std::vector<ColorOverlay> colorOverlays;
+    std::vector<GradientOverlay> gradientOverlays;
+    std::vector<PatternOverlay> patternOverlays;
+    std::vector<Satin> satins;
+    std::vector<Stroke> strokes;
+    std::vector<Bevel> bevels;
+    /// The layers's effects reference point ('fxrp'), for patterns linked with the layer.
+    double referenceX = 0, referenceY = 0;
+    /// Blending Options' Blend If, for the Layer Style dialog and Copy/Paste Layer Style: it lives in the record's
+    /// blending ranges, not in the effects block, so setLayerStyle leaves it alone (the editor applies it with
+    /// setLayerBlendIf); none leaves the layer's ranges as they are.
+    std::optional<BlendIf> blendIf;
+    /// Advanced Blending's Channels, the same way: the channels left out of the layer's blending (bit k: colour channel
+    /// k; setLayerExcludedChannels applies it); none leaves the layer's as they are.
+    std::optional<uint8_t> excludedChannels;
+    bool empty() const;
+    /// How far, in document pixels, the effects reach past the layer's pixels (or read past them).
+    double reach() const;
+};
+
+/// A layer's style, parsed once per carried block and cached; null when the layer has none (or all are off).
+std::shared_ptr<const LayerStyle> layerStyleOf(const Layer& layer, const Document& document);
+
+// ---- Editing (the Layer Style dialog) ------------------------------------------------------------------------
+
+/// The layer's style for editing: every effect, the ones switched off too (`enabled` false), with global-light
+/// angles resolved; an empty style when the layer has none.
+LayerStyle editableLayerStyle(const Layer& layer, const Document& document);
+/// The 'lfx2' block for `style` (Photoshop 2026's descriptor shapes, Patchy's authoring): each kind of effect as one
+/// object, or its '...Multi' list when there are several.
+std::vector<uint8_t> authorLayerStyleBlock(const LayerStyle& style);
+/// Gives the layer `style`: its carried effects blocks ('lfx2', 'lmfx', 'lfxs', 'lrFX') are replaced by one authored
+/// 'lfx2', or removed when the style has no effects at all; 'lmgm' and 'infx' follow the style's two options.
+void setLayerStyle(Layer& layer, const LayerStyle& style);
+/// Whether the style has any effect, on or off.
+bool hasAnyEffect(const LayerStyle& style);
+/// The style as JSON (automation's layers.style_get), and back: keys left out keep their defaults, unknown ones are
+/// refused with `error`.
+std::string layerStyleToJson(const LayerStyle& style);
+bool layerStyleFromJson(const std::string& json, LayerStyle& out, std::string* error);
+
+/// The document's patterns (Photoshop 'Patt' blocks), by id, straight RGBA; parsed once per document carry. A pattern
+/// stored at 16 bits keeps its samples at 15 bits (0..32768, straight) in `rgba16` too, for 16- and 32-bit documents;
+/// `rgba` is then those samples rounded to 8 bits.
+struct PatternTile { int width = 0, height = 0; std::vector<uint8_t> rgba; std::vector<uint16_t> rgba16; };
+std::shared_ptr<const std::map<std::string, PatternTile>> documentPatterns(const Document& document);
+/// The patterns of one 'Patt'-shaped payload (length-prefixed pattern records), by id.
+std::map<std::string, PatternTile> parsePatternBlock(const std::vector<uint8_t>& payload);
+/// An effects block in the 'lfx2' shape (u32 version, u32 16, descriptor) as an editable style, the effects that are
+/// off kept (a style preset's 'Lefx'); none when it cannot be read. Global-light flags stay as they are.
+std::optional<LayerStyle> parseLayerStyleBlock(const std::vector<uint8_t>& block);
+
+/// The document's global light (image resources 1037 and 1049), in degrees.
+void documentGlobalLight(const Document& document, float& angle, float& altitude);
+
+/// A fill layer's or a shape stroke's gradient from its descriptor block (u32 16 + descriptor, or the descriptor
+/// object itself); none when it has no gradient.
+std::optional<StyleGradient> parseFillGradient(const std::vector<uint8_t>& block);
+/// A fill layer's pattern ('PtFl'): the pattern id, scale, angle and phase.
+struct FillPattern { std::string id; float scale = 1, angle = 0, phaseX = 0, phaseY = 0; bool linked = true; };
+std::optional<FillPattern> parseFillPattern(const std::vector<uint8_t>& block);
+/// And the blocks themselves, as Photoshop writes a gradient ('GdFl') or pattern ('PtFl') fill (u32 16 + descriptor,
+/// padded to 4); `name` is the pattern's name (its id when empty).
+std::vector<uint8_t> authorGradientFill(const StyleGradient& gradient);
+std::vector<uint8_t> authorPatternFill(const FillPattern& pattern, const std::string& name = std::string());
+
+/// The layer's master opacity (its effects and pixels) and Fill (its pixels alone), within 0..1.
+void layerOpacities(const Layer& layer, float& master, float& fill);
+
+// ---- Pieces the renderer uses (layerstyle_render.cpp) --------------------------------------------------------
+
+/// `backdrop` (straight 0..1) blended with `source` in `mode`.
+void effectBlend(EffectBlend mode, const float backdrop[3], const float source[3], float out[3]);
+/// The layer blend mode an effect's mode is (Normal for one with none).
+BlendMode effectBlendMode(EffectBlend mode);
+/// One channel of a separable mode's blend, as effectBlend computes it (`mode` not Hue, Saturation, Color, Luminosity,
+/// Darker Color or Lighter Color).
+float effectBlendChannel(EffectBlend mode, float backdrop, float source);
+/// A gradient's position (0..1) at document pixel (x, y) over `bounds` (document pixels).
+float gradientPosition(const StyleGradient& g, double boundsX, double boundsY, double boundsW, double boundsH, double x, double y);
+StyleColor gradientColor(const StyleGradient& g, float position);
+/// The same unrounded (0..255, not clamped), for drawing at 16 bits.
+void gradientColorExact(const StyleGradient& g, float position, double out[3]);
+float gradientOpacity(const StyleGradient& g, float position);
+
+} // namespace nekophoto

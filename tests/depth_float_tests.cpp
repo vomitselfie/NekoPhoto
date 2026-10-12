@@ -4,18 +4,18 @@
 // to the same 8-bit pixels.
 #include "check.h"
 #include "float_reference.h"
-#include "compositor/blend.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/layerstyle.h"
-#include "compositor/render.h"
-#include "compositor/view32.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/render.h"
+#include "nekophoto/view32.h"
 #include <cmath>
 #include <limits>
 #include <cstring>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

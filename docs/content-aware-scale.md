@@ -13,7 +13,7 @@ give way; faces, buildings and text keep their proportions.
 
 ## How it works
 
-`compositor/seamcarve.h` (core, Qt-free). The energy is the gradient magnitude over RGBA (premultiplied), with
+`nekophoto/seamcarve.h` (core, Qt-free). The energy is the gradient magnitude over RGBA (premultiplied), with
 a large cost on protected pixels. Rather than one seam per cumulative-energy pass, each pass takes up to 1/32
 of the current width in disjoint seams: the lowest-cost bottom ends first, each traced back through the
 cumulative map while it stays clear of the seams already taken (a seam that would run into one is dropped).

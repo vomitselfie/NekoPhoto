@@ -16,7 +16,7 @@
 #include <QRadioButton>
 #include <QVBoxLayout>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app::color {
 

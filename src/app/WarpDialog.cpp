@@ -29,7 +29,7 @@ WarpDialog::WarpDialog(EditorSession* session, QWidget* parent) : QDialog(parent
     auto* form = new QFormLayout;
     style_ = new QComboBox;
     // Text can lose its warp; other layers are bent for good (or baked into a smart object).
-    const compositor::Layer* layer = session->activeLayer();
+    const nekophoto::Layer* layer = session->activeLayer();
     const bool text = layer && layer->isLiveText();
     if (text) style_->addItem(tr("None"), QString());
     for (auto& [name, id] : styles()) style_->addItem(tr(name), QString::fromLatin1(id));
@@ -42,7 +42,7 @@ WarpDialog::WarpDialog(EditorSession* session, QWidget* parent) : QDialog(parent
     orientation_->addItems({tr("Horizontal"), tr("Vertical")});
     form->addRow(tr("Orientation"), orientation_);
     auto spin = [](int value) { auto* s = new QSpinBox; s->setRange(-100, 100); s->setSuffix(" %"); s->setValue(value); return s; };
-    const compositor::TextWarp current = text ? layer->text->warp : compositor::TextWarp{};
+    const nekophoto::TextWarp current = text ? layer->text->warp : nekophoto::TextWarp{};
     bend_ = spin(current.active() ? int(current.bend) : 50);
     horizontal_ = spin(int(current.horizontal));
     vertical_ = spin(int(current.vertical));
@@ -59,7 +59,7 @@ WarpDialog::WarpDialog(EditorSession* session, QWidget* parent) : QDialog(parent
 
 void WarpDialog::accept() {
     if (!session_) { QDialog::accept(); return; }
-    compositor::TextWarp warp;
+    nekophoto::TextWarp warp;
     warp.style = style_->currentData().toString().toStdString();
     warp.bend = bend_->value();
     warp.horizontal = horizontal_->value();

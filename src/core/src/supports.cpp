@@ -1,8 +1,8 @@
-#include "compositor/supports.h"
-#include "compositor/colormgmt.h"
+#include "nekophoto/supports.h"
+#include "nekophoto/colormgmt.h"
 #include <string>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 constexpr SampleTypes eightAndSixteen = onlyEightBit | sampleTypeBit(SampleType::U16);
@@ -113,7 +113,7 @@ constexpr FeatureSupport table[] = {
     // Filter > Remove Background: the model and the refinement's guide see the layer reduced to 8 bits, the matte
     // stays float (AlphaPlane) and is committed as a 16-bit mask, and Clean edge colours works at 16 bits.
     {"edit.removeBackground", eightAndSixteen},
-    // Filter > Mosh (compositor/mosh.h, pixels.mosh): straight float colour at either depth.
+    // Filter > Mosh (nekophoto/mosh.h, pixels.mosh): straight float colour at either depth.
     {"filter.Mosh", eightAndSixteen},
     // Selections at the document's depth: the marquee, lasso, Magic Wand and Quick Select tools (they read the
     // canvas as shown, in 8-bit levels, and make 16-bit coverage; at 32 bits they read decisionImage(), exposure 0,
@@ -576,4 +576,4 @@ bool supports(AdjustmentKind kind, SampleType type) {
     return supports(std::string("adjustment.") + adjustmentKindName(kind), type);
 }
 
-} // namespace compositor
+} // namespace nekophoto

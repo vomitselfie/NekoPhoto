@@ -11,12 +11,12 @@ nekophoto (started with --rpc, or with the automation preference on) or
 launches one itself.
 
 Environment:
-  COMPOSITOR_RPC_SOCKET  socket path (default $XDG_RUNTIME_DIR/nekophoto.sock, else Qt's private
+  NEKOPHOTO_RPC_SOCKET  socket path (default $XDG_RUNTIME_DIR/nekophoto.sock, else Qt's private
                          /tmp/runtime-<user>/, never the shared /tmp itself; on Windows the named
                          pipe nekophoto-<user>)
-  COMPOSITOR_BIN         binary to launch when nothing is listening (default: nekophoto on PATH,
+  NEKOPHOTO_BIN         binary to launch when nothing is listening (default: nekophoto on PATH,
                          else the build next to this file)
-  COMPOSITOR_MCP_LAUNCH  "0" to never launch the app; "headless" to launch it without a window
+  NEKOPHOTO_MCP_LAUNCH  "0" to never launch the app; "headless" to launch it without a window
 """
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def outside(title: str, **options: Any):
 
 
 def socket_path() -> str:
-    env = os.environ.get("COMPOSITOR_RPC_SOCKET")
+    env = os.environ.get("NEKOPHOTO_RPC_SOCKET", os.environ.get("COMPOSITOR_RPC_SOCKET"))
     if env:
         return env
     if os.name == "nt":
@@ -81,7 +81,7 @@ def private_runtime_dir() -> str:
     os.makedirs(path, mode=0o700, exist_ok=True)
     info = os.lstat(path)
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
-        raise RuntimeError(f"{path} is not a private folder of this user; set XDG_RUNTIME_DIR or COMPOSITOR_RPC_SOCKET")
+        raise RuntimeError(f"{path} is not a private folder of this user; set XDG_RUNTIME_DIR or NEKOPHOTO_RPC_SOCKET")
     return path
 
 
@@ -123,10 +123,10 @@ class Connection:
             return
         except OSError:
             pass
-        mode = os.environ.get("COMPOSITOR_MCP_LAUNCH", "window")
+        mode = os.environ.get("NEKOPHOTO_MCP_LAUNCH", os.environ.get("COMPOSITOR_MCP_LAUNCH", "window"))
         if mode == "0":
             raise RuntimeError(f"NekoPhoto is not listening at {path}; start it with --rpc (or turn on Preferences > Automation)")
-        binary = os.environ.get("COMPOSITOR_BIN") or shutil.which("nekophoto")
+        binary = os.environ.get("NEKOPHOTO_BIN", os.environ.get("COMPOSITOR_BIN")) or shutil.which("nekophoto")
         if not binary:
             # The build next to this bridge (mcp/ sits in the source tree), never one relative to the current folder.
             candidate = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "src", "app",
@@ -134,7 +134,7 @@ class Connection:
             if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                 binary = candidate
         if not binary:
-            raise RuntimeError(f"nothing listening at {path} and no nekophoto binary found; set COMPOSITOR_BIN")
+            raise RuntimeError(f"nothing listening at {path} and no nekophoto binary found; set NEKOPHOTO_BIN")
         args = [binary, "--rpc", "--rpc-socket", path]
         if mode == "headless" or (os.name != "nt" and not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"))):
             args.append("--headless")

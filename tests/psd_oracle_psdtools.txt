@@ -1,7 +1,7 @@
 # Photoshop oracle over psd-tools' test files (MIT, https://github.com/psd-tools/psd-tools, tests/psd_files) (tests/psd_composite_oracle.cpp): each file's status and
 # numbers (max and mean in 8-bit levels, the share of pixels more than 2 levels off) when this was written.
 # A pass that fails, a file no longer compared, or a failure whose mean grows by more than a level fails the test.
-# Rewrite it after a change: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus psd-tools
+# Rewrite it after a change: NEKOPHOTO_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle --corpus psd-tools
 corpus psd-tools
 commit 96eb134c17b2c65edf4c4151c0f00b802ada86c2
 compared 285

@@ -1,17 +1,17 @@
 // EditorSession: The session: construction, the document, history, crop and canvas, tools and the view.
-#include "compositor/vectorlayer.h"
+#include "nekophoto/vectorlayer.h"
 #include "EditorSession.h"
 #include "ColorManagement.h"
-#include "compositor/depth.h"
-#include "compositor/supports.h"
-#include "compositor/smartfilter.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/supports.h"
+#include "nekophoto/smartfilter.h"
 #include "QtGeometry.h"
-#include "compositor/project.h"
+#include "nekophoto/project.h"
 #include <QFileInfo>
 #include <algorithm>
 #include <set>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -194,7 +194,7 @@ bool EditorSession::saveProject(const QString& path, QString* error) {
     // The watcher lets go first: on Windows its open handles on the package folder would block swapping it.
     stopWatchingProject();
     // The document itself, never a frame playback shows (endTemporaryLayers stops playback; this holds regardless).
-    if (!compositor::saveProject(documentToSave(), activeLayerId_, path.toStdString(), err)) {
+    if (!nekophoto::saveProject(documentToSave(), activeLayerId_, path.toStdString(), err)) {
         if (error) *error = QString::fromStdString(err.message);
         if (!projectPath_.isEmpty()) watchProject();
         return false;

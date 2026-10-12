@@ -1,8 +1,8 @@
 #include "ContentAwareScaleDialog.h"
-#include "compositor/depth.h"
+#include "nekophoto/depth.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
-#include "compositor/seamcarve.h"
+#include "nekophoto/seamcarve.h"
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -16,7 +16,7 @@
 #include <cmath>
 #include <cstring>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

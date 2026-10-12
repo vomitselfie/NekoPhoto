@@ -3,10 +3,10 @@
 #include "AutomationHandlers.h"
 #include "ImageConvert.h"
 #include "ModelStore.h"
-#include "compositor/scribble.h"
+#include "nekophoto/scribble.h"
 #include <algorithm>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {

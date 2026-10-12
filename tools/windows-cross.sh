@@ -46,7 +46,7 @@ docker run --rm "${it[@]}" -v "$root:/src:ro" -v "$volume:/build" -e "JOBS=$jobs
 set -e
 export WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=" QT_QPA_PLATFORM=offscreen
 unset DISPLAY WAYLAND_DISPLAY
-mingw64-cmake -S /src -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON \
+mingw64-cmake -S /src -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNEKOPHOTO_WARNINGS_AS_ERRORS=ON \
     -DOpenCV_DIR=/opt/opencv/lib/cmake/opencv4 >/build/configure.log || { tail -40 /build/configure.log; exit 1; }
 grep -E "^-- (Remove Background|Brushes|RAW|Brush import|Affinity|PDF|G.MIC|Appearance|Translations)" /build/configure.log || true
 [ "$SHELL_ONLY" = 1 ] && exec bash

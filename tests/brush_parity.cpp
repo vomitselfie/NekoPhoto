@@ -3,11 +3,11 @@
 // to change nothing must leave every line as it is; one that is meant to change something shows which strokes moved
 // and how (width, peak alpha, edge, taper). Every scene is painted on the worker pool and serially, which must agree.
 //
-// COMPOSITOR_UPDATE_BRUSH_PARITY=1 rewrites the baseline after an intentional change.
+// NEKOPHOTO_UPDATE_BRUSH_PARITY=1 rewrites the baseline after an intentional change.
 #include "check.h"
 #include "brush_harness.h"
-#include "compositor/mypaint.h"
-#include "compositor/parallel.h"
+#include "nekophoto/mypaint.h"
+#include "nekophoto/parallel.h"
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
@@ -58,7 +58,7 @@ std::map<std::string, std::string> readSection(const std::string& path, bool dee
 void writeBaseline(const std::string& path, const std::map<std::string, std::string>& eight, const std::map<std::string, std::string>& deep) {
     std::ofstream out(path);
     out << "# Brush parity baseline: <fixture>/<preset> <FNV-1a 64 of the layer's pixels> <measurements>, from tests/brush_parity.cpp.\n"
-           "# Regenerate after an intentional brush change: COMPOSITOR_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity\n";
+           "# Regenerate after an intentional brush change: NEKOPHOTO_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity\n";
     for (auto& [name, line] : eight) out << name << ' ' << line << '\n';
     if (deep.empty()) return;
     out << "# 16 bits: u16/<fixture>/<preset> <FNV-1a 64 of the 16-bit layer's samples> <measurements of it reduced to 8 bits>\n"
@@ -128,7 +128,7 @@ int compareSection(const std::map<std::string, std::string>& actual, const std::
             missing++;
         }
     if (changed || added || missing)
-        std::fprintf(stderr, "  %d changed, %d new, %d missing; COMPOSITOR_UPDATE_BRUSH_PARITY=1 rewrites %s\n", changed, added, missing, path.c_str());
+        std::fprintf(stderr, "  %d changed, %d new, %d missing; NEKOPHOTO_UPDATE_BRUSH_PARITY=1 rewrites %s\n", changed, added, missing, path.c_str());
     return changed + added + missing;
 }
 
@@ -466,7 +466,7 @@ TEST_CASE(every_fixture_and_preset_matches_the_baseline) {
     std::fprintf(stderr, "  %zu scenes (%zu fixtures x %zu presets, %d worker threads)\n", actual.size(), fixtures.size(), presets.size(), workerCount());
 
     const std::string path = BRUSH_PARITY_BASELINE;
-    if (std::getenv("COMPOSITOR_UPDATE_BRUSH_PARITY")) {
+    if (std::getenv("NEKOPHOTO_UPDATE_BRUSH_PARITY")) {
         writeBaseline(path, actual, readSection(path, true));
         std::fprintf(stderr, "  wrote %s\n", path.c_str());
         return;
@@ -519,7 +519,7 @@ TEST_CASE(every_fixture_and_preset_matches_the_baseline_at_16_bits) {
         std::fprintf(stderr, "  %-22s at 16 bits against 8: worst %d levels, at most %.3f%% of samples beyond a level\n", name.c_str(), c.worst, c.beyondOne * 100);
 
     const std::string path = BRUSH_PARITY_BASELINE;
-    if (std::getenv("COMPOSITOR_UPDATE_BRUSH_PARITY")) {
+    if (std::getenv("NEKOPHOTO_UPDATE_BRUSH_PARITY")) {
         writeBaseline(path, readSection(path, false), actual);
         std::fprintf(stderr, "  wrote the 16-bit section of %s\n", path.c_str());
         return;

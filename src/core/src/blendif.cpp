@@ -1,12 +1,12 @@
 // Blend If and Advanced Blending's Channels: the models, their bytes in a PSD layer record, and the gates the renderer
 // applies (blendif.h).
-#include "compositor/blendif.h"
-#include "compositor/document.h"
-#include "compositor/psd_carry.h"
+#include "nekophoto/blendif.h"
+#include "nekophoto/document.h"
+#include "nekophoto/psd_carry.h"
 #include <algorithm>
 #include <memory>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -172,4 +172,4 @@ float BlendIfGate::factor(const std::array<std::array<float, 256>, BlendIf::maxC
     return f;
 }
 
-} // namespace compositor
+} // namespace nekophoto

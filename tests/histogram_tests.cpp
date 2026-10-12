@@ -1,10 +1,10 @@
 // The Histogram panel's counts and statistics, cache levels, and the Levels / Curves clipping display at 8, 16 and
 // 32 bits and in CMYK and Lab.
 #include "check.h"
-#include "compositor/depth.h"
-#include "compositor/histogram.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/histogram.h"
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

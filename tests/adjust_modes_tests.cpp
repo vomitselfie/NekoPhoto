@@ -4,15 +4,15 @@
 // inks, Photo Filter and Exposure in Lab, the filters over five samples, the adjustment layer drawing what the pixel
 // edit makes, and the settings' extra CMYK slots kept out of RGB manifests.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/modeedit.h"
-#include "compositor/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/render.h"
 #include <cmath>
 #include <functional>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

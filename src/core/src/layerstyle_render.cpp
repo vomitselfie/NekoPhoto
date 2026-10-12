@@ -4,10 +4,10 @@
 // are ported from Patchy (MIT; src/render/layer_style_mask_ops.cpp and render/layer_compositor.hpp there),
 // which calibrated them against Photoshop 2026 COM renders; the comments there carry the probe details.
 #include "layerstyle_render.h"
-#include "compositor/blend.h"
-#include "compositor/imaget.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/imaget.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -15,7 +15,7 @@
 #include <optional>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 namespace {
 
 using Mask = std::vector<float>;
@@ -1323,4 +1323,4 @@ void drawStyledLayer(const StyledDraw& in, Image16& target) {
 }
 void drawStyledLayer(const StyledDraw& in, ImageF& target) { drawStyled<SampleType::F32, ColorMode::RGB>(in, target); }
 
-} // namespace compositor
+} // namespace nekophoto

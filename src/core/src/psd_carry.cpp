@@ -1,9 +1,9 @@
-#include "compositor/psd_carry.h"
-#include "compositor/depth.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/depth.h"
 #include <cstring>
 #include <set>
 
-namespace compositor {
+namespace nekophoto {
 
 PsdLayerCarry::Binding PsdLayerCarry::binding(const std::string& key) {
     // Text, smart objects (placed, embedded, linked, with their filters), fill layers, and the adjustment
@@ -259,4 +259,4 @@ std::shared_ptr<const PsdChannelCarry> parsePsdChannelCarry(const std::vector<ui
     return c;
 }
 
-} // namespace compositor
+} // namespace nekophoto

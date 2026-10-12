@@ -9,7 +9,7 @@
 #include <cmath>
 #include <map>
 
-namespace compositor {
+namespace nekophoto {
 
 using namespace photoshop;
 
@@ -267,4 +267,4 @@ std::optional<BrushImport> readAbr(const uint8_t* data, size_t size, const std::
     return std::nullopt;
 }
 
-} // namespace compositor
+} // namespace nekophoto

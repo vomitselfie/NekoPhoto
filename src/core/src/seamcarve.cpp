@@ -1,13 +1,13 @@
-#include "compositor/seamcarve.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
+#include "nekophoto/seamcarve.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <numeric>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 namespace {
 
 // The working image: packed RGBA pixels and protection, rows of `w` live pixels in a buffer of `stride`.
@@ -326,4 +326,4 @@ Image16 seamCarve(const Image16& image, int width, int height, const SeamCarveOp
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

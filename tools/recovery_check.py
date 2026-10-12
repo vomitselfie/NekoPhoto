@@ -40,7 +40,7 @@ shutil.copytree(proj, dead + "/e.comp"); open(dead + "/e.json", "w").write(meta(
 shutil.copytree(proj, dead + "/f.comp"); open(dead + "/f.json", "w").write(meta("Folder", folder))    # saved before as .comp
 os.remove(single); shutil.rmtree(folder)   # Save must write them again, each in its own form
 # 3. Launch, answering recover.
-p, r = run({"COMPOSITOR_RECOVERY_ANSWER": "recover"}, [])
+p, r = run({"NEKOPHOTO_RECOVERY_ANSWER": "recover"}, [])
 time.sleep(2)
 try:
     tabs = r.call("tabs.list")

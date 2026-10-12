@@ -1,7 +1,7 @@
 # Work counters
 
 Timing tests are flaky on a shared machine and on CI, so regressions in *how much work* an operation does are caught
-by counting it instead. `compositor/workcounters.h` keeps a handful of counters that the core bumps once per call
+by counting it instead. `nekophoto/workcounters.h` keeps a handful of counters that the core bumps once per call
 (never per pixel) with the area that call covered; two ctest suites run fixed, scripted workloads and assert upper
 bounds on them. The benchmarks in [benchmarks.md](benchmarks.md) and [brush-latency.md](brush-latency.md) still say
 how *fast* the work is; these tests say how much of it there is, and they run in every ctest.

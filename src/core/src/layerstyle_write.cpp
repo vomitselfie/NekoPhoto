@@ -1,8 +1,8 @@
 // Layer styles written back as Photoshop's 'lfx2' descriptor (layerstyle.h), for the Layer Style dialog. The shapes,
 // key order and id forms are Patchy's authoring (MIT, src/third_party/patchy_psd/README.md), which pinned each against
 // what Photoshop 2026 writes: Photoshop resets some effects whose descriptor is not laid out as its own.
-#include "compositor/document.h"
-#include "compositor/layerstyle.h"
+#include "nekophoto/document.h"
+#include "nekophoto/layerstyle.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -10,7 +10,7 @@
 
 namespace psd = patchy::psd;
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -387,4 +387,4 @@ void setLayerStyle(Layer& layer, const LayerStyle& style) {
     layer.psdCarry = std::move(carry);
 }
 
-} // namespace compositor
+} // namespace nekophoto

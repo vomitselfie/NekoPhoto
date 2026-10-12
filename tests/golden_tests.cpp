@@ -1,17 +1,17 @@
 // Golden image tests: known layer stacks rendered and compared with reference
-// PNGs under tests/golden. Set COMPOSITOR_UPDATE_GOLDEN=1 to rewrite the
+// PNGs under tests/golden. Set NEKOPHOTO_UPDATE_GOLDEN=1 to rewrite the
 // references after an intentional rendering change. A small tolerance absorbs
 // rounding differences between math paths.
 #include "check.h"
-#include "compositor/document.h"
-#include "compositor/png.h"
-#include "compositor/render.h"
+#include "nekophoto/document.h"
+#include "nekophoto/png.h"
+#include "nekophoto/render.h"
 
 #include <cstdlib>
 #include <filesystem>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 namespace {
@@ -46,7 +46,7 @@ Layer layerOf(const std::string& name, std::shared_ptr<Image> image, Point origi
 void compareGolden(const std::string& name, const Image& rendered) {
     fs::path dir(GOLDEN_DIR);
     fs::path file = dir / (name + ".png");
-    bool update = std::getenv("COMPOSITOR_UPDATE_GOLDEN") != nullptr;
+    bool update = std::getenv("NEKOPHOTO_UPDATE_GOLDEN") != nullptr;
     std::string error;
     if (update || !fs::exists(file)) {
         fs::create_directories(dir);

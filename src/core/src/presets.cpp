@@ -3,17 +3,17 @@
 // pat_reader.cpp, grd_io.cpp and psd_patterns.cpp there. The effects inside a style are read by the lfx2 parser
 // (layerstyle.cpp) and pattern pixels by the 'Patt' decoder, since an .asl's 'Lefx' and a .pat's records are the same
 // structures a PSD carries.
-#include "compositor/presets.h"
-#include "compositor/document.h"
-#include "compositor/psd_carry.h"
-#include "compositor/uuid.h"
+#include "nekophoto/presets.h"
+#include "nekophoto/document.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/uuid.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
 #include <set>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace psd = patchy::psd;
 
@@ -544,4 +544,4 @@ std::vector<uint8_t> writeGrd(const std::vector<GradientPreset>& gradients) {
     return w.bytes();
 }
 
-} // namespace compositor
+} // namespace nekophoto

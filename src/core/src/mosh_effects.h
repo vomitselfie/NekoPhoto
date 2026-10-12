@@ -4,7 +4,7 @@
 #include <functional>
 #include <string_view>
 
-namespace compositor::mosh {
+namespace nekophoto::mosh {
 
 /// Receives each finished output row, straight colour.
 using RowSink = std::function<void(int y, const rt::vec4* row)>;
@@ -14,4 +14,4 @@ using EffectFn = void (*)(const rt::Frame& in, const rt::Uniforms& u, const RowS
 /// The effect with OpenMosh id `id`; null when it is not ported.
 EffectFn effectFunction(std::string_view id);
 
-} // namespace compositor::mosh
+} // namespace nekophoto::mosh

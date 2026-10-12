@@ -6,7 +6,7 @@ Every reply must be a JSON-RPC error or result, in time; the editor must never d
 the request that caused it, the editor is started again and the hunt goes on; the exit status is 1 if anything died,
 hung or answered out of protocol.
 
-    COMPOSITOR_BIN=build/src/app/nekophoto python3 tools/rpc_panic_hunt.py [--only REGEX] [--budget SECONDS]
+    NEKOPHOTO_BIN=build/src/app/nekophoto python3 tools/rpc_panic_hunt.py [--only REGEX] [--budget SECONDS]
 
 Writes are contained: the editor runs with --rpc-write-root in a temporary folder and its settings, presets and
 actions in temporary XDG folders. Methods in SKIP are never called (each with its reason).
@@ -390,7 +390,7 @@ def snapshot_demo(ed, work, ctx):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--bin", default=os.environ.get("COMPOSITOR_BIN", os.path.join(ROOT, "build", "src", "app", "nekophoto")))
+    ap.add_argument("--bin", default=os.environ.get("NEKOPHOTO_BIN", os.environ.get("COMPOSITOR_BIN", os.path.join(ROOT, "build", "src", "app", "nekophoto"))))
     ap.add_argument("--only", help="only methods matching this regular expression (the deep phase runs when it matches 'deep')")
     ap.add_argument("--timeout", type=float, default=10, help="seconds one reply may take; longer is reported as a hang (default 10)")
     ap.add_argument("--budget", type=float, default=0, help="stop starting new methods after this many seconds (0: no limit)")
@@ -402,7 +402,7 @@ def main():
     ap.add_argument("--deep", type=int, default=1000, help="at most this many settings mutations, spread evenly (0: all of them)")
     args = ap.parse_args()
     if not os.path.exists(args.bin):
-        raise SystemExit(f"no editor at {args.bin}; build it or set COMPOSITOR_BIN")
+        raise SystemExit(f"no editor at {args.bin}; build it or set NEKOPHOTO_BIN")
 
     work = tempfile.mkdtemp(prefix="nphunt")
     ed = Editor(args.bin, work, args.timeout)

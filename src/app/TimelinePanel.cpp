@@ -1,8 +1,8 @@
 #include "TimelinePanel.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
-#include "compositor/animation.h"
-#include "compositor/render.h"
+#include "nekophoto/animation.h"
+#include "nekophoto/render.h"
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -17,7 +17,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -249,7 +249,7 @@ void TimelinePanel::refreshThumbnails() {
         Image out(w, h);
         RenderOptions options;
         options.scale = scale;
-        compositor::render(copy, options, out);
+        nekophoto::render(copy, options, out);
         QPixmap pixmap(thumbSize, thumbSize);
         pixmap.fill(Qt::transparent);
         QPainter p(&pixmap);

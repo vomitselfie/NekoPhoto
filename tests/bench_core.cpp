@@ -6,19 +6,19 @@
 // "worst-case brush" (report only, no threshold; run with the filter "worst"): a 10-second recorded tip-brush stroke with every per-dab feature at
 // once on a 4096 x 4096 layer at 8 and 16 bits, with its wall time, samples and dabs per second, and the most memory
 // the stroke held beyond what was held before it (sampled every millisecond, on glibc).
-#include "compositor/colormgmt.h"
-#include "compositor/adjustments.h"
-#include "compositor/brush.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/filters.h"
-#include "compositor/history.h"
-#include "compositor/layerstyle.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/mosh.h"
-#include "compositor/parallel.h"
-#include "compositor/render.h"
-#include "compositor/tipbrush.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/history.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/mosh.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/render.h"
+#include "nekophoto/tipbrush.h"
 #include "render_plan.h"
 
 #include <algorithm>
@@ -33,7 +33,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 // ---- Memory while a bench runs -------------------------------------------------------------------------------------
 // A thread samples, every millisecond, the bytes malloc holds (glibc's mallinfo2: the heap and the blocks it maps,

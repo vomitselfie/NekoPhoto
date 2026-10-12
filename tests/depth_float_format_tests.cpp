@@ -4,12 +4,12 @@
 // have none): the file is built here the way Photoshop lays one out (layers in an 'Lr32' block, big-endian floats,
 // zip with PSD's byte-planar prediction and raw channels, a float mask), which is weaker evidence than a real file.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/project.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <zlib.h>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 using Bytes = std::vector<uint8_t>;
 

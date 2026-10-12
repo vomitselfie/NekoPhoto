@@ -1,14 +1,14 @@
 // Colour management (colormgmt.h): profiles, transforms against Little CMS and analytic references, premultiplied
 // 8- and 16-bit conversion, soft proofing, transfer curves, Convert to Profile over a document.
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/png.h"
-#include "compositor/project.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/png.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
 #include <filesystem>
 #include "lcms2.h"
 #include <array>
@@ -16,7 +16,7 @@
 #include <cstring>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

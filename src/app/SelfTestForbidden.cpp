@@ -13,13 +13,13 @@
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "Theme.h"
-#include "compositor/channels.h"
-#include "compositor/depth.h"
-#include "compositor/psd.h"
-#include "compositor/psd_carry.h"
-#include "compositor/render.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/channels.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/render.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
 #include <QAction>
 #include <QApplication>
 #include <QElapsedTimer>
@@ -34,7 +34,7 @@
 #include <cstdlib>
 #include <cstring>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

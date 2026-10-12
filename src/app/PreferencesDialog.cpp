@@ -327,7 +327,7 @@ void PreferencesDialog::syncGmic() {
     if (busy) gmicStatus_->setText(tr("Downloading G'MIC %1…").arg(GmicStore::pinned().version));
     else if (found.source == QLatin1String("downloaded")) gmicStatus_->setText(tr("Downloaded G'MIC %1, in %2.").arg(GmicRunner::version(), QDir::toNativeSeparators(QFileInfo(found.path).absolutePath())));
     else if (!found.path.isEmpty()) {
-        const QString where = found.source == QLatin1String("env") ? tr("set by COMPOSITOR_GMIC")
+        const QString where = found.source == QLatin1String("env") ? tr("set by NEKOPHOTO_GMIC")
                             : found.source == QLatin1String("beside") ? tr("beside NekoPhoto")
                                                                       : tr("on PATH");
         gmicStatus_->setText(tr("G'MIC %1 found at %2 (%3).").arg(GmicRunner::version(), QDir::toNativeSeparators(found.path), where));

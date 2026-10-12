@@ -1,14 +1,14 @@
 // The typed image skeleton for high bit depth (docs/high-bit-depth-plan.md, P1): sample traits, ImageT,
 // GrayImageT, the AnyImage / AnyGray holders that layers, masks and the selection keep, and the supports() registry.
 #include "check.h"
-#include "compositor/imaget.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/history.h"
-#include "compositor/supports.h"
+#include "nekophoto/imaget.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/history.h"
+#include "nekophoto/supports.h"
 #include <type_traits>
 
-using namespace compositor;
+using namespace nekophoto;
 
 static_assert(std::is_same_v<ImageOf<SampleType::U8>, Image>);
 static_assert(std::is_same_v<GrayOf<SampleType::U8>, GrayImage>);

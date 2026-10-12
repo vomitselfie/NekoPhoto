@@ -70,8 +70,8 @@ private:
     EditorSession* session_;
     bool layer_ = false, ready_ = false;
     QString why_;
-    std::optional<compositor::Document> solo_;
-    const compositor::Document* source_ = nullptr;
+    std::optional<nekophoto::Document> solo_;
+    const nekophoto::Document* source_ = nullptr;
     QSize sourceSize_;
     QString format_;
     QMap<QString, exportas::Settings> settings_;

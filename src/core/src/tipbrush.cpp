@@ -1,7 +1,7 @@
-#include "compositor/tipbrush.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/png.h"
+#include "nekophoto/tipbrush.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/png.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <array>
@@ -11,7 +11,7 @@
 #include <sstream>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace fs = std::filesystem;
 
@@ -691,4 +691,4 @@ std::shared_ptr<Image> renderTipPreview(const TipPreset& preset, int width, int 
     return std::make_shared<Image>(*grid.previewImage());
 }
 
-} // namespace compositor
+} // namespace nekophoto

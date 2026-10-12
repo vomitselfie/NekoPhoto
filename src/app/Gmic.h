@@ -1,11 +1,11 @@
 // G'MIC (gmic.eu), the open-source filter framework: a filter runs on a layer's pixels through the
-// `gmic` executable and a PNG round trip, or, when the build found libgmic and COMPOSITOR_GMIC_INPROCESS
+// `gmic` executable and a PNG round trip, or, when the build found libgmic and NEKOPHOTO_GMIC_INPROCESS
 // is set, in-process through one interpreter kept warm with the catalogue's commands; the filter
 // catalogue comes from G'MIC's own definition file (the `#@gui` lines the G'MIC-Qt plugin reads), so
 // every filter it lists is available.
 #pragma once
-#include "compositor/image.h"
-#include "compositor/imaget.h"
+#include "nekophoto/image.h"
+#include "nekophoto/imaget.h"
 #include <QObject>
 #include <QString>
 #include <QHash>
@@ -83,9 +83,9 @@ public:
 
     /// G'MIC can run: the library is built in, or the executable was found (locate()).
     static bool available();
-    /// Filters run in-process through libgmic (no PNG round trip): built in and COMPOSITOR_GMIC_INPROCESS set.
+    /// Filters run in-process through libgmic (no PNG round trip): built in and NEKOPHOTO_GMIC_INPROCESS set.
     static bool inProcess();
-    /// Where the `gmic` executable was found, looked for in this order: COMPOSITOR_GMIC ("env"); a `gmic` folder
+    /// Where the `gmic` executable was found, looked for in this order: NEKOPHOTO_GMIC ("env"); a `gmic` folder
     /// beside the app's executable, as someone unpacks G'MIC next to a portable NekoPhoto ("beside"); the copy
     /// GmicStore downloads into the app's data folder ("downloaded"); then PATH ("path"). Empty when none.
     struct Location { QString path, source; };
@@ -108,34 +108,34 @@ public:
     /// Whether automation may run `command`. G'MIC is a full language (it can run shell commands, read and
     /// write files, and fetch URLs), so a command from outside, where a prompt could have written it, must be
     /// filter names from the catalogue or a short list of built-ins, each followed only by numbers; no
-    /// strings, paths, substitutions or definitions. COMPOSITOR_GMIC_UNRESTRICTED=1 lifts the check.
+    /// strings, paths, substitutions or definitions. NEKOPHOTO_GMIC_UNRESTRICTED=1 lifts the check.
     static bool allowedForAutomation(const QString& command, QString* why);
     /// Runs `command` on premultiplied RGBA `source`; the result has the same size or `error` says why not.
-    static std::shared_ptr<compositor::Image> runSync(const compositor::Image& source, const QString& command, QString* error, int timeoutMs = 300000);
+    static std::shared_ptr<nekophoto::Image> runSync(const nekophoto::Image& source, const QString& command, QString* error, int timeoutMs = 300000);
     /// The same on a 16-bit layer. G'MIC works in float on the 0..255 scale either way: the 16-bit pixels go in as
     /// straight float colour on that scale (unrounded), in-process or through a float .cimg file for the executable,
     /// and come back to 16 bits, so nothing is reduced to 8 bits on the way.
-    static std::shared_ptr<compositor::Image16> runSync(const compositor::Image16& source, const QString& command, QString* error, int timeoutMs = 300000);
+    static std::shared_ptr<nekophoto::Image16> runSync(const nekophoto::Image16& source, const QString& command, QString* error, int timeoutMs = 300000);
 
     /// Starts an asynchronous run; `finished` reports the result (null on failure) and the error.
     /// Stopped with an error after `timeoutMs` (0: no limit), so a filter that never ends cannot hang the dialog.
-    void start(std::shared_ptr<const compositor::Image> source, const QString& command, int timeoutMs = 0);
+    void start(std::shared_ptr<const nekophoto::Image> source, const QString& command, int timeoutMs = 0);
     /// The same on a 16-bit layer; `finished16` reports it.
-    void start(std::shared_ptr<const compositor::Image16> source, const QString& command, int timeoutMs = 0);
+    void start(std::shared_ptr<const nekophoto::Image16> source, const QString& command, int timeoutMs = 0);
     void cancel();
     bool running() const;
 
 signals:
-    void finished(std::shared_ptr<compositor::Image> result, QString error);
-    void finished16(std::shared_ptr<compositor::Image16> result, QString error);
+    void finished(std::shared_ptr<nekophoto::Image> result, QString error);
+    void finished16(std::shared_ptr<nekophoto::Image16> result, QString error);
 
 private:
     QProcess* process_ = nullptr;
     QTimer* limit_ = nullptr;
     std::unique_ptr<QTemporaryDir> dir_;
     // The executable run's source, for its size and the alpha a gray or RGB result keeps.
-    std::shared_ptr<const compositor::Image> source8_;
-    std::shared_ptr<const compositor::Image16> source16_;
+    std::shared_ptr<const nekophoto::Image> source8_;
+    std::shared_ptr<const nekophoto::Image16> source16_;
     // The in-process path: a worker thread, an abort flag the interpreter polls, and a run number so a
     // cancelled run's result is dropped.
     std::thread worker_;

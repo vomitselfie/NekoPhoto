@@ -1,7 +1,7 @@
 # PSD round trip
 
 Opening a PSD and exporting it as PSD again gives back what NekoPhoto does not model, as long as it is
-still true of the layer. The model is `src/core/include/compositor/psd_carry.h`; the importer
+still true of the layer. The model is `src/core/include/nekophoto/psd_carry.h`; the importer
 (`psd.cpp`) fills it, the writer (`psd_writer.cpp`) writes it back, and the project package keeps it
 (`images/<layer id>.psdcarry`, `images/document.psdcarry`), so a PSD can be saved as a project,
 reopened and still exported with everything carried.

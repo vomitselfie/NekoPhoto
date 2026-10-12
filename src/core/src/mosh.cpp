@@ -1,15 +1,15 @@
 // Mosh: the effect registry, the runtime's maths and the conversion between premultiplied pixels and the runtime's
-// straight frames (compositor/mosh.h, mosh_runtime.h). The effects themselves are in mosh_effects.cpp.
+// straight frames (nekophoto/mosh.h, mosh_runtime.h). The effects themselves are in mosh_effects.cpp.
 //
 // The registry is OpenMosh's (MIT, crates/mosh-core/src/registry.rs): ids, labels, ranges and defaults as it has
 // them, so presets and parameter values carry over.
-#include "compositor/mosh.h"
+#include "nekophoto/mosh.h"
 #include "mosh_effects.h"
 #include "mosh_runtime.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor::mosh {
+namespace nekophoto::mosh {
 
 namespace {
 
@@ -499,4 +499,4 @@ std::shared_ptr<Image16> onGrid(const Image16& image, const Affine& imageToDocum
     return onGridOf(image, imageToDocument, gridToDocument, width, height);
 }
 
-} // namespace compositor::mosh
+} // namespace nekophoto::mosh

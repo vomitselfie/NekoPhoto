@@ -3,7 +3,7 @@
 // File ▸ Import Presets… and automation's presets.import fill it; Layer ▸ Layer Style ▸ Apply Style, the Gradient
 // tool's preset list and the Layer Style dialog's gradient rows read it. See docs/presets.md.
 #pragma once
-#include "compositor/presets.h"
+#include "nekophoto/presets.h"
 #include <QColor>
 #include <QObject>
 #include <QStringList>
@@ -21,17 +21,17 @@ public:
     /// Where the files live (created on the first save).
     static QString folder();
 
-    const std::vector<compositor::StylePreset>& styles();
-    const std::vector<compositor::PatternPreset>& patterns();
-    const std::vector<compositor::GradientPreset>& gradients();
-    const compositor::StylePreset* findStyle(const QString& name);
-    const compositor::GradientPreset* findGradient(const QString& name);
+    const std::vector<nekophoto::StylePreset>& styles();
+    const std::vector<nekophoto::PatternPreset>& patterns();
+    const std::vector<nekophoto::GradientPreset>& gradients();
+    const nekophoto::StylePreset* findStyle(const QString& name);
+    const nekophoto::GradientPreset* findGradient(const QString& name);
     /// The library's patterns a style uses (the ones it has).
-    std::vector<compositor::PatternPreset> patternsFor(const compositor::LayerStyle& style);
+    std::vector<nekophoto::PatternPreset> patternsFor(const nekophoto::LayerStyle& style);
 
     struct ImportResult {
         QStringList styles, patterns, gradients;   // names imported
-        std::vector<compositor::PatternPreset> importedPatterns;   // the .pat files' patterns (to give the open document)
+        std::vector<nekophoto::PatternPreset> importedPatterns;   // the .pat files' patterns (to give the open document)
         QStringList notes, errors;
     };
     /// Imports .asl, .pat and .grd files. A style or gradient with the name of one already there replaces it; a
@@ -51,16 +51,16 @@ private:
     void load();
     void save();
     bool loaded_ = false;
-    std::vector<compositor::StylePreset> styles_;
-    std::vector<compositor::PatternPreset> patterns_;
-    std::vector<compositor::GradientPreset> gradients_;
+    std::vector<nekophoto::StylePreset> styles_;
+    std::vector<nekophoto::PatternPreset> patterns_;
+    std::vector<nekophoto::GradientPreset> gradients_;
 };
 
 /// A shape's gradient fill from the gradient preset `name` (empty or unknown: foreground to background), its
 /// foreground and background stops taking `foreground` and `background`; linear at 90 degrees, as Photoshop starts one.
-compositor::StyleGradient shapeGradient(const QString& name, const QColor& foreground, const QColor& background);
+nekophoto::StyleGradient shapeGradient(const QString& name, const QColor& foreground, const QColor& background);
 /// The document's patterns (its 'Patt' blocks) as id and name, for pattern fills.
-std::vector<std::pair<std::string, std::string>> documentPatternList(const compositor::Document& document);
+std::vector<std::pair<std::string, std::string>> documentPatternList(const nekophoto::Document& document);
 
 /// The file dialog's filter for preset files.
 QString presetFileFilter();

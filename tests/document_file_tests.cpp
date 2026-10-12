@@ -1,16 +1,16 @@
 // The single-file .nekophoto document: the ZIP container (zipfile.h) and the project round trip through it, against the
 // .comp folder holding the same files (docs/project-format.md).
 #include "check.h"
-#include "compositor/colormgmt.h"
-#include "compositor/png.h"
-#include "compositor/project.h"
-#include "compositor/smartobject.h"
-#include "compositor/zipfile.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/png.h"
+#include "nekophoto/project.h"
+#include "nekophoto/smartobject.h"
+#include "nekophoto/zipfile.h"
 #include <filesystem>
 #include <fstream>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 namespace {

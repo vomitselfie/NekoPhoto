@@ -1,17 +1,17 @@
 // Layer styles from a PSD's 'lfx2' / 'lmfx' descriptor. Parsing, the contour and gradient maths and the pattern
 // decoder follow Patchy (MIT; src/psd/psd_layer_styles.cpp, core/style_contour.cpp, core/blend_math.cpp and
 // docs/ps-compat.md there), whose rules were pinned against Photoshop 2026.
-#include "compositor/layerstyle.h"
-#include "compositor/blend.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/blend.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <mutex>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace psd = patchy::psd;
 
@@ -943,4 +943,4 @@ StyleColor gradientColor(const StyleGradient& g, float t) {
     return {byte(c[0]), byte(c[1]), byte(c[2])};
 }
 
-} // namespace compositor
+} // namespace nekophoto

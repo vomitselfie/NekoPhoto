@@ -2,7 +2,7 @@
 #include "ChannelDialogs.h"
 #include "Icons.h"
 #include "ImageConvert.h"
-#include "compositor/render.h"
+#include "nekophoto/render.h"
 #include <QAbstractItemModel>
 #include <QApplication>
 #include <QHBoxLayout>
@@ -19,7 +19,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -228,10 +228,10 @@ void ChannelsPanel::refreshThumbnails() {
     options.region = doc.rect();
     options.scale = scale;
     Image composite;
-    compositor::render(shown, options, composite);
+    nekophoto::render(shown, options, composite);
     // CMYK and Lab: the colour channels come from the composite at the document's layout (a plate's ink dark over
     // white paper; L, a and b as values, a and b gray where neutral).
-    const AnyImage native = doc.colorMode == ColorMode::RGB ? AnyImage() : compositor::renderNative(shown, options);
+    const AnyImage native = doc.colorMode == ColorMode::RGB ? AnyImage() : nekophoto::renderNative(shown, options);
     auto modeChannelImage = [&](int c) {
         QImage g(native.width(), native.height(), QImage::Format_Grayscale8);
         const int n = native.channels(), alpha = n - 1;

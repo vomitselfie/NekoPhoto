@@ -1,7 +1,7 @@
 #include "MoshDialog.h"
 #include "ActionLibrary.h"
 #include "Names.h"
-#include "compositor/depth.h"
+#include "nekophoto/depth.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -23,7 +23,7 @@
 #include <cstring>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

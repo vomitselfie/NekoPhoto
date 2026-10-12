@@ -1,12 +1,12 @@
 // Convert to Profile over a whole document (colormgmt.h): pixels, and every colour the document stores as a value.
-#include "compositor/adjustments.h"
-#include "compositor/colormgmt.h"
-#include "compositor/document.h"
-#include "compositor/layerstyle.h"
-#include "compositor/vectorlayer.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/document.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/vectorlayer.h"
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -141,4 +141,4 @@ bool convertDocumentProfile(Document& document, const ColorProfile& target, cons
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto

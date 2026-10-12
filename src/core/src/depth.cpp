@@ -1,9 +1,9 @@
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 std::shared_ptr<Image16> widenImage(const Image& image) {
     auto out = std::make_shared<Image16>(image.width(), image.height());
@@ -348,4 +348,4 @@ AnyImage imageAtFormat(const AnyImage& image, SampleType type, ColorMode mode) {
     return image.u16() ? image : image.u8() ? AnyImage(Image16Ptr(widenLab(*image.u8()))) : nullptr;
 }
 
-} // namespace compositor
+} // namespace nekophoto

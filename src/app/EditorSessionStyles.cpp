@@ -1,10 +1,10 @@
-// Layer ▸ Layer Style: editing a layer's effects (compositor/layerstyle.h). The style lives in the layer's PSD carry
+// Layer ▸ Layer Style: editing a layer's effects (nekophoto/layerstyle.h). The style lives in the layer's PSD carry
 // as an 'lfx2' block, so drawing, PSD export and the project package need nothing else; a style left as it was keeps
 // the file's own bytes.
 #include "EditorSession.h"
 #include "PresetLibrary.h"
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -20,8 +20,8 @@ LayerStyle EditorSession::layerStyle(const Uuid& id) const {
 /// The style's effects and, when it holds them, its Blend If ranges and excluded channels.
 void EditorSession::giveLayerStyle(Layer& layer, const LayerStyle& style) {
     setLayerStyle(layer, style);
-    if (style.blendIf) compositor::setLayerBlendIf(layer, *style.blendIf, document_->colorMode);
-    if (style.excludedChannels) compositor::setLayerExcludedChannels(layer, *style.excludedChannels, document_->colorMode);
+    if (style.blendIf) nekophoto::setLayerBlendIf(layer, *style.blendIf, document_->colorMode);
+    if (style.excludedChannels) nekophoto::setLayerExcludedChannels(layer, *style.excludedChannels, document_->colorMode);
 }
 
 bool EditorSession::setLayerExcludedChannels(const Uuid& id, uint8_t excluded) {
@@ -30,7 +30,7 @@ bool EditorSession::setLayerExcludedChannels(const Uuid& id, uint8_t excluded) {
     if (!layer) return false;
     if (layerExcludedChannels(*layer, document_->colorMode) == (excluded & allBlendChannels(document_->colorMode))) return true;   // already so
     beginEdit(QT_TRANSLATE_NOOP("History", "Blending Options"));
-    compositor::setLayerExcludedChannels(*document_->find(id), excluded, document_->colorMode);
+    nekophoto::setLayerExcludedChannels(*document_->find(id), excluded, document_->colorMode);
     endEdit();
     notifyDocument();
     return true;
@@ -41,9 +41,9 @@ bool EditorSession::setLayerBlendIf(const Uuid& id, const BlendIf& blendIf) {
     const Layer* layer = document_->find(id);
     if (!layer) return false;
     Layer probe = *layer;
-    if (!compositor::setLayerBlendIf(probe, blendIf, document_->colorMode)) return true;   // already so
+    if (!nekophoto::setLayerBlendIf(probe, blendIf, document_->colorMode)) return true;   // already so
     beginEdit(QT_TRANSLATE_NOOP("History", "Blending Options"));
-    compositor::setLayerBlendIf(*document_->find(id), blendIf, document_->colorMode);
+    nekophoto::setLayerBlendIf(*document_->find(id), blendIf, document_->colorMode);
     endEdit();
     notifyDocument();
     return true;

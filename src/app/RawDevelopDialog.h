@@ -3,11 +3,11 @@
 // Open Object into a new document whose layer is a smart object holding the RAW file and the settings, Cancel opens
 // nothing. Edit Contents on such a smart object reopens it here with its settings (OK develops it again).
 #pragma once
-#include "compositor/cameraraw.h"
-#include "compositor/imaget.h"
+#include "nekophoto/cameraraw.h"
+#include "nekophoto/imaget.h"
 #include <QDialog>
 #include <QImage>
-#include "compositor/raw.h"
+#include "nekophoto/raw.h"
 #include <array>
 #include <atomic>
 #include <memory>
@@ -29,14 +29,14 @@ public:
     /// Open: Open, Open Object and Cancel, with the workflow's depth. Redevelop: OK and Cancel (Edit Contents).
     enum class Purpose { Open, Redevelop };
     enum class Choice { Cancelled, Open, OpenObject };
-    RawDevelopDialog(std::shared_ptr<const std::vector<uint8_t>> bytes, const QString& fileName, const compositor::CameraRawSettings& settings,
+    RawDevelopDialog(std::shared_ptr<const std::vector<uint8_t>> bytes, const QString& fileName, const nekophoto::CameraRawSettings& settings,
                      Purpose purpose, QWidget* parent = nullptr);
     ~RawDevelopDialog() override;
 
     Choice choice() const { return choice_; }
-    const compositor::CameraRawSettings& settings() const;
+    const nekophoto::CameraRawSettings& settings() const;
     /// The whole file developed with settings(), at 16 bits; set once the dialog is accepted.
-    const std::shared_ptr<compositor::Image16>& developed() const { return developed_; }
+    const std::shared_ptr<nekophoto::Image16>& developed() const { return developed_; }
     /// Camera Raw's workflow depth for Open (8 or 16; 16 by default, remembered as Photoshop does).
     int bitsPerChannel() const;
 
@@ -49,7 +49,7 @@ protected:
 private:
     /// The quick decode at the current white balance's multipliers, off the UI thread; one at a time.
     void startPreviewDecode();
-    void previewDecoded(std::shared_ptr<compositor::Image16> image, const std::string& error, const std::array<double, 3>& multipliers,
+    void previewDecoded(std::shared_ptr<nekophoto::Image16> image, const std::string& error, const std::array<double, 3>& multipliers,
                         int generation);
     void stopPreview();
     /// The multipliers the settings develop with.
@@ -73,8 +73,8 @@ private:
     QPushButton* cancel_ = nullptr;
     QTimer* debounce_ = nullptr;
     int fullWidth_ = 0, fullHeight_ = 0;
-    compositor::RawWhiteBalance balance_;
-    std::shared_ptr<compositor::Image16> base_;      // the quick decode, reduced for previewing
+    nekophoto::RawWhiteBalance balance_;
+    std::shared_ptr<nekophoto::Image16> base_;      // the quick decode, reduced for previewing
     std::array<double, 3> baseMultipliers_{1, 1, 1};   // the multipliers base_ was decoded with
     std::thread previewWorker_;
     std::atomic<bool> previewCancel_{false};
@@ -82,8 +82,8 @@ private:
     bool previewBusy_ = false;
     QTimer* settle_ = nullptr;
     QImage shown_;
-    std::shared_ptr<compositor::Image16> developed_;
-    std::shared_ptr<compositor::Image16> workerResult_;
+    std::shared_ptr<nekophoto::Image16> developed_;
+    std::shared_ptr<nekophoto::Image16> workerResult_;
     std::string workerError_;
     std::atomic<bool> cancelFlag_{false};
     std::thread worker_;

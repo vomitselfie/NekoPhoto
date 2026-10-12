@@ -4,7 +4,7 @@ Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour managemen
 
 ## 1. Where we are
 
-- `compositor::Image` (`image.h`) is premultiplied RGBA8 (`PixelBytes`, explicit stride; `data()`/`row()`/`pixel()` hand out
+- `nekophoto::Image` (`image.h`) is premultiplied RGBA8 (`PixelBytes`, explicit stride; `data()`/`row()`/`pixel()` hand out
   `uint8_t*`). `GrayImage` is 8-bit, stride = width. `ImagePtr`/`GrayPtr` are `shared_ptr<const>`, shared copy-on-write
   between the document, `MipCache` and history snapshots.
 - Reach: 44 core and 21 app .cpp files take `Image&`/`ImagePtr`/`data()`; 41 core files touch pixel pointers. The pixel

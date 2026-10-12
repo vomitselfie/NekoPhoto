@@ -1,18 +1,18 @@
-#include "compositor/psd.h"
+#include "nekophoto/psd.h"
 #include "psd_channels.h"
 #include "photoshop.h"
-#include "compositor/adjustments.h"
-#include "compositor/colour.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/png.h"
-#include "compositor/render.h"
-#include "compositor/smartfilter.h"
-#include "compositor/modetransform.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/vectormask.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/colour.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/png.h"
+#include "nekophoto/render.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/modetransform.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/vectormask.h"
 #include "psd/psd_descriptor.hpp"
 #include <cstdio>
 #include <new>
@@ -27,7 +27,7 @@
 #include <set>
 #include <sstream>
 
-namespace compositor {
+namespace nekophoto {
 
 using namespace photoshop;
 
@@ -1553,7 +1553,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         document.channels[i].image = GrayFPtr(gray);
                     }
                 size_t spots = 0;
-                for (const compositor::Channel& ch : document.channels) spots += ch.kind == ChannelKind::Spot;
+                for (const nekophoto::Channel& ch : document.channels) spots += ch.kind == ChannelKind::Spot;
                 if (spots) notes.push_back(std::to_string(spots) + " spot channel(s) are kept and shown in the Channels panel, but not edited.");
             }
             if (ok) {
@@ -1674,4 +1674,4 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

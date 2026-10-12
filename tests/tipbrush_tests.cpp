@@ -1,13 +1,13 @@
 // Tip brushes: stamping, spacing, pressure, jitter, the selection, and presets on disk.
 #include "check.h"
-#include "compositor/brushimport.h"
-#include "compositor/png.h"
-#include "compositor/tipbrush.h"
+#include "nekophoto/brushimport.h"
+#include "nekophoto/png.h"
+#include "nekophoto/tipbrush.h"
 #include <cmath>
 #include <cstring>
 #include <filesystem>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 namespace {

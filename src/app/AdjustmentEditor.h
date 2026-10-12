@@ -2,10 +2,10 @@
 // Exposure, Gradient Map or Grain. Used by the Adjustments panel for
 // adjustment layers and by the Image > Adjustments dialogs for pixels.
 #pragma once
-#include "compositor/adjustments.h"
-#include "compositor/colormgmt.h"
-#include "compositor/colorprofile.h"
-#include "compositor/imaget.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/colorprofile.h"
+#include "nekophoto/imaget.h"
 #include <QPointer>
 #include <QWidget>
 #include <optional>
@@ -28,8 +28,8 @@ class AdjustmentEditor : public QWidget {
     Q_OBJECT
 public:
     explicit AdjustmentEditor(QWidget* parent = nullptr);
-    void setSettings(const compositor::AdjustmentSettings& settings);
-    const compositor::AdjustmentSettings& settings() const { return settings_; }
+    void setSettings(const nekophoto::AdjustmentSettings& settings);
+    const nekophoto::AdjustmentSettings& settings() const { return settings_; }
     void setHistogram(const std::array<std::vector<double>, 4>& histogram);
     /// Composite and four channels (CMYK's black in the last).
     void setHistogram(const std::array<std::vector<double>, 5>& histogram);
@@ -39,11 +39,11 @@ public:
     /// What the Levels and Curves clipping display adjusts (Alt on the black or white point, or Curves' Show Clipping):
     /// the pixels the adjustment takes, reduced, and where they lie on the document. Asked for when the display starts.
     struct ClippingSource {
-        compositor::AnyImage image;
-        compositor::Affine pixelToDocument;
-        compositor::ColorMode mode = compositor::ColorMode::RGB;
-        compositor::ColorProfile profile;
-        compositor::TransferCurve curve = compositor::TransferCurve::srgb();
+        nekophoto::AnyImage image;
+        nekophoto::Affine pixelToDocument;
+        nekophoto::ColorMode mode = nekophoto::ColorMode::RGB;
+        nekophoto::ColorProfile profile;
+        nekophoto::TransferCurve curve = nekophoto::TransferCurve::srgb();
     };
     void setClippingSource(std::function<std::optional<ClippingSource>()> source) { clippingSource_ = std::move(source); }
     /// The longest side the clipping display works at.
@@ -54,7 +54,7 @@ public:
 signals:
     /// A slider drag began / a value changed / the drag ended.
     void editStarted();
-    void settingsChanged(const compositor::AdjustmentSettings& settings);
+    void settingsChanged(const nekophoto::AdjustmentSettings& settings);
     void editFinished();
 
 private:
@@ -70,7 +70,7 @@ private:
     /// Balance, Vibrance, Photo Filter, Channel Mixer, Selective Color.
     QWidget* buildMore();
     QWidget* checkRow(const QString& label, std::function<bool()> get, std::function<void(bool)> apply);
-    QWidget* colourRow(const QString& label, std::function<compositor::AdjustmentColor&()> colour);
+    QWidget* colourRow(const QString& label, std::function<nekophoto::AdjustmentColor&()> colour);
     void changed();
     /// A slider paired with a spin box, both writing to `apply`.
     /// `clipPoint` 1 or 2: the Levels black or white input, whose drag with Alt held shows the clipping display.
@@ -81,7 +81,7 @@ private:
     int clipPoint_ = 0;
     bool curvesShowClipping_ = false;
 
-    compositor::AdjustmentSettings settings_;
+    nekophoto::AdjustmentSettings settings_;
     int toneRange_ = 1, mixerOutput_ = 0, selectiveRange_ = 0;   // which part of a many-part adjustment is shown
     QWidget* body_ = nullptr;
     bool syncing_ = false;
@@ -90,16 +90,16 @@ private:
     CurveWidget* curve_ = nullptr;
     std::array<std::vector<double>, 5> histogramData_;
     /// The session's document mode (RGB without one): the channel names and what the editors offer.
-    compositor::ColorMode colorMode() const;
+    nekophoto::ColorMode colorMode() const;
     int shownChannel(int channel) const;
-    compositor::ColorMode builtMode_ = compositor::ColorMode::RGB;   // the mode the editors were built for
+    nekophoto::ColorMode builtMode_ = nekophoto::ColorMode::RGB;   // the mode the editors were built for
     QComboBox* channelCombo();
     QPointer<EditorSession> session_;   // may go first: its tab can close while a dialog holding this editor is open
     int hueSampleMode_ = 0; // 0 off, 1 sample, 2 add, 3 remove
     bool hueTargeting_ = false;
     void installHueHooks();
     void installLevelsHook();
-    std::optional<compositor::LevelsSample> levelsSample_;
+    std::optional<nekophoto::LevelsSample> levelsSample_;
     void clearHueHooks();
     struct HueDrag { int range; double hue, saturation; };
     std::optional<HueDrag> hueDrag_;

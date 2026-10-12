@@ -2,12 +2,12 @@
 // Configured by src/app/CMakeLists.txt.
 #include <winver.h>
 
-IDI_ICON1 ICON "@COMPOSITOR_WIN_ICON@"
-1 24 "@COMPOSITOR_WIN_MANIFEST@"
+IDI_ICON1 ICON "@NEKOPHOTO_WIN_ICON@"
+1 24 "@NEKOPHOTO_WIN_MANIFEST@"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION @COMPOSITOR_WIN_VERSION_COMMAS@
-PRODUCTVERSION @COMPOSITOR_WIN_VERSION_COMMAS@
+FILEVERSION @NEKOPHOTO_WIN_VERSION_COMMAS@
+PRODUCTVERSION @NEKOPHOTO_WIN_VERSION_COMMAS@
 FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
 FILEFLAGS 0x0L
 FILEOS VOS_NT_WINDOWS32
@@ -20,12 +20,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "NekoPhoto contributors\0"
             VALUE "FileDescription", "NekoPhoto\0"
-            VALUE "FileVersion", "@COMPOSITOR_VERSION_STRING@\0"
+            VALUE "FileVersion", "@NEKOPHOTO_VERSION_STRING@\0"
             VALUE "InternalName", "nekophoto\0"
             VALUE "LegalCopyright", "GPL-3.0-or-later; see LICENSE\0"
             VALUE "OriginalFilename", "nekophoto.exe\0"
             VALUE "ProductName", "NekoPhoto\0"
-            VALUE "ProductVersion", "@COMPOSITOR_VERSION_STRING@\0"
+            VALUE "ProductVersion", "@NEKOPHOTO_VERSION_STRING@\0"
         END
     END
     BLOCK "VarFileInfo"

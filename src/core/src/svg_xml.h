@@ -20,7 +20,7 @@
 // BOM, UTF-16 (transcoded), and Latin-1 when the XML declaration says so.
 // Lenient where real files are sloppy (stray '&', unknown declarations), with
 // hard caps against pathological input (node count, depth, entity expansion).
-namespace compositor::svgxml {
+namespace nekophoto::svgxml {
 
 struct XmlNode {
   // Element name with the namespace resolved: elements in the SVG namespace
@@ -50,4 +50,4 @@ struct XmlNode {
 // plain-English message (and 1-based line number) on malformed input.
 [[nodiscard]] XmlNode parse_xml(std::span<const std::uint8_t> bytes);
 
-}  // namespace compositor::svgxml
+}  // namespace nekophoto::svgxml

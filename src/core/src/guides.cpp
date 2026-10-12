@@ -1,9 +1,9 @@
 // Ruler guides and Photoshop's resource 1032 (guides.h).
-#include "compositor/guides.h"
+#include "nekophoto/guides.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 uint32_t readU32(const std::vector<uint8_t>& d, size_t at) {
@@ -61,4 +61,4 @@ void flipGuides(std::vector<Guide>& guides, bool horizontal, double extent) {
     for (Guide& g : guides) if (g.vertical() == horizontal) g.position = guidePosition(extent - g.position);
 }
 
-} // namespace compositor
+} // namespace nekophoto

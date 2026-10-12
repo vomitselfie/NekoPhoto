@@ -1,16 +1,16 @@
 // Vector shape layers made here (vectorlayer.h): the authored blocks read back through the parsers the renderer
 // and the PSD round trip use, and the layer draws its shape.
 #include "check.h"
-#include "compositor/presets.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
-#include "compositor/colormgmt.h"
-#include "compositor/psd_carry.h"
-#include "compositor/vectorlayer.h"
+#include "nekophoto/presets.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/vectorlayer.h"
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 Document canvas(int w, int h) {

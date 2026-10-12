@@ -1,0 +1,75 @@
+// Writing documents as Photoshop PSD files: pixel layers with their names (Unicode too), positions,
+// visibility, opacity, blend modes, folders (nested), layer and folder masks and clipping; Levels, Curves,
+// Exposure and Photoshop-style Hue/Saturation as Photoshop adjustment layers; and the merged image from our
+// own renderer. What PSD cannot carry is written the way it looks and reported: transformed layers
+// resampled into place, text and shapes as pixels, adjustments Photoshop has no equivalent for baked into a
+// pixel layer. psd.h reads the files back; the round trip is tested (tests/psd_writer_tests.cpp).
+#pragma once
+#include "document.h"
+#include <functional>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace nekophoto {
+
+/// How a text layer was laid out, from the font engine that drew it (the core has none): what Photoshop's
+/// type layer needs to lay the same text out again. Raster coordinates are the text layer's own pixels.
+struct PsdTextMetrics {
+    std::string postScriptName;        // the face used, e.g. "DejaVuSans-Bold"
+    bool fauxBold = false, fauxItalic = false;   // bold or italic asked for but synthesised
+    double fontSize = 0;               // pixels, as drawn
+    double ascent = 0;                 // first baseline below the block's top
+    double lineHeight = 0;             // baseline to baseline
+    double blockLeft = 0, blockTop = 0, blockWidth = 0;
+    int lines = 1;
+    /// With runs: each run's face and synthesised styles, in order (the fields above are the first run's).
+    struct RunFace { std::string postScriptName; bool fauxBold = false, fauxItalic = false; };
+    std::vector<RunFace> runs;
+};
+
+struct PsdExportOptions {
+    /// PackBits (RLE) channels, as Photoshop writes; raw when a channel would not shrink.
+    bool compress = true;
+    /// Photoshop's large document format (PSB): 64-bit lengths, up to 300,000 pixels a side.
+    bool large = false;
+    /// With it, live text layers are written as Photoshop type layers (editable text over the same pixels);
+    /// without it, or when it returns nothing, as pixels.
+    std::function<std::optional<PsdTextMetrics>(const LayerText&)> textMetrics;
+};
+
+struct PsdExportSummary {
+    int layers = 0, folders = 0, masks = 0, clipped = 0, adjustments = 0, texts = 0, smartObjects = 0;   // texts: as Photoshop type layers
+    /// What will not look or behave the same in Photoshop, one line each.
+    std::vector<std::string> warnings;
+    /// What is written differently but looks the same (resampled layers, text as pixels), one line each.
+    std::vector<std::string> notes;
+};
+
+/// PSD's size limit per side; larger documents need PSB (PsdExportOptions::large).
+constexpr int psdMaxSide = 30000;
+constexpr int psbMaxSide = 300000;
+
+/// What exporting `document` would write and report, without encoding any pixels (for a dialog).
+PsdExportSummary planPsdExport(const Document& document, const PsdExportOptions& options = {});
+
+/// The 'TySh' block for a text layer drawn with `metrics`, placed by `transform` over its `imageWidth` x
+/// `imageHeight` raster; `recordBounds` is the layer record's rectangle. None for a flipped layer.
+std::optional<std::vector<uint8_t>> photoshopTypeBlock(const LayerText& text, const PsdTextMetrics& metrics, const LayerTransform& transform,
+                                                       int imageWidth, int imageHeight, const Rect& recordBounds);
+
+/// The file's bytes; empty with `error` set when the document cannot be written as PSD.
+std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions& options, PsdExportSummary* summary, std::string* error);
+
+/// Writes `path` through a temporary file beside it (`path` + ".part"), flushed to disk before it replaces the old
+/// file and the folder synced after (on Unix), so a failure or a crash leaves any old file whole and no temporary
+/// file behind.
+bool exportPsd(const Document& document, const std::string& path, const PsdExportOptions& options, PsdExportSummary* summary, std::string* error);
+
+namespace detail {
+/// For tests: when set, exportPsd asks it before each step of writing the file ("open", "write", "rename") and fails
+/// that step, as a full disk or a refused rename would, when it returns true.
+extern bool (*psdSaveFault)(const char* step);
+} // namespace detail
+
+} // namespace nekophoto

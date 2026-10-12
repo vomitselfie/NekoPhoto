@@ -1,10 +1,10 @@
 // Clip Studio import: a .sut-shaped SQLite database made here (Node and Variant rows with the columns the
 // reader uses, and MaterialFile rows holding tars of C2F layer files built from SQLite databases made here
-// too), when the build has SQLite; and a real file when COMPOSITOR_SUT_SAMPLE names one.
+// too), when the build has SQLite; and a real file when NEKOPHOTO_SUT_SAMPLE names one.
 #include "check.h"
 #include "brush_import_fixtures.h"
-#include "compositor/brushimport.h"
-#include "compositor/png.h"
+#include "nekophoto/brushimport.h"
+#include "nekophoto/png.h"
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -14,14 +14,14 @@
 #include <vector>
 #include <zlib.h>
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 #include <sqlite3.h>
 #endif
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 
 using namespace brushfixtures;
 
@@ -71,8 +71,8 @@ TEST_CASE(clip_studio_needs_sqlite) { std::fprintf(stderr, "  (skipped: built wi
 #endif
 
 TEST_CASE(clip_studio_sample_file_when_available) {
-    const char* sample = std::getenv("COMPOSITOR_SUT_SAMPLE");
-    if (!sample) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_SUT_SAMPLE to a .sut file)\n"); return; }
+    const char* sample = std::getenv("NEKOPHOTO_SUT_SAMPLE");
+    if (!sample) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_SUT_SAMPLE to a .sut file)\n"); return; }
     std::string error;
     auto import = importBrushFile(sample, &error);
     REQUIRE(import.has_value());

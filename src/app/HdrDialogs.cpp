@@ -43,9 +43,9 @@ Field field(double minimum, double maximum, double value, int decimals) {
     return f;
 }
 
-std::optional<compositor::View32> askView32(QWidget* parent, const QString& title, const QString& hint, const compositor::View32& initial,
-                                            const std::function<void(const compositor::View32&)>& preview) {
-    using compositor::ToneMethod;
+std::optional<nekophoto::View32> askView32(QWidget* parent, const QString& title, const QString& hint, const nekophoto::View32& initial,
+                                            const std::function<void(const nekophoto::View32&)>& preview) {
+    using nekophoto::ToneMethod;
     QDialog dialog(parent);
     dialog.setWindowTitle(title);
     auto* layout = new QVBoxLayout(&dialog);
@@ -55,8 +55,8 @@ std::optional<compositor::View32> askView32(QWidget* parent, const QString& titl
     method->addItem(QObject::tr("Highlight Compression"), int(ToneMethod::HighlightCompression));
     method->setCurrentIndex(initial.method == ToneMethod::HighlightCompression ? 1 : 0);
     form->addRow(QObject::tr("Method"), method);
-    Field exposure = field(compositor::View32::minExposure, compositor::View32::maxExposure, initial.exposure, 2);
-    Field gamma = field(compositor::View32::minGamma, compositor::View32::maxGamma, initial.gamma, 2);
+    Field exposure = field(nekophoto::View32::minExposure, nekophoto::View32::maxExposure, initial.exposure, 2);
+    Field gamma = field(nekophoto::View32::minGamma, nekophoto::View32::maxGamma, initial.gamma, 2);
     form->addRow(QObject::tr("Exposure"), exposure.row);
     form->addRow(QObject::tr("Gamma"), gamma.row);
     layout->addLayout(form);
@@ -73,7 +73,7 @@ std::optional<compositor::View32> askView32(QWidget* parent, const QString& titl
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
     auto current = [&] {
-        compositor::View32 v;
+        nekophoto::View32 v;
         v.method = ToneMethod(method->currentData().toInt());
         // Highlight Compression takes no settings (Photoshop's): exposure and gamma apply to Exposure and Gamma only.
         if (v.method == ToneMethod::ExposureGamma) { v.exposure = exposure.spin->value(); v.gamma = gamma.spin->value(); }
@@ -101,12 +101,12 @@ std::optional<compositor::View32> askView32(QWidget* parent, const QString& titl
 
 } // namespace
 
-std::optional<compositor::View32> askPreviewOptions(QWidget* parent, const compositor::View32& initial, const std::function<void(const compositor::View32&)>& preview) {
+std::optional<nekophoto::View32> askPreviewOptions(QWidget* parent, const nekophoto::View32& initial, const std::function<void(const nekophoto::View32&)>& preview) {
     return askView32(parent, QObject::tr("32-bit Preview Options"),
                      QObject::tr("How the canvas shows a 32-bit document's values; the pixels are not changed."), initial, preview);
 }
 
-std::optional<compositor::View32> askHdrToning(QWidget* parent, int bits, const compositor::View32& initial, const std::function<void(const compositor::View32&)>& preview) {
+std::optional<nekophoto::View32> askHdrToning(QWidget* parent, int bits, const nekophoto::View32& initial, const std::function<void(const nekophoto::View32&)>& preview) {
     return askView32(parent, QObject::tr("HDR Toning"),
                      QObject::tr("Converting to %1 bits per channel: the canvas shows the result. Layers are kept; values above white are clipped.").arg(bits),
                      initial, preview);

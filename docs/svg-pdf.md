@@ -73,7 +73,7 @@ File > Export > Export SVG (or `document.export` to a `.svg`) writes `src/core/s
 ## Opening PDF
 
 PDF pages are rendered by Qt PDF (`QPdfDocument`, PDFium), an optional build dependency
-(`-DCOMPOSITOR_WITH_QTPDF`, found as its own CMake package so a missing module never fails the Qt lookup;
+(`-DNEKOPHOTO_WITH_QTPDF`, found as its own CMake package so a missing module never fails the Qt lookup;
 Arch `qt6-webengine`, Ubuntu `qt6-pdf-dev` and the release builds' aqt module `qtpdf`).
 Without it `.pdf` is not offered and opening one says why; `app.info` reports `pdf`.
 

@@ -3,13 +3,13 @@
 // CameraRawColor.swift (curve, mixer, grading), CameraRawDetailOptics.swift and
 // CameraRawGeometryCalibration.swift. Upstream warps Geometry with Core Image's CIPerspectiveTransform;
 // here the same corners drive a homography resampled bilinearly.
-#include "compositor/cameraraw.h"
-#include "compositor/rawtone.h"
-#include "compositor/whitebalance.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/resample.h"
-#include "compositor/warp.h"
+#include "nekophoto/cameraraw.h"
+#include "nekophoto/rawtone.h"
+#include "nekophoto/whitebalance.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/warp.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
@@ -22,7 +22,7 @@ extern "C" {
 #include "CameraRawPixels.h"
 }
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -1101,4 +1101,4 @@ bool CameraRawSettings::parse(const std::string& text, CameraRawSettings& out, s
 #undef NUM
 #undef BOOL
 
-} // namespace compositor
+} // namespace nekophoto

@@ -3,11 +3,11 @@
 #include <string>
 #include <vector>
 #include "check.h"
-#include "compositor/render.h"
-#include "compositor/svg.h"
+#include "nekophoto/render.h"
+#include "nekophoto/svg.h"
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 std::optional<SvgImport> read(const std::string& text, std::string* error = nullptr) {

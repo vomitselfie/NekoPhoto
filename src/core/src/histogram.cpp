@@ -1,11 +1,11 @@
-#include "compositor/histogram.h"
-#include "compositor/depth.h"
-#include "compositor/modeedit.h"
-#include "compositor/render.h"
+#include "nekophoto/histogram.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/modeedit.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -225,4 +225,4 @@ std::shared_ptr<Image> clippingDisplay(const AnyImage& adjusted, ColorMode mode,
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

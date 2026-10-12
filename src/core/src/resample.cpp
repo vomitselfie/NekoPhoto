@@ -1,13 +1,13 @@
-#include "compositor/resample.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/simd.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/simd.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -320,4 +320,4 @@ int sampleGrayBilinear(const Gray16& image, double x, double y) {
     return int((top * gy + bottom * fy + (fractionOne * fractionOne / 2)) / (fractionOne * fractionOne));
 }
 
-} // namespace compositor
+} // namespace nekophoto

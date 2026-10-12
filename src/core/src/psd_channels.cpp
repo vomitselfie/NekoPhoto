@@ -1,13 +1,13 @@
 // A PSD's alpha and spot channels (psd_channels.h).
 #include "psd_channels.h"
-#include "compositor/depth.h"
-#include "compositor/psd_carry.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/psd_carry.h"
 #include <algorithm>
 #include <cmath>
 #include <set>
 #include <string>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -279,4 +279,4 @@ std::vector<uint8_t> psdChannelPlane(const Channel& channel, bool deep, int widt
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

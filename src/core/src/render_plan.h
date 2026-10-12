@@ -9,9 +9,9 @@
 //
 // render() builds the plan and switches on the document's sample type once.
 #pragma once
-#include "compositor/blendif.h"
-#include "compositor/blur.h"
-#include "compositor/render.h"
+#include "nekophoto/blendif.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -21,7 +21,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 struct RenderPlan {
     const Document& document;
@@ -172,4 +172,4 @@ bool resizeDocument16(Document& document, int width, int height, double resoluti
 /// And for a 32-bit one (render_f32.cpp): the float warps and resamplers.
 bool resizeDocumentF(Document& document, int width, int height, double resolution, Sampling sampling);
 
-} // namespace compositor
+} // namespace nekophoto

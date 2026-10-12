@@ -2,18 +2,18 @@
 // alternative, the accessors in colormodes.h, byte budgets by channel count, conforming buffers to a mode's format,
 // the supports() mode axis, undo accounting, and the project round trip of CMYK and Lab documents at 8 and 16 bits.
 #include "check.h"
-#include "compositor/colormodes.h"
-#include "compositor/depth.h"
-#include "compositor/document.h"
-#include "compositor/history.h"
-#include "compositor/project.h"
-#include "compositor/supports.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/document.h"
+#include "nekophoto/history.h"
+#include "nekophoto/project.h"
+#include "nekophoto/supports.h"
 #include <filesystem>
 #include <fstream>
 #include <random>
 #include <type_traits>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 static_assert(std::is_same_v<ImageC8::Sample, uint8_t>);

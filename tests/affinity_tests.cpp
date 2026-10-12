@@ -1,11 +1,11 @@
 // Affinity import: the pure helpers (stream predictors, the blend table, transform composition); a document
 // written here byte by byte (the container, its stream table, a doc.dat tree with one translated RGBA8 pixel layer
-// in Multiply, and its tile streams); and, when COMPOSITOR_AFFINITY_FIXTURES names a folder of real documents
+// in Multiply, and its tile streams); and, when NEKOPHOTO_AFFINITY_FIXTURES names a folder of real documents
 // (Patchy's test-fixtures/af), every one of them opened and compared with the preview Affinity embedded.
 #include "check.h"
-#include "compositor/affinity.h"
-#include "compositor/png.h"
-#include "compositor/render.h"
+#include "nekophoto/affinity.h"
+#include "nekophoto/png.h"
+#include "nekophoto/render.h"
 #include <cstdlib>
 #include <chrono>
 #include <cstring>
@@ -14,7 +14,7 @@
 #include <vector>
 #include <zlib.h>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 TEST_CASE(byte_delta_is_a_running_sum) {
@@ -384,8 +384,8 @@ TEST_CASE(damaged_documents_are_refused) {
 }
 
 TEST_CASE(real_documents_open_when_available) {
-    const char* dir = std::getenv("COMPOSITOR_AFFINITY_FIXTURES");
-    if (!dir) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_AFFINITY_FIXTURES to a folder of Affinity documents, such as Patchy's test-fixtures/af)\n"); return; }
+    const char* dir = std::getenv("NEKOPHOTO_AFFINITY_FIXTURES");
+    if (!dir) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_AFFINITY_FIXTURES to a folder of Affinity documents, such as Patchy's test-fixtures/af)\n"); return; }
     int opened = 0;
     for (const auto& entry : fs::directory_iterator(dir)) {
         const std::string ext = entry.path().extension().string();

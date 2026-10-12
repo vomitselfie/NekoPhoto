@@ -1,10 +1,10 @@
-// Temperature and Tint (compositor/whitebalance.h): Robertson's method against reference white points, the round trip
+// Temperature and Tint (nekophoto/whitebalance.h): Robertson's method against reference white points, the round trip
 // through xy, the tint scale's sign, and camera neutrals through one and two calibration matrices.
 #include "check.h"
-#include "compositor/whitebalance.h"
+#include "nekophoto/whitebalance.h"
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

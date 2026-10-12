@@ -1,8 +1,8 @@
 #include "brush_harness.h"
 #include "brush_import_fixtures.h"
-#include "compositor/brushimport.h"
-#include "compositor/depth.h"
-#include "compositor/mypaint.h"
+#include "nekophoto/brushimport.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/mypaint.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cinttypes>
@@ -298,7 +298,7 @@ std::vector<Preset> standardPresets(const std::string& myPaintFolder) {
         out.push_back(tipPreset("abr_leaf", abr->brushes[0], 28));
     if (auto set = importBrushFile(brushfixtures::writeTemp("parity.brushset", brushfixtures::procreateBrushsetFile())); set && set->brushes.size() == 2)
         out.push_back(tipPreset("procreate_soft_ink", set->brushes[1], 28));
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
     {
         const fs::path path = fs::temp_directory_path() / "parity.sut";
         if (brushfixtures::writeClipStudioFile(path))

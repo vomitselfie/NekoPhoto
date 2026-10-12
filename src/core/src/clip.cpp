@@ -5,19 +5,19 @@
 //
 // Clip Studio keeps each layer as a canvas-sized (or larger) bitmap, so every layer is cropped to what it
 // paints. Blend modes Clip Studio has and the editor lacks take the nearest one, and the import says so.
-#include "compositor/clip.h"
-#include "compositor/parallel.h"
+#include "nekophoto/clip.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <map>
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 #include "csp_clip_import.h"
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
 bool isClipFile(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
@@ -25,7 +25,7 @@ bool isClipFile(const std::string& path) {
     return in.read(magic, 8) && std::memcmp(magic, "CSFCHUNK", 8) == 0;
 }
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 
 namespace {
 
@@ -233,4 +233,4 @@ std::optional<PsdImport> importClip(const std::string&, std::string* error) {
 
 #endif
 
-} // namespace compositor
+} // namespace nekophoto

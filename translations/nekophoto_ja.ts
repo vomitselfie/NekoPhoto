@@ -9944,8 +9944,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>ダウンロードした G&apos;MIC %1(%2)。</translation>
     </message>
     <message>
-        <source>set by COMPOSITOR_GMIC</source>
-        <translation>COMPOSITOR_GMIC で指定</translation>
+        <source>set by NEKOPHOTO_GMIC</source>
+        <translation>NEKOPHOTO_GMIC で指定</translation>
     </message>
     <message>
         <source>beside NekoPhoto</source>

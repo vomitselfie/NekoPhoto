@@ -3,7 +3,7 @@
 #include "check.h"
 #include "brush_harness.h"
 #include "brush_import_fixtures.h"
-#include "compositor/brushimport.h"
+#include "nekophoto/brushimport.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 using namespace brushharness;
 namespace fs = std::filesystem;
 
@@ -281,7 +281,7 @@ TEST_CASE(abr_angle_controls_follow_photoshop) {
 
 // ---- Clip Studio ---------------------------------------------------------------------------------------------------
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 TEST_CASE(clip_studio_pressure_curve_and_starting_and_ending) {
     const fs::path path = fs::temp_directory_path() / "nekophoto-feel.sut";
     fs::remove(path);

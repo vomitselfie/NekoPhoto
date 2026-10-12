@@ -2,14 +2,14 @@
 // Smudge and Liquify carrying five, Dodge, Burn and Sponge on L, a, b and on the inks, and the Paint Bucket's choice on
 // the native samples. Nothing here passes through RGB.
 #include "check.h"
-#include "compositor/bucket.h"
-#include "compositor/colormodes.h"
-#include "compositor/heal.h"
-#include "compositor/toning.h"
-#include "compositor/warpstroke.h"
+#include "nekophoto/bucket.h"
+#include "nekophoto/colormodes.h"
+#include "nekophoto/heal.h"
+#include "nekophoto/toning.h"
+#include "nekophoto/warpstroke.h"
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

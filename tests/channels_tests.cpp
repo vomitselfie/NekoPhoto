@@ -2,18 +2,18 @@
 // thumbnail click modifiers, the canvas operations, single-channel painting and adjustments at 8 and 16 bits, the
 // channel view, and the PSD and project round trips.
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/brush.h"
-#include "compositor/channels.h"
-#include "compositor/depth.h"
-#include "compositor/history.h"
-#include "compositor/project.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/channels.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/history.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
 #include <filesystem>
 #include <unistd.h>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 namespace {

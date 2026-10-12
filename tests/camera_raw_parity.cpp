@@ -6,13 +6,13 @@
 // The cases are Camera Raw XMP attributes (cases.json); those this engine has no control for (B&W, looks, Point Color)
 // are listed and skipped. Each case's mean and 95th-percentile ΔE00 over the patches (the wide-gamut row left out, as
 // the corpus does) are held to tests/camera_raw_parity_baseline.txt: a case fails when it gets worse by more than 0.1 on
-// the mean or 0.3 on the 95th percentile, RAWmakase's margins. COMPOSITOR_BLESS_CAMERA_RAW_PARITY=1 rewrites the baseline
-// after an intended change. COMPOSITOR_CAMERA_RAW_PARITY_DUMP=<file> writes every case's patch values as JSON for fitting;
-// COMPOSITOR_CAMERA_RAW_PARITY_ONLY=<text> runs only the cases whose name contains it, and
-// COMPOSITOR_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>" patches one case's settings, to try a mapping by hand.
+// the mean or 0.3 on the 95th percentile, RAWmakase's margins. NEKOPHOTO_BLESS_CAMERA_RAW_PARITY=1 rewrites the baseline
+// after an intended change. NEKOPHOTO_CAMERA_RAW_PARITY_DUMP=<file> writes every case's patch values as JSON for fitting;
+// NEKOPHOTO_CAMERA_RAW_PARITY_ONLY=<text> runs only the cases whose name contains it, and
+// NEKOPHOTO_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>" patches one case's settings, to try a mapping by hand.
 #include "check.h"
-#include "compositor/camerarawxmp.h"
-#include "compositor/raw.h"
+#include "nekophoto/camerarawxmp.h"
+#include "nekophoto/raw.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
@@ -25,7 +25,7 @@
 #include <set>
 #include <sstream>
 
-using namespace compositor;
+using namespace nekophoto;
 using json = nlohmann::json;
 
 namespace {
@@ -220,7 +220,7 @@ void writeBaseline(const std::map<std::string, Score>& scores) {
     std::ofstream out(baselinePath);
     out << "# Camera Raw parity baseline: <chart>/<case> <mean ΔE00> <p95 ΔE00> against Camera Raw 18.7, from tests/camera_raw_parity.cpp.\n"
            "# A case fails when it is worse by more than 0.1 (mean) or 0.3 (p95). Regenerate after an intended change:\n"
-           "# COMPOSITOR_BLESS_CAMERA_RAW_PARITY=1 build/tests/camera_raw_parity\n";
+           "# NEKOPHOTO_BLESS_CAMERA_RAW_PARITY=1 build/tests/camera_raw_parity\n";
     char line[256];
     for (const auto& [name, s] : scores) {
         std::snprintf(line, sizeof line, "%s %.3f %.3f\n", name.c_str(), s.mean, s.p95);
@@ -253,11 +253,11 @@ Run runCorpus() {
     for (const json& entry : cases["cases"]) {
         const std::string name = entry["name"].get<std::string>();
         const std::string key = chartName + "/" + name;
-        if (const char* only = std::getenv("COMPOSITOR_CAMERA_RAW_PARITY_ONLY"); only && name.find(only) == std::string::npos) continue;
+        if (const char* only = std::getenv("NEKOPHOTO_CAMERA_RAW_PARITY_ONLY"); only && name.find(only) == std::string::npos) continue;
         MappedCase m = mapCase(cases["base"], entry);
         if (!m.unsupported.empty()) { run.skipped[key] = m.unsupported; continue; }
-        // For fitting by hand: COMPOSITOR_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>" patches that case's settings.
-        if (const char* trial = std::getenv("COMPOSITOR_CAMERA_RAW_PARITY_TRY")) {
+        // For fitting by hand: NEKOPHOTO_CAMERA_RAW_PARITY_TRY="<case>=<settings JSON>" patches that case's settings.
+        if (const char* trial = std::getenv("NEKOPHOTO_CAMERA_RAW_PARITY_TRY")) {
             const std::string text = trial;
             const size_t eq = text.find('=');
             if (eq != std::string::npos && text.substr(0, eq) == name && !CameraRawSettings::parse(text.substr(eq + 1), m.settings))
@@ -311,7 +311,7 @@ TEST_CASE(camera_raw_parity_does_not_regress) {
     if (!rawSupported()) { std::fprintf(stderr, "  no LibRaw in this build: skipped\n"); return; }
     Run run = runCorpus();
     if (run.scores.empty()) return;
-    if (const char* dump = std::getenv("COMPOSITOR_CAMERA_RAW_PARITY_DUMP")) {
+    if (const char* dump = std::getenv("NEKOPHOTO_CAMERA_RAW_PARITY_DUMP")) {
         std::ofstream out(dump);
         out << run.dump.dump() << '\n';
     }
@@ -345,8 +345,8 @@ TEST_CASE(camera_raw_parity_does_not_regress) {
         std::fprintf(stderr, "    %s: %s\n", name.c_str(), list.c_str());
     }
 
-    if (std::getenv("COMPOSITOR_CAMERA_RAW_PARITY_ONLY")) return;   // a subset: nothing to hold to the baseline
-    if (std::getenv("COMPOSITOR_BLESS_CAMERA_RAW_PARITY")) {
+    if (std::getenv("NEKOPHOTO_CAMERA_RAW_PARITY_ONLY")) return;   // a subset: nothing to hold to the baseline
+    if (std::getenv("NEKOPHOTO_BLESS_CAMERA_RAW_PARITY")) {
         writeBaseline(run.scores);
         std::fprintf(stderr, "  baseline rewritten: %s\n", baselinePath.c_str());
         return;

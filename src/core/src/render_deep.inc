@@ -2,11 +2,11 @@
 // `DeepOps<S>` policy (render_deep_ops.h). Each depth's file includes this once and names its entry points
 // (render_u16.cpp).
 #include "render_deep_ops.h"
-#include "compositor/render.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <cmath>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -45,4 +45,4 @@ void renderDeep(const Document& document, const RenderOptions& options, ImageOf<
 
 } // namespace
 
-} // namespace compositor
+} // namespace nekophoto

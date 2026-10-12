@@ -1,8 +1,8 @@
 // Photoshop .abr import: versions 2 and 6 written here byte by byte, and a real file when
-// COMPOSITOR_ABR_SAMPLE names one.
+// NEKOPHOTO_ABR_SAMPLE names one.
 #include "check.h"
 #include "brush_import_fixtures.h"
-#include "compositor/brushimport.h"
+#include "nekophoto/brushimport.h"
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
 using namespace brushfixtures;
@@ -85,8 +85,8 @@ TEST_CASE(abr_version_6_ties_presets_to_their_samples_and_reads_dynamics) {
 }
 
 TEST_CASE(abr_sample_file_when_available) {
-    const char* sample = std::getenv("COMPOSITOR_ABR_SAMPLE");
-    if (!sample) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_ABR_SAMPLE to a .abr file)\n"); return; }
+    const char* sample = std::getenv("NEKOPHOTO_ABR_SAMPLE");
+    if (!sample) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_ABR_SAMPLE to a .abr file)\n"); return; }
     std::string error;
     auto import = importBrushFile(sample, &error);
     REQUIRE(import.has_value());

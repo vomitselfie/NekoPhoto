@@ -2,18 +2,18 @@
 // (layers, names, order, bounds, opacity, visibility, blend modes, clipping, folders, masks) and then as
 // rendered, which must agree to within one level. The fixtures follow docs/psd-export.md.
 #include "check.h"
-#include "compositor/adjustments.h"
-#include "compositor/psd.h"
-#include "compositor/project.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
 #include "psd/psd_descriptor.hpp"
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <set>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

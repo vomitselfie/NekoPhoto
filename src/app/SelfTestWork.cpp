@@ -1,5 +1,5 @@
 // work-counters: the work the whole window does (the canvas, its panels, the session) for a scripted brush stroke,
-// an adjustment slider drag and a pan and zoom, bounded with the counters in compositor/workcounters.h instead of a
+// an adjustment slider drag and a pan and zoom, bounded with the counters in nekophoto/workcounters.h instead of a
 // clock (docs/work-counters.md). The core's own cases are tests/work_counter_tests.cpp; these cover what only the
 // window does: the canvas's dirty rectangles and scrolled cache, the panels that follow an edit, the release and the
 // undo that render only what changed.
@@ -10,7 +10,7 @@
 #include "CanvasWidget.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
-#include "compositor/workcounters.h"
+#include "nekophoto/workcounters.h"
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QThread>
@@ -19,7 +19,7 @@
 #include <memory>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 using work::Counter;
 
 namespace app {

@@ -3,25 +3,25 @@
 // and places it where they were, named after the topmost; Place is 1:1 centred, scaled to fit; Replace (and an
 // Edit Contents commit) gives the source a fresh id and rebuilds every instance about its own centre, keeping the
 // instance's scale; Rasterize keeps the pixels.
-#include "compositor/smartobject_edit.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/resample.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/warp.h"
-#include "compositor/smartfilter.h"
-#include "compositor/warpmesh.h"
-#include "compositor/modetransform.h"
-#include "compositor/png.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
+#include "nekophoto/smartobject_edit.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/resample.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/warp.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/warpmesh.h"
+#include "nekophoto/modetransform.h"
+#include "nekophoto/png.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
 #include <set>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -726,5 +726,5 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
     return true;
 }
 
-} // namespace compositor
+} // namespace nekophoto
 

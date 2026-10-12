@@ -1,6 +1,6 @@
-#include "compositor/adjustments.h"
-#include "compositor/kernels.h"
-#include "compositor/parallel.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/kernels.h"
+#include "nekophoto/parallel.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@ extern "C" {
 
 using json = nlohmann::json;
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -1148,4 +1148,4 @@ std::optional<Transfer> adjustmentTransfer(const AdjustmentSettings& settings) {
 
 std::string defaultAdjustmentJson(AdjustmentKind kind) { return AdjustmentSettings::defaults(kind).toJson(); }
 
-} // namespace compositor
+} // namespace nekophoto

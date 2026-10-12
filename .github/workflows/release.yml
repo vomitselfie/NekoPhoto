@@ -54,8 +54,8 @@ jobs:
       - name: Configure and build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}" \
-            -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON \
+            -DNEKOPHOTO_VERSION="${{ steps.version.outputs.version }}" \
+            -DNEKOPHOTO_WARNINGS_AS_ERRORS=ON \
             -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4"
           cmake --build build -j"$(nproc)"
 
@@ -147,8 +147,8 @@ jobs:
           # and stop here when configure did not find it (a release without Remove Background).
           opencv_dir="$(cygpath -m "$(dirname "$(find opencv-prefix -name OpenCVConfig.cmake | sort | tail -n 1)")")"
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}" \
-            -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON \
+            -DNEKOPHOTO_VERSION="${{ steps.version.outputs.version }}" \
+            -DNEKOPHOTO_WARNINGS_AS_ERRORS=ON \
             -DOpenCV_DIR="$opencv_dir" | tee configure.log
           grep -q "Remove Background: OpenCV" configure.log || { echo "OpenCV was not found in $opencv_dir"; exit 1; }
           cmake --build build -j"$(nproc)"

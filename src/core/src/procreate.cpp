@@ -5,7 +5,7 @@
 // set (Catherine's Basic Procreate Brushes, CC0). Procreate's sliders show these raw values through curves;
 // the raw values are the physical ones and are used as such.
 #include "brushformats.h"
-#include "compositor/png.h"
+#include "nekophoto/png.h"
 #include "plist.h"
 #include "zip.h"
 #include <algorithm>
@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <map>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -398,4 +398,4 @@ std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const
     return import;
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -2,8 +2,8 @@
 // kinds, channels, and undo steps. The English names stay the API (the manifest, JSON-RPC, recorded actions);
 // these give the interface's words for them, translated in the "Names" and "History" contexts.
 #pragma once
-#include "compositor/document.h"
-#include "compositor/filters.h"
+#include "nekophoto/document.h"
+#include "nekophoto/filters.h"
 #include <QCoreApplication>
 #include <QString>
 #include <string>
@@ -14,12 +14,12 @@ namespace app::names {
 /// colorRangeName, samplingName) in the interface language; unknown names come back unchanged.
 QString core(const char* english);
 inline QString core(const std::string& english) { return core(english.c_str()); }
-QString blendMode(compositor::BlendMode mode);
-QString adjustmentKind(compositor::AdjustmentKind kind);
-QString filterKind(compositor::FilterKind kind);
+QString blendMode(nekophoto::BlendMode mode);
+QString adjustmentKind(nekophoto::AdjustmentKind kind);
+QString filterKind(nekophoto::FilterKind kind);
 QString levelsChannel(int channel);
 /// The Levels and Curves channel in a document of `mode` ("Cyan", "Lightness"); empty for a slot the mode has not.
-QString levelsChannel(int channel, compositor::ColorMode mode);
+QString levelsChannel(int channel, nekophoto::ColorMode mode);
 QString colorRange(int range);
 
 /// An undo step's name (stored in English, as history.list reports it) for the Edit menu.

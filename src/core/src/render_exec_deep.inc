@@ -9,11 +9,11 @@
 // and pattern fill layers, adjustment layers, and layer styles on layers and folders.
 #include "render_deep_ops.h"
 #include "render_resume.h"
-#include "compositor/fill_cache.h"
-#include "compositor/layerstyle.h"
-#include "compositor/vectorlayer.h"
-#include "compositor/parallel.h"
-#include "compositor/workcounters.h"
+#include "nekophoto/fill_cache.h"
+#include "nekophoto/layerstyle.h"
+#include "nekophoto/vectorlayer.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/workcounters.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -809,4 +809,4 @@ struct RenderExecDeep {
     }
 };
 
-} // namespace compositor
+} // namespace nekophoto

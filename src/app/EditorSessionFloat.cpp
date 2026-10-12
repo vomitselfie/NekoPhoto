@@ -3,13 +3,13 @@
 // layers and its preview, and merging a transformed selection back. Colour is premultiplied linear light and may exceed
 // 1; coverage stays 0..1. The shared session files branch here once per entry point.
 #include "EditorSession.h"
-#include "compositor/depth.h"
-#include "compositor/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/colormgmt.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

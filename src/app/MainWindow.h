@@ -4,7 +4,7 @@
 #pragma once
 #include "CommandRegistry.h"
 #include "EditorSession.h"
-#include "compositor/psd.h"
+#include "nekophoto/psd.h"
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QMainWindow>
@@ -99,10 +99,10 @@ public:
     /// `error`, reports instead of showing a dialog (automation).
     /// A camera RAW smart object (Open Object) reopens in the Camera Raw dialog instead; given `rawSettings`, or with
     /// no window on screen, it is developed again with them (or its own) without the dialog.
-    bool editSmartObjectContents(QString* error = nullptr, const compositor::CameraRawSettings* rawSettings = nullptr);
+    bool editSmartObjectContents(QString* error = nullptr, const nekophoto::CameraRawSettings* rawSettings = nullptr);
     /// How a camera RAW file opens without the Camera Raw dialog (automation, a headless run).
     struct RawOpenRequest {
-        compositor::CameraRawSettings settings;
+        nekophoto::CameraRawSettings settings;
         bool asSmartObject = false;
         int bitsPerChannel = 16;
     };
@@ -188,11 +188,11 @@ private:
     /// The reading half of an open: the document `source` holds, read as File > Open reads it, with the choices it
     /// records (and records the ones made now: the profile decision, a PDF's page). A layered file's import notes
     /// land in `notes`. Empty with `error` (empty when a choice was cancelled).
-    std::optional<compositor::PsdImport> readLayeredSource(DocumentSource& source, QString* error);
+    std::optional<nekophoto::PsdImport> readLayeredSource(DocumentSource& source, QString* error);
     std::optional<EditorSession::LoadedProject> readSource(DocumentSource& source, QString* error);
     /// The profile decision for a file as it opens: the one `source` recorded while the file embeds the same profile,
     /// else asked (or by Color Settings' policy) and recorded.
-    color::OpenDecision openDecision(DocumentSource& source, const std::optional<compositor::ColorProfile>& embedded);
+    color::OpenDecision openDecision(DocumentSource& source, const std::optional<nekophoto::ColorProfile>& embedded);
     struct Tab {
         CanvasFrame* frame = nullptr;
         EditorSession* session = nullptr;
@@ -254,7 +254,7 @@ private:
     void deleteLayersCommand();
     void fillWith(const QColor& color);
     void maskCommand(const QJsonObject& params);
-    void samplingCommand(compositor::Sampling sampling);
+    void samplingCommand(nekophoto::Sampling sampling);
     void trimCommand(const QJsonObject& params);
     void updateColorSwatches();
     /// The foreground and background colours (the ones flagged), through colors.set.
@@ -344,9 +344,9 @@ private:
     /// Shows the active tab's 32-bit view in the status bar (and hides it for 8- and 16-bit documents).
     void refreshExposure();
     /// Image > Mode: converts the document, or says why it cannot.
-    void convertMode(compositor::SampleType type);
+    void convertMode(nekophoto::SampleType type);
     /// Image > Mode > RGB Color, CMYK Color, Lab Color.
-    void convertColorMode(compositor::ColorMode colorMode);
+    void convertColorMode(nekophoto::ColorMode colorMode);
     /// Greys out what the document's depth does not support, with a tooltip saying so.
     void refreshDepthGating();
     /// After exporting a 16-bit document to an 8-bit format: says it was dithered down.

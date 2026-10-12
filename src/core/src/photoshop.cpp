@@ -1,6 +1,6 @@
 #include "photoshop.h"
 
-namespace compositor::photoshop {
+namespace nekophoto::photoshop {
 
 Descriptor readDescriptorValue(Reader& r, const std::string& type, int depth);
 
@@ -67,4 +67,4 @@ Descriptor readDescriptor(Reader& r) {
     return readDescriptorObject(r, 0);
 }
 
-} // namespace compositor::photoshop
+} // namespace nekophoto::photoshop

@@ -1,9 +1,9 @@
 // Clip Studio project import: a .clip written here byte by byte (the CSFCHUNK container, tile streams laid
 // out as Clip Studio writes them, an SQLite database made here), when the build has SQLite; and a real file
-// with the PSD Clip Studio exported from it, when COMPOSITOR_CLIP_SAMPLE and COMPOSITOR_CLIP_PSD name them.
+// with the PSD Clip Studio exported from it, when NEKOPHOTO_CLIP_SAMPLE and NEKOPHOTO_CLIP_PSD name them.
 #include "check.h"
-#include "compositor/clip.h"
-#include "compositor/render.h"
+#include "nekophoto/clip.h"
+#include "nekophoto/render.h"
 #include <array>
 #include <cmath>
 #include <cstdlib>
@@ -15,14 +15,14 @@
 #include <vector>
 #include <zlib.h>
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 #include <sqlite3.h>
 #endif
 
-using namespace compositor;
+using namespace nekophoto;
 namespace fs = std::filesystem;
 
-#ifdef COMPOSITOR_HAVE_SQLITE
+#ifdef NEKOPHOTO_HAVE_SQLITE
 
 namespace {
 
@@ -208,7 +208,7 @@ TEST_CASE(clip_layers_folders_clipping_masks_and_placement_come_through) {
     auto flat = renderFlattened(doc);
     CHECK_EQ(int(flat->pixel(10, 200)[2]), 255);
     CHECK(flat->pixel(50, 60)[0] > 100 && flat->pixel(50, 60)[1] < 50);
-    if (!std::getenv("COMPOSITOR_KEEP_TEST_CLIP")) fs::remove(path);   // kept, it seeds a fuzzer
+    if (!std::getenv("NEKOPHOTO_KEEP_TEST_CLIP")) fs::remove(path);   // kept, it seeds a fuzzer
 }
 
 TEST_CASE(clip_files_that_lie_are_refused) {
@@ -231,9 +231,9 @@ TEST_CASE(clip_needs_sqlite) { std::fprintf(stderr, "  (skipped: built without S
 #endif
 
 TEST_CASE(clip_sample_matches_its_psd_when_available) {
-    const char* sample = std::getenv("COMPOSITOR_CLIP_SAMPLE");
-    const char* psdPath = std::getenv("COMPOSITOR_CLIP_PSD");
-    if (!sample || !psdPath) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_CLIP_SAMPLE to a .clip and COMPOSITOR_CLIP_PSD to its PSD export)\n"); return; }
+    const char* sample = std::getenv("NEKOPHOTO_CLIP_SAMPLE");
+    const char* psdPath = std::getenv("NEKOPHOTO_CLIP_PSD");
+    if (!sample || !psdPath) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_CLIP_SAMPLE to a .clip and NEKOPHOTO_CLIP_PSD to its PSD export)\n"); return; }
     std::string error;
     auto clip = importClip(sample, &error);
     REQUIRE(clip.has_value());

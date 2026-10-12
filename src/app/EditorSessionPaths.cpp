@@ -1,13 +1,13 @@
-// Paths: the Pen and Direct Selection tools and the Paths panel's commands (compositor/vectorlayer.h). The target
+// Paths: the Pen and Direct Selection tools and the Paths panel's commands (nekophoto/vectorlayer.h). The target
 // path is the Paths panel's choice, else the active layer's vector mask when it is targeted, else the active vector
 // shape layer's path.
 #include "EditorSession.h"
 #include "QtGeometry.h"
 #include "TextLayer.h"
-#include "compositor/depth.h"
-#include "compositor/selection.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/selection.h"
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 

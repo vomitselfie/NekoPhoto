@@ -5,16 +5,16 @@
 // then version-dependent trailers, each element padded to four bytes; 'SoLd' is 'soLD', version 4 or 5, then a
 // version-16 descriptor ('Idnt', 'placed', 'Trnf', 'nonAffineTransform', 'Sz  ', 'Rslt', 'warp', 'filterFX');
 // 'PlLd' is 'plcL', version 3, the Pascal uuid, page, pages, antialias, type and the eight quad doubles.
-#include "compositor/smartobject.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/png.h"
-#include "compositor/uuid.h"
+#include "nekophoto/smartobject.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/png.h"
+#include "nekophoto/uuid.h"
 #include "psd/psd_descriptor.hpp"
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace psd = patchy::psd;
 
@@ -684,4 +684,4 @@ std::optional<SmartObjectInstance> parseSmartObjectInstance(const std::vector<ui
     } catch (std::exception&) { return std::nullopt; }
 }
 
-} // namespace compositor
+} // namespace nekophoto

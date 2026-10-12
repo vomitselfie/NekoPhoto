@@ -6,11 +6,11 @@
 // and so must a CMYK or Lab file at either depth, which must also reopen in its own colour mode with its profile.
 // PSD_ROUNDTRIP_16=1 or PSD_ROUNDTRIP_32=1 convert each file to 16 or 32 bits first (Image > Mode).
 // Every file must also reopen with the same render (8-bit flattened, within a level).
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/psd_carry.h"
-#include "compositor/vectormask.h"
-#include "compositor/render.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/vectormask.h"
+#include "nekophoto/render.h"
 #include "psd/psd_binary.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -142,19 +142,19 @@ Bytes readFile(const fs::path& p) {
 /// Checks one file; prints what was lost. Returns false when anything carried did not come back.
 bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     std::string error;
-    auto imported = compositor::importPsd(path.string(), &error);
+    auto imported = nekophoto::importPsd(path.string(), &error);
     if (!imported) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
-    compositor::PsdExportSummary summary;
+    nekophoto::PsdExportSummary summary;
     // PSD_ROUNDTRIP_PSB=1: export as PSB instead (Photoshop's large format, 64-bit lengths).
-    compositor::PsdExportOptions options;
+    nekophoto::PsdExportOptions options;
     options.large = std::getenv("PSD_ROUNDTRIP_PSB") != nullptr;
     // PSD_ROUNDTRIP_16=1: convert to 16 bits first (Image > Mode), so the 16-bit writer carries the same blocks.
     const bool sixteen = std::getenv("PSD_ROUNDTRIP_16") != nullptr;
-    if (sixteen && !compositor::convertSampleType(imported->document, compositor::SampleType::U16, &error)) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
+    if (sixteen && !nekophoto::convertSampleType(imported->document, nekophoto::SampleType::U16, &error)) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
     // PSD_ROUNDTRIP_32=1: convert to 32 bits first, so the 32-bit writer ('Lr32', float channels) carries the same blocks.
     const bool thirtyTwo = std::getenv("PSD_ROUNDTRIP_32") != nullptr;
-    if (thirtyTwo && !compositor::convertSampleType(imported->document, compositor::SampleType::F32, &error)) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
-    Bytes out = compositor::encodePsd(imported->document, options, &summary, &error);
+    if (thirtyTwo && !nekophoto::convertSampleType(imported->document, nekophoto::SampleType::F32, &error)) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
+    Bytes out = nekophoto::encodePsd(imported->document, options, &summary, &error);
     if (out.empty()) { std::printf("FAIL %s: export: %s\n", path.filename().string().c_str(), error.c_str()); return false; }
     FileDump a, b;
     try { a = dump(readFile(path)); } catch (std::exception& e) { std::printf("SKIP %s: unreadable here (%s)\n", path.filename().string().c_str(), e.what()); return true; }
@@ -163,10 +163,10 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     // Fill layers Photoshop stored pixels for: our own drawing of the gradient or pattern against them (reported, not
     // gated: PSD_ROUNDTRIP_FILLS=1 prints each one).
     if (std::getenv("PSD_ROUNDTRIP_FILLS"))
-        for (const compositor::Layer& layer : imported->document.layers) {
-            const compositor::Image* stored = layer.asset ? layer.asset->image.u8().get() : nullptr;
+        for (const nekophoto::Layer& layer : imported->document.layers) {
+            const nekophoto::Image* stored = layer.asset ? layer.asset->image.u8().get() : nullptr;
             if (!stored || !layer.psdCarry) continue;
-            auto drawn = compositor::renderFillLayer(layer, imported->document);
+            auto drawn = nekophoto::renderFillLayer(layer, imported->document);
             if (!drawn) continue;
             const int ox = int(layer.origin().x), oy = int(layer.origin().y);
             double sum = 0; int worst = 0; long n = 0;
@@ -192,7 +192,7 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
             std::printf("     fill \"%s\": drawn against Photoshop's pixels: mean %.2f, max %d levels\n", layer.name.c_str(), n ? sum / double(n) : 0.0, worst);
         }
     // The size check before opening (estimatePsd) reads the same records the importer does, seeking past the pixels.
-    if (auto e = compositor::estimatePsd(path.string(), &error)) {
+    if (auto e = nekophoto::estimatePsd(path.string(), &error)) {
         if (e->layers != int(a.records.size()) || e->width != imported->document.width || e->height != imported->document.height)
             problems.push_back("estimatePsd saw " + std::to_string(e->layers) + " records at " + std::to_string(e->width) + "x" + std::to_string(e->height) +
                                ", the file has " + std::to_string(a.records.size()));
@@ -242,15 +242,15 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     // Round trip once more: our own file must read back.
     const fs::path again = fs::temp_directory_path() / ("psd_roundtrip_" + std::to_string(::getpid()) + (options.large ? ".psb" : ".psd"));
     { std::ofstream o(again, std::ios::binary); o.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size())); }
-    auto reopened = compositor::importPsd(again.string(), &error);
+    auto reopened = nekophoto::importPsd(again.string(), &error);
     if (!reopened) problems.push_back("our file does not reopen: " + error);
-    else if (sixteen && reopened->document.sampleType != compositor::SampleType::U16) problems.push_back("our file does not reopen at 16 bits");
-    else if (thirtyTwo && reopened->document.sampleType != compositor::SampleType::F32) problems.push_back("our file does not reopen at 32 bits");
+    else if (sixteen && reopened->document.sampleType != nekophoto::SampleType::U16) problems.push_back("our file does not reopen at 16 bits");
+    else if (thirtyTwo && reopened->document.sampleType != nekophoto::SampleType::F32) problems.push_back("our file does not reopen at 32 bits");
     if (reopened && reopened->document.colorMode != imported->document.colorMode) problems.push_back("our file does not reopen in the same colour mode");
     // What it looks like: the reopened document renders as the opened one did, within a level. Structure alone can
     // come back while the pixels do not (a Grayscale file's one plane written into an RGB record).
     if (reopened) {
-        auto before = compositor::renderFlattened(imported->document), after = compositor::renderFlattened(reopened->document);
+        auto before = nekophoto::renderFlattened(imported->document), after = nekophoto::renderFlattened(reopened->document);
         if (!before || !after || before->width() != after->width() || before->height() != after->height()) problems.push_back("render: our file reopens at another size");
         else {
             int worst = 0; long off = 0;
@@ -278,11 +278,11 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
         const auto& now = reopened->document.channels;
         if (was.size() != now.size()) problems.push_back("channel count " + std::to_string(was.size()) + " -> " + std::to_string(now.size()));
         else for (size_t i = 0; i < was.size(); i++) {
-            const compositor::Channel &x = was[i], &y = now[i];
+            const nekophoto::Channel &x = was[i], &y = now[i];
             const std::string label = "channel \"" + x.name + "\": ";
             if (x.name != y.name) problems.push_back(label + "renamed \"" + y.name + "\"");
             if (x.kind != y.kind || x.selectedAreas != y.selectedAreas || x.color != y.color || x.opacity != y.opacity) problems.push_back(label + "display changed");
-            if (compositor::psdMaskHash(x.image, true) != compositor::psdMaskHash(y.image, true)) problems.push_back(label + "pixels changed");
+            if (nekophoto::psdMaskHash(x.image, true) != nekophoto::psdMaskHash(y.image, true)) problems.push_back(label + "pixels changed");
             if (x.psdCarry && y.psdCarry && (x.psdCarry->displayInfo != y.psdCarry->displayInfo || x.psdCarry->identifier != y.psdCarry->identifier || (!x.psdCarry->plane16.empty() && x.psdCarry->plane16 != y.psdCarry->plane16)))
                 problems.push_back(label + "stored record or samples changed");
             else if (problems.empty()) channelsBack++;

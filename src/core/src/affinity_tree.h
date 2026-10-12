@@ -12,7 +12,7 @@
 #include <variant>
 #include <vector>
 
-namespace compositor::affinity {
+namespace nekophoto::affinity {
 
 /// A little-endian reader over a byte span; reading past the end throws std::runtime_error.
 class Reader {
@@ -87,4 +87,4 @@ constexpr uint32_t tag(const char (&s)[5]) {
     return uint32_t(uint8_t(s[0])) << 24 | uint32_t(uint8_t(s[1])) << 16 | uint32_t(uint8_t(s[2])) << 8 | uint32_t(uint8_t(s[3]));
 }
 
-} // namespace compositor::affinity
+} // namespace nekophoto::affinity

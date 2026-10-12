@@ -1,7 +1,7 @@
 #include "TextLayer.h"
 #include "ImageConvert.h"
-#include "compositor/smartobject.h"
-#include "compositor/warpmesh.h"
+#include "nekophoto/smartobject.h"
+#include "nekophoto/warpmesh.h"
 #include <QBuffer>
 #include <QFontDatabase>
 #include <QImageReader>
@@ -22,7 +22,7 @@ namespace app {
 
 QString defaultTextFamily() { return QFontDatabase::systemFont(QFontDatabase::GeneralFont).family(); }
 
-QFont fontFor(const compositor::LayerText& text) {
+QFont fontFor(const nekophoto::LayerText& text) {
     QFont font(text.fontFamily.empty() ? defaultTextFamily() : QString::fromStdString(text.fontFamily));
     font.setPixelSize(std::max(1, int(std::lround(text.fontSize))));
     font.setBold(text.bold);
@@ -35,8 +35,8 @@ QFont fontFor(const compositor::LayerText& text) {
 
 namespace {
 
-QFont runFont(const compositor::LayerText& text, const compositor::TextRun& run) {
-    compositor::LayerText t = text;
+QFont runFont(const nekophoto::LayerText& text, const nekophoto::TextRun& run) {
+    nekophoto::LayerText t = text;
     t.fontFamily = run.fontFamily; t.fontSize = run.fontSize; t.bold = run.bold; t.italic = run.italic; t.letterSpacing = run.letterSpacing;
     QFont font = fontFor(t);
     if (run.weight > 0) {
@@ -50,7 +50,7 @@ QFont runFont(const compositor::LayerText& text, const compositor::TextRun& run)
             if (!has) font.setWeight(QFont::Bold);
         }
     }
-    if (run.caps != compositor::TextRun::Caps::Normal) font.setCapitalization(run.caps == compositor::TextRun::Caps::Small ? QFont::SmallCaps : QFont::AllUppercase);
+    if (run.caps != nekophoto::TextRun::Caps::Normal) font.setCapitalization(run.caps == nekophoto::TextRun::Caps::Small ? QFont::SmallCaps : QFont::AllUppercase);
     return font;
 }
 
@@ -64,14 +64,14 @@ struct RunLayout {
     std::vector<QFont> fonts;       // each run's
 };
 
-RunLayout layoutRuns(const compositor::LayerText& text) {
+RunLayout layoutRuns(const nekophoto::LayerText& text) {
     RunLayout out;
     const bool boxed = text.boxWidth > 0 && text.boxHeight > 0;
-    const std::vector<compositor::TextRun> runs = compositor::textRuns(text);
+    const std::vector<nekophoto::TextRun> runs = nekophoto::textRuns(text);
     struct Span { int start, end; QTextCharFormat format; double leading, capHeight; };
     std::vector<Span> spans;
     int at = 0;
-    for (const compositor::TextRun& run : runs) {
+    for (const nekophoto::TextRun& run : runs) {
         const QFont font = runFont(text, run);
         out.fonts.push_back(font);
         QTextCharFormat f;
@@ -149,11 +149,11 @@ RunLayout layoutRuns(const compositor::LayerText& text) {
 /// the glyphs and colours at 16 bits there; its glyph coverage is 8-bit either way).
 QImage::Format textFormat(bool deep) { return deep ? QImage::Format_RGBA64_Premultiplied : QImage::Format_ARGB32_Premultiplied; }
 
-QImage renderRuns(const compositor::LayerText& text, bool deep) {
+QImage renderRuns(const nekophoto::LayerText& text, bool deep) {
     RunLayout laid = layoutRuns(text);
     const int w = std::max(1, int(std::ceil(laid.width)) + 2 * textPadding);
     const int h = std::max(1, int(std::ceil(laid.bottom)) + 2 * textPadding);
-    if ((long long)w * h > compositor::Document::pixelBudget) return {};
+    if ((long long)w * h > nekophoto::Document::pixelBudget) return {};
     QImage image(w, h, textFormat(deep));
     image.fill(Qt::transparent);
     QPainter painter(&image);
@@ -170,11 +170,11 @@ QImage renderRuns(const compositor::LayerText& text, bool deep) {
     return image;
 }
 
-QImage renderUpright(const compositor::LayerText& text, bool deep);
+QImage renderUpright(const nekophoto::LayerText& text, bool deep);
 
 } // namespace
 
-TextCaretGeometry textCaretGeometry(const compositor::LayerText& text) {
+TextCaretGeometry textCaretGeometry(const nekophoto::LayerText& text) {
     // The runs' layout, as renderRuns places it: plain text draws the same lines (one font, no wrap), so its caret
     // comes from the same layout.
     TextCaretGeometry out;
@@ -276,18 +276,18 @@ namespace {
 
 /// Warp Text over the upright raster, at either depth.
 template <class Img>
-std::shared_ptr<Img> bendText(const compositor::LayerText& text, std::shared_ptr<Img> upright, QPointF* warpOffset) {
+std::shared_ptr<Img> bendText(const nekophoto::LayerText& text, std::shared_ptr<Img> upright, QPointF* warpOffset) {
     if (!upright || !text.warp.active()) return upright;
     // Warp Text: the preset bent over the layout box (the block's lines, or the frame), as Photoshop re-derives it
     // from its own layout; ink past the box follows the patch's extension.
     auto m = psdTextMetrics(text);
     if (!m) return upright;
     const bool boxed = text.boxWidth > 0 && text.boxHeight > 0;
-    const compositor::Rect box(m->blockLeft, m->blockTop, boxed ? text.boxWidth : m->blockWidth, boxed ? text.boxHeight : m->lineHeight * std::max(1, m->lines));
-    auto mesh = compositor::styleWarpMesh(text.warp.style, text.warp.bend, text.warp.verticalOrientation, box.width, box.height);
+    const nekophoto::Rect box(m->blockLeft, m->blockTop, boxed ? text.boxWidth : m->blockWidth, boxed ? text.boxHeight : m->lineHeight * std::max(1, m->lines));
+    auto mesh = nekophoto::styleWarpMesh(text.warp.style, text.warp.bend, text.warp.verticalOrientation, box.width, box.height);
     if (!mesh) return upright;
-    compositor::distortWarpMesh(*mesh, text.warp.horizontal, text.warp.vertical);
-    auto bent = compositor::renderWarpedOverBox(*upright, *mesh, box);
+    nekophoto::distortWarpMesh(*mesh, text.warp.horizontal, text.warp.vertical);
+    auto bent = nekophoto::renderWarpedOverBox(*upright, *mesh, box);
     if (!bent) return upright;
     if (warpOffset) *warpOffset = QPointF(bent->transform.origin.x, bent->transform.origin.y);
     return std::const_pointer_cast<Img>(std::shared_ptr<const Img>(bent->image));
@@ -295,37 +295,37 @@ std::shared_ptr<Img> bendText(const compositor::LayerText& text, std::shared_ptr
 
 } // namespace
 
-std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text, QPointF* warpOffset) {
+std::shared_ptr<nekophoto::Image> renderTextLayer(const nekophoto::LayerText& text, QPointF* warpOffset) {
     if (warpOffset) *warpOffset = QPointF(0, 0);
     const QImage upright = renderUpright(text, false);
     return bendText(text, upright.isNull() ? nullptr : fromQImage(upright), warpOffset);
 }
 
-std::shared_ptr<compositor::Image16> renderTextLayer16(const compositor::LayerText& text, QPointF* warpOffset) {
+std::shared_ptr<nekophoto::Image16> renderTextLayer16(const nekophoto::LayerText& text, QPointF* warpOffset) {
     if (warpOffset) *warpOffset = QPointF(0, 0);
     const QImage upright = renderUpright(text, true);
     return bendText(text, upright.isNull() ? nullptr : fromQImage16(upright), warpOffset);
 }
 
-compositor::AnyImage renderTextLayerAt(const compositor::LayerText& text, compositor::SampleType type, QPointF* warpOffset) {
-    if (type == compositor::SampleType::U16) {
+nekophoto::AnyImage renderTextLayerAt(const nekophoto::LayerText& text, nekophoto::SampleType type, QPointF* warpOffset) {
+    if (type == nekophoto::SampleType::U16) {
         auto image = renderTextLayer16(text, warpOffset);
-        return image ? compositor::AnyImage(compositor::Image16Ptr(image)) : compositor::AnyImage();
+        return image ? nekophoto::AnyImage(nekophoto::Image16Ptr(image)) : nekophoto::AnyImage();
     }
     auto image = renderTextLayer(text, warpOffset);
-    return image ? compositor::AnyImage(compositor::ImagePtr(image)) : compositor::AnyImage();
+    return image ? nekophoto::AnyImage(nekophoto::ImagePtr(image)) : nekophoto::AnyImage();
 }
 
-compositor::AnyImage renderTextForDocument(const compositor::LayerText& text, const compositor::Document& document, QPointF* warpOffset,
-                                           const compositor::ConvertOptions& options) {
-    if (document.colorMode == compositor::ColorMode::RGB) return renderTextLayerAt(text, document.sampleType, warpOffset);
+nekophoto::AnyImage renderTextForDocument(const nekophoto::LayerText& text, const nekophoto::Document& document, QPointF* warpOffset,
+                                           const nekophoto::ConvertOptions& options) {
+    if (document.colorMode == nekophoto::ColorMode::RGB) return renderTextLayerAt(text, document.sampleType, warpOffset);
     auto image = renderTextLayer16(text, warpOffset);
-    return image ? compositor::textRasterInMode(*image, text, document, options) : compositor::AnyImage();
+    return image ? nekophoto::textRasterInMode(*image, text, document, options) : nekophoto::AnyImage();
 }
 
 namespace {
 
-QImage renderUpright(const compositor::LayerText& text, bool deep) {
+QImage renderUpright(const nekophoto::LayerText& text, bool deep) {
     if (!text.runs.empty() || (text.boxWidth > 0 && text.boxHeight > 0)) return renderRuns(text, deep);
     const QFont font = fontFor(text);
     const QFontMetricsF metrics(font);
@@ -337,7 +337,7 @@ QImage renderUpright(const compositor::LayerText& text, bool deep) {
     for (const QString& line : lines) width = std::max(width, metrics.horizontalAdvance(line));
     const int w = std::max(1, int(std::ceil(width)) + 2 * textPadding);
     const int h = std::max(1, int(std::ceil(lineHeight * lines.size())) + 2 * textPadding);
-    if ((long long)w * h > compositor::Document::pixelBudget) return {};
+    if ((long long)w * h > nekophoto::Document::pixelBudget) return {};
     QImage image(w, h, textFormat(deep));
     image.fill(Qt::transparent);
     QPainter painter(&image);
@@ -360,8 +360,8 @@ QImage renderUpright(const compositor::LayerText& text, bool deep) {
 namespace {
 
 /// A Qt outline as path subpaths: each closed figure a subpath of corner and curve knots, `group` given.
-void appendOutline(const QPainterPath& outline, int32_t group, compositor::VectorPath& out) {
-    compositor::VectorPath::Subpath current;
+void appendOutline(const QPainterPath& outline, int32_t group, nekophoto::VectorPath& out) {
+    nekophoto::VectorPath::Subpath current;
     auto flush = [&] {
         auto& k = current.knots;
         // A figure that returns to its start: the last knot is the first (its incoming handle goes to the first).
@@ -369,7 +369,7 @@ void appendOutline(const QPainterPath& outline, int32_t group, compositor::Vecto
             k.front().inX = k.back().inX; k.front().inY = k.back().inY;
             k.pop_back();
         }
-        if (k.size() >= 2) { current.closed = true; current.op = compositor::VectorPath::Op::Add; current.group = group; out.subpaths.push_back(current); }
+        if (k.size() >= 2) { current.closed = true; current.op = nekophoto::VectorPath::Op::Add; current.group = group; out.subpaths.push_back(current); }
         current = {};
     };
     for (int i = 0; i < outline.elementCount(); i++) {
@@ -388,10 +388,10 @@ void appendOutline(const QPainterPath& outline, int32_t group, compositor::Vecto
 
 } // namespace
 
-std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& layer, QString* error) {
+std::optional<nekophoto::VectorPath> textLayerOutline(const nekophoto::Layer& layer, QString* error) {
     auto fail = [&](const QString& why) { if (error) *error = why; return std::nullopt; };
     if (!layer.isLiveText() || !layer.asset || !layer.asset->image) return fail(QObject::tr("The layer is not a text layer."));
-    const compositor::LayerText& text = *layer.text;
+    const nekophoto::LayerText& text = *layer.text;
     if (text.warp.active()) return fail(QObject::tr("Warped text cannot be made a path here; set its warp to None first."));
     // The glyphs where renderUpright puts them in the layer's raster, one shape group each (overlapping letters
     // add; a letter's own holes fill even-odd).
@@ -441,14 +441,14 @@ std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& 
             collect(layout, QPointF(x, baseline - l.ascent()));
         }
     }
-    compositor::VectorPath path;
+    nekophoto::VectorPath path;
     for (size_t i = 0; i < glyphs.size(); i++) appendOutline(glyphs[i], int32_t(i), path);
     if (path.subpaths.empty()) return fail(QObject::tr("The text has no outlines (only spaces?)."));
     // From the raster to the document, through the layer's placement (moved, scaled or turned).
     const int w = layer.asset->image.width(), h = layer.asset->image.height();
     for (auto& s : path.subpaths)
         for (auto& k : s.knots) {
-            auto map = [&](double& x, double& y) { const compositor::Point p = compositor::mapThroughTransform(layer.transform, w, h, x, y); x = p.x; y = p.y; };
+            auto map = [&](double& x, double& y) { const nekophoto::Point p = nekophoto::mapThroughTransform(layer.transform, w, h, x, y); x = p.x; y = p.y; };
             map(k.inX, k.inY); map(k.x, k.y); map(k.outX, k.outY);
         }
     return path;
@@ -479,11 +479,11 @@ QString postScriptName(const QRawFont& raw) {
 
 } // namespace
 
-std::optional<compositor::PsdTextMetrics> psdTextMetrics(const compositor::LayerText& text) {
+std::optional<nekophoto::PsdTextMetrics> psdTextMetrics(const nekophoto::LayerText& text) {
     if (!text.runs.empty() || (text.boxWidth > 0 && text.boxHeight > 0)) {
         if (text.text.empty()) return std::nullopt;
         const RunLayout laid = layoutRuns(text);
-        compositor::PsdTextMetrics m;
+        nekophoto::PsdTextMetrics m;
         m.fontSize = laid.fonts.front().pixelSize();
         m.ascent = laid.firstAscent;
         // The block's height over its lines (the writer spaces the bounds by one pitch; each run keeps its own leading).
@@ -492,10 +492,10 @@ std::optional<compositor::PsdTextMetrics> psdTextMetrics(const compositor::Layer
         if (!(m.lineHeight > 0)) m.lineHeight = laid.pitch;
         m.blockWidth = laid.width;
         m.blockLeft = m.blockTop = textPadding;
-        const std::vector<compositor::TextRun> runs = compositor::textRuns(text);
+        const std::vector<nekophoto::TextRun> runs = nekophoto::textRuns(text);
         for (size_t i = 0; i < runs.size(); i++) {
             const QRawFont raw = QRawFont::fromFont(laid.fonts[i]);
-            compositor::PsdTextMetrics::RunFace face;
+            nekophoto::PsdTextMetrics::RunFace face;
             face.postScriptName = postScriptName(raw).toStdString();
             if (face.postScriptName.empty()) face.postScriptName = QString(laid.fonts[i].family()).remove(' ').toStdString();
             face.fauxBold = runs[i].bold && runs[i].weight == 0 && raw.weight() < QFont::DemiBold;
@@ -513,7 +513,7 @@ std::optional<compositor::PsdTextMetrics> psdTextMetrics(const compositor::Layer
     QString content = QString::fromStdString(text.text);
     if (content.isEmpty()) return std::nullopt;
     const QStringList lines = content.split('\n');
-    compositor::PsdTextMetrics m;
+    nekophoto::PsdTextMetrics m;
     m.fontSize = font.pixelSize();
     m.ascent = metrics.ascent();
     m.lineHeight = metrics.height() * std::clamp(text.lineSpacing, 0.1, 10.0);
@@ -571,11 +571,11 @@ bool installed(const QString& family) {
 
 } // namespace
 
-void finishPsdText(compositor::PsdImport& imported) {
-    for (const compositor::PsdImportedText& t : imported.texts) {
-        compositor::Layer* layer = imported.document.find(t.layer);
+void finishPsdText(nekophoto::PsdImport& imported) {
+    for (const nekophoto::PsdImportedText& t : imported.texts) {
+        nekophoto::Layer* layer = imported.document.find(t.layer);
         if (!layer || !layer->text) continue;
-        compositor::LayerText& text = *layer->text;
+        nekophoto::LayerText& text = *layer->text;
         const QString family = familyForPostScriptName(QString::fromStdString(t.postScriptName));
         text.fontFamily = family.toStdString();
         std::vector<std::string> missing;
@@ -597,21 +597,21 @@ void finishPsdText(compositor::PsdImport& imported) {
     }
 }
 
-void finishPendingText(compositor::PsdImport& imported) {
-    for (const compositor::PsdImport::PendingText& p : imported.pendingTexts) {
-        compositor::Layer* layer = imported.document.find(p.layer);
+void finishPendingText(nekophoto::PsdImport& imported) {
+    for (const nekophoto::PsdImport::PendingText& p : imported.pendingTexts) {
+        nekophoto::Layer* layer = imported.document.find(p.layer);
         if (!layer || !layer->text) continue;
-        compositor::LayerText& text = *layer->text;
+        nekophoto::LayerText& text = *layer->text;
         std::vector<std::string> missing;
         auto check = [&](const std::string& family) {
             if (!family.empty() && !installed(QString::fromStdString(family)) && std::find(missing.begin(), missing.end(), family) == missing.end()) missing.push_back(family);
         };
         check(text.fontFamily);
-        for (const compositor::TextRun& run : text.runs) check(run.fontFamily);
+        for (const nekophoto::TextRun& run : text.runs) check(run.fontFamily);
         for (const std::string& family : missing)
             imported.notes.push_back(QCoreApplication::translate("app::TextLayer", "Layer \"%1\": the font %2 is not installed; the closest match, %3, draws it until you install it.")
                                          .arg(QString::fromStdString(layer->name), QString::fromStdString(family), QFontInfo(QFont(QString::fromStdString(family))).family()).toStdString());
-        const compositor::AnyImage image = renderTextForDocument(text, imported.document);
+        const nekophoto::AnyImage image = renderTextForDocument(text, imported.document);
         if (!image) continue;
         const auto m = psdTextMetrics(text);
         const double blockTop = m ? m->blockTop : textPadding, ascent = m ? m->ascent : 0;
@@ -621,37 +621,37 @@ void finishPendingText(compositor::PsdImport& imported) {
             const double slack = p.width - (image.width() - 2 * textPadding);
             left += p.align == 1 ? slack / 2 : slack;
         }
-        layer->asset = compositor::Asset::makeAny(image, layer->name);
+        layer->asset = nekophoto::Asset::makeAny(image, layer->name);
         layer->textImage = image;
         const double w = image.width(), h = image.height();
         if (p.rotation == 0) {
-            layer->transform = compositor::LayerTransform(compositor::Point(std::round(left), std::round(top)), compositor::Size(w, h));
+            layer->transform = nekophoto::LayerTransform(nekophoto::Point(std::round(left), std::round(top)), nekophoto::Size(w, h));
         } else {
             // The upright raster's corner and centre turned into the document; the layer turns about its centre.
             const double a = p.rotation * M_PI / 180, c = std::cos(a), sn = std::sin(a);
             const double cx = left + w / 2, cy = top + h / 2;
-            const compositor::Point centre(p.originX + cx * c - cy * sn, p.originY + cx * sn + cy * c);
-            layer->transform = compositor::LayerTransform(compositor::Point(centre.x - w / 2, centre.y - h / 2), compositor::Size(w, h));
+            const nekophoto::Point centre(p.originX + cx * c - cy * sn, p.originY + cx * sn + cy * c);
+            layer->transform = nekophoto::LayerTransform(nekophoto::Point(centre.x - w / 2, centre.y - h / 2), nekophoto::Size(w, h));
             layer->transform.rotation = p.rotation;
         }
     }
     imported.pendingTexts.clear();
 }
 
-compositor::PsdImportOptions psdImportOptions() {
-    compositor::PsdImportOptions options;
-    options.decodeImage = [](const std::vector<uint8_t>& bytes, const std::string&, const std::string&) -> compositor::ImagePtr {
+nekophoto::PsdImportOptions psdImportOptions() {
+    nekophoto::PsdImportOptions options;
+    options.decodeImage = [](const std::vector<uint8_t>& bytes, const std::string&, const std::string&) -> nekophoto::ImagePtr {
         QImage image;
         if (bytes.size() > size_t(std::numeric_limits<int>::max()) || !image.loadFromData(bytes.data(), int(bytes.size()))) return nullptr;
-        if ((long long)image.width() * image.height() > compositor::Document::pixelBudget) return nullptr;
+        if ((long long)image.width() * image.height() > nekophoto::Document::pixelBudget) return nullptr;
         return fromQImage(image);
     };
     return options;
 }
 
-compositor::PsdImportOptions affinityImportOptions() {
-    compositor::PsdImportOptions options;
-    options.decodeImage = [](const std::vector<uint8_t>& bytes, const std::string&, const std::string&) -> compositor::ImagePtr {
+nekophoto::PsdImportOptions affinityImportOptions() {
+    nekophoto::PsdImportOptions options;
+    options.decodeImage = [](const std::vector<uint8_t>& bytes, const std::string&, const std::string&) -> nekophoto::ImagePtr {
         if (bytes.size() > size_t(std::numeric_limits<int>::max())) return nullptr;
         QByteArray data = QByteArray::fromRawData(reinterpret_cast<const char*>(bytes.data()), int(bytes.size()));
         QBuffer buffer(&data);
@@ -659,14 +659,14 @@ compositor::PsdImportOptions affinityImportOptions() {
         QImageReader reader(&buffer);
         reader.setAutoTransform(false);
         const QImage image = reader.read();
-        if (image.isNull() || (long long)image.width() * image.height() > compositor::Document::pixelBudget) return nullptr;
+        if (image.isNull() || (long long)image.width() * image.height() > nekophoto::Document::pixelBudget) return nullptr;
         return fromQImage(image);
     };
     return options;
 }
 
-compositor::PsdExportOptions psdExportOptions() {
-    compositor::PsdExportOptions options;
+nekophoto::PsdExportOptions psdExportOptions() {
+    nekophoto::PsdExportOptions options;
     options.textMetrics = psdTextMetrics;
     return options;
 }

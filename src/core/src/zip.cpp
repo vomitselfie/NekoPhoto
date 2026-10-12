@@ -2,7 +2,7 @@
 #include <zlib.h>
 #include <algorithm>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -101,4 +101,4 @@ std::optional<std::vector<uint8_t>> ZipArchive::read(const std::string& name, si
     return out;
 }
 
-} // namespace compositor
+} // namespace nekophoto

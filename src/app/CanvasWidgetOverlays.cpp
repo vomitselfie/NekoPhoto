@@ -1,7 +1,7 @@
 // The canvas overlays: transform box, selection ants, scribbles, crop, guides and the tool previews.
 #include "CanvasWidget.h"
 #include "VectorPathQt.h"
-#include "compositor/warpmesh.h"
+#include "nekophoto/warpmesh.h"
 #include <cstring>
 #include "QtGeometry.h"
 #include <QPainter>
@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
@@ -234,8 +234,8 @@ void CanvasWidget::refreshSelectionOutline() {
         size_t points = 0;
         for (auto& loop : loops) points += loop.size();
         // Past a couple of hundred thousand corners the vector ants cost more than a raster pass per tick.
-        // COMPOSITOR_RASTER_ANTS=1 forces the raster path, for checking it.
-        if (tooDetailed || points > 200000 || qEnvironmentVariableIsSet("COMPOSITOR_RASTER_ANTS")) selectionRasterAnts_ = true;
+        // NEKOPHOTO_RASTER_ANTS=1 forces the raster path, for checking it.
+        if (tooDetailed || points > 200000 || qEnvironmentVariableIsSet("NEKOPHOTO_RASTER_ANTS")) selectionRasterAnts_ = true;
         else for (auto& loop : loops) {
             QPolygonF poly;
             for (auto& p : loop) poly << toQPoint(p);
@@ -252,7 +252,7 @@ void CanvasWidget::drawWarpCage(QPainter& painter) {
     // The grid: the patch's own curves at thirds, and the control points with the corners' handle lines.
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(QColor(0, 120, 255), 1));
-    auto at = [&](double u, double v) { const compositor::Point p = compositor::evaluateWarpMesh(*cage, u, v); return viewPoint(QPointF(p.x, p.y)); };
+    auto at = [&](double u, double v) { const nekophoto::Point p = nekophoto::evaluateWarpMesh(*cage, u, v); return viewPoint(QPointF(p.x, p.y)); };
     for (int line = 0; line <= 3; line++) {
         const double t = line / 3.0;
         QPainterPath across, down;
@@ -300,7 +300,7 @@ CanvasWidget::PathHit CanvasWidget::pathHit(QPointF view) const {
         }
     auto map = [this](double x, double y) { return viewPoint(QPointF(x, y)); };
     for (int si = int(path->subpaths.size()) - 1; si >= 0; si--) {
-        compositor::VectorPath one;
+        nekophoto::VectorPath one;
         one.subpaths.push_back(path->subpaths[size_t(si)]);
         const QPainterPath outline = painterPath(one, map);
         QPainterPathStroker stroker;
@@ -315,7 +315,7 @@ void CanvasWidget::drawPathOverlay(QPainter& painter) {
     const Tool tool = canvasTool();   // the Direct Selection tool held from the Pen shows the anchors too
     // The pen's path so far, and the segment to where the pointer is.
     if (const auto& draft = session_->penDraft()) {
-        compositor::VectorPath p;
+        nekophoto::VectorPath p;
         p.subpaths.push_back(*draft);
         p.subpaths[0].closed = false;
         painter.setBrush(Qt::NoBrush);

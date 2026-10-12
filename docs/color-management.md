@@ -193,7 +193,7 @@ The MCP tools are `document_profile` and `color_settings` ([automation.md](autom
 
 ## For developers
 
-`src/core/include/compositor/colormgmt.h` is the one place that builds transforms for documents: a thread-safe LRU
+`src/core/include/nekophoto/colormgmt.h` is the one place that builds transforms for documents: a thread-safe LRU
 cache of Little CMS transforms (the 24 most recent), `convertImage` for 8- and 16-bit premultiplied pixels (made
 straight for the transform and premultiplied again; 16-bit pixels go through Little CMS's float pipeline, since its
 16-bit one precalculates a grid that is coarse near the gamut's edges), `convertDocumentProfile`, soft-proofing

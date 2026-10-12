@@ -14,7 +14,7 @@ the undo history, and shows on screen (or nowhere, in headless mode).
 
 The socket is `$XDG_RUNTIME_DIR/nekophoto.sock` (without that variable, `runtime-<user>` under the temp folder,
 which must be a folder of yours closed to everyone else), or the path given with
-`--rpc-socket` or `$COMPOSITOR_RPC_SOCKET`. Only the same user can connect. The
+`--rpc-socket` or `$NEKOPHOTO_RPC_SOCKET`. Only the same user can connect. The
 status bar shows "Agent connected" while a client is attached.
 
 ### Files and limits
@@ -46,11 +46,11 @@ Without `uv`: `pip install "mcp<2"` and run `python3 mcp/nekophoto_mcp.py` inste
 The bridge uses the 1.x MCP SDK API (2.x renamed its server class).
 
 When nothing is listening the bridge launches `nekophoto` (from `PATH`,
-`$COMPOSITOR_BIN`, or `./build/src/app/`) with the socket on; with no display it
+`$NEKOPHOTO_BIN`, or `./build/src/app/`) with the socket on; with no display it
 launches headless. When the editor is already open, that launch hands the
 request to it instead and the running window starts listening on the socket,
-so the agent works in the document the person is looking at. `COMPOSITOR_MCP_LAUNCH=0` disables launching and
-`COMPOSITOR_MCP_LAUNCH=headless` forces the windowless kind.
+so the agent works in the document the person is looking at. `NEKOPHOTO_MCP_LAUNCH=0` disables launching and
+`NEKOPHOTO_MCP_LAUNCH=headless` forces the windowless kind.
 
 The bridge exposes one MCP tool per common operation (`document_overview`, `render`,
 `layers_set`, `pixels_filter`, `selection_rect`, ...), `describe_method` and a generic `rpc` tool
@@ -82,7 +82,7 @@ nekophoto --call render --params '{"path": "/tmp/check.png", "maxSize": 800}'
 file of requests, one JSON object per line (`#` comments allowed, ids
 optional), in a fresh windowless instance with no socket, prints one response
 per line and quits; the first error stops it unless
-`COMPOSITOR_BATCH_CONTINUE=1`.
+`NEKOPHOTO_BATCH_CONTINUE=1`.
 
 ## The protocol
 
@@ -258,12 +258,12 @@ mirrored image's, defaulting to the preference; the mask Filter > Remove Backgro
 used again rather than running the model twice), `pixels.gmic` (`command`, a G'MIC
 command line made of catalogue filters or common built-ins, each followed only by numbers: G'MIC can
 run shell commands and read or write files, so strings, paths, substitutions and other commands are
-refused unless `COMPOSITOR_GMIC_UNRESTRICTED=1` is set; `name` is what the undo step calls it after "G'MIC: ", the
+refused unless `NEKOPHOTO_GMIC_UNRESTRICTED=1` is set; `name` is what the undo step calls it after "G'MIC: ", the
 filter's name when the G'MIC dialog's OK runs it; a command the dialog's typed line holds that the method refuses runs
 in the dialog as before;
 `gmic.filters` lists the catalogue with parameters and defaults, leaving out the filters that do not
 work here unless `all: true`, when they carry an `unsupported` reason). `app.info`'s `gmic` says where G'MIC was found:
-`{path, source, version}` with `source` `env` (`COMPOSITOR_GMIC`), `beside` (a `gmic` folder beside the app's
+`{path, source, version}` with `source` `env` (`NEKOPHOTO_GMIC`), `beside` (a `gmic` folder beside the app's
 executable), `downloaded` (the copy Filter > G'MIC or Preferences downloaded, on Windows) or `path`, in that order of
 preference; `library` (no path) when only libgmic runs it in-process; `null` when it is not installed. There is no
 method that installs it: downloading is the person's choice, in the interface.

@@ -1,11 +1,11 @@
-#include "compositor/history.h"
-#include "compositor/psd_carry.h"
-#include "compositor/smartobject.h"
+#include "nekophoto/history.h"
+#include "nekophoto/psd_carry.h"
+#include "nekophoto/smartobject.h"
 #include <cstring>
 #include <set>
 #include <unordered_set>
 
-namespace compositor {
+namespace nekophoto {
 
 DocumentHistory::DocumentHistory(int entryLimit, size_t retainedByteLimit)
     : entryLimit_(std::max(0, entryLimit)), retainedByteLimit_(retainedByteLimit) {}
@@ -518,4 +518,4 @@ void DocumentHistory::trim(const std::optional<Document>& current) {
     }
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -39,7 +39,7 @@ struct Command {
     std::function<void()> run;
     /// The title of an error the request gives (default: the label).
     QString errorTitle;
-    /// Whether it needs a document, and the supports() feature it is (compositor/supports.h): the depth and colour
+    /// Whether it needs a document, and the supports() feature it is (nekophoto/supports.h): the depth and colour
     /// mode then gate it. A document command without a feature is 8-bit RGB only.
     bool needsDocument = false;
     QString feature;

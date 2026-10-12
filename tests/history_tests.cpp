@@ -2,13 +2,13 @@
 // 16 bits and in CMYK, and undo and redo give back the same bytes, also on layers made or removed by steps still in
 // the history, and over random sequences of steps, undos, redos, merges and trims.
 #include "check.h"
-#include "compositor/document.h"
-#include "compositor/history.h"
+#include "nekophoto/document.h"
+#include "nekophoto/history.h"
 #include <cstring>
 #include <map>
 #include <random>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 

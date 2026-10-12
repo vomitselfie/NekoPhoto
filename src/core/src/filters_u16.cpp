@@ -1,15 +1,15 @@
 // The Filter menu's built-in filters and the selection helpers at 16 bits (filters.h): the same maths as the 8-bit
 // kernels on 0..32768 samples, without their rounding to bytes between steps.
-#include "compositor/filters.h"
-#include "compositor/blur.h"
-#include "compositor/depth.h"
-#include "compositor/parallel.h"
-#include "compositor/resample.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/resample.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -206,4 +206,4 @@ void blendThroughCoverage(Gray16& adjusted, const Gray16& original, const Gray16
         }
 }
 
-} // namespace compositor
+} // namespace nekophoto

@@ -1,10 +1,10 @@
 // The PSD importer against files written here: raw and RLE channels, folders, clipping, masks, blend
 // modes, adjustment layers, unicode names, and the merged image.
 #include "check.h"
-#include "compositor/psd.h"
-#include "compositor/adjustments.h"
-#include "compositor/render.h"
-#include "compositor/psd_writer.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/adjustments.h"
+#include "nekophoto/render.h"
+#include "nekophoto/psd_writer.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -14,7 +14,7 @@
 #include <fstream>
 #include <vector>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace {
 
@@ -355,9 +355,9 @@ TEST_CASE(psb_channel_length_that_wraps_the_bounds_check_is_refused) {
 }
 
 TEST_CASE(psd_sample_file_when_available) {
-    // COMPOSITOR_PSD_SAMPLE=path: a real Photoshop file; its layers must render close to its own merged image.
-    const char* sample = std::getenv("COMPOSITOR_PSD_SAMPLE");
-    if (!sample) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_PSD_SAMPLE to a .psd to run)\n"); return; }
+    // NEKOPHOTO_PSD_SAMPLE=path: a real Photoshop file; its layers must render close to its own merged image.
+    const char* sample = std::getenv("NEKOPHOTO_PSD_SAMPLE");
+    if (!sample) { std::fprintf(stderr, "  (skipped: set NEKOPHOTO_PSD_SAMPLE to a .psd to run)\n"); return; }
     std::string error;
     auto imported = importPsd(sample, &error);
     REQUIRE(imported.has_value());

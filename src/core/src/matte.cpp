@@ -9,19 +9,19 @@
 // (Li et al.'s weighted guided filter), so flat background stays smooth while edges keep their detail;
 // and, as in the fast guided filter (He & Sun 2015), the coefficients are computed on a subsampled grid
 // and upsampled, then applied to the full-resolution guide.
-#include "compositor/matte.h"
-#include "compositor/blur.h"
-#include "compositor/filters.h"
-#include "compositor/morphology.h"
-#include "compositor/parallel.h"
-#include "compositor/render.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/morphology.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/render.h"
 #include <algorithm>
 #include <type_traits>
 #include <array>
 #include <cmath>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 MatteSettings MatteSettings::normalized() const {
     auto c = [](double v, double lo, double hi, double f) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : f; };
@@ -1199,4 +1199,4 @@ AnyImage estimateForegroundAny(const AnyImage& image, const AlphaPlane& matte) {
     return {};
 }
 
-} // namespace compositor
+} // namespace nekophoto

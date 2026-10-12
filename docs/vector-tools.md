@@ -7,7 +7,7 @@ Shape layers, paths, the Pen and Direct Selection, as Photoshop has them.
 A shape layer is a path filled with a colour, a gradient or a pattern and optionally stroked. It is stored the way
 Photoshop stores a shape layer: the path as a `vsms` block, the stroke as `vstk`, the fill as `SoCo` (a gradient as
 `GdFl`, a pattern as `PtFl`), its live properties as `vogk`, in the layer's PSD carry
-(`src/core/include/compositor/vectorlayer.h`). The renderer draws it from those blocks (the same code that draws
+(`src/core/include/nekophoto/vectorlayer.h`). The renderer draws it from those blocks (the same code that draws
 shape layers opened from a PSD), PSD export writes them back so Photoshop opens a live shape layer, and the project
 package keeps them. The layer's pixels are the fill colour over the path's bounds; the path cuts them.
 

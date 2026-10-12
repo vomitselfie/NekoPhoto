@@ -38,7 +38,7 @@ DocumentSource DocumentSource::fromJson(const QJsonObject& json) {
     s.pdfResolution = json.value("resolution").toDouble(150);
     if (s.kind == Kind::Raw) {
         const QJsonObject settings = json.value("settings").toObject();
-        if (!compositor::CameraRawSettings::parse(QJsonDocument(settings).toJson(QJsonDocument::Compact).toStdString(), s.raw)) s.raw = {};
+        if (!nekophoto::CameraRawSettings::parse(QJsonDocument(settings).toJson(QJsonDocument::Compact).toStdString(), s.raw)) s.raw = {};
         s.rawAsObject = json.value("asSmartObject").toBool(false);
         s.rawBits = json.value("bitsPerChannel").toInt(16) == 8 ? 8 : 16;
     }

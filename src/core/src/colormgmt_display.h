@@ -2,13 +2,13 @@
 // docs/color-management.md, "The display grid"). Internal to the core: colormgmt.cpp applies it through
 // ColorTransform::apply, colormgmt_display.cpp builds it.
 #pragma once
-#include "compositor/colormgmt.h"
+#include "nekophoto/colormgmt.h"
 #include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
-namespace compositor {
+namespace nekophoto {
 
 /// What a precalculated display transform holds. Built once per (document profile, monitor profile, intent, black
 /// point compensation, layout) and never changed after, so it is shared by every thread drawing at once.
@@ -43,4 +43,4 @@ struct DisplayGrid {
 /// A ColorTransform that applies `grid` (colormgmt.cpp, which owns the transform object).
 ColorTransformPtr makeGridTransform(std::shared_ptr<const DisplayGrid> grid, PixelFormat input);
 
-} // namespace compositor
+} // namespace nekophoto

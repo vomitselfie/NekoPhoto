@@ -1,11 +1,11 @@
-#include "compositor/toning.h"
-#include "compositor/blur.h"
-#include "compositor/parallel.h"
+#include "nekophoto/toning.h"
+#include "nekophoto/blur.h"
+#include "nekophoto/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <type_traits>
 
-namespace compositor {
+namespace nekophoto {
 
 // Each range's curve bends the tones it names most and leaves black and white where they are (Dodge Shadows lifts
 // black, as Photoshop's does; Burn Highlights pulls white down).
@@ -311,4 +311,4 @@ void gaussianBlurSamples(Image16& image, double sigma) { blurSamples<Image16, Im
 void sharpenSamples(ImageC8& image, double radius) { sharpenSamplesImpl(image, radius, 255.0); }
 void sharpenSamples(Image16& image, double radius) { sharpenSamplesImpl(image, radius, 32768.0); }
 
-} // namespace compositor
+} // namespace nekophoto

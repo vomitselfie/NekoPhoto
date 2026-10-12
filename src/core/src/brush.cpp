@@ -1,11 +1,11 @@
 // BrushStroke: the curve through the samples, the dab spacing, the provisional tail and the dirty area, at any depth.
 // The pixels are a StrokeRasterOf<Ops> (stroke_raster.h), instantiated here for 8 bits, in brush_u16.cpp for 16, in
 // brush_f32.cpp for 32 and in brush_modes.cpp for CMYK.
-#include "compositor/brush.h"
+#include "nekophoto/brush.h"
 #include "stroke_raster.h"
-#include "compositor/workcounters.h"
+#include "nekophoto/workcounters.h"
 
-namespace compositor {
+namespace nekophoto {
 
 template class StrokeRasterOf<StrokeOps<SampleType::U8>>;
 extern template class StrokeRasterOf<StrokeOps<SampleType::U16>>;
@@ -375,4 +375,4 @@ BrushStroke::Commit BrushStroke::commit() {
     return result;
 }
 
-} // namespace compositor
+} // namespace nekophoto

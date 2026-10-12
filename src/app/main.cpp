@@ -20,7 +20,7 @@
 #include "Theme.h"
 #include "CameraRawDialog.h"
 #include "RawDevelopDialog.h"
-#include "compositor/raw.h"
+#include "nekophoto/raw.h"
 #include "LayerStyleDialog.h"
 #include "FilterDialog.h"
 #include "HistogramPanel.h"
@@ -39,14 +39,15 @@
 #include "Scrub.h"
 #include "ImageConvert.h"
 #include <QDialog>
+#include <QProcessEnvironment>
 #include <cstdio>
 #include <cstring>
-#include "compositor/filters.h"
-#include "compositor/selection.h"
-#include "compositor/matte.h"
-#include "compositor/subject.h"
+#include "nekophoto/filters.h"
+#include "nekophoto/selection.h"
+#include "nekophoto/matte.h"
+#include "nekophoto/subject.h"
 #include <QFileInfo>
-#include "compositor/warp.h"
+#include "nekophoto/warp.h"
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
@@ -71,7 +72,7 @@ namespace {
 // A layered document for smoke tests and screenshots: an image, a painted layer, a
 // masked layer in a folder, a clipped layer and a blend mode, so every render path runs.
 void buildDemo(app::EditorSession& session, const QString& imagePath) {
-    using namespace compositor;
+    using namespace nekophoto;
     QImage base;
     if (!imagePath.isEmpty()) { QImageReader reader(imagePath); reader.setAutoTransform(true); base = reader.read(); }
     if (base.isNull()) {
@@ -187,7 +188,7 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
     }
     session.selectLayer(session.document()->layers[1].id);
     // With a model available, Remove Background on the base image, as the menu item would.
-    QString modelDir = qEnvironmentVariable("COMPOSITOR_MODEL_DIR");
+    QString modelDir = qEnvironmentVariable("NEKOPHOTO_MODEL_DIR");
     if (!modelDir.isEmpty() && subjectModelSupported()) {
         QString path = modelDir + "/isnet-general-use.onnx";
         if (!QFileInfo::exists(path)) path = modelDir + "/u2netp.onnx";
@@ -229,6 +230,17 @@ namespace app {
 void buildDemoDocument(EditorSession& session) { buildDemo(session, QString()); }
 } // namespace app
 
+/// The environment variables were COMPOSITOR_* until 1.8.14: an old one still sets its NEKOPHOTO_* namesake, unless
+/// that is set too, so existing scripts and launchers keep working.
+static void adoptOldEnvironmentNames() {
+    const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    for (const QString& key : env.keys())
+        if (key.startsWith(QLatin1String("COMPOSITOR_"))) {
+            const QByteArray now = "NEKOPHOTO_" + key.mid(11).toLatin1();
+            if (!qEnvironmentVariableIsSet(now.constData())) qputenv(now.constData(), env.value(key).toLocal8Bit());
+        }
+}
+
 int run(int argc, char** argv) {
     // --headless: no window on screen; the automation socket is the only way in. Must be decided before QApplication.
     // --call and --batch never show a window either, so they must work without a display.
@@ -255,7 +267,7 @@ int run(int argc, char** argv) {
     QApplication::setApplicationDisplayName("NekoPhoto");
     migrateFromOldName();
     app::cpupower::apply();   // the pool's size and the priority, before anything runs a parallel loop
-    QApplication::setApplicationVersion(QStringLiteral(COMPOSITOR_VERSION));
+    QApplication::setApplicationVersion(QStringLiteral(NEKOPHOTO_VERSION));
     // The desktop entry gives Wayland the app id and icon; naming it when it isn't installed only makes the portal complain.
     if (!QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "nekophoto.desktop").isEmpty()) QApplication::setDesktopFileName("nekophoto");
     app.setWindowIcon(QIcon(QStringLiteral(":/app/icon.svg")));
@@ -328,7 +340,7 @@ int run(int argc, char** argv) {
     QCommandLineOption selfTestOption("self-test", "Developer check: run in-app test <name> (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen, hide-panels, forbidden-cursor) on a demo document, print the result and quit with its status.", "name");
     parser.addOption(selfTestOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
-    QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
+    QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $NEKOPHOTO_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
     QCommandLineOption headlessOption("headless", "Run without a visible window (offscreen) with the automation socket on; implies --rpc.");
     QCommandLineOption rpcWriteRoot("rpc-write-root", "Let automation requests write files only inside <dir> (repeatable; adds to the automation/writeRoots setting). Without any, they may write anywhere you can.", "dir");
     QCommandLineOption rpcLog("rpc-log", "Append one line per automation request to <file>: time, method, the paths it names, ok or the error, and how long it took (also the automation/log setting).", "file");
@@ -435,11 +447,11 @@ int run(int argc, char** argv) {
             out << QJsonDocument(response).toJson(QJsonDocument::Compact) << "\n";
             out.flush();
             QApplication::processEvents();
-            if (response.contains("error")) { status = 1; if (!qEnvironmentVariableIsSet("COMPOSITOR_BATCH_CONTINUE")) break; }
+            if (response.contains("error")) { status = 1; if (!qEnvironmentVariableIsSet("NEKOPHOTO_BATCH_CONTINUE")) break; }
         }
         return status;
     }
-    if (qEnvironmentVariableIsSet("COMPOSITOR_DEBUG_LAYOUT")) {
+    if (qEnvironmentVariableIsSet("NEKOPHOTO_DEBUG_LAYOUT")) {
         // What is forcing the window's minimum size: the main window and each toolbar, dock and central child.
         auto report = [](QWidget* w, const char* tag) { QSize m = w->minimumSizeHint(), mm = w->minimumSize(); std::fprintf(stderr, "layout: %-28s %-22s hint %dx%d min %dx%d size %dx%d\n", tag, qPrintable(w->objectName().isEmpty() ? w->windowTitle() : w->objectName()), m.width(), m.height(), mm.width(), mm.height(), w->width(), w->height()); };
         report(&window, "window");
@@ -473,7 +485,7 @@ int run(int argc, char** argv) {
     if (parser.isSet(dialogOption)) {
         QString name = parser.value(dialogOption).toLower();
         QTimer::singleShot(50, &window, [&window, name, given = parser.value(dialogOption)] {
-            using compositor::AdjustmentKind; using compositor::FilterKind;
+            using nekophoto::AdjustmentKind; using nekophoto::FilterKind;
             static const QMap<QString, AdjustmentKind> adjustments{{"levels", AdjustmentKind::Levels}, {"curves", AdjustmentKind::Curves}, {"hue", AdjustmentKind::HueSaturation},
                 {"exposure", AdjustmentKind::Exposure}, {"gradient-map", AdjustmentKind::GradientMap}, {"grain", AdjustmentKind::Grain},
                 {"brightness-contrast", AdjustmentKind::BrightnessContrast}, {"posterize", AdjustmentKind::Posterize}, {"threshold", AdjustmentKind::Threshold},
@@ -484,8 +496,8 @@ int run(int argc, char** argv) {
             if (auto* banner = window.findChild<app::ImportBanner*>()) banner->hide();   // dialog shots show the dialog, not an open's notes
             // Any filter by its name in lower case with dashes ("unsharp-mask", "twirl", "dust-scratches").
             std::optional<FilterKind> filterNamed;
-            for (int i = 0; i < compositor::filterKindCount; i++) {
-                QString n = QString::fromUtf8(compositor::filterKindName(FilterKind(i))).toLower().remove('&');
+            for (int i = 0; i < nekophoto::filterKindCount; i++) {
+                QString n = QString::fromUtf8(nekophoto::filterKindName(FilterKind(i))).toLower().remove('&');
                 n = n.simplified().replace(' ', '-');
                 if (n == name) filterNamed = FilterKind(i);
             }
@@ -499,7 +511,7 @@ int run(int argc, char** argv) {
                 auto* dialog = new app::PixelAdjustmentDialog(s, levels ? AdjustmentKind::Levels : AdjustmentKind::Curves, &window);
                 dialog->show();
                 if (auto* editor = dialog->findChild<app::AdjustmentEditor*>()) {
-                    compositor::AdjustmentSettings settings = editor->settings();
+                    nekophoto::AdjustmentSettings settings = editor->settings();
                     if (levels) settings.levels.ranges[0].white = 170;
                     else settings.curves.channels[0][0].x = 60;
                     editor->setSettings(settings);
@@ -520,24 +532,24 @@ int run(int argc, char** argv) {
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
             else if (name == "32bit") {
                 // The document at 32 bits, its view a stop brighter: the status bar's exposure and the greyed tools.
-                s->convertMode(compositor::SampleType::F32);
-                compositor::View32 view;
+                s->convertMode(nekophoto::SampleType::F32);
+                nekophoto::View32 view;
                 view.exposure = 1;
                 s->setView32(view);
             }
             else if (name == "mosh" || name.startsWith("mosh:")) {
                 // mosh, or mosh:<effect id> (pixel-sort, vhs, ...): the Mosh dialog on the demo's background
                 const QString id = name.section(':', 1).isEmpty() ? QStringLiteral("vhs") : name.section(':', 1);
-                if (const auto* spec = compositor::mosh::findEffect(id.toStdString())) {
+                if (const auto* spec = nekophoto::mosh::findEffect(id.toStdString())) {
                     for (const auto& l : s->document()->layers) if (l.name == "Background") s->selectLayer(l.id);
                     (new app::MoshDialog(s, *spec, &window))->show();
                 } else qWarning("unknown Mosh effect: %s", qPrintable(id));
             }
             else if (name == "content-fill") {
                 // A selection in the middle of the canvas, then the dialog with Wide Area sampling.
-                compositor::GrayImage shape(s->document()->width, s->document()->height);
+                nekophoto::GrayImage shape(s->document()->width, s->document()->height);
                 for (int y = shape.height() * 2 / 5; y < shape.height() * 3 / 5; y++) for (int x = shape.width() * 2 / 5; x < shape.width() * 3 / 5; x++) shape.at(x, y) = 255;
-                s->applySelectionShape(shape, compositor::SelectionMode::Replace, "Select");
+                s->applySelectionShape(shape, nekophoto::SelectionMode::Replace, "Select");
                 auto* dialog = new app::ContentFillDialog(s, &window);
                 if (auto* group = dialog->findChild<QButtonGroup*>()) { group->button(1)->click(); }
                 dialog->show();
@@ -553,7 +565,7 @@ int run(int argc, char** argv) {
                 QString file = given.section(QLatin1Char(':'), 1), panel;   // the path as given, not lowercased
                 if (const int colon = file.lastIndexOf(':'); colon > 0 && file.mid(colon + 1).toInt() > 0) { panel = file.mid(colon + 1); file.truncate(colon); }
                 std::string why;
-                auto bytes = std::make_shared<const std::vector<uint8_t>>(compositor::readRawFileBytes(file.toStdString(), &why));
+                auto bytes = std::make_shared<const std::vector<uint8_t>>(nekophoto::readRawFileBytes(file.toStdString(), &why));
                 if (bytes->empty()) qWarning("%s", why.c_str());
                 else {
                     auto* dialog = new app::RawDevelopDialog(bytes, QFileInfo(file).fileName(), {}, app::RawDevelopDialog::Purpose::Open, &window);
@@ -565,7 +577,7 @@ int run(int argc, char** argv) {
                 // The cage on the demo's ellipse with its bottom-right corner pulled out.
                 for (const auto& l : s->document()->layers) if (QString::fromStdString(l.name) == QCoreApplication::translate("Names", "Ellipse") + " 1") s->selectLayer(l.id);
                 if (s->beginWarpCage() && s->warpCage()) {
-                    compositor::WarpMesh cage = *s->warpCage();
+                    nekophoto::WarpMesh cage = *s->warpCage();
                     cage.xs[15] += 60; cage.ys[15] += 40; cage.xs[5] -= 30;
                     s->setWarpCage(cage);
                 }
@@ -586,15 +598,15 @@ int run(int argc, char** argv) {
                 for (auto* w : window.findChildren<app::WelcomeDialog*>()) for (int i = 0; i < page; i++) for (auto* b : w->findChildren<QPushButton*>()) if (b->text() == QObject::tr("Next")) { b->click(); break; }
             }
             else if (name == "text" || name == "text:styled" || name == "fonts") {
-                compositor::LayerText text = s->textStyle;
+                nekophoto::LayerText text = s->textStyle;
                 text.text = "Hello";
                 if (name == "text:styled") {
                     // Letters in several styles, to show the editor's runs and the Character section's mixed values.
                     text.text = "Hello styled\nworld";
-                    compositor::TextRunPatch red; red.color = std::array<double, 3>{0.85, 0.1, 0.1}; red.fontSize = text.fontSize * 1.5; red.weight = 800;
-                    compositor::styleTextRange(text, 6, 6, red);
-                    compositor::TextRunPatch under; under.underline = true; under.italic = true; under.caps = compositor::TextRun::Caps::Small;
-                    compositor::styleTextRange(text, 13, 5, under);
+                    nekophoto::TextRunPatch red; red.color = std::array<double, 3>{0.85, 0.1, 0.1}; red.fontSize = text.fontSize * 1.5; red.weight = 800;
+                    nekophoto::styleTextRange(text, 6, 6, red);
+                    nekophoto::TextRunPatch under; under.underline = true; under.italic = true; under.caps = nekophoto::TextRun::Caps::Small;
+                    nekophoto::styleTextRange(text, 13, 5, under);
                 }
                 if (s->hasDocument()) s->addTextLayer(QPointF(s->document()->width / 3.0, s->document()->height / 3.0), text, true);
                 if (name == "fonts") QTimer::singleShot(100, &window, [] { for (QWidget* w : QApplication::topLevelWidgets()) for (auto* picker : w->findChildren<app::FontPicker*>()) if (w->isVisible()) { picker->showPicker(); return; } });
@@ -631,10 +643,10 @@ int run(int argc, char** argv) {
                 window.showPanel("channels");
                 if (s->hasDocument()) {
                     const int w = s->document()->width, h = s->document()->height;
-                    s->applySelectionShape(*compositor::rasterizeEllipse(compositor::Rect(w * 0.2, h * 0.2, w * 0.45, h * 0.55), w, h, true), compositor::SelectionMode::Replace, "Select");
-                    s->saveSelectionToChannel(std::nullopt, QString(), compositor::SelectionMode::Replace);
-                    s->applySelectionShape(*compositor::rasterizeRect(compositor::Rect(w * 0.5, h * 0.1, w * 0.4, h * 0.4), w, h, true), compositor::SelectionMode::Replace, "Select");
-                    const auto second = s->saveSelectionToChannel(std::nullopt, QString(), compositor::SelectionMode::Replace);
+                    s->applySelectionShape(*nekophoto::rasterizeEllipse(nekophoto::Rect(w * 0.2, h * 0.2, w * 0.45, h * 0.55), w, h, true), nekophoto::SelectionMode::Replace, "Select");
+                    s->saveSelectionToChannel(std::nullopt, QString(), nekophoto::SelectionMode::Replace);
+                    s->applySelectionShape(*nekophoto::rasterizeRect(nekophoto::Rect(w * 0.5, h * 0.1, w * 0.4, h * 0.4), w, h, true), nekophoto::SelectionMode::Replace, "Select");
+                    const auto second = s->saveSelectionToChannel(std::nullopt, QString(), nekophoto::SelectionMode::Replace);
                     if (name == "channels" && second) s->selectAlphaChannel(*second);
                     if (name == "save-selection") (new app::SaveSelectionDialog(s, &window))->show();
                     else if (name == "load-selection") (new app::LoadSelectionDialog(s, &window))->show();
@@ -643,8 +655,8 @@ int run(int argc, char** argv) {
             }
             else if (name == "guides") {
                 if (s->hasDocument()) {
-                    s->addGuide(compositor::Guide{compositor::Guide::Orientation::Vertical, std::round(s->document()->width / 3.0)});
-                    s->addGuide(compositor::Guide{compositor::Guide::Orientation::Horizontal, std::round(s->document()->height / 2.0)});
+                    s->addGuide(nekophoto::Guide{nekophoto::Guide::Orientation::Vertical, std::round(s->document()->width / 3.0)});
+                    s->addGuide(nekophoto::Guide{nekophoto::Guide::Orientation::Horizontal, std::round(s->document()->height / 2.0)});
                     s->setSnapGuides({s->document()->width * 0.4}, {});
                 }
             }
@@ -725,8 +737,8 @@ int run(int argc, char** argv) {
     }
     if (parser.isSet(screenshot)) {
         QString target = parser.value(screenshot), savePath = parser.value(saveAs);
-        // COMPOSITOR_SCREENSHOT_DELAY (ms) waits longer, for a preview that runs in the background.
-        const int delay = qEnvironmentVariableIsSet("COMPOSITOR_SCREENSHOT_DELAY") ? qEnvironmentVariableIntValue("COMPOSITOR_SCREENSHOT_DELAY") : 400;
+        // NEKOPHOTO_SCREENSHOT_DELAY (ms) waits longer, for a preview that runs in the background.
+        const int delay = qEnvironmentVariableIsSet("NEKOPHOTO_SCREENSHOT_DELAY") ? qEnvironmentVariableIntValue("NEKOPHOTO_SCREENSHOT_DELAY") : 400;
         QTimer::singleShot(delay, &window, [&window, target, savePath, preferences] {
             QWidget* subject = preferences;
             if (!subject) for (QWidget* w : QApplication::topLevelWidgets()) if (w->isVisible() && qobject_cast<QDialog*>(w)) subject = w;
@@ -743,6 +755,7 @@ int run(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
+    adoptOldEnvironmentNames();
     const int status = run(argc, argv);   // every Qt object is gone by here
     return app::platform::finishProcess(status);
 }

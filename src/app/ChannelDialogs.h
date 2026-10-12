@@ -50,13 +50,13 @@ private:
 class ChannelOptionsDialog : public QDialog {
     Q_OBJECT
 public:
-    ChannelOptionsDialog(EditorSession* session, const compositor::Uuid& channel, QWidget* parent = nullptr);
+    ChannelOptionsDialog(EditorSession* session, const nekophoto::Uuid& channel, QWidget* parent = nullptr);
 
 private:
     void setSwatch(const QColor& color);
     void apply();
     QPointer<EditorSession> session_;
-    compositor::Uuid id_;
+    nekophoto::Uuid id_;
     QLineEdit* name_;
     QRadioButton* masked_;
     QRadioButton* selected_;

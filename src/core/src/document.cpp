@@ -1,15 +1,15 @@
-#include "compositor/document.h"
-#include "compositor/colormgmt.h"
-#include "compositor/depth.h"
-#include "compositor/render.h"
-#include "compositor/view32.h"
+#include "nekophoto/document.h"
+#include "nekophoto/colormgmt.h"
+#include "nekophoto/depth.h"
+#include "nekophoto/render.h"
+#include "nekophoto/view32.h"
 #include <cstdio>
 #include <algorithm>
 #include <cmath>
 #include <functional>
 #include <map>
 
-namespace compositor {
+namespace nekophoto {
 
 const char* blendModeName(BlendMode mode) {
     switch (mode) {
@@ -588,9 +588,9 @@ Rect changedArea(const Document& before, const Document& after) {
     return area.isEmpty() ? Rect() : area.insetBy(-2, -2).intersection(whole);
 }
 
-} // namespace compositor
+} // namespace nekophoto
 
-namespace compositor {
+namespace nekophoto {
 
 namespace {
 
@@ -752,4 +752,4 @@ void styleTextRange(LayerText& text, int start, int length, const TextRunPatch& 
     settleTextRuns(text);
 }
 
-} // namespace compositor
+} // namespace nekophoto

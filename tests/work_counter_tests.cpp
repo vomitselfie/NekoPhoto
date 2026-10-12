@@ -7,13 +7,13 @@
 // Two consistency checks ride along: a region rendered alone equals the same region cut from the full render, and a
 // render at a quarter (drawn from the cached reductions) stays within a small tolerance of the full render reduced.
 #include "check.h"
-#include "compositor/brush.h"
-#include "compositor/history.h"
-#include "compositor/png.h"
-#include "compositor/render.h"
-#include "compositor/smartfilter.h"
-#include "compositor/smartobject_edit.h"
-#include "compositor/workcounters.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/history.h"
+#include "nekophoto/png.h"
+#include "nekophoto/render.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/smartobject_edit.h"
+#include "nekophoto/workcounters.h"
 
 #include <algorithm>
 #include <cmath>
@@ -22,7 +22,7 @@
 #include <cstring>
 #include <string>
 
-using namespace compositor;
+using namespace nekophoto;
 using work::Counter;
 
 namespace {

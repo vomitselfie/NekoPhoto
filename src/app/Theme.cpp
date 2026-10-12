@@ -12,7 +12,7 @@
 #include <QStyle>
 #include <QStyleFactory>
 #include <QStyleHints>
-#ifdef COMPOSITOR_HAVE_DBUS
+#ifdef NEKOPHOTO_HAVE_DBUS
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDBusVariant>
@@ -80,8 +80,8 @@ QPalette gothKittyPalette() {
 }
 
 QString gothKittyStyleSheet() {
-    // COMPOSITOR_THEME_QSS reads the stylesheet from a file instead, for working on the theme without a rebuild.
-    const QString override = qEnvironmentVariable("COMPOSITOR_THEME_QSS");
+    // NEKOPHOTO_THEME_QSS reads the stylesheet from a file instead, for working on the theme without a rebuild.
+    const QString override = qEnvironmentVariable("NEKOPHOTO_THEME_QSS");
     QFile file(override.isEmpty() ? QStringLiteral(":/gothkitty/gothkitty.qss") : override);
     return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
 }
@@ -98,7 +98,7 @@ Scheme desktopScheme() {
     default: break;
     }
 #endif
-#ifdef COMPOSITOR_HAVE_DBUS
+#ifdef NEKOPHOTO_HAVE_DBUS
     QDBusInterface portal("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings");
     portal.setTimeout(500);
     if (portal.isValid()) {
@@ -164,7 +164,7 @@ bool paletteIsDark(const QPalette& p) { return p.color(QPalette::Window).lightne
 } // namespace
 
 QString themeSetting() {
-    QString env = qEnvironmentVariable("COMPOSITOR_THEME");
+    QString env = qEnvironmentVariable("NEKOPHOTO_THEME");
     if (env == "dark" || env == "light" || env == "system" || env == "gothkitty") return env;
     // Goth Kitty unless the person chose another look (System follows the desktop, as before 1.8.12).
     QString v = QSettings().value("appearance/theme", "gothkitty").toString();

@@ -2,10 +2,10 @@
 // they are painted with, and the measurements taken of the result. brush_parity (a test) holds every render to
 // tests/brush_parity_baseline.txt; brush_parity_tool writes the images and measurements out for a look.
 #pragma once
-#include "compositor/brush.h"
-#include "compositor/brushsample.h"
-#include "compositor/brushsmoothing.h"
-#include "compositor/tipbrush.h"
+#include "nekophoto/brush.h"
+#include "nekophoto/brushsample.h"
+#include "nekophoto/brushsmoothing.h"
+#include "nekophoto/tipbrush.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -15,7 +15,7 @@
 
 namespace brushharness {
 
-using namespace compositor;
+using namespace nekophoto;
 
 /// A recorded stroke (brushsample.h): raw samples, seconds since the stroke began, document positions and the pen.
 /// `stylus` false plays it as a mouse (neutral pressure, no tilt or twist).

@@ -2,18 +2,18 @@
 // PSD export. The real-file checks (Photoshop's own placed PNG, a designer file with warped, filtered and linked
 // instances) run over Patchy's fixtures through build/tests/psd_roundtrip (docs/smart-objects.md).
 #include "check.h"
-#include "compositor/png.h"
-#include "compositor/project.h"
-#include "compositor/psd.h"
-#include "compositor/psd_writer.h"
-#include "compositor/render.h"
-#include "compositor/smartobject.h"
-#include "compositor/smartobject_edit.h"
-#include "compositor/smartfilter.h"
+#include "nekophoto/png.h"
+#include "nekophoto/project.h"
+#include "nekophoto/psd.h"
+#include "nekophoto/psd_writer.h"
+#include "nekophoto/render.h"
+#include "nekophoto/smartobject.h"
+#include "nekophoto/smartobject_edit.h"
+#include "nekophoto/smartfilter.h"
 #include "psd/psd_descriptor.hpp"
 #include <filesystem>
 
-using namespace compositor;
+using namespace nekophoto;
 namespace psd = patchy::psd;
 
 namespace {

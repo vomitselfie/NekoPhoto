@@ -1,7 +1,7 @@
-#include "compositor/raw.h"
-#include "compositor/document.h"
-#include "compositor/parallel.h"
-#include "compositor/rawtone.h"
+#include "nekophoto/raw.h"
+#include "nekophoto/document.h"
+#include "nekophoto/parallel.h"
+#include "nekophoto/rawtone.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -9,14 +9,14 @@
 #include <cstring>
 #include <fstream>
 
-#ifdef COMPOSITOR_HAVE_LIBRAW
+#ifdef NEKOPHOTO_HAVE_LIBRAW
 #include <libraw/libraw.h>
 #endif
 
-namespace compositor {
+namespace nekophoto {
 
 bool rawSupported() {
-#ifdef COMPOSITOR_HAVE_LIBRAW
+#ifdef NEKOPHOTO_HAVE_LIBRAW
     return true;
 #else
     return false;
@@ -44,7 +44,7 @@ std::vector<uint8_t> readRawFileBytes(const std::string& path, std::string* erro
     return bytes;
 }
 
-#ifdef COMPOSITOR_HAVE_LIBRAW
+#ifdef NEKOPHOTO_HAVE_LIBRAW
 namespace {
 
 int cancelCallback(void* data, enum LibRaw_progress, int, int) {
@@ -152,7 +152,7 @@ std::shared_ptr<Image16> decode16(const std::vector<uint8_t>& bytes, const RawDe
 #endif
 
 std::shared_ptr<Image> decodeRaw(const std::string& path, std::string* error) {
-#ifdef COMPOSITOR_HAVE_LIBRAW
+#ifdef NEKOPHOTO_HAVE_LIBRAW
     const std::vector<uint8_t> bytes = readRawFileBytes(path, error);
     if (bytes.empty()) return nullptr;
     auto deep = decode16(bytes, {}, error);
@@ -172,7 +172,7 @@ std::shared_ptr<Image> decodeRaw(const std::string& path, std::string* error) {
 }
 
 bool readRawInfo(const std::vector<uint8_t>& bytes, RawInfo& info, std::string* error) {
-#ifdef COMPOSITOR_HAVE_LIBRAW
+#ifdef NEKOPHOTO_HAVE_LIBRAW
     auto raw = openRaw(bytes, error);
     if (!raw) return false;
     const auto& id = raw->imgdata.idata;
@@ -196,7 +196,7 @@ bool readRawInfo(const std::vector<uint8_t>& bytes, RawInfo& info, std::string* 
 }
 
 std::shared_ptr<Image16> decodeRaw16(const std::vector<uint8_t>& bytes, const RawDecodeOptions& options, std::string* error) {
-#ifdef COMPOSITOR_HAVE_LIBRAW
+#ifdef NEKOPHOTO_HAVE_LIBRAW
     return decode16(bytes, options, error);
 #else
     (void)bytes; (void)options;
@@ -314,7 +314,7 @@ CameraRawSettings RawWhiteBalance::inKelvin(const CameraRawSettings& settings) c
 }
 
 bool readRawWhiteBalance(const std::vector<uint8_t>& bytes, RawWhiteBalance& out, std::string* error) {
-#ifdef COMPOSITOR_HAVE_LIBRAW
+#ifdef NEKOPHOTO_HAVE_LIBRAW
     auto raw = openRaw(bytes, error);
     if (!raw) return false;
     out = {};
@@ -493,4 +493,4 @@ std::string resolveRawWhiteBalance(const std::vector<uint8_t>& bytes, CameraRawS
     return {};
 }
 
-} // namespace compositor
+} // namespace nekophoto

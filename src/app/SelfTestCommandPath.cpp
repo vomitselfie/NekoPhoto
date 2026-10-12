@@ -24,7 +24,7 @@
 #include <QKeyEvent>
 #include <cstdio>
 
-using namespace compositor;
+using namespace nekophoto;
 
 namespace app {
 
