@@ -11,9 +11,9 @@ Copyright (C) 2026 the NekoPhoto contributors.
 
 NekoPhoto (formerly compositor-linux) began as a port of [Compositor](https://github.com/robbietilton/Compositor)
 for macOS, copyright (c) 2026 Wonder Assembly LLC and released under the MIT
-licence. The code taken from it, the macOS sources under `Compositor/`
-(including the C pixel routines in `Compositor/Rendering` that the Linux build
-compiles unchanged) and the parts of the port derived from them, keeps that
+licence. The code taken from it, the C pixel routines in `src/pixels` (from its
+`Compositor/Rendering`, compiled unchanged; the macOS sources themselves were in this
+repository until 1.8.14) and the parts of the port derived from them, keeps that
 notice: [LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt). Those files
 may still be used on their own under the MIT licence; the program as a whole is
 distributed under the GPL.

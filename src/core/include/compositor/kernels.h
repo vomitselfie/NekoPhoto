@@ -1,4 +1,4 @@
-// Optimised per-pixel kernels. The portable C routines under Compositor/Rendering are
+// Optimised per-pixel kernels. The portable C routines under src/pixels are
 // the reference implementations (and stay unchanged); these are the versions the editor
 // runs: row-parallel, integer where the reference used float, and laid out so the
 // compiler can vectorise them. tests/kernel_tests.cpp holds each one to its reference.

@@ -1,14 +1,6 @@
 # Build output
 dist/
 build/
-DerivedData/
-*.xcarchive
-*.dmg
-
-# Xcode per-user state
-xcuserdata/
-*.xcuserstate
-
 # macOS
 .DS_Store
 

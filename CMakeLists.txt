@@ -11,8 +11,7 @@ else()
     set(COMPOSITOR_VERSION_STRING "${COMPOSITOR_VERSION}")
 endif()
 
-# NekoPhoto, which began as the Linux port of Compositor. The macOS application (Compositor.xcodeproj)
-# does not use this file; it keeps building from Xcode. See docs/linux-port-architecture.md.
+# NekoPhoto, which began as the Linux port of Compositor for macOS (https://github.com/robbietilton/Compositor).
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)

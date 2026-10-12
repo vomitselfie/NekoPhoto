@@ -2,7 +2,8 @@
 
 Answers to the investigation checklist in the port plan, gathered from the macOS
 sources before any Linux code was written. Line references are to the Swift
-sources under `Compositor/`.
+sources under `Compositor/` in [upstream Compositor](https://github.com/robbietilton/Compositor); they were in this
+repository until 1.8.14 (the tree at `8a0fc5f` still has them). This note is history: NekoPhoto follows Photoshop now.
 
 ## Where things live in the Mac app
 
@@ -164,5 +165,5 @@ with `-std=c11 -Wall -Wextra` unchanged.
 - **Core is Qt-free C++20** with libpng for `.comp` assets and PNG export.
   Image import (PNG, JPEG, TIFF, WebP, HEIC where plugins exist) and JPEG
   export go through Qt's codecs in the app layer, as the plan suggests.
-- **The C files stay where they are** under `Compositor/Rendering` and are
-  referenced from CMake, so the Xcode project is untouched.
+- **The C files were compiled where they were**, under `Compositor/Rendering`, so the Xcode project stayed
+  untouched; with the Mac sources gone they live in `src/pixels`, unchanged.

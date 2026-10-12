@@ -68,8 +68,8 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
   deeper buffer, so gate a feature with `supports()` (`compositor/supports.h`; [docs/bit-depth.md](docs/bit-depth.md)).
 - **`EditorSession`** (`src/app/EditorSession*.cpp`) owns the open document and its undo history; the widgets and
   the automation handlers both go through it.
-- **`Compositor/`, `Compositor.xcodeproj` and the other Xcode folders** are the original macOS app's Swift
-  sources, kept as a reference for behaviour. Don't edit them; the port lives in `src/`.
+- **The original macOS app** is [Compositor](https://github.com/robbietilton/Compositor). Its Swift sources were in
+  this repository until 1.8.14 (the tree at `8a0fc5f` still has them); NekoPhoto follows Photoshop now, not the Mac app.
 
 ## Rules
 

@@ -1,8 +1,0 @@
-#import "Rendering/BrushPixels.h"
-#import "Rendering/HealPixels.h"
-#import "Rendering/LevelsPixels.h"
-#import "Rendering/WandPixels.h"
-#import "Rendering/NoisePixels.h"
-#import "Rendering/LensPixels.h"
-#import "Rendering/ContentFill.h"
-#import "Rendering/AdjustPixels.h"

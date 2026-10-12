@@ -10,7 +10,7 @@ destructive: on a smart object it asks first, like the other pixel filters, and 
 | Pixel kernels (`adjust_camera_raw_*`: texture, glow, grain, defringe, profile corrections, detail, point colours, the clipping views) | `Rendering/AdjustPixels.c` | `src/pixels/CameraRawPixels.c`, extracted unchanged apart from warning fixes |
 | Tone and colour responses fitted to Camera Raw ([Fitted responses](#fitted-responses)) | none | `src/core/src/rawtone.cpp`, tables from `tools/camera_raw_fit.py` |
 | Panels | `UI/CameraRaw*.swift`, `UI/RawDevelopSheet.swift` | `src/app/CameraRawDialog.cpp` |
-| Tests | `CompositorTests/CameraRawTests.swift` | `tests/cameraraw_tests.cpp`, `tests/camera_raw_parity.cpp` |
+| Tests | upstream `CompositorTests/CameraRawTests.swift` | `tests/cameraraw_tests.cpp`, `tests/camera_raw_parity.cpp` |
 | Automation | none | `pixels.cameraRaw`, MCP `pixels_camera_raw` |
 
 The grade runs in this order: manual Distortion and the Transform sliders; then, per pixel, the relative white balance,

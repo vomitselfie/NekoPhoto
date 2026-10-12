@@ -1,24 +1,22 @@
-# The existing portable C pixel routines, compiled unchanged from where the
-# Xcode project keeps them. Nothing here depends on Apple frameworks.
-
-set(COMPOSITOR_PIXELS_DIR ${CMAKE_SOURCE_DIR}/Compositor/Rendering)
+# The portable C pixel routines from upstream Compositor's Compositor/Rendering (MIT, LICENSES/MIT-Compositor.txt),
+# kept as they were. Nothing here depends on Apple frameworks.
 
 add_library(compositor_pixels STATIC
-    ${COMPOSITOR_PIXELS_DIR}/AdjustPixels.c
-    ${COMPOSITOR_PIXELS_DIR}/BrushPixels.c
-    ${COMPOSITOR_PIXELS_DIR}/ContentFill.c
-    ${COMPOSITOR_PIXELS_DIR}/HealPixels.c
-    ${COMPOSITOR_PIXELS_DIR}/LensPixels.c
-    ${COMPOSITOR_PIXELS_DIR}/LevelsPixels.c
-    ${COMPOSITOR_PIXELS_DIR}/NoisePixels.c
-    ${COMPOSITOR_PIXELS_DIR}/WandPixels.c
-    # The Camera Raw kernels, extracted from upstream's newer AdjustPixels.c (the vendored one predates them).
+    ${CMAKE_CURRENT_SOURCE_DIR}/AdjustPixels.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/BrushPixels.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/ContentFill.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/HealPixels.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/LensPixels.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/LevelsPixels.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/NoisePixels.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/WandPixels.c
+    # The Camera Raw kernels, extracted from upstream's newer AdjustPixels.c (the one above predates them).
     ${CMAKE_CURRENT_SOURCE_DIR}/CameraRawPixels.c
     ${CMAKE_CURRENT_SOURCE_DIR}/CameraRawPixelsFloat.c
 )
 add_library(compositor::pixels ALIAS compositor_pixels)
 
-target_include_directories(compositor_pixels PUBLIC ${COMPOSITOR_PIXELS_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(compositor_pixels PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # M_PI is a POSIX extension, hidden under strict -std=c11.
 target_compile_definitions(compositor_pixels PRIVATE _DEFAULT_SOURCE)
 target_link_libraries(compositor_pixels PRIVATE compositor_warnings m)

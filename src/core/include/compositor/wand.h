@@ -1,5 +1,5 @@
 // Magic Wand: which pixels of a premultiplied RGBA image match the colour at a seed. The contract is
-// wand_mask's in Compositor/Rendering/WandPixels.h (the reference this is held to): the reference colour
+// wand_mask's in src/pixels/WandPixels.h (the reference this is held to): the reference colour
 // is the rounded average over a (2 * radius + 1)^2 square around the seed, a pixel matches when every
 // channel, alpha included, is within `tolerance` of it, and contiguous fills 4-connected from the seed.
 #pragma once

@@ -1,7 +1,7 @@
 // Healing: filling a spot smoothly from its surroundings. The membrane (the smooth spread of the
 // boundary values across the hole) is evaluated with mean-value coordinates over the polygon of known
 // pixels around the hole (Farbman et al. 2009): no iterative solve, exact on linear ramps, milliseconds
-// for a brush spot. Spot healing follows spot_heal in Compositor/Rendering/HealPixels.h (the reference) with this
+// for a brush spot. Spot healing follows spot_heal in src/pixels/HealPixels.h (the reference) with this
 // membrane in place of its relaxation sweeps.
 #pragma once
 #include "image.h"

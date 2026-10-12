@@ -2,9 +2,10 @@
 
 NekoPhoto is a Qt 6 front end over a portable C++ core that re-implements
 the Mac app's document model, compositor, brush, history and `.comp` project
-format; its own projects are single `.nekophoto` files holding the same contents. The existing C pixel routines under `Compositor/Rendering` are compiled
-unchanged. The macOS application and its Xcode project are untouched; see
-`docs/linux-port-architecture.md` for how the two relate.
+format; its own projects are single `.nekophoto` files holding the same contents. The Mac app's portable C pixel routines are compiled unchanged from `src/pixels`.
+The Mac app's own sources were in this repository until 1.8.14 (the tree at `8a0fc5f`
+has them, as does [upstream](https://github.com/robbietilton/Compositor)); see
+`docs/linux-port-architecture.md` for how the two related.
 
 Until 1.0 the project was called compositor-linux. The rename covers the
 program (`nekophoto`), the desktop entry and icon,
