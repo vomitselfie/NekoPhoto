@@ -110,7 +110,8 @@ Options: `-DNEKOPHOTO_BUILD_APP=OFF` builds only the core and tests;
 `-DNEKOPHOTO_WITH_QTPDF=OFF` leaves out PDF import;
 `-DNEKOPHOTO_WARNINGS_AS_ERRORS=ON` is what CI uses;
 `-DNEKOPHOTO_PCH=OFF` turns off the precompiled headers (on by default, off under MinGW), for a toolchain that
-mishandles them or to check that every file includes what it uses.
+mishandles them or to check that every file includes what it uses;
+`-DNEKOPHOTO_LLD=OFF` links with the system's default linker instead of lld (used on Linux when the compiler finds it).
 `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4` builds against the OpenCV that
 `tools/build-opencv.sh <prefix>` makes: a pinned 4.x, static, with only the
 three modules the model needs and every optional dependency off. CI and the

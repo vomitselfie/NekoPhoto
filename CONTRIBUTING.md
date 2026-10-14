@@ -16,7 +16,8 @@ ctest --test-dir build --output-on-failure
 
 Configure with `-DNEKOPHOTO_WARNINGS_AS_ERRORS=ON` to build as CI does. The common standard and Qt headers are
 precompiled (`NEKOPHOTO_PCH`, on by default except under MinGW); a build with `-DNEKOPHOTO_PCH=OFF` shows a file
-that leans on them for an include of its own. The other options (building without OpenCV, MyPaint, SQLite or Qt PDF)
+that leans on them for an include of its own. On Linux it links with lld when it is installed (`NEKOPHOTO_LLD`), several
+times faster than GNU ld. The other options (building without OpenCV, MyPaint, SQLite or Qt PDF)
 are in [docs/linux-port.md](docs/linux-port.md#building).
 
 CI's toolchain is older than a rolling desktop's (Ubuntu 24.04: GCC 13, Clang 18, Qt 6.4; releases build on

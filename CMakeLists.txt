@@ -40,6 +40,16 @@ option(NEKOPHOTO_BUILD_APP "Build the Qt 6 application" ON)
 option(NEKOPHOTO_BUILD_TESTS "Build the test executables" ON)
 option(NEKOPHOTO_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
 option(NEKOPHOTO_BUILD_FUZZERS "Build the libFuzzer targets (Clang; see docs/fuzzing.md)" OFF)
+# LLVM's lld links about five times faster than GNU ld (the app: 0.07 s of CPU against 0.4 s), which adds up over the
+# hundred test programs a change in the core relinks. Used on Linux when the compiler can find it; ld otherwise.
+option(NEKOPHOTO_LLD "Link with lld when it is available (Linux, GCC or Clang)" ON)
+if(NEKOPHOTO_LLD AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "-fuse-ld=lld" NEKOPHOTO_HAVE_LLD)
+    if(NEKOPHOTO_HAVE_LLD)
+        add_link_options("-fuse-ld=lld")
+    endif()
+endif()
 # x86-64-v2 (SSE4.2, every x86 CPU since 2009) makes roundf/floor/min/max single instructions in the kernels.
 set(NEKOPHOTO_ARCH_FLAGS "" CACHE STRING "Extra architecture flags (empty picks x86-64-v2 on x86_64 with GCC/Clang)")
 if(NEKOPHOTO_ARCH_FLAGS STREQUAL "" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
