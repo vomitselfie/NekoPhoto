@@ -20,6 +20,14 @@ jobs:
     defaults:
       run:
         shell: msys2 {0}
+    env:
+      # ccache as on Linux (linux.yml). MinGW builds have NEKOPHOTO_PCH off, so no precompiled-header settings are needed.
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 500M
+      CCACHE_SLOPPINESS: time_macros,include_file_mtime,include_file_ctime
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e   # v2.33.0
@@ -29,7 +37,7 @@ jobs:
           install: >-
             curl zip
           pacboy: >-
-            gcc:p cmake:p ninja:p pkgconf:p python:p
+            gcc:p cmake:p ninja:p pkgconf:p python:p ccache:p
             qt6-base:p qt6-svg:p qt6-imageformats:p qt6-tools:p qt6-translations:p
             libpng:p zlib:p libmypaint:p libraw:p zstd:p sqlite3:p
       - name: Version
@@ -46,6 +54,13 @@ jobs:
         if: steps.opencv.outputs.cache-hit != 'true'
         run: tools/build-opencv.sh opencv-prefix
 
+      - name: Compiler cache (restore)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
+        with:
+          path: .ccache
+          key: ccache-windows-ucrt64-gcc-Release-${{ github.sha }}
+          restore-keys: ccache-windows-ucrt64-gcc-Release-
+
       - name: Configure and build
         run: |
           set -o pipefail
@@ -54,9 +69,18 @@ jobs:
           opencv_dir="$(cygpath -m "$(dirname "$(find opencv-prefix -name OpenCVConfig.cmake | sort | tail -n 1)")")"
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNEKOPHOTO_WARNINGS_AS_ERRORS=ON \
             -DNEKOPHOTO_VERSION="${{ steps.version.outputs.version }}" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DOpenCV_DIR="$opencv_dir" | tee configure.log
           grep -q "Remove Background: OpenCV" configure.log || { echo "OpenCV was not found in $opencv_dir"; exit 1; }
+          ccache --zero-stats
           cmake --build build -j"$(nproc)"
+
+      - name: Compiler cache (save)
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
+        with:
+          path: .ccache
+          key: ccache-windows-ucrt64-gcc-Release-${{ github.sha }}
 
       - name: Tests
         run: QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
@@ -80,6 +104,10 @@ jobs:
           cd NekoPhoto-*-windows-x86_64
           PATH="/c/Windows/System32:/c/Windows" ./nekophoto.exe --version
           PATH="/c/Windows/System32:/c/Windows" QT_QPA_PLATFORM=offscreen ./nekophoto.exe --demo --screenshot ../zip-demo.png
+
+      - name: Compiler cache statistics
+        if: ${{ !cancelled() }}
+        run: ccache --show-stats
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:

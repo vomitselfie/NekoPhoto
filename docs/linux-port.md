@@ -233,7 +233,8 @@ bridges it to MCP. `docs/automation.md` has the protocol and method list.
 
 `.github/workflows/release.yml` runs when a `v*` tag is pushed. It builds on
 Ubuntu 22.04 with Qt 6.7 from the Qt installer (so the AppImage runs on
-distributions back to 2022), runs the tests and the offscreen smoke test,
+distributions back to 2022) from scratch (no compiler cache, unlike the
+push builds), runs the tests and the offscreen smoke test,
 stages `cmake --install` into an AppDir, bundles Qt (Wayland, xcb and
 offscreen platforms) and libpng with linuxdeploy (OpenCV is built in),
 copies the Debian copyright file of every bundled system library into

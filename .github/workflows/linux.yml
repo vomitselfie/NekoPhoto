@@ -13,12 +13,25 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
+    env:
+      # ccache: the cache lives in the workspace (restored and saved below), keyed per compiler; paths are hashed relative
+      # to the workspace and the compiler by its contents, so a new runner image with the same compiler still hits.
+      # NEKOPHOTO_PCH is on here: CMake brings the precompiled header in with -include (GCC) or -include-pch (Clang),
+      # which ccache follows, but it needs pch_defines and time_macros sloppiness to cache files built with a PCH, and
+      # Clang's PCH must carry no timestamp (-fno-pch-timestamp, set at configure). include_file_mtime/ctime: a fresh
+      # checkout's headers and the PCH just built are newer than ccache's "too new to trust" window.
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 500M
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake libpng-dev libmypaint-dev libraw-dev libzstd-dev libsqlite3-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev pkg-config clang
+          sudo apt-get install -y ninja-build cmake ccache libpng-dev libmypaint-dev libraw-dev libzstd-dev libsqlite3-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev pkg-config clang
           # Qt Linguist (lupdate/lrelease) for the Japanese translation and its completeness test.
           sudo apt-get install -y qt6-tools-dev qt6-l10n-tools qt6-translations-l10n
           # Qt PDF opens PDF files; optional, so a runner image without the package still builds (PDF import off).
@@ -32,12 +45,29 @@ jobs:
       - name: Build OpenCV
         if: steps.opencv.outputs.cache-hit != 'true'
         run: tools/build-opencv.sh opencv-prefix
+      - name: Compiler cache (restore)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
+        with:
+          path: .ccache
+          key: ccache-ubuntu-24.04-${{ matrix.compiler }}-Release-${{ github.sha }}
+          restore-keys: ccache-ubuntu-24.04-${{ matrix.compiler }}-Release-
       - name: Configure
         run: |
-          if [ "${{ matrix.compiler }}" = "clang" ]; then export CC=clang CXX=clang++; else export CC=gcc CXX=g++; fi
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNEKOPHOTO_WARNINGS_AS_ERRORS=ON -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4"
+          pch_flags=""
+          if [ "${{ matrix.compiler }}" = "clang" ]; then export CC=clang CXX=clang++; pch_flags="-Xclang -fno-pch-timestamp"; else export CC=gcc CXX=g++; fi
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNEKOPHOTO_WARNINGS_AS_ERRORS=ON -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_FLAGS="$pch_flags"
       - name: Build
-        run: cmake --build build -j
+        run: |
+          ccache --zero-stats
+          cmake --build build -j
+      - name: Compiler cache (save)
+        # Saved once the build has run, whatever the tests say, so a failing test does not cost the next run its cache.
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
+        with:
+          path: .ccache
+          key: ccache-ubuntu-24.04-${{ matrix.compiler }}-Release-${{ github.sha }}
       - name: Unit and golden tests
         run: ctest --test-dir build --output-on-failure
       - name: Smoke test the application offscreen
@@ -58,6 +88,9 @@ jobs:
       - name: Crash recovery
         timeout-minutes: 5
         run: python3 tools/recovery_check.py ./build/src/app/nekophoto
+      - name: Compiler cache statistics
+        if: ${{ !cancelled() }}
+        run: ccache --show-stats
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: screenshots-${{ matrix.compiler }}
