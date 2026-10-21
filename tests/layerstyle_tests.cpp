@@ -155,6 +155,25 @@ TEST_CASE(clipping_ignores_the_base_layers_effects) {
     CHECK(at(*out, 13, 20)[1] < 20);   // the stroke band stays blue, not green
 }
 
+TEST_CASE(a_styled_bases_interior_effects_lie_over_its_clipped_layers) {
+    // Photoshop draws a clipping base's effects around and over its pixels with the clipped layers on them: a 50%
+    // Color Overlay tints the clipped layer too and an Inside stroke covers it (psd-tools stroke-composite).
+    auto doc = squareWith(lfx2({{"SoFi", object(descriptor("SoFi", {{"enab", boolean(true)}, {"Md  ", enumeration("BlnM", "Nrml")},
+        {"Opct", number(50, "#Prc")}, {"Clr ", rgb(255, 0, 0)}}))},
+        {"FrFX", object(descriptor("FrFX", {{"enab", boolean(true)}, {"Styl", enumeration("FStl", "InsF")},
+        {"PntT", enumeration("FrFl", "SClr")}, {"Md  ", enumeration("BlnM", "Nrml")}, {"Opct", number(100, "#Prc")},
+        {"Sz  ", number(2, "#Pxl")}, {"Clr ", rgb(0, 0, 255)}}))}}));
+    auto green = std::make_shared<Image>(40, 40);
+    green->fill(0, 255, 0, 255);
+    Layer clipped(Asset::make(green, "Clipped"), Point(0, 0));
+    clipped.maskSourceId = doc.layers[1].id;
+    doc.layers.push_back(clipped);
+    auto out = renderFlattened(doc);
+    const uint8_t* inside = at(*out, 20, 20);
+    CHECK(std::abs(int(inside[0]) - 128) <= 2 && std::abs(int(inside[1]) - 128) <= 2);   // green under 50% red
+    CHECK(at(*out, 15, 20)[2] > 250 && at(*out, 15, 20)[1] < 5);                          // the stroke over the clipped layer
+}
+
 TEST_CASE(a_style_set_here_draws_and_reads_back) {
     // A layer with no PSD past: the Layer Style dialog's path, with one effect switched off.
     auto doc = squareWith(lfx2({}));

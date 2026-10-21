@@ -52,6 +52,9 @@ struct RenderExec<SampleType::U8> {
     std::map<Uuid, std::shared_ptr<GrayImage>> liveCoverage;
     std::set<Uuid> visiting;
     bool plainOnly = false;   // while taking a clipping base's transparency
+    /// While a styled clipping base is drawn: the colours of its pixels with the layers clipped to it over them (straight,
+    /// over the output), which its effects then take as its content.
+    const Image* clippedColours = nullptr;
     /// A Blend If layer's gate, for its styled draw to run between its pixels and its interior effects.
     std::function<void()>* interiorGate = nullptr;
     bool ungated = false;     // drawing a Blend If layer's own pass (blendif.h)
@@ -511,6 +514,21 @@ struct RenderExec<SampleType::U8> {
                 // The vector mask shapes what the effects are drawn around, as the pixel mask does.
                 std::shared_ptr<GrayImage> shape = vector ? rasterizeVectorMask(*vector, area, scale, into.width(), into.height()) : nullptr;
                 drawLayer(plain, area, scale, shape.get(), into);
+                if (const Image* colours = clippedColours) {
+                    // A clipping base: its clipped layers are part of what its effects draw around and over.
+                    const int dx = int(std::lround((area.x - region.x) * scale)), dy = int(std::lround((area.y - region.y) * scale));
+                    for (int y = 0; y < into.height(); y++) {
+                        const int oy = y + dy;
+                        if (oy < 0 || oy >= outHeight) continue;
+                        uint8_t* p = into.row(y);
+                        const uint8_t* c = colours->row(oy);
+                        for (int x = std::max(0, -dx); x < std::min(into.width(), outWidth - dx); x++) {
+                            uint8_t* q = p + x * 4;
+                            if (!q[3]) continue;
+                            for (int k = 0; k < 3; k++) q[k] = uint8_t((c[(x + dx) * 4 + k] * q[3] + 127) / 255);
+                        }
+                    }
+                }
             };
             // The folders' coverage alone: the vector mask is already in the source.
             if (vector) draw.coverage = coverageWithoutVector;
@@ -689,28 +707,27 @@ struct RenderExec<SampleType::U8> {
         StackState* keep = nullptr;
         const size_t dragged = plainOnly ? stack->second.size() : stackChild(stack->second, resume, keep);
         if (!plainOnly && layerStyleOf(layer, document)) {
-            // A styled base: the base with its effects, then the clipped layers over it, masked by the base's own
-            // transparency (never by its effects, as in Photoshop).
-            std::shared_ptr<GrayImage> clip;
-            size_t first = 0;
-            if (resume) {
-                std::memcpy(out.data(), resume->group->data(), out.byteCount());
-                clip = resume->clip;
-                first = dragged;
-            } else {
-                drawOwn(layer, out, folders.get());
-                clip = multiply(folders, coverageOf(layer.id));
-            }
-            for (size_t c = first; c < stack->second.size(); c++) {
-                const Uuid& childId = stack->second[c];
-                if (keep && c == dragged) { keep->group = std::make_unique<Image>(out); keep->clip = clip; keep->reached = true; }
+            // A styled base: its pixels with the clipped layers over them (within its own transparency) are the
+            // content its effects are drawn around and over, as in Photoshop: an overlay covers the clipped layers too,
+            // and a stroke lies over them (psd-tools stroke-composite; PhotoCraft composites a styled base the same way).
+            // Drawn whole, never resumed mid-stack (`keep` stays unreached).
+            Image group(outWidth, outHeight);
+            const bool wasPlain = plainOnly, wasUngated = ungated;
+            plainOnly = true; ungated = true;
+            drawOwn(layer, group, nullptr);
+            plainOnly = wasPlain; ungated = wasUngated;
+            layer_unpremultiply_opaque(group.data(), size_t(group.stride()), size_t(outWidth), size_t(outHeight));
+            for (const Uuid& childId : stack->second) {
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
-                excluding(*it->second, out, [&] {
-                    if (it->second->adjustment) adjust(*it->second, out, clip);
-                    else drawOwn(*it->second, out, clip.get());
+                excluding(*it->second, group, [&] {
+                    if (it->second->adjustment) adjust(*it->second, group, nullptr);
+                    else drawOwn(*it->second, group, nullptr);
                 });
             }
+            clippedColours = &group;
+            drawOwn(layer, out, folders.get());
+            clippedColours = nullptr;
             return;
         }
         // A clipping stack: the base's alpha is shared by the layers clipped to it.
