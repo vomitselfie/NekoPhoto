@@ -6,8 +6,8 @@ corpus patchy
 commit 7d14d1f6ede2dc8fb52c11eefcc7cc8783473711
 compared 72
 flatten 48
-floor 59
-FAIL arrows.psd                                                       [rgb8]             max   98.00  >2:   5.14%  mean   1.088
+floor 61
+FAIL arrows.psd                                                       [rgb8]             max   58.00  >2:   4.83%  mean   0.987
 --   patchy-legacy-black-composite.psb                                                   merged image matted by another program (no Photoshop version info, no transparency over transparent layers)
 pass patchy-open-path-strokes.psd                                     [rgb8]             max   31.00  >2:   0.17%  mean   0.034
 --   photoshop-basic.psb                                                                 saved without Maximize Compatibility
@@ -35,7 +35,7 @@ FAIL photoshop-gloss-contour.psd                                      [bmp]     
 pass photoshop-gradient-overlay-geometry.psd                          [bmp]              max    6.00  >2:   0.75%  mean   0.066
 pass photoshop-group-fx-blend-fill.psd                                [bmp]              max    0.00  >2:   0.00%  mean   0.000
 pass photoshop-group-fx-interior.psd                                  [bmp]              max    0.00  >2:   0.00%  mean   0.000
-pass photoshop-group-fx-mask-stroke.psd                               [bmp]              max   30.00  >2:   0.06%  mean   0.014
+pass photoshop-group-fx-mask-stroke.psd                               [bmp]              max    1.00  >2:   0.00%  mean   0.004
 pass photoshop-group-fx-passthrough.psd                               [bmp]              max    0.00  >2:   0.00%  mean   0.000
 pass photoshop-group-opacity.psd                                      [bmp]              max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop-hue-saturation-bands.psd                               [bmp]              max    7.00  >2:   1.98%  mean   0.127
@@ -58,7 +58,7 @@ pass photoshop-pattern-deep.psd                                       [rgb8]    
 pass photoshop-pattern-overlay.psd                                    [bmp]              max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop-pattern-scale.psd                                      [bmp]              max   32.00  >2:  30.08%  mean   1.753
 pass photoshop-pattern-transparent.psd                                [bmp]              max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop-pillow-emboss.psd                                      [bmp]              max   72.00  >2:   1.03%  mean   0.075
+pass photoshop-pillow-emboss.psd                                      [bmp]              max   72.00  >2:   0.97%  mean   0.062
 pass photoshop-pillow-emboss2.psd                                     [bmp]              max   67.00  >2:   0.98%  mean   0.098
 --   photoshop-place-embedded-png.psd                                                    saved without Maximize Compatibility
 pass photoshop-posterize.psd                                          [rgb8]             max    0.00  >2:   0.00%  mean   0.000
@@ -94,12 +94,12 @@ pass photoshop-smart-filter-radial-blur.psd                           [rgb8]    
 --   photoshop-smart-filter-surface-blur.psd                                             saved without Maximize Compatibility
 --   photoshop-smart-filter-tilt-shift.psd                                               saved without Maximize Compatibility
 --   photoshop-smart-filter-unsharp-motion.psd                                           saved without Maximize Compatibility
-FAIL photoshop-stroke-aa-matte.psd                                    [bmp]              max  100.00  >2:   3.72%  mean   0.876
+pass photoshop-stroke-aa-matte.psd                                    [bmp]              max    2.00  >2:   0.00%  mean   0.021
 --   photoshop-stroke-masked.psd                                                         saved without Maximize Compatibility
-pass photoshop-stroke-overprint.psd                                   [bmp]              max   51.00  >2:   0.45%  mean   0.069
+pass photoshop-stroke-overprint.psd                                   [bmp]              max    1.00  >2:   0.00%  mean   0.010
 --   photoshop-stroke-partial-alpha.psd                                                  saved without Maximize Compatibility
 --   photoshop-stroke-positions.psd                                                      saved without Maximize Compatibility
-pass photoshop-stroke-shapeburst.psd                                  [bmp]              max  127.00  >2:   0.20%  mean   0.070
+pass photoshop-stroke-shapeburst.psd                                  [bmp]              max    3.00  >2:   0.01%  mean   0.042
 pass photoshop-text-anchor-center-third.psd                           [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop-text-anchor-center-whole.psd                           [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop-text-anchor-center90-third.psd                         [rgb8]             max    0.00  >2:   0.00%  mean   0.000

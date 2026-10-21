@@ -163,12 +163,12 @@ FAIL photoshop/effects/bevel-pillow-chisel-hard-gloss-and-contour.psd [rgb8]    
 FAIL photoshop/effects/bevel-pillow-chisel-hard.psd                   [rgb8]             max  135.00  >2:  19.33%  mean   3.330
 FAIL photoshop/effects/bevel-pillow-chisel-soft.psd                   [rgb8]             max   89.00  >2:  17.26%  mean   2.023
 FAIL photoshop/effects/bevel-pillow-smooth.psd                        [rgb8]             max   46.00  >2:   6.62%  mean   0.427
-FAIL photoshop/effects/bevel-stroke-chisel-hard.psd                   [rgb8]             max  175.00  >2:  13.21%  mean   5.061
-FAIL photoshop/effects/bevel-stroke-chisel-soft.psd                   [rgb8]             max  180.00  >2:  13.25%  mean   5.128
-FAIL photoshop/effects/bevel-stroke-emboss-center-stroke-chisel-soft.psd [rgb8]             max  163.00  >2:  20.42%  mean   6.825
-FAIL photoshop/effects/bevel-stroke-emboss-inside-stroke.psd          [rgb8]             max  181.00  >2:  11.60%  mean   3.532
-FAIL photoshop/effects/bevel-stroke-smooth.psd                        [rgb8]             max  186.00  >2:  13.36%  mean   5.493
-FAIL photoshop/effects/combo-bevel-satin-glows-stroke.psd             [rgb8]             max  152.00  >2:  24.30%  mean   5.499
+FAIL photoshop/effects/bevel-stroke-chisel-hard.psd                   [rgb8]             max  175.00  >2:  12.92%  mean   4.822
+FAIL photoshop/effects/bevel-stroke-chisel-soft.psd                   [rgb8]             max  180.00  >2:  13.01%  mean   4.880
+FAIL photoshop/effects/bevel-stroke-emboss-center-stroke-chisel-soft.psd [rgb8]             max  164.00  >2:  20.17%  mean   6.685
+FAIL photoshop/effects/bevel-stroke-emboss-inside-stroke.psd          [rgb8]             max  181.00  >2:  11.44%  mean   3.407
+FAIL photoshop/effects/bevel-stroke-smooth.psd                        [rgb8]             max  184.00  >2:  13.09%  mean   5.229
+FAIL photoshop/effects/combo-bevel-satin-glows-stroke.psd             [rgb8]             max  152.00  >2:  23.42%  mean   5.378
 FAIL photoshop/effects/inner-glow-center-precise-choke30.psd          [rgb8]             max   89.00  >2:  27.52%  mean   5.622
 FAIL photoshop/effects/inner-glow-edge-contour-ramp-peak.psd          [rgb8]             max  115.00  >2:  28.12%  mean   4.793
 FAIL photoshop/effects/inner-glow-edge-soft.psd                       [rgb8]             max   35.00  >2:   1.09%  mean   0.167
@@ -252,7 +252,7 @@ pass photoshop/text/point-sizes-colors-runs.psd                       [rgb8]    
 pass photoshop/text/scale-horizontal-vertical.psd                     [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/text/super-subscript-runs.psd                          [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/text/text-on-gradient-blend-multiply.psd               [rgb8]             max   25.00  >2:   9.47%  mean   0.578
-FAIL photoshop/text/text-with-layer-styles.psd                        [rgb8]             max   84.00  >2:   7.49%  mean   1.082
+FAIL photoshop/text/text-with-layer-styles.psd                        [rgb8]             max   35.00  >2:   4.62%  mean   0.223
 pass photoshop/text/tracking-minus60-runs.psd                         [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/text/tracking-plus200.psd                              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/text/underline-strikethrough.psd                       [rgb8]             max    0.00  >2:   0.00%  mean   0.000

@@ -22,7 +22,7 @@
   <a href="https://github.com/vomitselfie/nekophoto/actions/workflows/windows.yml"><img alt="Windows build and tests" src="https://github.com/vomitselfie/nekophoto/actions/workflows/windows.yml/badge.svg?branch=main"></a>
   <!-- compat-badges:start (tools/compat_table.py --write) -->
   <a href="docs/compatibility.md#at-a-glance"><img alt="PSD round trip: 117 of 117 files" src="https://img.shields.io/badge/PSD%20round%20trip-117%2F117-2ea44f?style=flat-square"></a>
-  <a href="docs/compatibility.md#at-a-glance"><img alt="Matches Photoshop's render: 59 of 72 files" src="https://img.shields.io/badge/Photoshop%20match-59%2F72-97ca00?style=flat-square"></a>
+  <a href="docs/compatibility.md#at-a-glance"><img alt="Matches Photoshop's render: 61 of 72 files" src="https://img.shields.io/badge/Photoshop%20match-61%2F72-97ca00?style=flat-square"></a>
   <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 105 CTest suites" src="https://img.shields.io/badge/tests-105%20suites-2f7bf5?style=flat-square"></a>
   <a href="docs/automation.md"><img alt="Automation: 184 methods" src="https://img.shields.io/badge/automation-184%20methods-2f7bf5?style=flat-square"></a>
   <!-- compat-badges:end -->
@@ -220,7 +220,7 @@ NekoPhoto is tested against real Photoshop files, and the numbers are published 
 - **Round trip:** all 117 PSD and PSB files of the test corpus, nearly all saved by Photoshop 2026 (text, smart objects
   and Smart Filters, layer styles, shapes, masks, PSB), open, export and reopen with nothing lost; 3,675 blocks
   NekoPhoto does not edit go back byte for byte. Converted to 16 bits, they come back too.
-- **Against Photoshop's own render:** 59 of 72 files render within 2 levels of what Photoshop shows on 99% of their
+- **Against Photoshop's own render:** 61 of 72 files render within 2 levels of what Photoshop shows on 99% of their
   pixels, compared with Photoshop's own flatten or the merged image it stored. Two public corpora check the same way:
   179 of the 258 files Photoshop saved for [PhotoCraft's corpus](https://github.com/storytold/photocraft-corpus), and
   220 of the 285 [psd-tools](https://github.com/psd-tools/psd-tools) test files with a merged image, each compared in
@@ -358,7 +358,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
   <a href="https://github.com/vomitselfie/nekophoto/actions/workflows/windows.yml"><img alt="Windows のビルドとテスト" src="https://github.com/vomitselfie/nekophoto/actions/workflows/windows.yml/badge.svg?branch=main"></a>
   <!-- compat-badges-ja:start (tools/compat_table.py --write) -->
   <a href="docs/compatibility.md#日本語"><img alt="PSD の往復: 117 個中 117 個" src="https://img.shields.io/badge/PSD%20%E5%BE%80%E5%BE%A9-117%2F117-2ea44f?style=flat-square"></a>
-  <a href="docs/compatibility.md#日本語"><img alt="Photoshop の描画と一致: 72 個中 59 個" src="https://img.shields.io/badge/Photoshop%20%E3%81%A8%E4%B8%80%E8%87%B4-59%2F72-97ca00?style=flat-square"></a>
+  <a href="docs/compatibility.md#日本語"><img alt="Photoshop の描画と一致: 72 個中 61 個" src="https://img.shields.io/badge/Photoshop%20%E3%81%A8%E4%B8%80%E8%87%B4-61%2F72-97ca00?style=flat-square"></a>
   <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 105 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%20105%20%E5%80%8B-2f7bf5?style=flat-square"></a>
   <a href="docs/automation.md"><img alt="自動操作: メソッド 184 個" src="https://img.shields.io/badge/%E8%87%AA%E5%8B%95%E6%93%8D%E4%BD%9C-%E3%83%A1%E3%82%BD%E3%83%83%E3%83%89%20184%20%E5%80%8B-2f7bf5?style=flat-square"></a>
   <!-- compat-badges-ja:end -->
@@ -555,7 +555,7 @@ NekoPhoto は実際の Photoshop ファイルで検証しており、その数�
 - **往復:** テスト用の PSD・PSB ファイル 117 個(ほぼすべて Photoshop 2026 で保存。テキスト、スマートオブジェクトとスマートフィルター、
   レイヤースタイル、シェイプ、マスク、PSB を網羅)は、開いて書き出し、開き直しても何も失われません。NekoPhoto が編集しない
   3,675 個のブロックはバイト単位でそのまま戻ります。16 ビットに変換しても同様です。
-- **Photoshop 自身の描画と比較:** 72 個中 59 個のファイルが、ピクセルの 99% で Photoshop の表示と 2 レベル以内に収まります
+- **Photoshop 自身の描画と比較:** 72 個中 61 個のファイルが、ピクセルの 99% で Photoshop の表示と 2 レベル以内に収まります
   (Photoshop で統合した画像、またはファイルに保存された統合画像と比較)。公開されている 2 つのテスト用ファイル群でも同じ方法で
   確認しています。[PhotoCraft のコーパス](https://github.com/storytold/photocraft-corpus)の Photoshop で保存された 258 個中 179 個、
   [psd-tools](https://github.com/psd-tools/psd-tools) の統合画像付きテストファイル 285 個中 220 個で、それぞれのカラーモードと
