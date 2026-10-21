@@ -114,8 +114,9 @@ The Stroke layer effect's distances (`chamferFrom` and its use in `strokeBand`, 
 5 × 5 chamfer with exact step lengths, partly covered pixels seeding at their uncovered share outside and at their
 coverage relative to their neighbourhood inside, the exact transform from 20 px out) and its two parts (the outside one
 beneath the layer, the inside one within its shape) are adapted from [PhotoCraft](https://github.com/storytold/photocraft)'s
-`chamfer_from`, `dist_outside_by`, `dist_inside_by`, `local_coverage`, `stroke_outside_exact` and the strokes in
-`composite_with_effects_prepared` in `crates/compose/src/effects.rs` at commit 04d0212c7a1006b00f6ec9dd144affc98f8e7d83 (dual
+`chamfer_from`, `dist_outside_by`, `dist_inside_by`, `local_coverage`, `stroke_outside_exact`, `stroke_frame` (a
+gradient stroke's extent) and the strokes in `composite_with_effects_prepared`, which also has a styled clipping base
+take its clipped layers as its content (`render_exec_u8.cpp`, `render_exec_deep.inc`), in `crates/compose/src/effects.rs` at commit 04d0212c7a1006b00f6ec9dd144affc98f8e7d83 (dual
 MIT / Apache-2.0, used under MIT, [PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt); Copyright (c) 2026 ArtCraft Team
 and the PhotoCraft contributors).
 

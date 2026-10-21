@@ -5,7 +5,9 @@ A PSD's layer styles (the effects Photoshop keeps in a layer's 'lfx2' block, 'lm
 was carried (psd-roundtrip.md) and go back unchanged on PSD export, and Layer ▸ Layer Style edits them.
 
 - Model and parsing: `src/core/include/nekophoto/layerstyle.h`, `src/core/src/layerstyle.cpp` (with the global
-  light from image resources 1037/1049, the effects scale, the 'fxrp' reference point and the file's patterns).
+  light from image resources 1037/1049, the 'fxrp' reference point and the file's patterns). The style's own
+  'Scl ' is not applied: Photoshop writes the document's resolution over 72 ppi there and draws each effect at its
+  stored size.
 - Drawing: `src/core/src/layerstyle_render.cpp`, called by the renderer for a styled layer (`drawOwn`), a
   clipping base with a style, and a styled folder (exterior effects before its first child, the rest after its
   last, over the shape of its children drawn alone).
@@ -26,16 +28,27 @@ was carried (psd-roundtrip.md) and go back unchanged on PSD export, and Layer �
 
 The renderer follows Patchy (MIT, `src/third_party/patchy_psd/README.md`), which calibrated each effect against
 Photoshop 2026. Its mask machinery is ported: the tent blur, spread and choke as grayscale dilation, exact
-Euclidean distance fields, the stroke band measured from the matte's subpixel half-coverage contour, the bevel
-height field and Lambert split. So are its compositing rules: effects fold their alpha into the colour for the
+Euclidean distance fields, the bevel height field and Lambert split. So are its compositing rules: effects fold their alpha into the colour for the
 burn and dodge modes; a layer and its shadow or glow add up against the backdrop (the shape knocks the effect
 out, "Layer Knocks Out Drop Shadow" included); overlays stack pattern, gradient, colour, then satin, inner
 glow, inner shadow, stroke, bevel; with Blend Interior Effects as Group off (the default) the layer's mode
 blends its own pixels and the interior effects land on that, with it on they fold into the layer's colour (on a
 folder that isolates, the overlays and satins join the folder's result, which its mode then blends: Patchy's
 photoshop-group-fx-interior); a
-Stroke with Overprint off knocks the layer's content out of its band, even at 0% opacity; a clipped layer is
-masked by the base's pixels, never its effects; with Fill below 100% the overlays are their own passes.
+clipped layer is masked by the base's pixels, never its effects, and a styled base draws its effects around and
+over its pixels with the clipped layers on them (an overlay tints the clipped layers, a stroke lies over them); with
+Fill below 100% the overlays are their own passes.
+
+Strokes follow PhotoCraft (MIT OR Apache-2.0), which matches Photoshop on psd-tools' stroke files. A stroke's width
+is measured with Photoshop's 5 × 5 chamfer (step lengths 1, √2, √5: a pixel two across and three up from a square's
+corner pixel is √5 + √2 = 3.65 px from it, not √13 = 3.61), with a one-pixel antialiasing ramp; a partly covered edge pixel places
+the edge by its coverage. From 20 px out the outer edge uses the exact distance, where the chamfer's octagon would
+show. The stroke comes in two parts: the outside one lies beneath the layer and fills what the layer and the inside
+part leave of each pixel (a 25% edge pixel under an Outside stroke ends opaque); the inside one is drawn over the
+layer within its shape. With Overprint off (the default) the inside part knocks the layer's content out, even at 0%
+opacity. Several strokes: the first listed is the top one, and each outside part blends with the backdrop, not with
+the strokes below. A gradient aligned with the layer spans the stroke's extent (the shape grown by the outside width
+less a pixel).
 
 ## Fill
 
@@ -174,9 +187,9 @@ gloss, `photoshop-bevel-gloss`, is 0.03):
 | Effect | Mean |
 |---|---:|
 | Inner shadow, interior/exterior blending, pattern overlay (anchor, transparency, a 16-bit pattern), overlay z-order | 0.00-0.02 |
-| Shadow knockout, inner glow range, outer glow range, gradient overlay geometry, smooth bevel, stroke overprint | 0.02-0.08 |
+| Shadow knockout, inner glow range, outer glow range, gradient overlay geometry, smooth bevel, stroke overprint, stroke on antialiased edges, Shape Burst stroke | 0.02-0.08 |
 | Pillow emboss, emboss styles | 0.08-0.13 |
-| Inner glow, bevel texture, Shape Burst stroke, gloss contour, stroke on antialiased edges | 0.3-0.9 |
+| Inner glow, bevel texture, gloss contour | 0.3-0.9 |
 | Bevel with an anti-aliased non-monotone contour | 0.8 |
 | Outer glow, pattern scale (minified: Photoshop's filter is not identified) | 1.1-1.7 |
 | Styled folders | 0.00-2.6 |
@@ -185,8 +198,9 @@ gloss, `photoshop-bevel-gloss`, is 0.03):
 A designer's client PSD (three smart objects, eight styled layers, a gold Multiply colour overlay carrying the
 whole design) renders within 1.7 levels of Photoshop's own composite, no pixel off by more than 8.
 
-Not drawn yet: contours on shadows and glows (they draw as Linear), noise and jitter, Dissolve (drawn as
-Normal), "Layer Mask Hides Effects". Vector masks and shape layers are drawn too (vector-masks.md).
+Not drawn yet: contours on shadows and glows (they draw as Linear), noise and jitter, a Noise gradient (a stroke or
+overlay with one is drawn without its colours), Dissolve (drawn as Normal), "Layer Mask Hides Effects". A stroked
+shape's own stroke is drawn with its fill, under the layers clipped to it; Photoshop draws it over them. Vector masks and shape layers are drawn too (vector-masks.md).
 
 Folders follow Photoshop: a folder in any mode but Pass Through isolates its children and composites their
 result in its mode and opacity; a Pass Through folder below full opacity fades its result back toward what was
