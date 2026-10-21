@@ -182,13 +182,15 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block, bool
     const psd::DescriptorObject root = psd::read_descriptor(r);
     auto style = std::make_shared<LayerStyle>();
     style->visible = flag(root, "masterFXSwitch", true);
-    const float scale = std::max(0.01f, num(root, "Scl ", 100) / 100.0f);   // Scale Effects
+    // The descriptor's own 'Scl ' is not a scale to draw at: Photoshop writes the document's resolution over 72 ppi
+    // there (208.3% at 150 ppi) and draws every effect at its stored size (psd-tools double-stroke-effects, 1 px
+    // strokes; layer_effects; effect-stroke-gradient). Patchy and PhotoCraft read it the same way.
     each(root, "DrSh", "dropShadowMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         DropShadow s;
         s.mode = modeOf(e, "Md  ", EffectBlend::Multiply); s.color = colorOf(e, "Clr ", {}); s.opacity = percent(e, "Opct", 75);
         s.angle = num(e, "lagl", 120); s.useGlobalLight = flag(e, "uglg", false);
-        s.distance = std::max(0.0f, num(e, "Dstn", 5)) * scale; s.spread = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f);
-        s.size = std::max(0.0f, num(e, "blur", 5)) * scale; s.layerConceals = flag(e, "layerConceals", true);
+        s.distance = std::max(0.0f, num(e, "Dstn", 5)); s.spread = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f);
+        s.size = std::max(0.0f, num(e, "blur", 5)); s.layerConceals = flag(e, "layerConceals", true);
         style->dropShadows.push_back(s);
         return style->dropShadows.back();
     });
@@ -196,15 +198,15 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block, bool
         InnerShadow s;
         s.mode = modeOf(e, "Md  ", EffectBlend::Multiply); s.color = colorOf(e, "Clr ", {}); s.opacity = percent(e, "Opct", 75);
         s.angle = num(e, "lagl", 120); s.useGlobalLight = flag(e, "uglg", false);
-        s.distance = std::max(0.0f, num(e, "Dstn", 5)) * scale; s.choke = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f);
-        s.size = std::max(0.0f, num(e, "blur", 5)) * scale;
+        s.distance = std::max(0.0f, num(e, "Dstn", 5)); s.choke = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f);
+        s.size = std::max(0.0f, num(e, "blur", 5));
         style->innerShadows.push_back(s);
         return style->innerShadows.back();
     });
     each(root, "OrGl", "outerGlowMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         OuterGlow g;
         g.mode = modeOf(e, "Md  ", EffectBlend::Screen); g.color = colorOf(e, "Clr ", {255, 255, 190}); g.opacity = percent(e, "Opct", 75);
-        g.spread = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f); g.size = std::max(0.0f, num(e, "blur", 5)) * scale;
+        g.spread = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f); g.size = std::max(0.0f, num(e, "blur", 5));
         g.precise = enumOf(e, "GlwT", "SfBL") == "PrBL"; g.range = std::clamp(num(e, "Inpr", 100), 1.0f, 100.0f);
         style->outerGlows.push_back(g);
         return style->outerGlows.back();
@@ -212,7 +214,7 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block, bool
     each(root, "IrGl", "innerGlowMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         InnerGlow g;
         g.mode = modeOf(e, "Md  ", EffectBlend::Screen); g.color = colorOf(e, "Clr ", {255, 255, 190}); g.opacity = percent(e, "Opct", 75);
-        g.choke = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f); g.size = std::max(0.0f, num(e, "blur", 5)) * scale;
+        g.choke = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f); g.size = std::max(0.0f, num(e, "blur", 5));
         g.precise = enumOf(e, "GlwT", "SfBL") == "PrBL"; g.range = std::clamp(num(e, "Inpr", 100), 1.0f, 100.0f);
         g.center = enumOf(e, "glwS", "SrcE") == "SrcC";
         style->innerGlows.push_back(g);
@@ -241,15 +243,15 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block, bool
     each(root, "ChFX", "chromeFXMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         Satin s;
         s.mode = modeOf(e, "Md  ", EffectBlend::Multiply); s.color = colorOf(e, "Clr ", {}); s.opacity = percent(e, "Opct", 50);
-        s.angle = num(e, "lagl", 19); s.distance = std::max(0.0f, num(e, "Dstn", 11)) * scale;
-        s.size = std::max(0.0f, num(e, "blur", 14)) * scale; s.invert = flag(e, "Invr", true);
+        s.angle = num(e, "lagl", 19); s.distance = std::max(0.0f, num(e, "Dstn", 11));
+        s.size = std::max(0.0f, num(e, "blur", 14)); s.invert = flag(e, "Invr", true);
         style->satins.push_back(s);
         return style->satins.back();
     });
     each(root, "FrFX", "frameFXMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         Stroke s;
         s.mode = modeOf(e, "Md  ", EffectBlend::Normal); s.opacity = percent(e, "Opct", 100);
-        s.size = std::max(1.0f, num(e, "Sz  ", 3)) * scale;
+        s.size = std::max(1.0f, num(e, "Sz  ", 3));
         const std::string position = enumOf(e, "Styl", "OutF");
         s.position = position == "InsF" ? Stroke::Position::Inside : position == "CtrF" ? Stroke::Position::Center : Stroke::Position::Outside;
         s.color = colorOf(e, "Clr ", {});
@@ -264,14 +266,14 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block, bool
         b.highlightMode = modeOf(e, "hglM", EffectBlend::Screen); b.highlight = colorOf(e, "hglC", {255, 255, 255}); b.highlightOpacity = percent(e, "hglO", 75);
         b.shadowMode = modeOf(e, "sdwM", EffectBlend::Multiply); b.shadow = colorOf(e, "sdwC", {}); b.shadowOpacity = percent(e, "sdwO", 75);
         b.angle = num(e, "lagl", 120); b.useGlobalLight = flag(e, "uglg", false); b.altitude = num(e, "Lald", 30);
-        b.depth = std::max(0.01f, num(e, "srgR", 100) / 100.0f); b.size = std::max(1.0f, num(e, "blur", 5)) * scale;
+        b.depth = std::max(0.01f, num(e, "srgR", 100) / 100.0f); b.size = std::max(1.0f, num(e, "blur", 5));
         b.up = enumOf(e, "bvlD", "In  ") != "Out ";
         const std::string kind = enumOf(e, "bvlS", "InrB");
         b.kind = kind == "OtrB" ? Bevel::Kind::Outer : kind == "Embs" ? Bevel::Kind::Emboss : kind == "PlEb" ? Bevel::Kind::Pillow
                : kind == "strokeEmboss" ? Bevel::Kind::StrokeEmboss : Bevel::Kind::Inner;
         const std::string technique = enumOf(e, "bvlT", "SfBL");
         b.technique = technique == "PrBL" ? Bevel::Technique::ChiselHard : technique == "Slmt" ? Bevel::Technique::ChiselSoft : Bevel::Technique::Smooth;
-        b.soften = std::max(0.0f, num(e, "Sftn", 0)) * scale;
+        b.soften = std::max(0.0f, num(e, "Sftn", 0));
         if (auto gloss = psd::descriptor_object(e, "TrnS")) b.gloss = contourOf(*gloss);
         b.glossAntialiased = flag(e, "antialiasGloss", false);
         b.useContour = flag(e, "useShape", false);
