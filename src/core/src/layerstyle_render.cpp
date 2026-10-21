@@ -964,6 +964,14 @@ void drawStyled(const StyledDraw& in, Img& target) {
         } else if (stroke.gradientFill) {
             double gx, gy, gw, gh;
             gradientBounds(stroke.gradient, gx, gy, gw, gh);
+            if (stroke.gradient.alignWithLayer) {
+                // Aligned with the layer, the gradient spans the stroke's extent: the shape's bounds grown by the
+                // outside width less a pixel (a 4 px outside stroke around a 22 px square runs over 28 px; PhotoCraft's
+                // stroke_frame, from psd-tools stroke-effects and effect-stroke-gradient).
+                const float outW = stroke.position == Stroke::Position::Inside ? 0 : stroke.position == Stroke::Position::Center ? stroke.size / 2 : stroke.size;
+                const double grow = std::max(0.0, std::ceil(double(std::min(outW, 512.0f))) - 1);
+                gx -= grow; gy -= grow; gw += 2 * grow; gh += 2 * grow;
+            }
             const float t = gradientPosition(stroke.gradient, gx, gy, gw, gh, docX(ox), docY(oy));
             gradRgb(stroke.gradient, t, c);
             a *= gradientOpacity(stroke.gradient, t);
