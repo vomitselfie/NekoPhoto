@@ -15,7 +15,7 @@ adjust/photo_filter a24945cf7e970309
 adjust/posterize 38bdd6bc2fea68d7
 adjust/selective_color 16b6017ea54288e8
 adjust/threshold 6ab288f63b15b5f8
-adjust/vibrance d10f50de132d9b86
+adjust/vibrance c11bd02591c9cf6d
 adjust_layer/black_&_white e522bbc8255cbdcb
 adjust_layer/brightness/contrast 017399784effee14
 adjust_layer/channel_mixer a6decbe8767d46e0
@@ -31,7 +31,7 @@ adjust_layer/photo_filter 5b5b35281bdf1827
 adjust_layer/posterize 35e56948bd389e80
 adjust_layer/selective_color 6007322c79d547fc
 adjust_layer/threshold d4017530e27bf272
-adjust_layer/vibrance 9568758ec9dc2c1b
+adjust_layer/vibrance ed17102d622e1ef9
 blend/color 2aa782d8ec935f6d
 blend/color@0.5 c6ec6462701e0db4
 blend/color_burn 659d11429d7dde2e
@@ -254,7 +254,7 @@ f32/adjust/hue/saturation 266e6dfc213ed61d
 f32/adjust/invert 75a347cbf28a64b2
 f32/adjust/levels 40e6e6aad101bbb1
 f32/adjust/photo_filter 46732f7f66564322
-f32/adjust/vibrance f73da4d51b0f09ff
+f32/adjust/vibrance 5fbc421315da317b
 f32/adjust_layer/black_&_white 4c259f7aca869d04
 f32/adjust_layer/brightness/contrast 4acfcd8ae25ca71f
 f32/adjust_layer/channel_mixer 356047fdd70fd657
@@ -268,7 +268,7 @@ f32/adjust_layer/levels ca7b13134805e60a
 f32/adjust_layer/photo_filter 11a840ec08195579
 f32/adjust_layer/posterize_not_drawn 173ff4d8b3b1efbc
 f32/adjust_layer/stack a812d5884f781e2f
-f32/adjust_layer/vibrance 4ea7b377acf42a2d
+f32/adjust_layer/vibrance 7a0b681a875e5c70
 f32/blend/color 959b8732e2a92788
 f32/blend/color@0.5 557b0f82c80092c7
 f32/blend/color_burn a488bc0bb36f6cfa
@@ -571,7 +571,7 @@ u16/adjust/photo_filter 8ff6b14215a0fb21
 u16/adjust/posterize b189f84dde7db248
 u16/adjust/selective_color 1f3c0017dc868362
 u16/adjust/threshold 5faf032b511d07a3
-u16/adjust/vibrance a4fdcdeb36b63fb2
+u16/adjust/vibrance c9176cc008f721af
 u16/adjust_layer/black_&_white fd1ddc16aef87ab8
 u16/adjust_layer/brightness/contrast e4c3a7d1e24807bc
 u16/adjust_layer/channel_mixer fdba7c9353ce2c8c
@@ -587,7 +587,7 @@ u16/adjust_layer/photo_filter 1e530f21e0c956ce
 u16/adjust_layer/posterize 6c184944a7fd04b8
 u16/adjust_layer/selective_color ca03e89dffe0c861
 u16/adjust_layer/threshold 4fd6346746e4e01c
-u16/adjust_layer/vibrance 58bebb3d9daca328
+u16/adjust_layer/vibrance 7e67163b661e9784
 u16/artboard/backgrounds_and_clipping 3ac0c7755467286f
 u16/blend/color 5825725ee63b846c
 u16/blend/color@0.5 e638c90cf16f5c35

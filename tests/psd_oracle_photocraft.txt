@@ -105,7 +105,7 @@ pass photoshop/adjustments/rgb16/photo-filter.psd                     [rgb16]   
 pass photoshop/adjustments/rgb16/posterize-4.psd                      [rgb16]            max    0.01  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/rgb16/selective-color.psd                  [rgb16]            max   11.37  >2:  11.61%  mean   0.297
 pass photoshop/adjustments/rgb16/threshold-128.psd                    [rgb16]            max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/rgb16/vibrance.psd                         [rgb16]            max   74.12  >2:  59.38%  mean   8.780
+FAIL photoshop/adjustments/rgb16/vibrance.psd                         [rgb16]            max    4.33  >2:   8.59%  mean   0.103
 pass photoshop/adjustments/rgb32/baseline-layer-copy.psd              [f32]              max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/rgb32/black-white-tint.psd                 [f32]              max    0.50  >2:   0.00%  mean   0.024
 pass photoshop/adjustments/rgb32/brightness-contrast-legacy.psd       [f32]              max    0.00  >2:   0.00%  mean   0.000
@@ -141,7 +141,7 @@ pass photoshop/adjustments/rgb8/posterize-4.psd                       [rgb8]    
 FAIL photoshop/adjustments/rgb8/selective-color.psd                   [rgb8]             max   11.00  >2:  10.37%  mean   0.299
 pass photoshop/adjustments/rgb8/stack-levels-curves-hue-posterize.psd [rgb8]             max   51.00  >2:   0.16%  mean   0.062
 pass photoshop/adjustments/rgb8/threshold-128.psd                     [rgb8]             max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/rgb8/vibrance.psd                          [rgb8]             max   74.00  >2:  59.38%  mean   8.798
+FAIL photoshop/adjustments/rgb8/vibrance.psd                          [rgb8]             max    5.00  >2:   8.46%  mean   0.116
 FAIL photoshop/effects/bevel-emboss-chisel-hard.psd                   [rgb8]             max  135.00  >2:  18.99%  mean   3.217
 FAIL photoshop/effects/bevel-emboss-chisel-soft.psd                   [rgb8]             max   89.00  >2:  16.70%  mean   1.925
 pass photoshop/effects/bevel-emboss-smooth-colored-normal.psd         [rgb8]             max   12.00  >2:   0.91%  mean   0.066

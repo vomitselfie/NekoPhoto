@@ -304,7 +304,6 @@ void perColour(Canvas& canvas, const Encoding& encoding, F&& f) {
     }
 }
 
-double luma601(double r, double g, double b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
 
 void blackWhite(double& r, double& g, double& b, const BlackWhiteSettings& s) {
     double w[6];
@@ -347,15 +346,36 @@ void colorBalance(double& r, double& g, double& b, const ColorBalanceSettings& s
 }
 
 void vibrance(double& r, double& g, double& b, const VibranceSettings& s) {
-    const double sat = std::clamp(s.saturation, -100.0, 100.0) / 100, vib = std::clamp(s.vibrance, -100.0, 100.0) / 100;
-    const double l = luma601(r, g, b), chroma = std::max({r, g, b}) - std::min({r, g, b});
-    const double k = (1 + sat) * (1 + vib * (vib > 0 ? (1 - chroma) : 1));
-    r = l + (r - l) * k; g = l + (g - l) * k; b = l + (b - l) * k;
-    const double hi = std::max({r, g, b}), lo = std::min({r, g, b});
-    double f = 1;
-    if (hi > 1 && hi > l) f = std::min(f, (1 - l) / (hi - l));
-    if (lo < 0 && lo < l) f = std::min(f, l / (l - lo));
-    if (f < 1) { r = l + (r - l) * f; g = l + (g - l) * f; b = l + (b - l) * f; }
+    // Photoshop's (PhotoCraft's fit): Vibrance then Saturation on the sRGB-linearised colour.
+    const double sat = std::clamp(s.saturation, -100.0, 100.0) / 100, v = std::clamp(s.vibrance, -100.0, 100.0) / 100;
+    auto decode = [](double x) { x = std::clamp(x, 0.0, 1.0); return x <= 0.04045 ? x / 12.92 : std::pow((x + 0.055) / 1.055, 2.4); };
+    auto encode = [](double x) { x = std::clamp(x, 0.0, 1.0); return x <= 0.0031308 ? x * 12.92 : 1.055 * std::pow(x, 1 / 2.4) - 0.055; };
+    double c[3] = {decode(r), decode(g), decode(b)};
+    const double mx = std::max({c[0], c[1], c[2]}), mn = std::min({c[0], c[1], c[2]});
+    if (v != 0 && mx > 0 && mx - mn > 1e-9) {
+        const double t = 1 - mn / mx, shape = t * (1 - t) * (2 - t + t * t) * mx * std::max(0.0, 1 - mx);
+        double t2, v2;
+        if (v < 0) {
+            t2 = t * (1 + v / 4) * (1 + v - v * t * (1 + t) / 2);
+            v2 = mx + v * shape;
+        } else {
+            const double d = mx - mn;
+            double h = mx == c[0] ? std::fmod((c[1] - c[2]) / d + 6, 6.0) : mx == c[1] ? (c[2] - c[0]) / d + 2 : (c[0] - c[1]) / d + 4;
+            h *= 60;
+            const double skin = h <= 30 ? 1 : h < 45 ? (45 - h) / 15 : h < 300 ? 0 : (h - 300) / 60;
+            const double a = v * (1 - skin) + 0.64 * std::pow(v, 1.6) * skin;
+            const double boost = (0.5001 * a + 0.0887 * a * a) * std::pow(t, 0.4374) * std::pow(1 - t, 0.7573) * std::exp((-0.8113 + 0.5154 * a + 2.8026 * (1 - t)) * std::max(0.0, 1 - mx));
+            t2 = std::min(1.0, t * (1 + boost));
+            v2 = mx + v / 4 * shape;
+        }
+        const double m2 = v2 * (1 - t2), k = (v2 - m2) / (mx - mn);
+        for (double& x : c) x = m2 + (x - mn) * k;
+    }
+    if (sat != 0) {
+        const double grey = 0.288 * c[0] + 0.712 * c[1];
+        for (double& x : c) x = std::clamp(grey + (1 + sat) * (x - grey), 0.0, 1.0);
+    }
+    r = encode(c[0]); g = encode(c[1]); b = encode(c[2]);
 }
 
 void channelMixer(double& r, double& g, double& b, const ChannelMixerSettings& s) {
