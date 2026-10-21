@@ -183,6 +183,7 @@ add_library(nekophoto_core STATIC
     src/toning.cpp
     src/bucket_modes.cpp
     src/raw.cpp
+    src/rawcameras.cpp
     src/rawtone.cpp
     src/rawmeasured.cpp
     src/camerarawxmp.cpp

@@ -64,7 +64,8 @@ open document.
 
 The develop is `nekophoto/raw.h`: LibRaw demosaics with the white balance's multipliers (the camera's own for As
 Shot) and the camera's colour matrix into linear ProPhoto RGB at 16 bits, the raw white point at 1; a DNG's
-BaselineExposure scales it; the [default tone curve](#the-default-render) takes it to display light and sRGB. Then
+BaselineExposure, or for other formats the [camera's exposure offset](#camera-exposure-offsets), scales it; the
+[default tone curve](#the-default-render) takes it to display light and sRGB. Then
 `applyCameraRaw` grades it with the settings, the same code as the filter (so the dialog's result equals Open with no
 settings followed by Filter ▸ Camera Raw Filter with them, which `raw_tests` checks).
 
@@ -82,15 +83,42 @@ rendering, with its BT.709 gamma and automatic brightening, was 14.9.
 
 What the fit cannot know:
 
-- Camera Raw brightens most cameras by an exposure offset of its own (their Adobe profiles' baseline). A DNG says
-  what it wants in BaselineExposure, which NekoPhoto applies; other formats develop without an offset, so they can
-  look darker than in Camera Raw.
+- Camera Raw brightens most cameras by an exposure offset of its own. A DNG says what it wants in BaselineExposure,
+  which NekoPhoto applies; other formats take the [camera's exposure offset](#camera-exposure-offsets), which is
+  measured for a few bodies and estimated for the rest.
 - Camera Raw rebuilds clipped channels from the ones that are not; LibRaw clips them. Pulling Exposure down shows the
   difference in blown highlights.
 - Colours follow the camera's colour matrix (LibRaw's, or the DNG's ColorMatrix): a DNG's forward matrices and a
   camera's Adobe profile (its hue and saturation tables) are not used. The chart's embedded profile is matrices only,
   and its colours come out within the default render's 0.28 of Camera Raw's; with a camera's Adobe Standard profile
   Camera Raw's colours differ by what the profile's tables do.
+
+### Camera exposure offsets
+
+Camera Raw brightens an unedited photo by an amount that depends on the camera, about 0.3 EV for most Sony, Canon and
+Nikon bodies, as RAWmakase measured; without it a RAW file opens darker than in Camera Raw. A DNG carries the amount
+itself (BaselineExposure). For the other formats NekoPhoto takes it from a table (`src/core/src/rawcameras.cpp`,
+`cameraExposureOffset` in `nekophoto/raw.h`):
+
+1. The camera's own row, by make and model (or another name for the body).
+2. For a camera without a row, the median of the rows of the same make, or the median of all rows when the make has none.
+
+The rows are the 17 bodies of RAWmakase's camera table (MIT, `data/cameras.toml`) whose offsets it fitted to Camera Raw
+18.7's renders of unedited photos from them: Canon PowerShot G5 X Mark II; Fujifilm X-H2, X-H2S, X-S10, X-S20, X-T30 II,
+X-T5 and X100VI; Nikon D500, D5600, D850 and Z 7; Olympus PEN-F; Pentax K-70; Sony RX100 VII, A7CR and A7 V. The rest
+of that table (about 260 bodies) holds the BaselineExposure Adobe's DNG Converter writes, or values from Adobe's camera
+profiles: that is Adobe's own data, so it is not used, and the medians are of the fitted rows alone (Canon 0.05, Fujifilm
+−0.1, Nikon 0.2, Olympus 0.55, Pentax 0.35, Sony 0.3; all rows 0.05 EV). With so few rows the make medians are rough:
+RAWmakase's own test, with the whole table, put a make's median 0.14 EV from a body's value on average.
+
+Fujifilm rows hold at DR100 and base ISO. Camera Raw's value for a Fujifilm raw follows the exposure midpoint shift the
+maker notes record (about −0.72 EV at DR100 on X-Trans, −0.49 on GFX, 0 on the small Bayer bodies, a stop lower per DR
+step), so DR200 and DR400 photos develop a stop and two brighter; the X-Trans III bodies (X-T2, X-E3, X-Pro2, X-T20,
+X100F, X-H1) keep one value. Camera Raw's extra stop off at a Sony's extended low ISO is not applied.
+
+The offset scales the scene light before the default tone curve, the same as a DNG's BaselineExposure; the Exposure
+slider stays at 0. Settings saved with a develop keep developing with whatever the table says when they are opened, so
+a change to the table changes how a RAW smart object develops the next time it is developed.
 
 Where it is kept:
 

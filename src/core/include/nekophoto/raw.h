@@ -10,6 +10,7 @@
 #include "imaget.h"
 #include <atomic>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <array>
@@ -87,7 +88,20 @@ struct RawInfo {
 };
 bool readRawInfo(const std::vector<uint8_t>& bytes, RawInfo& info, std::string* error);
 
+/// Camera Raw's exposure offset for a camera's RAW files, in EV: what it brightens an unedited photo by. A DNG says so
+/// itself (BaselineExposure); for the other formats this is RAWmakase's table of offsets fitted to Camera Raw's renders
+/// (src/core/src/rawcameras.cpp), else the median of the same make's bodies in it, else of all of them. Fujifilm values
+/// follow the maker notes' exposure midpoint shift (`fujifilmShift`, LibRaw's; DR200 and DR400), `xTrans` the sensor.
+struct CameraExposureOffset {
+    enum class From { Body, Make, AllBodies };
+    double ev = 0;
+    From from = From::AllBodies;
+};
+CameraExposureOffset cameraExposureOffset(const std::string& make, const std::string& model, double fujifilmShift = std::numeric_limits<double>::quiet_NaN(),
+                                          bool xTrans = false);
+
 /// The file's pixels at 16 bits (0..32768, opaque), in sRGB: the camera's white balance (or options.multipliers), no grade.
+/// A DNG's BaselineExposure, or for another format the camera's exposure offset (cameraExposureOffset), brightens it first.
 std::shared_ptr<Image16> decodeRaw16(const std::vector<uint8_t>& bytes, const RawDecodeOptions& options, std::string* error);
 
 /// Decoded as shot, then graded by `settings` (Camera Raw's panels): what Open in the Camera Raw dialog makes.

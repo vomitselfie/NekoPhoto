@@ -108,8 +108,8 @@ libraw_processed_image_t* process(LibRaw& raw, const RawDecodeOptions& options, 
     return developed;
 }
 
-/// LibRaw's linear ProPhoto RGB through the default tone curve into encoded sRGB at 16 bits (0..32768, opaque). A DNG's
-/// BaselineExposure scales the scene light first, as Camera Raw does.
+/// LibRaw's linear ProPhoto RGB through the default tone curve into encoded sRGB at 16 bits (0..32768, opaque). The
+/// baseline exposure (a DNG's BaselineExposure, or the camera's offset) scales the scene light first, as Camera Raw does.
 std::shared_ptr<Image16> developed16(const libraw_processed_image_t& developed, double baselineExposure) {
     const rawtone::Developer* developer = &rawtone::Developer::shared();
     std::unique_ptr<rawtone::Developer> scaled;
@@ -139,10 +139,14 @@ std::shared_ptr<Image16> developed16(const libraw_processed_image_t& developed, 
 std::shared_ptr<Image16> decode16(const std::vector<uint8_t>& bytes, const RawDecodeOptions& options, std::string* error) {
     auto raw = openRaw(bytes, error);
     if (!raw) return nullptr;
+    // A DNG's own BaselineExposure (0 when it has none, the DNG default); for other formats, Camera Raw's offset for the
+    // camera (cameraExposureOffset). Read before the develop, which leaves the colour filter pattern (9: X-Trans) behind.
+    const auto& id = raw->imgdata.idata;
+    const auto& levels = raw->imgdata.color.dng_levels;
+    const double baseline = id.dng_version ? (levels.parsedfields & LIBRAW_DNGFM_BASELINEEXPOSURE ? double(levels.baseline_exposure) : 0.0)
+                                           : cameraExposureOffset(id.make, id.model, raw->imgdata.makernotes.fuji.ExpoMidPointShift, id.filters == 9).ev;
     libraw_processed_image_t* developed = process(*raw, options, error);
     if (!developed) return nullptr;
-    const auto& levels = raw->imgdata.color.dng_levels;
-    const double baseline = raw->imgdata.idata.dng_version && (levels.parsedfields & LIBRAW_DNGFM_BASELINEEXPOSURE) ? double(levels.baseline_exposure) : 0.0;
     auto out = developed16(*developed, baseline);
     LibRaw::dcraw_clear_mem(developed);
     return out;

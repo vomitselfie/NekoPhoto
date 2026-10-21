@@ -137,6 +137,12 @@ format are in [src/third_party/rawmakase/README.md](src/third_party/rawmakase/RE
 reads them there (`color_mixer.rs`, `black_white.rs`, `parametric.rs`, `color_grade_curves.rs`), copyright (c) 2026
 RAWmakase contributors, MIT ([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)).
 
+The camera exposure offsets in `src/core/src/rawcameras.cpp` are the rows of RAWmakase's `data/cameras.toml` (commit
+7c19ab8d78fc91ebc18dd9514b4f83e405c27953) that it fitted to Camera Raw's renders (`source = "fitted"`), with its rule for
+Fujifilm's exposure midpoint shift (`docs/cameras.md`), copyright (c) 2026 RAWmakase contributors, MIT
+([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)). The table's rows read from Adobe-written DNGs or Adobe profiles are not
+used.
+
 The Photoshop oracle (`tests/psd_composite_oracle.cpp`) judges files with a Dissolve layer by the rule of
 [PhotoCraft](https://github.com/storytold/photocraft)'s `crates/io/tests/corpus.rs` (`dissolve_matches`) at commit
 88ffd89e9fe2b774023016c0f9024d3a2f6728b4 (dual MIT / Apache-2.0, used under MIT,
