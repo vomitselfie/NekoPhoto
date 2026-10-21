@@ -6,8 +6,7 @@
 //   slot goes with lightness, as older files hold it) and a and b take their own. Brightness/Contrast on every ink in
 //   CMYK and on L in Lab; Invert and Posterize on every channel.
 // - Exposure (Lab): on L, through relative luminance, as the RGB kernel works on linear light.
-// - Threshold: on the pixel's lightness (L in Lab, the CMYK colour's L* through the profile, read for deciding only),
-//   its black the profile's black, as the brush paints black.
+// - Threshold: on L in Lab; in CMYK on the Rec. 601 luma of the inks' plain complement, to paper or black ink alone.
 // - Hue/Saturation and Color Balance (CMYK): the RGB kernels' maths on the stored cyan, magenta and yellow (the
 //   complements of the inks) as red, green and blue; black is kept.
 // - Photo Filter: Lab scales the colour's X, Y and Z by the filter's (Preserve Luminosity keeps L), as Photoshop does;
@@ -302,11 +301,6 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
     std::array<Table, 4> tables;
     std::array<const Table*, 4> use{nullptr, nullptr, nullptr, nullptr};
     auto useTable = [&](int k, const Table& t) { tables[size_t(k)] = t; if (!isIdentity(t)) use[size_t(k)] = &tables[size_t(k)]; };
-    ColorTransformPtr lightness;
-    if (cmyk && s.kind == AdjustmentKind::Threshold) {
-        lightness = transformBetween(profile, ColorProfile(), ConvertOptions(), PixelFormat::CMYKFloat, PixelFormat::LabFloat);
-        if (!lightness) return false;
-    }
     switch (s.kind) {
     case AdjustmentKind::Levels:
         for (int k = 0; k < C; k++) {
@@ -344,13 +338,16 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
         break;
     }
     case AdjustmentKind::Threshold: {
-        // Photoshop's level on the lightness; black the profile's black (CMYK) or L 0 (Lab), white no ink or L 100.
-        double black[4] = {0, 0, 0, 0}, white[4] = {1, 1, 1, 1};
-        if (cmyk) { if (!nativeColour<S>(0, 0, 0, M, profile, black)) return false; }
-        else { black[1] = black[2] = white[1] = white[2] = labStored<S>(0); }
-        const double level = std::clamp(s.threshold.level, 1, 255) - 0.005;
-        eachStraight<S>(image, N, lightness.get(), [&](double* v, double l) {
-            const double* to = l * 2.55 >= level ? white : black;
+        // Lab: on L, black L 0 and white L 100, a and b neutral. CMYK: Photoshop compares the Rec. 601 luma of the inks'
+        // plain complement (stored cyan times stored black, and so on), whatever the profile, rounded to a level, and
+        // makes paper or 100% black ink alone (PhotoCraft's ink_luma, crates/compose/src/adjust.rs at 04d0212, MIT OR
+        // Apache-2.0, used under MIT; photocraft-corpus cmyk8 and cmyk16 threshold-128.psd).
+        double black[4] = {1, 1, 1, 0}, white[4] = {1, 1, 1, 1};
+        if (!cmyk) { black[0] = 0; black[1] = black[2] = white[1] = white[2] = labStored<S>(0); }
+        const int level = std::clamp(s.threshold.level, 1, 255);
+        eachStraight<S>(image, N, nullptr, [&](double* v, double l) {
+            const double luma = cmyk ? (0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]) * v[3] : l / 100;
+            const double* to = std::lround(luma * 255) >= level ? white : black;
             for (int k = 0; k < C; k++) v[k] = to[k];
         });
         return true;

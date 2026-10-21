@@ -6,7 +6,7 @@ corpus psd-tools
 commit 96eb134c17b2c65edf4c4151c0f00b802ada86c2
 compared 285
 flatten 0
-floor 220
+floor 221
 pass tests/psd_files/0layers.psb                                      [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/0layers.psd                                      [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/0layers_tblocks.psb                              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
@@ -63,7 +63,7 @@ pass tests/psd_files/adjustments/posterize_grayscale.psd              [rgb8]    
 pass tests/psd_files/adjustments/posterize_rgb.psd                    [rgb8]             max   43.00  >2:   0.06%  mean   0.341
 pass tests/psd_files/adjustments/threshold_16bits_grayscale.psd       [rgb16]            max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/adjustments/threshold_16bits_rgb.psd             [rgb16]            max    0.01  >2:   0.00%  mean   0.000
-FAIL tests/psd_files/adjustments/threshold_cmyk.psd                   [cmyk8]            max  255.00  >2:  63.14%  mean  66.588
+pass tests/psd_files/adjustments/threshold_cmyk.psd                   [cmyk8]            max  255.00  >2:   0.15%  mean   0.079
 pass tests/psd_files/adjustments/threshold_grayscale.psd              [rgb8]             max  255.00  >2:   0.00%  mean   0.005
 pass tests/psd_files/adjustments/threshold_rgb.psd                    [rgb8]             max  255.00  >2:   0.24%  mean   0.459
 FAIL tests/psd_files/advanced-blending.psd                            [rgb8]             max  193.00  >2:  35.96%  mean  43.669

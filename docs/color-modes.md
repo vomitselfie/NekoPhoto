@@ -78,7 +78,7 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
 | Levels, Curves | composite and each ink (Cyan, Magenta, Yellow, Black) | Lightness, a, b (no composite; Lightness first) |
 | Brightness/Contrast | every ink | Lightness |
 | Invert, Posterize | every ink | L, a and b |
-| Threshold, Gradient Map | on the colour's lightness (Gradient Map: the inks' luminosity) | on L |
+| Threshold, Gradient Map | on the inks' plain luma (Threshold) or luminosity (Gradient Map) | on L |
 | Photo Filter | yes | yes |
 | Exposure | greyed (Photoshop lacks) | on L |
 | Hue/Saturation | yes (Colorize through RGB) | yes, through RGB (approximate) |
@@ -91,8 +91,9 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
   own setting. Lab has no composite channel: the channel menu starts at Lightness, and a and b take their own curves.
   The Levels histogram shows the layer's channels. Auto and the black, gray and white samplers are RGB only for now.
 - **Invert** (Ctrl+I) inverts every ink, or L, a and b.
-- **Threshold** decides on lightness: L in Lab, and in CMYK the colour's L* read through the profile (for deciding
-  only; the pixels are not converted). Its black is the profile's black, as the brush paints it.
+- **Threshold** decides on L in Lab (to L 0 or 100, neutral). In CMYK it reads the Rec. 601 luma of the inks' plain
+  complement (stored cyan times stored black, and so on), whatever the profile, and makes paper or 100% black ink alone,
+  as Photoshop does (photocraft-corpus cmyk8 and cmyk16 threshold-128.psd and psd-tools threshold_cmyk.psd).
 - **Gradient Map** runs between its stops in the document's mode: a stop read from the file keeps the CMYK or Lab
   colour Photoshop stored, one made here is converted through the profile once. It reads L in Lab, and in CMYK
   Photoshop's luminosity of the inks' plain complement (stored cyan times stored black, and so on), whatever the
@@ -118,7 +119,7 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
   reads its four ink rows.
 
 Checked by `adjust_modes_tests` (Levels on CMYK moves ink, the black slot moves the black plate alone, Lab Curves on
-Lightness leaves a and b, Invert inverts the inks, Selective Color, Threshold to the profile's black, a black-to-white
+Lightness leaves a and b, Invert inverts the inks, Selective Color, Threshold to black ink alone, a black-to-white
 Gradient Map keeping L, the colour kinds, the filters over five samples, an adjustment layer drawing what the pixel
 edit makes), CMYK and Lab adjustment and filter scenes in `render_hash_tests`, and `rpc_smoke.py`.
 
