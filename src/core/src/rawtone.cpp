@@ -1,5 +1,6 @@
 #include "nekophoto/rawtone.h"
 #include "nekophoto/cameraraw.h"
+#include "rawmeasured.h"
 #include <algorithm>
 #include <cmath>
 #include <iterator>
@@ -150,56 +151,7 @@ template <typename F> void hueKeeping(double c[3], F&& f) {
     c[mid] = l + (h - l) * t;
 }
 
-/// The hue of an RGB colour in degrees (0 for a grey).
-double hslHue(const double e[3]) {
-    const double hi = std::max({e[0], e[1], e[2]}), chroma = hi - std::min({e[0], e[1], e[2]});
-    if (!(chroma > 1e-9)) return 0;
-    if (hi == e[0]) return std::fmod((e[1] - e[2]) / chroma + 6, 6.0) * 60;
-    if (hi == e[1]) return ((e[2] - e[0]) / chroma + 2) * 60;
-    return ((e[0] - e[1]) / chroma + 4) * 60;
-}
-
-void toHsl(const double e[3], double& h, double& s, double& l) {
-    const double hi = std::max({e[0], e[1], e[2]}), lo = std::min({e[0], e[1], e[2]}), d = hi - lo;
-    l = (hi + lo) / 2;
-    s = d < 1e-9 ? 0 : d / std::max(1e-9, 1 - std::fabs(2 * l - 1));
-    h = hslHue(e);
-}
-
-void fromHsl(double h, double s, double l, double out[3]) {
-    const double c = (1 - std::fabs(2 * l - 1)) * s;
-    const double hp = std::fmod(std::fmod(h, 360.0) + 360, 360.0) / 60;
-    const double x = c * (1 - std::fabs(std::fmod(hp, 2.0) - 1));
-    double r = 0, g = 0, b = 0;
-    if (hp < 1) { r = c; g = x; }
-    else if (hp < 2) { r = x; g = c; }
-    else if (hp < 3) { g = c; b = x; }
-    else if (hp < 4) { g = x; b = c; }
-    else if (hp < 5) { r = x; b = c; }
-    else { r = c; b = x; }
-    const double m = l - c / 2;
-    out[0] = r + m;
-    out[1] = g + m;
-    out[2] = b + m;
-}
-
-/// Each colour mixer band's share of a hue: linear between neighbouring band centres, so the shares add up to 1.
-void mixerWeights(double h, double w[8]) {
-    const auto& centres = CameraRawMixerSettings::centers;
-    for (int b = 0; b < 8; b++) w[b] = 0;
-    for (int b = 0; b < 8; b++) {
-        const double from = centres[size_t(b)], to = b == 7 ? 360 : centres[size_t(b + 1)];
-        const double offset = std::fmod(h - from + 360, 360.0);
-        if (offset < to - from) {
-            const double t = offset / (to - from);
-            w[b] += 1 - t;
-            w[(b + 1) % 8] += t;
-            return;
-        }
-    }
-}
-
-/// A Colour Grading table at encoded luminance `luma` (linear between the ramp's steps, held past its ends).
+/// A table over the grey ramp (kGradeLuma) at encoded luminance `luma`: linear between the ramp's steps, held past its ends.
 double gradeAt(const double* table, double luma) {
     const int n = int(std::size(kGradeLuma));
     if (luma <= kGradeLuma[0]) return table[0];
@@ -207,26 +159,6 @@ double gradeAt(const double* table, double luma) {
     const int i = int(std::upper_bound(kGradeLuma, kGradeLuma + n, luma) - kGradeLuma) - 1;
     const double t = (luma - kGradeLuma[i]) / (kGradeLuma[i + 1] - kGradeLuma[i]);
     return table[i] + (table[i + 1] - table[i]) * t;
-}
-
-/// How much a wheel (0 shadows, 1 midtones, 2 highlights, 3 global) pushes per unit of saturation at `luma`. Blending moves
-/// the shadow and highlight weights toward those measured at 100, Balance toward those at +50 (both linearly).
-double gradeWeight(int region, double luma, double blending, double balance) {
-    static const double* const base[4] = {kGradeShadows, kGradeMidtones, kGradeHighlights, kGradeGlobal};
-    const double w = gradeAt(base[region], luma);
-    if (region == 1 || region == 3) return w;
-    const double* blended = region == 0 ? kGradeShadowsBlending100 : kGradeHighlightsBlending100;
-    const double* balanced = region == 0 ? kGradeShadowsBalance50 : kGradeHighlightsBalance50;
-    double out = w + (blending - 50) / 50 * (gradeAt(blended, luma) - w) + balance / 50 * (gradeAt(balanced, luma) - w);
-    if (blending < 50) out = std::max(0.0, out);
-    return out;
-}
-
-/// The grey a wheel's Luminance slider (-100..100) adds at `luma`.
-double gradeLuminance(int region, double luma, double amount) {
-    static const double* const darker[4] = {kGradeShadowsDarker, kGradeMidtonesDarker, kGradeHighlightsDarker, kGradeGlobalDarker};
-    static const double* const brighter[4] = {kGradeShadowsBrighter, kGradeMidtonesBrighter, kGradeHighlightsBrighter, kGradeGlobalBrighter};
-    return amount > 0 ? gradeAt(brighter[region], luma) * amount / 100 : gradeAt(darker[region], luma) * -amount / 100;
 }
 
 /// One slider's curve at `amount`: the measured curves on either side of it (0 is no change), mixed linearly.
@@ -278,9 +210,20 @@ struct Composer {
             v = std::clamp(v + curve(w) - w, 0.0, 1.0);
         }
     }
-    /// The parametric curve: Shadows then Darks, Highlights then Lights, which is how Camera Raw's regions compose.
+    /// The parametric curve. One region at the default splits is the curve fitted here to its own renders (kSliderTables);
+    /// several regions, or moved splits, are RAWmakase's measured grids (rawmeasured.h), which follow how Camera Raw composes
+    /// the regions and moves them with the splits. Otherwise Shadows then Darks, Highlights then Lights.
     void thenParametric(const CameraRawCurveSettings& c) {
         const std::array<double, 3> splits{c.shadowSplit / 100, c.darkSplit / 100, c.lightSplit / 100};
+        const int regions = (c.shadows != 0) + (c.darks != 0) + (c.lights != 0) + (c.highlights != 0);
+        const bool standard = c.shadowSplit == 25 && c.darkSplit == 50 && c.lightSplit == 75;
+        if (regions > 1 || !standard) {
+            const std::vector<float> curve = measured::parametricCurve({c.shadows / 100, c.darks / 100, c.lights / 100, c.highlights / 100}, splits, 4096);
+            if (!curve.empty()) {
+                for (double& v : values) v = linearIndexed(curve, v);
+                return;
+            }
+        }
         thenRegion(ToneSlider::ParametricShadows, c.shadows, splits);
         thenRegion(ToneSlider::ParametricHighlights, c.highlights, splits);
         thenRegion(ToneSlider::ParametricDarks, c.darks, splits);
@@ -485,33 +428,19 @@ ToneStage::ToneStage(const CameraRawSettings& s) {
         channel_ = {c.channelTable(c.red), c.channelTable(c.green), c.channelTable(c.blue)};
     }
     saturation_ = s.saturation / 100;
-    vibrance_ = s.vibrance / 100;
-    for (size_t b = 0; b < 8; b++) {
-        auto at = [&](double amount, const double (&gain)[8][2]) { return amount / 100 * gain[b][amount > 0 ? 1 : 0]; };
-        mixer_[0][b] = at(s.mixer.hue[b], kMixerHue);
-        mixer_[1][b] = at(s.mixer.saturation[b], kMixerSaturation);
-        mixer_[2][b] = at(s.mixer.luminance[b], kMixerLightness);
-        for (const auto& kind : mixer_) mixed_ = mixed_ || kind[b] != 0;
-    }
+    // The colour mixer's bands and Vibrance: RAWmakase's measured lookup (rawmeasured.h).
+    std::array<std::array<double, 8>, 3> bands{};
+    for (size_t i = 0; i < 8; i++) bands[0][i] = s.mixer.hue[i] / 100, bands[1][i] = s.mixer.saturation[i] / 100, bands[2][i] = s.mixer.luminance[i] / 100;
+    auto mixer = std::make_shared<measured::ColorMixer>(bands, 0.0, s.vibrance / 100, true, false, true);
+    if (mixer->active()) mixer_ = std::move(mixer);
+    // Colour Grading: RAWmakase's gain curves per channel of linear ProPhoto RGB.
     const CameraRawGradeWheel* wheels[4] = {&s.grading.shadows, &s.grading.midtones, &s.grading.highlights, &s.grading.global};
-    for (size_t i = 0; i < 4; i++) {
-        Wheel& wheel = wheels_[i];
-        wheel.saturation = wheels[i]->saturation / 100;
-        wheel.luminance = wheels[i]->luminance;
-        // The fully saturated colour of the wheel's hue, less its mean, at unit length.
-        const double hp = std::fmod(wheels[i]->hue + 360, 360.0) / 60;
-        double push[3] = {std::clamp(std::fabs(hp - 3) - 1, 0.0, 1.0), std::clamp(2 - std::fabs(hp - 2), 0.0, 1.0), std::clamp(2 - std::fabs(hp - 4), 0.0, 1.0)};
-        const double mean = (push[0] + push[1] + push[2]) / 3;
-        double length = 0;
-        for (double& v : push) { v -= mean; length += v * v; }
-        length = std::sqrt(length);
-        for (size_t k = 0; k < 3; k++) wheel.push[k] = length > 0 ? push[k] / length : 0;
-        graded_ = graded_ || wheel.saturation > 0 || wheel.luminance != 0;
-    }
-    blending_ = s.grading.blending;
-    balance_ = s.grading.balance;
-    identity_ = !gained_ && !calibrated_ && shadowTint_ == 0 && !exposed_ && !toned_ && !curved_ && !channelCurved_ && saturation_ == 0
-             && vibrance_ == 0 && !mixed_ && !graded_;
+    std::array<std::array<double, 3>, 4> w{};
+    for (size_t i = 0; i < 4; i++) w[i] = {wheels[i]->hue / 360, wheels[i]->saturation / 100, wheels[i]->luminance / 100};
+    auto grade = std::make_shared<measured::GradeCurves>(w, s.grading.blending / 100, s.grading.balance / 100);
+    if (grade->active()) grade_ = std::move(grade);
+    identity_ = !gained_ && !calibrated_ && shadowTint_ == 0 && !exposed_ && !toned_ && !curved_ && !channelCurved_ && !mixer_
+             && saturation_ == 0 && !grade_;
 }
 
 void ToneStage::apply(float rgb[3]) const {
@@ -597,70 +526,13 @@ void ToneStage::apply(float rgb[3]) const {
             }
         for (int k = 0; k < 3; k++) c[k] = linearIndexed(decode, e[k]);
     }
-    if (vibrance_ != 0) {
-        // Vibrance (fitted to the chart's ±50 and ±100, kVibrance): the colourfulness scaled more the duller the colour
-        // is. Raising it keeps the brightest channel and spares skin hues; lowering it pulls the channels toward their mean.
-        const double hi = std::max({c[0], c[1], c[2]}), lo = std::min({c[0], c[1], c[2]});
-        const double dull = 1 - std::clamp(hi > 1e-9 ? (hi - lo) / hi : 0.0, 0.0, 1.0);
-        const VibranceFit& fit = kVibrance[vibrance_ > 0 ? 1 : 0];
-        double skin = 0;
-        if (fit.skin > 0) {
-            const Rgb s = srgbFromProPhoto({c[0], c[1], c[2]});
-            double e[3];
-            for (int k = 0; k < 3; k++) e[k] = srgbEncode(std::clamp(s[size_t(k)], 0.0, 1.0));
-            const double hue = hslHue(e);
-            skin = std::max(0.0, 1 - std::fabs(std::remainder(hue - 15, 360.0)) / 45);
-        }
-        const double factor = std::max(0.0, 1 + vibrance_ * fit.gain * std::pow(dull, fit.power) * (1 - fit.skin * skin));
-        const double pivot = vibrance_ > 0 ? hi : (c[0] + c[1] + c[2]) / 3;
-        for (double& v : c) v = std::max(0.0, pivot + (v - pivot) * factor);
-    }
+    if (mixer_) mixer_->apply(c);
     if (saturation_ != 0) {
         // Saturation: the colour's distance from its luminance in linear ProPhoto RGB, scaled by 1 + amount.
         const double y = kProPhotoY[0] * c[0] + kProPhotoY[1] * c[1] + kProPhotoY[2] * c[2];
         for (double& v : c) v = std::max(0.0, y + (v - y) * (1 + saturation_));
     }
-    if (mixed_ || graded_) {
-        double e[3];
-        for (int k = 0; k < 3; k++) e[k] = sqrtIndexed(encode, c[k]);
-        if (mixed_) {
-            // The colour mixer in the HSL of ProPhoto RGB with the sRGB transfer: each band's share of the hue is linear
-            // between neighbouring band centres; lightness moves with the square root of the chroma, so greys stay.
-            double h, s, l;
-            toHsl(e, h, s, l);
-            double w[8];
-            mixerWeights(h, w);
-            double dh = 0, ds = 0, dl = 0;
-            for (int b = 0; b < 8; b++) {
-                dh += w[b] * mixer_[0][size_t(b)];
-                ds += w[b] * mixer_[1][size_t(b)];
-                dl += w[b] * mixer_[2][size_t(b)];
-            }
-            const double chroma = std::max({e[0], e[1], e[2]}) - std::min({e[0], e[1], e[2]});
-            fromHsl(h + dh, std::clamp(s * (1 + ds), 0.0, 1.0), std::clamp(l + dl * std::pow(std::max(0.0, chroma), kMixerLightnessChromaPower), 0.0, 1.0), e);
-        }
-        if (graded_) {
-            // Colour Grading: each wheel pushes the colour along its hue by its saturation and the weight its region has at
-            // the colour's luminance; the Luminance sliders add grey the same way.
-            double lin[3];
-            for (int k = 0; k < 3; k++) lin[k] = linearIndexed(decode, e[k]);
-            const double luma = sqrtIndexed(encode, kProPhotoY[0] * lin[0] + kProPhotoY[1] * lin[1] + kProPhotoY[2] * lin[2]);
-            double add[3] = {0, 0, 0};
-            for (int region = 0; region < 4; region++) {
-                const Wheel& wheel = wheels_[size_t(region)];
-                if (wheel.saturation > 0) {
-                    const double weight = gradeWeight(region, luma, blending_, balance_) * wheel.saturation;
-                    for (int k = 0; k < 3; k++) add[k] += wheel.push[size_t(k)] * weight;
-                }
-                if (wheel.luminance != 0) {
-                    const double grey = gradeLuminance(region, luma, wheel.luminance);
-                    for (double& v : add) v += grey;
-                }
-            }
-            for (int k = 0; k < 3; k++) e[k] = std::clamp(e[k] + add[k], 0.0, 1.0);
-        }
-        for (int k = 0; k < 3; k++) c[k] = linearIndexed(decode, e[k]);
-    }
+    if (grade_) grade_->apply(c);
     const auto& m = toSrgb().m;
     for (int r = 0; r < 3; r++) rgb[r] = float(sqrtIndexed(encode, m[r][0] * c[0] + m[r][1] * c[1] + m[r][2] * c[2]));
 }

@@ -248,6 +248,12 @@ CameraRawXmp cameraRawFromXmpAttributes(const std::map<std::string, std::string>
         }
         out.applied.push_back(key);
     }
+    // A legacy split-toning record (SplitToning keys, no ColorGrade ones) renders as Colour Grading at Blending 100, as
+    // Camera Raw 18.7 renders one (RAWmakase's measurement, docs/camera-raw.md#fitted-responses).
+    const auto has = [&](const char* prefix) {
+        return std::any_of(attributes.begin(), attributes.end(), [&](const auto& item) { return item.first.rfind(prefix, 0) == 0; });
+    };
+    if (has("SplitToning") && !has("ColorGrade")) s.grading.blending = 100;
     for (const auto& [key, text] : switches)
         if (!panelSwitch(key, text, s) && (text == "True" || text == "true")) out.unsupported.push_back(key + "=" + text);
     if (raw && s.rawTemperature > 0 && s.whiteBalance != CameraRawWhiteBalance::AsShot && s.whiteBalance != CameraRawWhiteBalance::Auto)

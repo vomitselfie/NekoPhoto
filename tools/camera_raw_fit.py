@@ -10,14 +10,16 @@ From the chart's 24-step grey ramp (-8 to +3.5 EV in half stops):
 - The Basic panel's tone sliders (Whites, Blacks, Highlights, Shadows, Dehaze, Contrast) and the parametric curve's
   regions: each case that sets one of them alone gives the curve from the default render's ramp to its own, sampled on
   a fixed grid of encoded values.
-- Colour Grading's wheel and Luminance weights and Shadow Tint's push, per encoded luminance.
+- Shadow Tint's push, per encoded luminance.
 
 From all of the chart's patches, starting from Camera Raw's own default render (so a fit does not carry the default
 render's error), by grid or simplex search on the mean CIEDE2000 the parity test computes:
 
-- whether each tone slider works on the colour's channels or its luminance; Vibrance's gain, dullness power and skin
-  protection; the colour mixer's gain per band and direction; Camera Calibration's strengths; the post-crop vignette's
-  mask and strengths; lens vignetting's strength and power.
+- whether each tone slider works on the colour's channels or its luminance; Camera Calibration's strengths; the post-crop
+  vignette's mask and strengths; lens vignetting's strength and power.
+
+The colour mixer, Vibrance, Colour Grading and the parametric curve's composed regions are not fitted here:
+they render through RAWmakase's measured tables (src/third_party/rawmakase, src/core/src/rawmeasured.cpp).
 
     python3 tools/camera_raw_fit.py            print the fits
     python3 tools/camera_raw_fit.py --write    rewrite src/core/src/rawtone_tables.inc (about a minute and a half)
@@ -180,8 +182,6 @@ def slider_tables(cases, renders, ramp):
 SRGB_TO_PP = np.array([[0.529317, 0.330092, 0.140588], [0.098368, 0.873465, 0.028169], [0.016879, 0.117663, 0.865457]])
 PP_TO_SRGB = np.linalg.inv(SRGB_TO_PP)
 PP_Y = np.array([0.2880402, 0.7118741, 0.0000857])
-MIXER_CENTRES = np.array([0, 30, 60, 120, 180, 240, 270, 300], float)
-MIXER_BANDS = ["Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta"]
 
 
 def srgb_encode(lin):
@@ -286,166 +286,10 @@ def slider_luminance(renders, tables, score):
     return weights
 
 
-def fit_vibrance(cases, renders, score):
-    """Vibrance: colourfulness scaled by 1 + amount * gain * (1 - S)^power, spared on skin hues by `skin` (S is (max - min) /
-    max in linear ProPhoto). Lowering it pulls the channels toward their mean, raising it keeps the brightest channel: the
-    pivots that fit best of mean, luminance and brightest channel."""
-    base = np.array(renders["default"], float)
-    lin = srgb_decode(base / 65535)
-    pp = lin @ SRGB_TO_PP.T
-    e = srgb_encode(lin)
-    eh = e.max(1)
-    chroma = eh - e.min(1)
-    r, g, b = e.T
-    hue = np.where(chroma < 1e-9, 0, np.where(eh == r, ((g - b) / np.maximum(chroma, 1e-12)) % 6,
-                   np.where(eh == g, (b - r) / np.maximum(chroma, 1e-12) + 2, (r - g) / np.maximum(chroma, 1e-12) + 4)) * 60)
-    skin_weight = np.clip(1 - np.abs((hue - 15 + 180) % 360 - 180) / 45, 0, 1)
-    hi, lo = pp.max(1), pp.min(1)
-    dull = 1 - np.clip(np.where(hi > 1e-9, (hi - lo) / np.maximum(hi, 1e-9), 0), 0, 1)
-    vib = [(n, s["Vibrance"] / 100) for n, s in case_settings(cases, lambda k: k == "Vibrance")]
-    fits = []
-    for sign in (0, 1):
-        group = [(n, v) for n, v in vib if (v > 0) == (sign == 1)]
-        pivot = pp.mean(1) if sign == 0 else hi
-        best = None
-        for power in np.arange(0, 2.01, 0.1):
-            for gain in np.arange(0.5, 1.41, 0.05):
-                for skin in (0, 0.25, 0.5, 0.75):
-                    err = 0
-                    for n, v in group:
-                        k = np.maximum(0, 1 + v * gain * dull**power * (1 - skin * skin_weight))
-                        out = np.maximum(pivot[:, None] + (pp - pivot[:, None]) * k[:, None], 0)
-                        err += score(srgb_encode(out @ PP_TO_SRGB.T) * 65535, n)
-                    if best is None or err < best[0]:
-                        best = (err, gain, power, skin)
-        fits.append(best[1:])
-    return fits
-
-
-def hsl(e):
-    mx, mn = e.max(1), e.min(1)
-    l = (mx + mn) / 2
-    d = mx - mn
-    s = np.where(d < 1e-9, 0, d / np.maximum(1 - np.abs(2 * l - 1), 1e-9))
-    r, g, b = e.T
-    dd = np.maximum(d, 1e-12)
-    h = np.where(d < 1e-9, 0, np.where(mx == r, ((g - b) / dd) % 6, np.where(mx == g, (b - r) / dd + 2, (r - g) / dd + 4)) * 60)
-    return h % 360, s, l
-
-
-def from_hsl(h, s, l):
-    c = (1 - np.abs(2 * l - 1)) * s
-    hp = (h % 360) / 60
-    x = c * (1 - np.abs(hp % 2 - 1))
-    z = np.zeros_like(h)
-    conds = [hp < 1, hp < 2, hp < 3, hp < 4, hp < 5, hp >= 5]
-    rgb = np.stack([np.select(conds, v) for v in ([c, x, z, z, x, c], [x, c, c, x, z, z], [z, z, x, c, c, x])], 1)
-    return rgb + (l - c / 2)[:, None]
-
-
-def band_weights(h):
-    """Each colour band's share of a hue: linear between neighbouring band centres (rawtone.cpp's mixerWeights)."""
-    w = np.zeros((len(h), 8))
-    ext = np.append(MIXER_CENTRES, 360)
-    for i in range(8):
-        span = ext[i + 1] - ext[i]
-        off = (h - ext[i]) % 360
-        inside = off < span
-        w[:, i] += np.where(inside, 1 - off / span, 0)
-        w[:, (i + 1) % 8] += np.where(inside, off / span, 0)
-    return w
-
-
-MIXER_LUMA_CHROMA_POWER = 0.5
-
-
-def mixer(e, amounts, gains):
-    """The colour mixer on ProPhoto RGB with the sRGB transfer, in its HSL: amounts (3, 8) of -1..1 for hue, saturation and
-    luminance; gains (3, 8, 2) per band and sign (degrees, saturation factor, lightness). Luminance scales with chroma^0.5,
-    so greys stay."""
-    h, s, l = hsl(e)
-    w = band_weights(h)
-    eff = np.where(amounts >= 0, amounts * gains[:, :, 1], amounts * gains[:, :, 0])
-    chroma = e.max(1) - e.min(1)
-    return from_hsl(h + w @ eff[0], np.clip(s * (1 + w @ eff[1]), 0, 1), np.clip(l + (w @ eff[2]) * chroma**MIXER_LUMA_CHROMA_POWER, 0, 1))
-
-
-def fit_mixer(cases, renders, score):
-    """Each band's hue, saturation and luminance gain, per sign, fitted to the cases that move that slider alone."""
-    e = pp_encoded(np.array(renders["default"], float))
-    singles = []
-    for case in cases["cases"]:
-        settings = case.get("settings", {})
-        if len(settings) != 1 or case.get("look") or case.get("curves"):
-            continue
-        (key, text), = settings.items()
-        for kind, prefix in enumerate(("HueAdjustment", "SaturationAdjustment", "LuminanceAdjustment")):
-            for band, name in enumerate(MIXER_BANDS):
-                if key == prefix + name and case["name"] in renders:
-                    singles.append((case["name"], kind, band, float(text) / 100))
-    gains = np.zeros((3, 8, 2))
-    grids = (np.arange(0, 90.1, 2), np.arange(0, 2.001, 0.05), np.arange(0, 0.8001, 0.02))
-    for kind in range(3):
-        for band in range(8):
-            for sign in (0, 1):
-                group = [(n, a) for n, k, b, a in singles if k == kind and b == band and (a > 0) == (sign == 1)]
-                best = None
-                for gain in grids[kind]:
-                    trial = gains.copy()
-                    trial[kind, band, sign] = gain
-                    err = 0
-                    for n, a in group:
-                        amounts = np.zeros((3, 8))
-                        amounts[kind, band] = a
-                        err += score(srgb16(mixer(e, amounts, trial)), n)
-                    if best is None or err < best[0]:
-                        best = (err, gain)
-                gains[kind, band, sign] = best[1]
-    return gains
-
-
-def hue_direction(h):
-    """The chroma direction of hue `h` in RGB: the fully saturated colour of that hue less its mean, unit length."""
-    hp = h % 360 / 60
-    c = np.clip(np.array([abs(hp - 3) - 1, 2 - abs(hp - 2), 2 - abs(hp - 4)]), 0, 1)
-    c = c - c.mean()
-    return c / np.linalg.norm(c)
-
-
-def grading_tables(renders, ramp):
-    """Colour Grading on the grey ramp: each wheel adds its hue's direction times its saturation to ProPhoto RGB with the sRGB
-    transfer, weighted by the colour's encoded luminance; each Luminance slider adds grey. The weights per unit of saturation
-    and of luminance are read off the ramp, and Blending 100 and Balance +50 off the cases that set two wheels."""
+def grade_luma(renders, ramp):
+    """The grey ramp's encoded luminance in the default render: where Shadow Tint's push is read."""
     e0 = pp_encoded(np.array(renders["default"], float))[ramp]
-    luma = srgb_encode(srgb_decode(e0) @ PP_Y)
-
-    def offset(case):
-        return pp_encoded(np.array(renders[case], float))[ramp] - e0
-
-    def along(case, h):
-        return offset(case) @ hue_direction(h)
-
-    def pair(case, h1, h2):
-        off = offset(case)
-        chroma = off - off.mean(1)[:, None]
-        a = np.stack([hue_direction(h1), hue_direction(h2)], 1) * 0.5
-        return np.array([np.linalg.lstsq(a, chroma[i], rcond=None)[0] for i in range(len(chroma))])
-
-    t = {
-        "Shadows": (along("grading-shadows-h30", 30) / 0.5 + along("grading-shadows-h210", 210) / 0.5 + along("grading-shadows-h30-s100", 30)) / 3,
-        "Midtones": (along("grading-midtones-h30", 30) + along("grading-midtones-h210", 210)) / 2 / 0.5,
-        "Highlights": (along("grading-highlights-h30", 30) / 0.5 + along("grading-highlights-h210", 210) / 0.5
-                       + along("grading-highlights-h210-s100", 210)) / 3,
-        "Global": (along("grading-global-h30", 30) + along("grading-global-h210", 210)) / 2 / 0.5,
-    }
-    blend = pair("grading-blending-100", 210, 40)
-    balance = pair("grading-balance-50", 210, 40)
-    t["ShadowsBlending100"], t["HighlightsBlending100"] = blend[:, 0], blend[:, 1]
-    t["ShadowsBalance50"], t["HighlightsBalance50"] = balance[:, 0], balance[:, 1]
-    for region, name in (("Shadows", "shadow"), ("Midtones", "midtone"), ("Highlights", "highlight"), ("Global", "global")):
-        t[region + "Darker"] = offset("grading-%s-lum-50" % name).mean(1) / 0.5
-        t[region + "Brighter"] = offset("grading-%s-lum+50" % name).mean(1) / 0.5
-    return luma, t
+    return srgb_encode(srgb_decode(e0) @ PP_Y)
 
 
 # ---- Camera Calibration -----------------------------------------------------------------------------------------------
@@ -669,11 +513,7 @@ def main():
     score = Scorer(json.load(open(os.path.join(CORPUS, "layout.json")))["patches"], renders)
     luminance = slider_luminance(renders, tables, score)
     print("slider luminance weights (negative, positive):", {n: tuple(luminance[i]) for i, n in enumerate(SLIDERS.values()) if luminance[i].any()})
-    vibrance = fit_vibrance(cases, renders, score)
-    print("vibrance (gain, dullness power, skin) lowering %s, raising %s" % (vibrance[0], vibrance[1]))
-    print("fitting the colour mixer (a few minutes)...")
-    gains = fit_mixer(cases, renders, score)
-    luma, grading = grading_tables(renders, ramp)
+    luma = grade_luma(renders, ramp)
     calibration = fit_calibration(cases, renders, score, knots, values)
     print("calibration strengths per 100:", calibration)
     tint_direction, tint = shadow_tint_table(renders, ramp)
@@ -727,27 +567,10 @@ def main():
     lines += [
         "};",
         "",
-        "// Vibrance, lowering and raising: colourfulness times 1 + amount * gain * (1 - S)^power * (1 - skin * skin hue).",
-        "struct VibranceFit {",
-        "    double gain, power, skin;",
-        "};",
-        "constexpr VibranceFit kVibrance[2] = {{%g, %g, %g}, {%g, %g, %g}};" % (*vibrance[0], *vibrance[1]),
-        "",
-        "// The colour mixer: per band (Red, Orange, Yellow, Green, Aqua, Blue, Purple, Magenta), for lowering and raising,",
-        "// hue in degrees, saturation as a factor and lightness at a full slider; lightness scales with chroma^power.",
-        "constexpr double kMixerHue[8][2] = {%s};" % ", ".join("{%g, %g}" % tuple(gains[0, b]) for b in range(8)),
-        "constexpr double kMixerSaturation[8][2] = {%s};" % ", ".join("{%g, %g}" % tuple(gains[1, b]) for b in range(8)),
-        "constexpr double kMixerLightness[8][2] = {%s};" % ", ".join("{%g, %g}" % tuple(gains[2, b]) for b in range(8)),
-        "constexpr double kMixerLightnessChromaPower = %g;" % MIXER_LUMA_CHROMA_POWER,
-        "",
-        "// Colour Grading: at each encoded luminance, a wheel's push per unit of saturation and a Luminance slider's per unit.",
+        "// The grey ramp's encoded luminances, where Shadow Tint's push is measured.",
         "constexpr double kGradeLuma[] = {",
         numbers(luma),
         "};",
-    ]
-    for name, values in grading.items():
-        lines += ["constexpr double kGrade%s[] = {" % name, numbers(values), "};"]
-    lines += [
         "",
         "// Camera Calibration: per 100 of each primary's Hue and Saturation, how much of it moves into the other two channels",
         "// of scene-light ProPhoto RGB (rawtone.cpp's calibration matrix); Shadow Tint's direction and its push per 100 at",

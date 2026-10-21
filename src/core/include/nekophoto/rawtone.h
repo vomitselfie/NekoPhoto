@@ -11,6 +11,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace nekophoto {
@@ -19,6 +20,11 @@ struct CameraRawSettings;
 struct CameraRawCurveSettings;
 
 namespace rawtone {
+
+namespace measured {
+class ColorMixer;
+class GradeCurves;
+}
 
 using Rgb = std::array<double, 3>;
 
@@ -87,7 +93,7 @@ private:
     double exposureScale_ = 1, shoulder_ = 0;
     bool gained_ = false, exposed_ = false, toned_ = false, curved_ = false, channelCurved_ = false;
     double refine_ = 0;            // -1..0: how much of the master curve's saturation change is undone
-    double saturation_ = 0, vibrance_ = 0;
+    double saturation_ = 0;
     std::vector<float> exposure_;  // display light (by square root) -> display light
     /// The Basic panel's sliders and the parametric curve, in order: encoded -> encoded tables, each applied to the
     /// brightest and darkest channel, or by `luminance` (0..1) to the colour's luminance instead, as the measured
@@ -99,18 +105,9 @@ private:
     std::vector<Step> steps_;
     std::vector<float> master_;    // encoded -> encoded, the RGB point curve
     std::array<std::vector<float>, 3> channel_;
-    /// The colour mixer: each band's hue (degrees), saturation (factor) and lightness change at these settings.
-    bool mixed_ = false;
-    std::array<std::array<double, 8>, 3> mixer_{};
-    /// Colour Grading: each wheel's push (the direction of its hue times its saturation) and luminance, with Blending and
-    /// Balance.
-    bool graded_ = false;
-    struct Wheel {
-        std::array<double, 3> push{};
-        double saturation = 0, luminance = 0;
-    };
-    std::array<Wheel, 4> wheels_{};   // shadows, midtones, highlights, global
-    double blending_ = 50, balance_ = 0;
+    /// The colour mixer's bands and Vibrance, and Colour Grading: RAWmakase's measured responses (rawmeasured.h).
+    std::shared_ptr<const measured::ColorMixer> mixer_;
+    std::shared_ptr<const measured::GradeCurves> grade_;
 };
 
 } // namespace rawtone

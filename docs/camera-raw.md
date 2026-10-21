@@ -8,14 +8,14 @@ destructive: on a smart object it asks first, like the other pixel filters, and 
 |---|---|---|
 | Settings, ranges, normalization, apply order | `Document/CameraRaw*.swift` | `src/core/include/nekophoto/cameraraw.h`, `src/core/src/cameraraw.cpp` |
 | Pixel kernels (`adjust_camera_raw_*`: texture, glow, grain, defringe, profile corrections, detail, point colours, the clipping views) | `Rendering/AdjustPixels.c` | `src/pixels/CameraRawPixels.c`, extracted unchanged apart from warning fixes |
-| Tone and colour responses fitted to Camera Raw ([Fitted responses](#fitted-responses)) | none | `src/core/src/rawtone.cpp`, tables from `tools/camera_raw_fit.py` |
+| Tone and colour responses fitted to Camera Raw ([Fitted responses](#fitted-responses)) | none | `src/core/src/rawtone.cpp`, tables from `tools/camera_raw_fit.py`; RAWmakase's measured tables in `src/third_party/rawmakase`, read by `src/core/src/rawmeasured.cpp` |
 | Panels | `UI/CameraRaw*.swift`, `UI/RawDevelopSheet.swift` | `src/app/CameraRawDialog.cpp` |
 | Tests | upstream `CompositorTests/CameraRawTests.swift` | `tests/cameraraw_tests.cpp`, `tests/camera_raw_parity.cpp` |
 | Automation | none | `pixels.cameraRaw`, MCP `pixels_camera_raw` |
 
 The grade runs in this order: manual Distortion and the Transform sliders; then, per pixel, the relative white balance,
-Camera Calibration, Exposure, the Basic panel's tone sliders, the Tone Curve, Vibrance and Saturation, the colour mixer
-and Colour Grading; point colours; Clarity, Texture and Glow, the post-crop vignette and Grain; lens vignetting and the
+Camera Calibration, Exposure, the Basic panel's tone sliders, the Tone Curve, the colour mixer and Vibrance, Saturation and
+Colour Grading; point colours; Clarity, Texture and Glow, the post-crop vignette and Grain; lens vignetting and the
 lens profile and defringe; then detail. Alpha is kept. A reduced preview scales every radius, so it matches the
 full-size result.
 
@@ -212,23 +212,29 @@ in its place, which keeps hues, unless the fit says otherwise.
   between amounts. They apply in the order Whites, Blacks, Highlights, Shadows, Dehaze, Contrast, which is the order that
   fits the chart's pairs. Lowering Whites and Highlights works on the colour's luminance (its channels scaled together),
   raising Blacks and either way Shadows half on the luminance and half on the channels: whichever fits the colours.
-- **Parametric curve**: the four regions the same way at ±50 and ±100; moved splits warp each region's input so its range
-  follows them. Shadows then Highlights, then Darks and Lights.
+- **Parametric curve**: one region at the default splits is fitted the same way at ±50 and ±100. Several regions, or
+  moved splits, take RAWmakase's measured curves (`parametric.bin`: each region at eight amounts, Shadows and Highlights
+  over five split ratios, Darks and Lights over seven midtone splits and on a joint grid), applied in gamma-2.2 encoding,
+  Shadows below the midtone split and Highlights above it, then Darks and Lights. Where both exist, our own fit of a single
+  region was closer (Shadows −100: 0.36 against 0.50); for moved splits and combined regions the measured curves are far
+  closer (`parametric-lights+50-splits-25-35-75` 2.54 → 0.53, `parametric-all+50` 1.52 → 0.68).
 - **Point curves**: the RGB curve on the brightest and darkest channel; Refine Saturation is Lightroom's (0–200, 100 the
   curve as drawn) less 100: at −100 a colour keeps its channel differences from before the curve and takes its brightness
   (Rec. 601 luma) from it, and values in between blend. The red, green and blue curves run on each channel of ProPhoto RGB.
-- **Vibrance and Saturation**: Saturation scales a colour's distance from its luminance in linear ProPhoto RGB by
-  1 + amount / 100 (which matches the chart from −100 to +100). Vibrance scales colourfulness by
-  1 + amount · gain · (1 − S)^power, S the colour's (max − min) / max; raising it keeps the brightest channel and spares
-  skin hues (around 15°) by half, lowering it pulls the channels toward their mean (gain and power fitted per sign).
-- **Colour mixer**: the HSL of ProPhoto RGB with the sRGB transfer, each band's share of a hue linear between the
-  neighbouring band centres, and a gain per band and direction for Hue (degrees at ±100), Saturation and Luminance, fitted
-  to the 96 single-band cases. Luminance moves with the square root of the colour's chroma, so greys stay.
-- **Colour Grading**: each wheel pushes the colour (on ProPhoto RGB with the sRGB transfer) along its hue, the fully
-  saturated colour of that hue less its mean, by its saturation and the weight its region has at the colour's encoded
-  luminance, read off the grey ramp per region. Blending and Balance move the shadow and highlight weights toward those
-  read off Blending 100 and Balance +50 (linearly; other values are extrapolated). The Luminance sliders add grey by their
-  own ramp tables.
+- **Colour mixer and Vibrance**: RAWmakase's measured lookup (`color_mixer_chart.bin`, `vibrance_chart.bin`): each slider's
+  change to the colour as a hue shift and saturation and value factors on a grid of 36 hues × 6 saturations × 6 values of
+  HSV in linear ProPhoto RGB, interpolated trilinearly; the sliders add their changes. Band Luminance scales its ±100 change
+  by the slider to the power 1.6 darkening and 0.79 lightening, as Camera Raw's is not linear; negative Saturation of a band
+  scales its saturation factor itself. Vibrance up to ±50 scales the ±50 tables, beyond takes the grids measured at ±75 and
+  ±100. Below the lowest saturation the grid measured, a grey's change fades to none, so a nearly grey colour keeps its
+  brightness whatever its hue (RAWmakase holds the row; the ±50 Vibrance tables move it by up to 6% by hue).
+- **Saturation**: scales a colour's distance from its luminance in linear ProPhoto RGB by 1 + amount / 100 (which matches
+  the chart from −100 to +100; RAWmakase's ±50 Saturation tables were further from Camera Raw, 1.32 against 0.96, and
+  are not used).
+- **Colour Grading**: RAWmakase's measured gain curves (`color_grade_curves.bin`): a curve per channel of linear ProPhoto
+  RGB, each region's tint 1 + Σ A(x)·p with profiles A along the channel that Blending and Balance shape and coefficients
+  p that hue and saturation set; regions multiply, and Luminance is one curve for all channels before the tint. A preset
+  with legacy split toning (SplitToning keys and no ColorGrade keys) renders at Blending 100, as Camera Raw renders one.
 - **Camera Calibration**: a matrix on scene light that keeps greys: each primary's Hue moves it into the other two channels
   in opposite directions and its Saturation out of both (about 0.33 and 0.40 per 100, fitted per slider). Shadow Tint
   pushes along its measured green–magenta direction by a ramp table. Older process versions scale the sliders down as
@@ -261,12 +267,12 @@ rendering, before both, was 13–26 on every control:
 | Clarity | 4 | 3.46 | 2.93 |
 | Texture | 4 | 1.58 | 1.58 |
 | Dehaze | 4 | 11.96 | 3.16 |
-| Vibrance | 4 | 4.31 | 1.91 |
+| Vibrance | 4 | 4.31 | 0.80 |
 | Saturation | 4 | 2.40 | 0.96 |
-| Parametric curve | 24 | 4.75 | 0.72 |
+| Parametric curve | 24 | 4.75 | 0.47 |
 | Point curve | 7 | 3.01 | 0.84 |
-| Colour mixer | 105 | 1.53 | 0.91 |
-| Colour grading | 20 | 5.85 | 1.73 |
+| Colour mixer | 105 | 1.53 | 0.42 |
+| Colour grading | 20 | 5.85 | 0.47 |
 | Camera Calibration | 9 | 2.77 | 0.38 |
 | Post-crop vignette | 16 | 4.45 | 1.46 |
 | Lens vignetting | 3 | 9.54 | 0.72 |
@@ -275,7 +281,14 @@ rendering, before both, was 13–26 on every control:
 | White balance | 9 | 0.94 | 0.94 |
 | Grain | 1 | 1.17 | 1.17 |
 | Sharpening, noise reduction | 4 | 0.28 | 0.28 |
-| Pairs and the combined look | 24 | 7.04 | 2.39 |
+| Pairs and the combined look | 24 | 7.04 | 2.30 |
+
+RAWmakase's measured tables replaced our own fits on 2026-10-21 where the chart says they are closer: mean ΔE00 per
+control, our fit → the tables, Vibrance 1.91 → 0.80, colour mixer 0.91 → 0.42, Colour Grading 1.73 → 0.47 (with
+legacy split toning at Blending 100), parametric curve 0.72 → 0.47 (moved splits and combined regions only). Two
+combined cases got a little worse: `pair-parametric-lights+50-vibrance+50` (mean 0.91 → 0.77, its 95th percentile
+2.24 → 2.64) and `look-warm-contrast` (nine controls at once, 2.89 → 3.00); the tables measure each slider's change to
+Camera Raw's default render, and both cases move the colours before Vibrance sees them.
 
 What does not match yet:
 
@@ -287,7 +300,8 @@ What does not match yet:
   Exposure −1.5 is far off (`pair-exposure-1.5-whites+100`, 14.8).
 - **Texture** works on edges and fine detail, which the chart's flat patches hardly show; it keeps upstream's operator.
 - **White balance** at 2500 and 3200 K is 2–3.3 ΔE00 off (the other temperatures and tints 0.3–0.9).
-- Colour mixer bands combine by adding their changes, so alternating luminance (`mixer-alternate-luminance`, 3.8) is off.
+- Colour mixer bands combine by adding their changes, so alternating luminance (`mixer-alternate-luminance`, 1.4) is the
+  furthest of the mixer's cases.
 
 ## XMP presets
 
@@ -299,7 +313,8 @@ settings are read as attributes or elements, the point curves as sequences.
 - Read: Exposure2012, Contrast2012, Highlights2012, Shadows2012, Whites2012, Blacks2012, Texture, Clarity2012, Dehaze,
   Vibrance, Saturation; the Parametric* regions and splits; ToneCurvePV2012 (and Red, Green, Blue) and
   CurveRefineSaturation (stored less 100); Hue/Saturation/LuminanceAdjustment for the eight bands; SplitToning* and
-  ColorGrade* (wheels, Luminance, Blending, Balance); ShadowTint and the Red/Green/Blue Hue and Saturation; PostCropVignette*
+  ColorGrade* (wheels, Luminance, Blending, Balance; a preset with SplitToning keys and no ColorGrade keys renders at Blending
+  100, as Camera Raw renders legacy split toning); ShadowTint and the Red/Green/Blue Hue and Saturation; PostCropVignette*
   (style codes 1 Highlight Priority, 2 Color Priority, 3 Paint Overlay); Grain*; VignetteAmount and VignetteMidpoint;
   LensManualDistortionAmount, LensProfileEnable with its distortion and vignetting scales, AutoLateralCA and the Defringe*
   settings; Perspective* (Scale less 100); Sharpness, SharpenRadius (0.5–3 px onto the slider), SharpenDetail,

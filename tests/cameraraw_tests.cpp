@@ -609,8 +609,9 @@ TEST_CASE(sixteen_bit_agrees_with_eight_bit_on_eight_bit_input) {
              s.exposure = 0.4; s.contrast = 20; s.shadows = 30; s.vibrance = 20; s.clarity = 20; s.curve.rgb = CameraRawCurveSettings::mediumContrast();
              s.grading.midtones = {30, 20, 0}; s.detail.sharpenAmount = 40; s.vignetteAmount = -20; },
          // The 8-bit grade rounds after the tone, clarity, vignette and sharpening passes, and the fitted curves are steep
-         // in the shadows, so their roundings add up on a few pixels.
-         5},
+         // in the shadows, so their roundings add up on a few pixels: the low channel of strongly saturated colours, which
+         // Vibrance's measured lookup pushes toward the edge of sRGB, where encoding is steepest.
+         9},
     };
     bool within = true;
     for (const Case& c : cases) {
@@ -697,6 +698,7 @@ TEST_CASE(an_xmp_preset_patches_the_settings_and_lists_what_it_cannot) {
     auto listed = [&](const std::string& key) {
         return std::any_of(onPixels->unsupported.begin(), onPixels->unsupported.end(), [&](const std::string& u) { return u.rfind(key, 0) == 0; });
     };
+    CHECK_EQ(s.grading.blending, 100.0);   // legacy split toning (no ColorGrade keys) renders at Blending 100
     CHECK(listed("ConvertToGrayscale=True"));
     CHECK(listed("GrayMixerRed"));
     CHECK(listed("HasCrop=True"));

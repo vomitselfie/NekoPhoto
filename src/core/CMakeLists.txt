@@ -184,6 +184,7 @@ add_library(nekophoto_core STATIC
     src/bucket_modes.cpp
     src/raw.cpp
     src/rawtone.cpp
+    src/rawmeasured.cpp
     src/camerarawxmp.cpp
     src/whitebalance.cpp
     src/vectorlayer.cpp
@@ -264,6 +265,23 @@ add_custom_command(
     COMMENT "Embedding the default CMYK profile"
     VERBATIM)
 target_sources(nekophoto_core PRIVATE ${NEKOPHOTO_CMYK_BLOB})
+
+# RAWmakase's measured Camera Raw responses (MIT; src/third_party/rawmakase/README.md), compiled in the same way.
+foreach(table IN ITEMS ColorMixerChart:color_mixer_chart VibranceChart:vibrance_chart
+                       Parametric:parametric ColorGradeCurves:color_grade_curves)
+    string(REPLACE ":" ";" parts ${table})
+    list(GET parts 0 symbol)
+    list(GET parts 1 file)
+    set(input ${CMAKE_SOURCE_DIR}/src/third_party/rawmakase/${file}.bin)
+    set(output ${CMAKE_CURRENT_BINARY_DIR}/generated/rawmakase_${file}_blob.cpp)
+    add_custom_command(
+        OUTPUT ${output}
+        COMMAND ${CMAKE_COMMAND} -DINPUT=${input} -DOUTPUT=${output} -DSYMBOL=rawmakase${symbol} -P ${CMAKE_CURRENT_SOURCE_DIR}/embed_blob.cmake
+        DEPENDS ${input} ${CMAKE_CURRENT_SOURCE_DIR}/embed_blob.cmake
+        COMMENT "Embedding RAWmakase's ${file} table"
+        VERBATIM)
+    target_sources(nekophoto_core PRIVATE ${output})
+endforeach()
 
 target_include_directories(nekophoto_core
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
