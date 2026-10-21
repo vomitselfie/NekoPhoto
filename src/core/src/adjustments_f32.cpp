@@ -160,9 +160,22 @@ namespace {
 
 // ---- Hue/Saturation: Photoshop's model on each encoded colour ----------------------------------------------------
 
-void applyHueSaturationF(ImageF& image, const HueSaturationSettings& settings, const TransferCurve& curve) {
+void applyHueSaturationF(ImageF& image, const HueSaturationSettings& settings, const TransferCurve&) {
+    // Photoshop's 32-bit Hue/Saturation works on the linear values as stored (HueSaturationSettings::linearAdjuster).
     if (settings.isIdentity()) return;
-    forEachEncodedColour(image, curve, settings.adjuster());
+    const auto adjust = settings.linearAdjuster();
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            float* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const float a = p[3];
+                if (!(a > 0)) continue;
+                double c[3] = {p[0] / a, p[1] / a, p[2] / a};
+                adjust(c[0], c[1], c[2]);
+                for (int k = 0; k < 3; k++) p[k] = cleanColour(float(c[k] * a));
+            }
+        }
+    });
 }
 
 void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const TransferCurve& curve) {

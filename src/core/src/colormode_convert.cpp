@@ -94,8 +94,11 @@ bool adjustmentOfferedInMode(AdjustmentKind kind, ColorMode mode) {
     case AdjustmentKind::Invert: case AdjustmentKind::Posterize: case AdjustmentKind::Threshold:
     case AdjustmentKind::GradientMap: case AdjustmentKind::PhotoFilter: case AdjustmentKind::ColorLookup:
         return true;
-    // Channel Mixer mixes RGB or CMYK channels; Photoshop greys it in Lab.
-    case AdjustmentKind::HueSaturation: case AdjustmentKind::ColorBalance: case AdjustmentKind::SelectiveColor:
+    // Hue/Saturation in Lab too (photocraft-corpus has Photoshop 27's lab8 and lab16 files). Channel Mixer mixes RGB or
+    // CMYK channels; Photoshop greys it, Color Balance and Selective Color in Lab.
+    case AdjustmentKind::HueSaturation:
+        return true;
+    case AdjustmentKind::ColorBalance: case AdjustmentKind::SelectiveColor:
     case AdjustmentKind::ChannelMixer:
         return mode == ColorMode::CMYK;
     case AdjustmentKind::Exposure:

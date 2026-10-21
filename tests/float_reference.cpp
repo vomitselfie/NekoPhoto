@@ -345,11 +345,17 @@ void channelMixer(double& r, double& g, double& b, const ChannelMixerSettings& s
     r = nr; g = ng; b = nb;
 }
 
-void hueSaturation(Canvas& canvas, const HueSaturationSettings& settings, const Encoding& encoding) {
+void hueSaturation(Canvas& canvas, const HueSaturationSettings& settings, const Encoding&) {
     if (settings.isIdentity()) return;
-    // The model itself, colour by colour (it is what the 16- and 32-bit kernels evaluate).
-    const auto adjust = settings.adjuster();
-    perColour(canvas, encoding, [&](double& r, double& g, double& b) { adjust(r, g, b); });
+    // The model's linear form colour by colour, on the straight linear values (Photoshop's 32-bit Hue/Saturation).
+    const auto adjust = settings.linearAdjuster();
+    for (size_t i = 0; i < canvas.pixels.size(); i += 4) {
+        const double a = canvas.pixels[i + 3];
+        if (!(a > 0)) continue;
+        double c[3] = {canvas.pixels[i] / a, canvas.pixels[i + 1] / a, canvas.pixels[i + 2] / a};
+        adjust(c[0], c[1], c[2]);
+        for (size_t k = 0; k < 3; k++) canvas.pixels[i + k] = std::clamp(c[k] * a, 0.0, 65504.0);   // cleanColour
+    }
 }
 
 inline uint32_t hash32(uint32_t x) {

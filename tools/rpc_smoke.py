@@ -1648,9 +1648,9 @@ def colour_mode_adjustments(rpc):
     first = rpc.call("tabs.list")
     tab = rpc.call("tabs.new")
     common = ("Levels", "Curves", "Brightness/Contrast", "Invert", "Posterize", "Threshold", "Gradient Map", "Photo Filter")
-    offered = {"cmyk": common + ("Hue/Saturation", "Color Balance", "Selective Color", "Channel Mixer"), "lab": common + ("Exposure",)}
+    offered = {"cmyk": common + ("Hue/Saturation", "Color Balance", "Selective Color", "Channel Mixer"), "lab": common + ("Exposure", "Hue/Saturation")}
     lacking = {"cmyk": ("Exposure", "Vibrance", "Black & White", "Grain"),
-               "lab": ("Hue/Saturation", "Color Balance", "Selective Color", "Channel Mixer", "Vibrance", "Black & White", "Grain")}
+               "lab": ("Color Balance", "Selective Color", "Channel Mixer", "Vibrance", "Black & White", "Grain")}
     for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
         rpc.call("document.new", width=48, height=32)
         rpc.call("pixels.fill", color="#c05030")

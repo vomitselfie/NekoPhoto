@@ -220,9 +220,11 @@ TEST_CASE(supports_has_a_mode_axis) {
     CHECK_EQ(unavailableReason("tool.dodge", SampleType::F32, ColorMode::RGB), std::string("Not available in 32-bit mode"));
     CHECK(unavailableReason("tool.brush", SampleType::U16, ColorMode::CMYK).empty());
     CHECK(!supports("filter.never-heard-of-it", SampleType::U8, ColorMode::Lab));
-    CHECK(supports(AdjustmentKind(0), SampleType::U8, ColorMode::CMYK));
-    CHECK(!supports(AdjustmentKind(0), SampleType::U8, ColorMode::Lab));
-    CHECK(supports(AdjustmentKind(0), SampleType::U8, ColorMode::RGB));
+    // Color Balance: offered in CMYK, greyed in Lab (Hue/Saturation, once the example here, is offered in both).
+    CHECK(supports(AdjustmentKind::ColorBalance, SampleType::U8, ColorMode::CMYK));
+    CHECK(!supports(AdjustmentKind::ColorBalance, SampleType::U8, ColorMode::Lab));
+    CHECK(supports(AdjustmentKind::ColorBalance, SampleType::U8, ColorMode::RGB));
+    CHECK(supports(AdjustmentKind::HueSaturation, SampleType::U8, ColorMode::Lab));
     // A feature listed for a mode still needs the depth: transforming a selection is 8-bit RGB only.
     CHECK(!supports("edit.transformSelection", SampleType::U8, ColorMode::CMYK));
     CHECK_EQ(notAvailableInMode(ColorMode::CMYK), std::string("Not available in CMYK mode"));

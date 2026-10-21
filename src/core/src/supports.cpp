@@ -260,7 +260,7 @@ constexpr FeatureModes modeTable[] = {
     {"adjustment.Threshold", allModes},
     {"adjustment.Gradient Map", allModes},
     {"adjustment.Photo Filter", allModes},
-    {"adjustment.Hue/Saturation", colorModeBit(ColorMode::CMYK)},
+    {"adjustment.Hue/Saturation", allModes},
     {"adjustment.Color Balance", colorModeBit(ColorMode::CMYK)},
     {"adjustment.Selective Color", colorModeBit(ColorMode::CMYK)},
     {"adjustment.Channel Mixer", colorModeBit(ColorMode::CMYK)},
@@ -404,7 +404,7 @@ bool photoshopLacksInMode(std::string_view feature, ColorMode mode) {
     if (mode == ColorMode::RGB) return false;
     for (std::string_view f : rgbOnly) if (f == feature) return true;
     // The adjustments Photoshop's Image > Adjustments greys in the mode (Vibrance and Black & White in CMYK and Lab,
-    // Exposure in CMYK; Hue/Saturation, Color Balance, Selective Color and Channel Mixer in Lab), and Grain.
+    // Exposure in CMYK; Color Balance, Selective Color and Channel Mixer in Lab), and Grain.
     constexpr std::string_view prefix = "adjustment.";
     if (feature.substr(0, prefix.size()) == prefix) {
         AdjustmentKind kind;

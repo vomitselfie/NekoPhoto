@@ -219,11 +219,9 @@ TEST_CASE(adjustments_at_32_bits_match_8_bits_on_8_bit_pixels) {
         const auto [worst, over] = levelsApart(*back, at8);
         std::fprintf(stderr, "  %s%s: %d levels, %.3f%% beyond one\n", adjustmentKindName(settings.kind), opaque ? " (opaque)" : "", worst, over * 100);
         if (settings.kind == AdjustmentKind::HueSaturation) {
-            // At 8 bits Hue/Saturation is Photoshop's byte arithmetic (the lightness, the half-chroma and the hue
-            // interpolant each rounded to a level), which a raised saturation multiplies; 32 bits runs the model
-            // unrounded.
-            CHECK(worst <= (opaque ? 3 : 6));
-            CHECK(over < 0.03);
+            // Photoshop's 32-bit Hue/Saturation runs its model on the linear values, unlimited (photocraft-corpus rgb32
+            // hue-saturation.psd and hue-saturation-colorize.psd); at 8 bits it is the byte arithmetic on the encoded
+            // colour. The two are different functions there.
             continue;
         }
         if (settings.kind == AdjustmentKind::Exposure) {

@@ -264,7 +264,8 @@ void colourKinds() {
     REQUIRE(bright);
     CHECK(labAt(bright, 0, 0, 0) > 60);
     CHECK_EQ(stored(bright, 0, 0, 1), stored(lab, 0, 0, 1));
-    CHECK(!adjustedInMode(settingsOf(AdjustmentKind::HueSaturation), lab, ColorMode::Lab, ColorProfile()));
+    // Hue/Saturation is offered in Lab (Photoshop 27's corpus files have it): drawn through RGB and back.
+    CHECK(bool(adjustedInMode(settingsOf(AdjustmentKind::HueSaturation), lab, ColorMode::Lab, ColorProfile())));
     CHECK(!adjustedInMode(settingsOf(AdjustmentKind::ChannelMixer), lab, ColorMode::Lab, ColorProfile()));
 }
 

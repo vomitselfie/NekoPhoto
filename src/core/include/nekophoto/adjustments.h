@@ -182,6 +182,8 @@ struct HueSaturationSettings {
     void adjust(double& r, double& g, double& b) const;
     /// adjust() with the per-hue response worked out once, for adjusting many colours.
     std::function<void(double&, double&, double&)> adjuster() const;
+    /// Photoshop's 32-bit Hue/Saturation on a straight linear colour (unbounded in and out).
+    std::function<void(double&, double&, double&)> linearAdjuster() const;
     /// The hue a spectrum swatch becomes.
     double shiftedHue(double hue) const;
 };

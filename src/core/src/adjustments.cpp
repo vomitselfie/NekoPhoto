@@ -602,15 +602,15 @@ void wheelSplit(double position, int& sector, double& interpolant) {
 
 /// The colour at a lightness and half-chroma in a sector. On bytes (`exact`) the brightest channel rounds and the
 /// darkest truncates, which makes all-zero sliders an exact identity.
-void hslRebuild(double light, double halfChroma, int sector, double interpolant, bool exact, double out[3]) {
+void hslRebuild(double light, double halfChroma, int sector, double interpolant, bool exact, double out[3], bool bounded = true) {
     double q, p, m;
     if (exact) {
         q = std::min(255.0, light + std::floor(halfChroma + 0.5));
         p = std::max(0.0, light - std::floor(halfChroma));
         m = p + std::floor((q - p) * interpolant / 255 + 0.5);
     } else {
-        q = std::min(255.0, light + halfChroma);
-        p = std::max(0.0, light - halfChroma);
+        q = bounded ? std::min(255.0, light + halfChroma) : light + halfChroma;
+        p = bounded ? std::max(0.0, light - halfChroma) : light - halfChroma;
         m = p + (q - p) * interpolant / 255;
     }
     switch (sector) {
@@ -637,7 +637,8 @@ struct HueSatModel {
     bool colorize = false;
     // Colorize
     int colorizeHue = 0;
-    double colorizeScale = 0, colorizeLightness = 0;
+    double colorizeHueExact = 0;
+    double colorizeScale = 0, colorizeLightness = 0, colorizeSaturation = 0;
     // Master
     double lightness = 0, ratio = 1, rotation = 0;
     struct Range { int range; double hue, lightness, saturationOffset; };
@@ -652,8 +653,10 @@ struct HueSatModel {
         if (colorize) {
             const RangeAdjustment a = s.currentValue();
             colorizeHue = int(std::lround(wrap360(a.hue))) % 360;
+            colorizeHueExact = wrap360(a.hue);
             colorizeScale = tableAt(colorizeSaturationScale, std::clamp(a.saturation, 0.0, 100.0));
             colorizeLightness = std::clamp(a.lightness, -100.0, 100.0);
+            colorizeSaturation = std::clamp(a.saturation, 0.0, 100.0);
             return;
         }
         RangeAdjustment master;
@@ -669,13 +672,73 @@ struct HueSatModel {
         for (int v = 0; v < 256; v++) ramp[size_t(v)] = uint8_t(lightnessValue(v, lightness, true));
     }
 
+    /// One linear colour (0..1, unbounded) as Photoshop's 32-bit Hue/Saturation adjusts it: the same model on the linear
+    /// values themselves, the sliders unquantised and nothing limited or cut (photocraft-corpus rgb32
+    /// hue-saturation.psd and hue-saturation-colorize.psd: the master goes below 0 and above 1 there). Colorize builds
+    /// the colour at the lightened lightness with its half-chroma also scaled by 1 - |lightness|.
+    void applyLinear(double c[3]) const {
+        auto lighten = [](double v, double l) { return l > 0 ? v + (1 - v) * l : v * (1 + l); };
+        if (colorize) {
+            const double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
+            const double l = colorizeLightness / 100;
+            const double light = lighten((high + low) / 2, l);
+            const double halfChroma = std::max(0.0, std::min(light, 1 - light)) * colorizeSaturation / 100 * (1 - std::fabs(l));
+            int sector;
+            double interpolant;
+            wheelSplit(colorizeHueExact * 4.25, sector, interpolant);
+            hslRebuild(light * 255, halfChroma * 255, sector, interpolant, false, c, false);
+            for (int k = 0; k < 3; k++) c[k] /= 255;
+            return;
+        }
+        for (int k = 0; k < 3; k++) c[k] *= 255;
+        double weights[7] = {0, 0, 0, 0, 0, 0, 0};
+        if (!ranges.empty()) {
+            const double wheel = wheelPosition(c);
+            int sector;
+            double interpolant;
+            wheelSplit(wheel, sector, interpolant);
+            double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
+            double bandLightness = 0;
+            if (high > low)
+                for (const Range& r : ranges) {
+                    weights[r.range] = settings.weight(r.range, wheel / 4.25);
+                    bandLightness += weights[r.range] * r.lightness;
+                }
+            if (bandLightness > 0) low += (high - low) * std::min(bandLightness, 100.0) / 100;
+            else if (bandLightness < 0) high += (low - high) * std::min(-bandLightness, 100.0) / 100;
+            if (bandLightness != 0) hslRebuild((high + low) / 2, (high - low) / 2, sector, interpolant, false, c, false);
+        }
+        double lit[3];
+        for (int i = 0; i < 3; i++) lit[i] = lighten(c[i] / 255, lightness / 100) * 255;
+        const double high = std::max({lit[0], lit[1], lit[2]}), low = std::min({lit[0], lit[1], lit[2]});
+        if (high == low) { for (int k = 0; k < 3; k++) c[k] = lit[k] / 255; return; }
+        double offset = 0, turn = rotation;
+        for (const Range& r : ranges) {
+            const double w = weights[r.range];
+            if (w <= 0) continue;
+            offset += w * r.saturationOffset;
+            if (r.hue != 0) turn += w * r.hue * 4.25;
+        }
+        int sector;
+        double interpolant;
+        wheelSplit(wheelPosition(lit) + turn, sector, interpolant);
+        hslRebuild((high + low) / 2, (high - low) / 2 * ratio * std::max(0.0, 1 + offset), sector, interpolant, false, c, false);
+        for (int k = 0; k < 3; k++) c[k] /= 255;
+    }
+
     /// One colour on the 0..255 scale; whole numbers in and out when `exact`.
     void apply(double c[3], bool exact) const {
         if (colorize) {
             const double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
             const double light = lightnessValue(exact ? std::floor((high + low) / 2) : (high + low) / 2, colorizeLightness, exact);
             const double halfChroma = std::min(light, 255 - light) * colorizeScale;
-            hslRebuild(light, halfChroma, colorizeHue / 60, colorizeHueInterp[size_t(colorizeHue)], exact, c);
+            if (exact) { hslRebuild(light, halfChroma, colorizeHue / 60, colorizeHueInterp[size_t(colorizeHue)], exact, c); return; }
+            // Unrounded (16 and 32 bits): the hue's own place on the wheel, as Photoshop's 16-bit Colorize has it
+            // (photocraft-corpus rgb16 hue-saturation-colorize.psd), not the byte table's measured steps.
+            int sector;
+            double interpolant;
+            wheelSplit(colorizeHueExact * 4.25, sector, interpolant);
+            hslRebuild(light, halfChroma, sector, interpolant, exact, c);
             return;
         }
         // The ranges, chosen by the colour's own hue (a master rotation does not move them); their lightness first.
@@ -733,6 +796,15 @@ std::function<void(double&, double&, double&)> HueSaturationSettings::adjuster()
         double c[3] = {std::clamp(r, 0.0, 1.0) * 255, std::clamp(g, 0.0, 1.0) * 255, std::clamp(b, 0.0, 1.0) * 255};
         model->apply(c, false);
         r = c[0] / 255; g = c[1] / 255; b = c[2] / 255;
+    };
+}
+
+std::function<void(double&, double&, double&)> HueSaturationSettings::linearAdjuster() const {
+    auto model = std::make_shared<const HueSatModel>(*this);
+    return [model](double& r, double& g, double& b) {
+        double c[3] = {r, g, b};
+        model->applyLinear(c);
+        r = c[0]; g = c[1]; b = c[2];
     };
 }
 

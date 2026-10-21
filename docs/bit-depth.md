@@ -305,7 +305,10 @@ adjusts as it did, and light above white goes on through the function:
   NekoPhoto's stated choices.
 - **Photo Filter** is its linear-light map on the samples as stored, the luminance kept in the map with Preserve
   Luminosity, nothing clipped above (photocraft-corpus rgb32: white filters to red 1.19).
-- **Hue/Saturation, Color Balance, Black & White, Channel Mixer, Vibrance and Color Lookup** are defined on
+- **Hue/Saturation** runs its model on the linear values as stored, its sliders unquantised and nothing limited or cut
+  (photocraft-corpus rgb32 hue-saturation.psd and hue-saturation-colorize.psd within a level; a raised saturation
+  takes channels below 0, which a 32-bit document here keeps at 0).
+- **Color Balance, Black & White, Channel Mixer, Vibrance and Color Lookup** are defined on
   0 to 1: a colour brighter than white is adjusted as the same colour at white's brightness (its linear channels divided
   by the brightest) and scaled back up, so hue and saturation move and the light level stays.
 - **Invert** is 1 minus the encoded value, so light above white inverts to black. **Gradient Map** maps the encoded
@@ -314,12 +317,11 @@ adjusts as it did, and light above white goes on through the function:
   cut. The blurs and Lens Correction work on the linear values.
 
 On an 8-bit picture converted to 32 bits, adjusted there and converted back at exposure 0, every kind is within one
-level of the 8-bit adjustment on opaque pixels but Hue/Saturation, within three: at 8 bits it is Photoshop's byte
-arithmetic (lightness, half-chroma and hue each rounded to a level, which a raised saturation multiplies), at 16 and 32
-bits the same model unrounded; and Exposure, a few levels apart, as in Photoshop: at 8 and 16 bits it linearises
+level of the 8-bit adjustment on opaque pixels but Hue/Saturation, which Photoshop runs on the linear values at 32
+bits and on the encoded colour at 8 and 16 (above); and Exposure, a few levels apart, as in Photoshop: at 8 and 16 bits it linearises
 through a 2.2 power (1.732 for a grayscale file), at 32 bits it takes the stored linear values; and Photo Filter, which
 Photoshop also draws differently at 32 bits (above). On half-transparent pixels Levels, Curves, Invert, Black &
-White, Channel Mixer and Gradient Map stay within a level; Hue/Saturation, Color Balance and Vibrance
+White, Channel Mixer and Gradient Map stay within a level; Color Balance and Vibrance
 reach 2 to 5 levels on under 0.1% of samples, because the 8-bit kernels round the straight colour to a whole level
 (value × 255 / alpha, cut) before their function, which at a low alpha is off by up to a level divided by the alpha.
 Levels matches wherever the 8-bit Levels does not cut at its white point with an output white below 255: there 32 bits

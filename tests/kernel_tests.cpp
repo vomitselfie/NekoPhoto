@@ -175,9 +175,12 @@ TEST_CASE(colorize_bytes_follow_the_continuous_model) {
             double r = p[0] / 255.0, g = p[1] / 255.0, b = p[2] / 255.0;
             settings.adjust(r, g, b);
             const uint8_t* o = ours.pixel(x, y);
+            // Hue 200 builds (darkest, interpolated, brightest): the bytes place the hue by Photoshop's measured 8-bit
+            // table, the continuous model where the hue falls on the wheel (its 16-bit Colorize), so only the darkest
+            // and brightest channels, which carry the lightness and saturation, are the same function.
             CHECK(std::abs(int(o[0]) - int(std::lround(r * 255))) <= 2);
-            CHECK(std::abs(int(o[1]) - int(std::lround(g * 255))) <= 2);
             CHECK(std::abs(int(o[2]) - int(std::lround(b * 255))) <= 2);
+            CHECK(o[0] <= o[1] && o[1] <= o[2]);
         }
 }
 

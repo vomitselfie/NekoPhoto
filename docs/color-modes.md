@@ -23,8 +23,8 @@ Profiles and the display are in [color-management.md](color-management.md); the 
   They stay RGB values (sRGB in a CMYK or Lab document); converting to CMYK brings them into the press's gamut.
 - **Levels and Curves lose their per-channel settings** (red, green and blue mean something else in CMYK and Lab);
   the composite settings stay.
-- An **adjustment layer the new mode does not offer** (Vibrance and Black & White in CMYK and Lab; Hue/Saturation,
-  Color Balance, Selective Color and Channel Mixer in Lab; Exposure in CMYK) is **kept, hidden and marked**; converting
+- An **adjustment layer the new mode does not offer** (Vibrance and Black & White in CMYK and Lab; Color Balance,
+  Selective Color and Channel Mixer in Lab; Exposure in CMYK) is **kept, hidden and marked**; converting
   back to a mode that offers it shows it again as it was.
 - Masks, alpha and spot channels and the selection are not colour and stay as they are.
 - A document that would not fit the byte budget in the new mode (a CMYK layer holds four fifths the pixels of an RGB
@@ -81,7 +81,8 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
 | Threshold, Gradient Map | on the colour's lightness (Gradient Map: the inks' luminosity) | on L |
 | Photo Filter | yes | yes |
 | Exposure | greyed (Photoshop lacks) | on L |
-| Hue/Saturation, Color Balance, Selective Color, Channel Mixer | yes | greyed (Photoshop lacks) |
+| Hue/Saturation | yes (Colorize through RGB) | yes, through RGB (approximate) |
+| Color Balance, Selective Color, Channel Mixer | yes | greyed (Photoshop lacks) |
 | Vibrance, Black & White | greyed (Photoshop lacks) | greyed (Photoshop lacks) |
 | Color Lookup | ICC abstract profiles, CMYK device links | ICC abstract profiles, Lab device links |
 
@@ -96,6 +97,9 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
   colour Photoshop stored, one made here is converted through the profile once. It reads L in Lab, and in CMYK
   Photoshop's luminosity of the inks' plain complement (stored cyan times stored black, and so on), whatever the
   profile.
+- **Hue/Saturation in Lab**, and **Colorize in CMYK** (which Photoshop separates again, black and all), convert each colour to
+  sRGB through the profile, adjust it and convert it back: Photoshop's own rule is not known (Lab: L follows the
+  Lightness slider exactly in its files, a and b do not follow this; CMYK depends on the separation profile).
 - **Hue/Saturation and Color Balance** in CMYK work on the stored cyan, magenta and yellow as the RGB kernels work on
   red, green and blue; the black plate is kept. **Selective Color** moves each ink by colour range, its Black slider
   the black plate. **Channel Mixer** in CMYK has four ink rows (cyan, magenta, yellow and black from the four inks and

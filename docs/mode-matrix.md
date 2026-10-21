@@ -65,7 +65,7 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Image > Adjustments (menu) | `adjustment.pixels` | native | native | native | native | native | native | native |  |
 | Levels | `adjustment.Levels` | native | native | native | native | native | native | native |  |
 | Curves | `adjustment.Curves` | native | native | native | native | native | native | native |  |
-| Hue/Saturation | `adjustment.Hue/Saturation` | native | native | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Hue/Saturation | `adjustment.Hue/Saturation` | native | native | native | native | native | native | native |  |
 | Exposure | `adjustment.Exposure` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | native | native |  |
 | Gradient Map | `adjustment.Gradient Map` | native | native | native | native | native | native | native |  |
 | Grain | `adjustment.Grain` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |

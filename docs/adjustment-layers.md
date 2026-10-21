@@ -76,7 +76,9 @@ back exactly. A range (Reds ... Magentas) is chosen by the colour's own hue thro
 collapses the chroma towards the brightest (positive) or darkest (negative) channel before the master, its saturation
 adds `weight * (table - 1)` to the master's factor and its hue adds `weight * degrees` in steps. Colorize keeps the
 lightness and rebuilds from measured per-percent saturation and per-degree hue tables. On bytes this is Photoshop's
-integer arithmetic; at 16 and 32 bits and in CMYK the same model runs unrounded on each colour. Without the Photoshop
+integer arithmetic; at 16 bits and in CMYK the same model runs unrounded on each colour (Colorize at the hue's own place
+on the wheel, not the byte table's steps); at 32 bits on the linear values, unlimited (bit-depth.md). Lab (which
+Photoshop offers) and CMYK Colorize go through sRGB and back, an approximation (color-modes.md). Without the Photoshop
 saturation curve (`"saturationCurve": "scale"`, the default for a layer made here) Saturation scales the half-chroma by
 1 + percent / 100 instead. Against Photoshop's flatten of Patchy's probes (`photoshop-hue-saturation-{master,bands}.bmp`;
 the merged image stored in those two PSDs is the probe before the settings were written into them, so

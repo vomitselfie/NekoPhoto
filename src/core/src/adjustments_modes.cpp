@@ -142,6 +142,54 @@ bool nativeColour(double r, double g, double b, ColorMode mode, const ColorProfi
 template <SampleType S> double labValue(double stored) { return (stored * double(SampleTraits<S>::one) - labOffset<S>()) / labScale<S>(); }
 template <SampleType S> double labStored(double value) { return (value * labScale<S>() + labOffset<S>()) / double(SampleTraits<S>::one); }
 
+/// Each pixel's colour as straight sRGB (0..1) through `f`, converted from the document's mode through the profile and
+/// back, a row at a time; transparent pixels are left alone. False when the profile cannot be used.
+template <SampleType S, ColorMode M, class Img, class F>
+bool eachViaRgb(Img& image, const ColorProfile& profile, F&& f) {
+    using T = SampleOf<S>;
+    constexpr int N = colorModeChannels(M), C = N - 1;
+    constexpr bool cmyk = M == ColorMode::CMYK;
+    const PixelFormat native = cmyk ? PixelFormat::CMYKFloat : PixelFormat::LabFloat;
+    const ColorTransformPtr in = transformBetween(profile, ColorProfile(), ConvertOptions(), native, PixelFormat::RGBFloat);
+    const ColorTransformPtr out = transformBetween(ColorProfile(), profile, ConvertOptions(), PixelFormat::RGBFloat, native);
+    if (!in || !out) return false;
+    parallelRows(0, image.height(), [&](int ya, int yb) {
+        const size_t w = size_t(image.width());
+        constexpr size_t stride = cmyk ? 4 : 3;   // CMYKFloat holds four floats, LabFloat three
+        std::vector<float> values(w * stride), rgb(w * 3);
+        for (int y = ya; y < yb; y++) {
+            T* row = image.row(y);
+            for (size_t x = 0; x < w; x++) {
+                const T* q = row + x * size_t(N);
+                const double a = q[C];
+                float* v = values.data() + x * stride;
+                double st[4] = {0, 0, 0, 0};
+                for (int k = 0; k < C; k++) st[k] = a > 0 ? std::min(1.0, q[k] / a) : (cmyk ? 1.0 : 0.0);
+                if (cmyk) for (int k = 0; k < 4; k++) v[k] = float(100 * (1 - st[k]));
+                else { v[0] = float(st[0] * 100); v[1] = float(labValue<S>(st[1])); v[2] = float(labValue<S>(st[2])); }
+            }
+            in->apply(values.data(), rgb.data(), w);
+            for (size_t x = 0; x < w; x++) {
+                double c[3] = {rgb[x * 3], rgb[x * 3 + 1], rgb[x * 3 + 2]};
+                f(c[0], c[1], c[2]);
+                for (int k = 0; k < 3; k++) rgb[x * 3 + size_t(k)] = float(std::clamp(c[k], 0.0, 1.0));
+            }
+            out->apply(rgb.data(), values.data(), w);
+            for (size_t x = 0; x < w; x++) {
+                T* q = row + x * size_t(N);
+                const double a = q[C];
+                if (!(a > 0)) continue;
+                const float* v = values.data() + x * stride;
+                double st[4];
+                if (cmyk) for (int k = 0; k < 4; k++) st[k] = 1 - std::clamp(double(v[k]) / 100, 0.0, 1.0);
+                else { st[0] = std::clamp(double(v[0]) / 100, 0.0, 1.0); st[1] = std::clamp(labStored<S>(v[1]), 0.0, 1.0); st[2] = std::clamp(labStored<S>(v[2]), 0.0, 1.0); }
+                for (int k = 0; k < C; k++) q[k] = T(std::clamp(std::lround(st[k] * a), 0L, long(a)));
+            }
+        }
+    });
+    return true;
+}
+
 // CIE L* and relative luminance.
 double luminanceOf(double l) {
     const double fy = (l + 16) / 116, e = 6.0 / 29;
@@ -323,11 +371,15 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
         return true;
     }
     case AdjustmentKind::HueSaturation: {
-        if constexpr (!cmyk) return false;
         if (s.hsv.isIdentity()) return true;
         const auto adjust = s.hsv.adjuster();
-        eachStraight<S>(image, N, nullptr, [&](double* v, double) { adjust(v[0], v[1], v[2]); });
-        return true;
+        // CMYK: on the stored cyan, magenta and yellow as red, green and blue, black kept; Colorize, which Photoshop
+        // separates again (black and all), and Lab go through RGB and back.
+        if (cmyk && !s.hsv.colorize) {
+            eachStraight<S>(image, N, nullptr, [&](double* v, double) { adjust(v[0], v[1], v[2]); });
+            return true;
+        }
+        return eachViaRgb<S, M>(image, profile, adjust);
     }
     case AdjustmentKind::ColorBalance:
         if constexpr (cmyk) { applyColorBalanceStoredCmy(image, s.colorBalance); return true; }
