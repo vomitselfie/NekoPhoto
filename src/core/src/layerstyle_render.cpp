@@ -326,40 +326,40 @@ bool reachesHalf(const Mask& matte, int w, int h, int x, int y, float reach) {
     return false;
 }
 
-/// The stroke band: Outside `size` out, Inside `size` in, Center half each way, measured from the matte's
-/// half-coverage contour, 1 px antialiasing ramp. With `inPart` and `outPart`, its two parts as Photoshop draws them:
+/// The stroke band: Outside `size` out, Inside `size` in, Center half each way, measured with Photoshop's chamfer
+/// (a wide outside edge from the matte's half-coverage contour), 1 px antialiasing ramp. With `inPart` and `outPart`, its two parts as Photoshop draws them:
 /// the inside one relative to the shape (1 over the whole of a covered pixel the band reaches), the outside one over
 /// the part of each pixel the shape leaves uncovered.
 Mask strokeBand(const Mask& base, int w, int h, float size, Stroke::Position position, Mask* burst = nullptr,
                 Mask* inPart = nullptr, Mask* outPart = nullptr) {
     const float bandOut = position == Stroke::Position::Inside ? 0 : position == Stroke::Position::Center ? size / 2 : size;
     const float bandIn = position == Stroke::Position::Outside ? 0 : position == Stroke::Position::Center ? size / 2 : size;
-    // The contour: half-covered pixels, plus faint ones that are a flat wash rather than an antialiased fringe
-    // (farther than 2 px from a solid pixel and 3 px from any half-coverage crossing).
-    Mask contour(base.size(), 0);
-    bool solid = false, faint = false;
-    for (size_t i = 0; i < base.size(); i++) { if (base[i] >= 0.5f) { contour[i] = 1; solid = true; } else if (base[i] > 0) faint = true; }
-    if (!solid) for (size_t i = 0; i < base.size(); i++) contour[i] = base[i] > 0 ? 1 : 0;
-    else if (faint) {
-        const Mask solidDistance = distanceField(contour, w, h, true);
-        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
-            const size_t i = size_t(y) * w + x;
-            if (base[i] <= 0 || contour[i] != 0 || solidDistance[i] <= 2) continue;
-            if (solidDistance[i] > 3 + 1.4142137f || !reachesHalf(base, w, h, x, y, 3)) contour[i] = 1;
-        }
-    }
-    Mask anchor(base.size(), 0);
-    bool fringe = false;
-    for (size_t i = 0; i < base.size(); i++) {
-        anchor[i] = contour[i] > 0 ? (base[i] >= 0.5f ? base[i] : 1) : base[i];
-        if (anchor[i] > 0 && anchor[i] < 1) fringe = true;
-    }
+    // The contour (a wide outside edge and Shape Burst's ramp measure from it): half-covered pixels, plus faint ones
+    // that are a flat wash rather than an antialiased fringe (farther than 2 px from a solid pixel and 3 px from any
+    // half-coverage crossing).
     Mask outside, inside;
     const bool exactOut = bandOut >= kStrokeChamferMax;
-    if (fringe) subpixelFields(anchor, w, h, exactOut, bandIn > 0, outside, inside);
-    else {
-        if (exactOut) outside = distanceField(contour, w, h, true);
-        if (bandIn > 0) inside = distanceField(contour, w, h, false);
+    Mask contour(base.size(), 0);
+    if (exactOut || burst) {
+        bool solid = false, faint = false;
+        for (size_t i = 0; i < base.size(); i++) { if (base[i] >= 0.5f) { contour[i] = 1; solid = true; } else if (base[i] > 0) faint = true; }
+        if (!solid) for (size_t i = 0; i < base.size(); i++) contour[i] = base[i] > 0 ? 1 : 0;
+        else if (faint) {
+            const Mask solidDistance = distanceField(contour, w, h, true);
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+                const size_t i = size_t(y) * w + x;
+                if (base[i] <= 0 || contour[i] != 0 || solidDistance[i] <= 2) continue;
+                if (solidDistance[i] > 3 + 1.4142137f || !reachesHalf(base, w, h, x, y, 3)) contour[i] = 1;
+            }
+        }
+        Mask anchor(base.size(), 0);
+        bool fringe = false;
+        for (size_t i = 0; i < base.size(); i++) {
+            anchor[i] = contour[i] > 0 ? (base[i] >= 0.5f ? base[i] : 1) : base[i];
+            if (anchor[i] > 0 && anchor[i] < 1) fringe = true;
+        }
+        if (exactOut && fringe) subpixelFields(anchor, w, h, true, false, outside, inside);
+        else if (exactOut) outside = distanceField(contour, w, h, true);
     }
     // An outside edge under 20 px measures Photoshop's chamfer from every painted pixel, a partly covered one starting
     // at its uncovered share (PhotoCraft's stroke_outside_exact: past 20 px the chamfer's octagon would facet the
@@ -368,6 +368,24 @@ Mask strokeBand(const Mask& base, int w, int h, float size, Stroke::Position pos
         Mask start(base.size(), kUnreached);
         for (size_t i = 0; i < base.size(); i++) if (base[i] > 0) start[i] = 1 - unit(base[i]);
         outside = chamferFrom(std::move(start), w, h);
+    }
+    // The inside edge: the same chamfer from every clear pixel, an edge pixel whose coverage is below its
+    // neighbourhood's starting at that share (a 25% edge column puts the edge a quarter pixel in), so a fill's own
+    // opacity is not taken for an edge (PhotoCraft's dist_inside_by with local_coverage).
+    if (bandIn > 0) {
+        Mask start(base.size(), kUnreached);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            const size_t i = size_t(y) * w + x;
+            if (base[i] <= 0) { start[i] = 0; continue; }
+            float m = base[i];
+            for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+                const int nx = x + dx, ny = y + dy;
+                if (nx >= 0 && ny >= 0 && nx < w && ny < h) m = std::max(m, base[size_t(ny) * w + nx]);
+            }
+            const float c = std::min(1.0f, base[i] / m);
+            if (c < 1 - 1e-3f) start[i] = c;
+        }
+        inside = chamferFrom(std::move(start), w, h);
     }
     auto coverage = [](float d, float band) { return band <= 0 ? 0.0f : unit(band + 1 - d); };
     Mask band(base.size(), 0);
