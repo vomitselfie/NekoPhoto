@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(nekophoto VERSION 1.8.14 LANGUAGES C CXX)
+project(nekophoto VERSION 1.8.15 LANGUAGES C CXX)
 
 # The options were COMPOSITOR_* until 1.8.14: one given the old way (on the command line, or kept in an old build
 # folder's cache) still sets its NEKOPHOTO_* namesake, unless that is set too.
