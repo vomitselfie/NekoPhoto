@@ -361,7 +361,7 @@ f32/style/color_overlay fad81bf9bd3c0567
 f32/style/drop_shadow d25ba07c598d8224
 f32/style/gradient_overlay b938d867976db95b
 f32/style/outer_glow cc97c9bdb93ce79b
-f32/style/stroke 8d357dc6aab99465
+f32/style/stroke 3fb38120da2da31e
 f32/view/exposure_0 3f938dad7df7c6a9
 f32/view/exposure_minus_2_gamma_1_4 b43c2d7afcfe390c
 f32/view/highlight_compression b98e0211d7e146c0
@@ -454,8 +454,8 @@ lab/smart_object/converted_layers 28c2efdecfef4cc8
 lab/smart_object/placed_16bit_source 11f3ef61abf36f63
 lab/smart_object/placed_rgb_source 1f242c9ef05f9ac7
 lab/smart_object/warped f8ef7d65dcd5bb99
-lab/style/all_ten 1743d6c3ee669b8d
-lab/style/all_ten@0.5 56aedfeab31fa815
+lab/style/all_ten 0bc8727afb174bb0
+lab/style/all_ten@0.5 39a5efdfc147c95d
 lab/style/bevel a4d7e889f5c48f79
 lab/style/bevel_soft_gloss af151b7a01459e56
 lab/style/color_overlay 1d5df0a0d0fd5cd5
@@ -467,7 +467,7 @@ lab/style/inner_shadow 875b18e7d2a01e73
 lab/style/outer_glow c9f6b299d9d10f8d
 lab/style/pattern_overlay 318e293d77a81537
 lab/style/satin 5573187cdfe66678
-lab/style/stroke ae05a2012910e2e9
+lab/style/stroke 8ef3e26a93653f7a
 lab16/adjust/levels_curves 3541748e9c0d0521
 lab16/adjust/tones 83c45fc55dc09ff4
 lab16/artboard/coloured_background e217844300bc9f56
@@ -518,8 +518,8 @@ lab16/smart_object/converted_layers caaca5c8156e4194
 lab16/smart_object/placed_16bit_source 947afbfce0ff234b
 lab16/smart_object/placed_rgb_source ca333c2fe3667cd9
 lab16/smart_object/warped ab4e09683ebb3067
-lab16/style/all_ten 7f6fec917536b039
-lab16/style/all_ten@0.5 dad59701fe655300
+lab16/style/all_ten 3c1bc00cc29b8e21
+lab16/style/all_ten@0.5 639e96b18b436c82
 lab16/style/bevel fc4f306e7fe9177b
 lab16/style/bevel_soft_gloss 345b53f4a08cdddf
 lab16/style/color_overlay 2d2e3b00ed2dde2f
@@ -531,7 +531,7 @@ lab16/style/inner_shadow b7c8b61ba721d675
 lab16/style/outer_glow 20b2edd8ac67ba02
 lab16/style/pattern_overlay 31b83489e5619bac
 lab16/style/satin 66b6c1e7a79e47ce
-lab16/style/stroke d2ba544449fa614c
+lab16/style/stroke c3a6af76f39ce214
 mypaint/classic/charcoal bb3e2b751085771c
 mypaint/classic/pencil 3b4bf22b06fb2543
 mypaint/deevad/watercolor_glazing 5bcc9f4e4c19c6ff
@@ -694,8 +694,8 @@ u16/smart_object/placed_16bit_source 7e0a2a0b2018925e
 u16/smart_object/placed_8bit_source df35afab0c5fb667
 u16/smart_object/turned@0.5 6e1facb7cb866278
 u16/smart_object/warped 2dc4aa670fe28414
-u16/style/all_ten c252a06240e3288a
-u16/style/all_ten@0.5 54b3da938fb167eb
+u16/style/all_ten edd704d845f1254b
+u16/style/all_ten@0.5 c14d44531e2b5d56
 u16/style/bevel 5f7fd8a7cb64abd5
 u16/style/bevel_soft_gloss b4d19d8eb58527f7
 u16/style/color_overlay 0d720336ad2db2d1
@@ -707,7 +707,7 @@ u16/style/inner_shadow 89bddb23d4918bd1
 u16/style/outer_glow 6ac810df2050d00f
 u16/style/pattern_overlay ee4fb5cdf7816a29
 u16/style/satin a97c1f91c6be613d
-u16/style/stroke c09bec720e56b115
+u16/style/stroke 33aba58b1c125101
 u16/timeline/second_frame 0dee6d1d4573d275
 u16/vector_mask/pixel_layer 80a10183cc57f1c5
 u16/vector_mask/pixel_layer@0.5 2f4708df1f248302

@@ -897,18 +897,60 @@ void drawStyled(const StyledDraw& in, Img& target) {
 
     // Strokes: their bands, and (Overprint off, the default) the knockout they make in the layer's own content.
     std::vector<Mask> bands, burstPositions;
-    Mask knockout;
+    bool knocks = false;
     for (const Stroke& stroke : style.strokes) {
         const bool burst = stroke.gradientFill && stroke.gradient.type == StyleGradient::Type::ShapeBurst;
         burstPositions.emplace_back();
         bands.push_back(strokeBand(alpha, w, h, stroke.size * float(s), stroke.position, burst ? &burstPositions.back() : nullptr));
-        // Overprint off (the default): the band knocks the layer's content out, even at 0% opacity.
-        if (!stroke.overprint && ownContent) {
-            if (knockout.empty()) knockout.assign(alpha.size(), 1);
-            for (size_t i = 0; i < knockout.size(); i++) knockout[i] *= 1 - bands.back()[i];
-        }
+        knocks |= !stroke.overprint && ownContent;
     }
-    auto knock = [&](size_t i) { return knockout.empty() ? 1.0f : knockout[i]; };
+    // A stroke's colour at an output pixel (into `c`) and the alpha it is drawn with there.
+    auto strokeAt = [&](size_t k, int ox, int oy, size_t i, float* c) {
+        const Stroke& stroke = style.strokes[k];
+        float a = bands[k][i] * stroke.opacity * master * coverAt(ox, oy);
+        if (a <= 0) return 0.0f;
+        rgb(stroke.color, c);
+        if (stroke.gradientFill && stroke.gradient.type == StyleGradient::Type::ShapeBurst) {
+            // Photoshop supersamples the ramp over the pixel: a 1-2-1 tent of the colours around it.
+            const float step = 1.0f / std::max(1.0f, stroke.size * float(s) + 2);
+            float t = burstPositions[k][i];
+            if (stroke.gradient.reverse) t = 1 - t;
+            float acc[4] = {0, 0, 0, 0};
+            for (int j = -1; j <= 1; j++) {
+                float cc[4] = {}; gradRgb(stroke.gradient, unit(t + j * step), cc);
+                const float wgt = j == 0 ? 0.5f : 0.25f;
+                for (int q = 0; q < nc; q++) acc[q] += cc[q] * wgt;
+            }
+            for (int q = 0; q < nc; q++) c[q] = acc[q];
+            a *= gradientOpacity(stroke.gradient, t);
+        } else if (stroke.gradientFill) {
+            double gx, gy, gw, gh;
+            gradientBounds(stroke.gradient, gx, gy, gw, gh);
+            const float t = gradientPosition(stroke.gradient, gx, gy, gw, gh, docX(ox), docY(oy));
+            gradRgb(stroke.gradient, t, c);
+            a *= gradientOpacity(stroke.gradient, t);
+        }
+        return a;
+    };
+    // Overprint off (the default): the band knocks the layer's content out, even at 0% opacity, so the content keeps
+    // a x (1 - band) under the stroke. A Normal stroke is then drawn source-over, which scales what is under it by
+    // (1 - its alpha) once more: the factor divides that back out (an opaque Normal stroke knocks out nothing it does
+    // not cover anyway). Other modes blend with the backdrop in the band: plain (1 - band). Patchy's
+    // stroke_knockout_factor (MIT), from Photoshop's probes.
+    auto knock = [&](int ox, int oy, size_t i) {
+        if (!knocks) return 1.0f;
+        float f = 1;
+        for (size_t k = 0; k < style.strokes.size(); k++) {
+            const Stroke& stroke = style.strokes[k];
+            const float band = bands[k][i];
+            if (stroke.overprint || band <= 0) continue;
+            if (stroke.mode != EffectBlend::Normal || stroke.opacity <= 0) { f *= unit(1 - band); continue; }
+            float c[4] = {};
+            const float remaining = 1 - strokeAt(k, ox, oy, i, c);
+            f *= remaining <= 1e-6f ? 0.0f : unit((1 - band) / remaining);
+        }
+        return f;
+    };
 
     // Interior overlays (pattern under gradient under colour) and satins, folded into the layer's colour.
     auto patterns = in.patterns;
@@ -994,7 +1036,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
             if constexpr (S == SampleType::F32) c[k] = std::max(0.0f, p[k] / a);   // linear, above 1 kept
             else c[k] = std::min(1.0f, p[k] / one / a);
         }
-        const float paint = a * master * (fillInside ? 1.0f : fill) * knock(i) * coverAt(ox, oy);
+        const float paint = a * master * (fillInside ? 1.0f : fill) * knock(ox, oy, i) * coverAt(ox, oy);
         if (paint <= 0) return;
         if (foldInteriors && interiorsFirst) foldInto(c, ox, oy, i);
         if (in.mode != BlendMode::Normal && foldInteriors && !interiorsFirst) {
@@ -1052,7 +1094,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
     // With Fill below 100% the overlays and satins are their own passes (Fill fades the pixels, not the effects).
     if (!foldInteriors && drawOverlays) {
         paintOut([&](int ox, int oy, T* d, size_t i) {
-            const float shape = alpha[i] * master * knock(i) * coverAt(ox, oy);
+            const float shape = alpha[i] * master * knock(ox, oy, i) * coverAt(ox, oy);
             if (shape <= 0) return;
             const double x = docX(ox), y = docY(oy);
             for (const PatternOverlay& p : style.patternOverlays) {
@@ -1094,7 +1136,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
         float color[4] = {}; rgb(glow.color, color);
         paintOut([&](int ox, int oy, T* d, size_t i) {
             if (alpha[i] <= 0) return;
-            compositeEffect<T, M>(d, color, alpha[i] * m[i] * glow.opacity * master * knock(i) * coverAt(ox, oy), glow.mode);
+            compositeEffect<T, M>(d, color, alpha[i] * m[i] * glow.opacity * master * knock(ox, oy, i) * coverAt(ox, oy), glow.mode);
         });
     }
     for (const InnerShadow& shadow : style.innerShadows) {
@@ -1106,7 +1148,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
         float color[4] = {}; rgb(shadow.color, color);
         paintOut([&](int ox, int oy, T* d, size_t i) {
             if (alpha[i] <= 0) return;
-            compositeEffect<T, M>(d, color, alpha[i] * m[i] * shadow.opacity * master * knock(i) * coverAt(ox, oy), shadow.mode);
+            compositeEffect<T, M>(d, color, alpha[i] * m[i] * shadow.opacity * master * knock(ox, oy, i) * coverAt(ox, oy), shadow.mode);
         });
     }
 
@@ -1114,33 +1156,10 @@ void drawStyled(const StyledDraw& in, Img& target) {
     for (size_t k = 0; k < style.strokes.size(); k++) {
         const Stroke& stroke = style.strokes[k];
         if (stroke.opacity <= 0) continue;
-        const Mask& band = bands[k];
-        float color[4] = {}; rgb(stroke.color, color);
         paintOut([&](int ox, int oy, T* d, size_t i) {
-            float a = band[i] * stroke.opacity * master * coverAt(ox, oy);
-            if (a <= 0) return;
-            float c[4] = {color[0], color[1], color[2], color[3]};
-            if (stroke.gradientFill && stroke.gradient.type == StyleGradient::Type::ShapeBurst) {
-                // Photoshop supersamples the ramp over the pixel: a 1-2-1 tent of the colours around it.
-                const float step = 1.0f / std::max(1.0f, stroke.size * float(s) + 2);
-                float t = burstPositions[k][i];
-                if (stroke.gradient.reverse) t = 1 - t;
-                float acc[4] = {0, 0, 0, 0};
-                for (int j = -1; j <= 1; j++) {
-                    float cc[4] = {}; gradRgb(stroke.gradient, unit(t + j * step), cc);
-                    const float wgt = j == 0 ? 0.5f : 0.25f;
-                    for (int q = 0; q < nc; q++) acc[q] += cc[q] * wgt;
-                }
-                for (int q = 0; q < nc; q++) c[q] = acc[q];
-                a *= gradientOpacity(stroke.gradient, t);
-            } else if (stroke.gradientFill) {
-                double gx, gy, gw, gh;
-                gradientBounds(stroke.gradient, gx, gy, gw, gh);
-                const float t = gradientPosition(stroke.gradient, gx, gy, gw, gh, docX(ox), docY(oy));
-                gradRgb(stroke.gradient, t, c);
-                a *= gradientOpacity(stroke.gradient, t);
-            }
-            compositeEffect<T, M>(d, c, a, stroke.mode);
+            float c[4] = {};
+            const float a = strokeAt(k, ox, oy, i, c);
+            if (a > 0) compositeEffect<T, M>(d, c, a, stroke.mode);
         });
     }
 
