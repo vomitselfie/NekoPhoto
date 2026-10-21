@@ -72,10 +72,24 @@ double lensVignetteGain(double x, double y, double width, double height, double 
 /// The Tone Curve's parametric curve alone (regions and splits) on encoded values: 4097 entries over 0..1.
 std::vector<float> parametricTable(const CameraRawCurveSettings& curve);
 
+/// The B&W Mix's Auto (CameraRawSettings::autoGrayMix): whole-image statistics of the colours `add` is given (encoded
+/// sRGB, 0..1) and the mix they call for. Each band's share of the image's colour and the mean lightness (the cube root
+/// of luminance) of its colours against the image's mean set its slider through fixed constants; nothing is fitted or
+/// adapted to the content beyond those sums.
+class GrayMixStatistics {
+public:
+    void add(const float rgb[3]);
+    std::array<double, 8> mix() const;
+
+private:
+    double count_ = 0, lightness_ = 0;
+    std::array<double, 8> weight_{}, weightedLightness_{};
+};
+
 /// The Camera Raw grade's tone and colour stage, made once per settings and applied per pixel to encoded sRGB (0..1,
 /// unpremultiplied): the relative white balance gains, Camera Calibration, Exposure, the Basic panel's tone sliders (Whites, Blacks,
 /// Highlights, Shadows, Dehaze's tone, Contrast), the parametric curve, the point curves with Refine Saturation,
-/// Vibrance and Saturation, the colour mixer and Colour Grading.
+/// Vibrance and Saturation, the colour mixer and Colour Grading, and Black & White.
 class ToneStage {
 public:
     explicit ToneStage(const CameraRawSettings& normalized);
@@ -108,6 +122,9 @@ private:
     /// The colour mixer's bands and Vibrance, and Colour Grading: RAWmakase's measured responses (rawmeasured.h).
     std::shared_ptr<const measured::ColorMixer> mixer_;
     std::shared_ptr<const measured::GradeCurves> grade_;
+    /// Black & White: the B&W Mix's grid (rawmeasured.h's measured::Grid).
+    bool blackWhite_ = false;
+    std::vector<std::array<float, 3>> grayGrid_;
 };
 
 } // namespace rawtone

@@ -50,6 +50,12 @@ the program, not legal advice.
   (even with *Show all filters*), and commands that use them are refused when typed or run by automation. G'MIC's
   other filters, including its diffusion-based inpainting, are unaffected.
 
+## Camera Raw
+
+- **The B&W Mix's Auto is NekoPhoto's own.** It sets each colour band from how much of the picture is that colour and
+  how light those colours are against the picture as a whole, through fixed rules, so it can choose differently from
+  Camera Raw's Auto. The black-and-white conversion itself follows Camera Raw's measured responses.
+
 ## Names
 
 Adobe and Photoshop are trademarks of Adobe Inc. NekoPhoto is not affiliated with or endorsed by Adobe; Photoshop is
@@ -108,6 +114,12 @@ Photoshop の方式の一部は現在も有効な特許で保護されている�
 - **G'MIC のパッチベースの修復(inpaint)とパッチマッチングのフィルターは表示されません。** フィルターブラウザーには
   (「Show all filters」をオンにしても)表示されず、それらを使うコマンドは入力しても自動化から実行しても拒否されます。
   拡散ベースの修復を含む、その他の G'MIC フィルターには影響しません。
+
+## Camera Raw
+
+- **白黒ミックスの「自動」は NekoPhoto 独自のものです。** 画像のうちその色が占める割合と、その色が画像全体と比べてどれだけ
+  明るいかから、固定の規則で各色の値を決めるため、Camera Raw の「自動」とは異なる値になることがあります。白黒への変換そのもの
+  は Camera Raw の測定された応答に従います。
 
 ## 名称
 

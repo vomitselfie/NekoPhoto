@@ -267,7 +267,7 @@ add_custom_command(
 target_sources(nekophoto_core PRIVATE ${NEKOPHOTO_CMYK_BLOB})
 
 # RAWmakase's measured Camera Raw responses (MIT; src/third_party/rawmakase/README.md), compiled in the same way.
-foreach(table IN ITEMS ColorMixerChart:color_mixer_chart VibranceChart:vibrance_chart
+foreach(table IN ITEMS ColorMixerChart:color_mixer_chart VibranceChart:vibrance_chart BlackWhiteChart:black_white_chart
                        Parametric:parametric ColorGradeCurves:color_grade_curves)
     string(REPLACE ":" ";" parts ${table})
     list(GET parts 0 symbol)

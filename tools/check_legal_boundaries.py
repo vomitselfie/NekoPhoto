@@ -36,6 +36,9 @@ def require(path, pattern, why, count=1):
 # Quick Select solves once, when the pointer is released: the canvas never starts a solve while dragging.
 for f in sorted((SRC / "app").glob("CanvasWidget*.cpp")):
     forbid(f.relative_to(SRC), r"startQuickSelectJob", "the canvas must not start a Quick Select solve (solve on release only)")
+# The B&W Mix's Auto (rawtone::GrayMixStatistics) reads whole-image band sums through fixed constants: no fitted map of
+# Camera Raw's choices (RAWmakase's principal-axis estimate) and no per-region statistics.
+forbid("core/src/rawtone.cpp", r"covariance|principal|AUTO_MIX", "the B&W Mix's Auto stays whole-image band statistics with fixed constants")
 # Enhance Edge is geometric: the Quick Select refinement never reads the image through the matting refiner.
 forbid("app/EditorSessionQuickSelect.cpp", r"refineMatte\s*\(", "Quick Select's refinement must stay geometric")
 # Healing shows no live healed result.

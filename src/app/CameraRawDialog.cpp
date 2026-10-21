@@ -43,6 +43,11 @@ CameraRawDialog::CameraRawDialog(EditorSession* session, QWidget* parent)
         if (!hasSource()) return std::nullopt;
         return source16() ? CameraRawSettings::autoBalance(*source16()) : CameraRawSettings::autoBalance(*source());
     };
+    // B&W Mix > Auto: the mix the layer's covered colours call for.
+    panels_->autoGrayMix = [this]() -> std::optional<std::array<double, 8>> {
+        if (!hasSource()) return std::nullopt;
+        return source16() ? CameraRawSettings::autoGrayMix(*source16()) : CameraRawSettings::autoGrayMix(*source());
+    };
     connect(panels_, &CameraRawPanels::changed, this, [this] { debounce_->start(); });
     layout->addWidget(panels_, 1);
     connect(addPreviewAndButtons(layout), &QCheckBox::toggled, this, [this] { refreshPreview(); });

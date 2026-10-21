@@ -3986,10 +3986,6 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <translation>キャリブレーション</translation>
     </message>
     <message>
-        <source>Color Mixer and Color Grading</source>
-        <translation>カラーミキサーとカラーグレーディング</translation>
-    </message>
-    <message>
         <source>Reset All</source>
         <translation>すべて初期化</translation>
     </message>
@@ -4020,6 +4016,10 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     <message>
         <source>Temperature</source>
         <translation>色温度</translation>
+    </message>
+    <message>
+        <source>Color Mixer (B&amp;W Mix in Black &amp; White) and Color Grading</source>
+        <translation>カラーミキサー（白黒では白黒ミックス）とカラーグレーディング</translation>
     </message>
     <message>
         <source>Load Preset…</source>
@@ -4088,6 +4088,14 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     <message>
         <source>Flash</source>
         <translation>フラッシュ</translation>
+    </message>
+    <message>
+        <source>Treatment</source>
+        <translation>処理方法</translation>
+    </message>
+    <message>
+        <source>Black &amp; White</source>
+        <translation>白黒</translation>
     </message>
     <message>
         <source>Light</source>
@@ -4248,6 +4256,14 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     <message>
         <source>Hue</source>
         <translation>色相</translation>
+    </message>
+    <message>
+        <source>B&amp;W Mix</source>
+        <translation>白黒ミックス</translation>
+    </message>
+    <message>
+        <source>Set the mix from the image&apos;s colours</source>
+        <translation>画像の色からミックスを設定</translation>
     </message>
     <message>
         <source>Color Grading</source>

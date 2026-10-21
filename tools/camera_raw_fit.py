@@ -18,7 +18,7 @@ render's error), by grid or simplex search on the mean CIEDE2000 the parity test
 - whether each tone slider works on the colour's channels or its luminance; Camera Calibration's strengths; the post-crop
   vignette's mask and strengths; lens vignetting's strength and power.
 
-The colour mixer, Vibrance, Colour Grading and the parametric curve's composed regions are not fitted here:
+The colour mixer, Vibrance, Colour Grading, Black & White and the parametric curve's composed regions are not fitted here:
 they render through RAWmakase's measured tables (src/third_party/rawmakase, src/core/src/rawmeasured.cpp).
 
     python3 tools/camera_raw_fit.py            print the fits

@@ -32,6 +32,8 @@ public:
     /// White Balance > Auto: the host's gray-world balance of the image it grades, as relative Temperature and Tint, or
     /// for a RAW file with a colour model as kelvin and Tint; empty when there is none yet.
     std::function<std::optional<std::array<double, 2>>()> autoBalance;
+    /// B&W Mix > Auto: the host's CameraRawSettings::autoGrayMix of the image it grades; empty when there is none yet.
+    std::function<std::optional<std::array<double, 8>>()> autoGrayMix;
 
 signals:
     /// A setting or overlay changed (not debounced).
@@ -62,6 +64,8 @@ private:
     /// White Balance in kelvin for a RAW file (Mode::Raw with a colour model).
     void whiteBalanceKelvin(QFormLayout* white);
     static QString whiteBalanceName(nekophoto::CameraRawWhiteBalance mode);
+    /// Sets the B&W Mix to Auto's when the host has one.
+    void applyAutoGrayMix();
 
     nekophoto::CameraRawSettings settings_;
     nekophoto::CameraRawPreview preview_;

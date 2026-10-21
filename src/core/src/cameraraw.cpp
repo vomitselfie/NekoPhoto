@@ -442,6 +442,8 @@ bool CameraRawSettings::isValid() const {
         if (!within(v, 0, 100)) return false;
     if (rawTemperature != 0 && !within(rawTemperature, kMinRawTemperature, kMaxRawTemperature)) return false;
     if (!within(rawTint, -kMaxRawTint, kMaxRawTint)) return false;
+    for (double v : grayMix)
+        if (!within(v, -100, 100)) return false;
     return true;
 }
 
@@ -458,6 +460,7 @@ CameraRawSettings CameraRawSettings::normalized() const {
     r.grainAmount = clampTo(grainAmount, 0, 100, 0);
     r.grainSize = clampTo(grainSize, 0, 100, 25);
     r.grainRoughness = clampTo(grainRoughness, 0, 100, 50);
+    for (double& v : r.grayMix) v = clampTo(v, -100, 100, 0);
     r.curve = curve.normalized();
     r.mixer = mixer.normalized();
     r.grading = grading.normalized();
@@ -481,7 +484,7 @@ CameraRawSettings CameraRawSettings::applying(const CameraRawPanels& panels) con
     if (!panels.color) r.temperature = r.tint = r.vibrance = r.saturation = 0;
     if (!panels.effects) r.texture = r.clarity = r.dehaze = r.glow = r.vignetteAmount = r.grainAmount = 0;
     if (!panels.curve) r.curve = {};
-    if (!panels.mixer) r.mixer = {};
+    if (!panels.mixer) r.mixer = {}, r.grayMix = {};
     if (!panels.grading) r.grading = {};
     if (!panels.detail) r.detail = {};
     if (!panels.optics) r.optics = {};
@@ -534,6 +537,28 @@ std::optional<std::array<double, 2>> grayWorld(const ImageType& image) {
 
 std::optional<std::array<double, 2>> CameraRawSettings::autoBalance(const Image& image) { return grayWorld(image); }
 std::optional<std::array<double, 2>> CameraRawSettings::autoBalance(const Image16& image) { return grayWorld(image); }
+
+namespace {
+
+template <typename ImageType>
+std::array<double, 8> autoMix(const ImageType& image) {
+    rawtone::GrayMixStatistics statistics;
+    for (int y = 0; y < image.height(); y++) {
+        const auto* p = image.row(y);
+        for (int x = 0; x < image.width(); x++, p += 4) {
+            const double alpha = p[3];
+            if (alpha == 0) continue;
+            const float rgb[3] = {float(std::min(1.0, p[0] / alpha)), float(std::min(1.0, p[1] / alpha)), float(std::min(1.0, p[2] / alpha))};
+            statistics.add(rgb);
+        }
+    }
+    return statistics.mix();
+}
+
+} // namespace
+
+std::array<double, 8> CameraRawSettings::autoGrayMix(const Image& image) { return autoMix(image); }
+std::array<double, 8> CameraRawSettings::autoGrayMix(const Image16& image) { return autoMix(image); }
 
 // ---- Apply --------------------------------------------------------------------------------------
 
@@ -732,7 +757,8 @@ void runCameraRaw(Kernels& k, const CameraRawSettings& s, double pixelScale, uin
     const bool pointColors = std::any_of(s.mixer.points.begin(), s.mixer.points.end(), [](const auto& p) {
         return p.hueShift != 0 || p.saturationShift != 0 || p.luminanceShift != 0;
     });
-    const bool paintColor = !clipping && !sharpenMask && (pointColors || visualize >= 0);
+    // Black & White leaves Point Color out, as Camera Raw does.
+    const bool paintColor = !clipping && !sharpenMask && !s.blackWhite && (pointColors || visualize >= 0);
     const bool paintEffects = !clipping && !sharpenMask && s.adjustsEffects();
     const bool paintDetailOptics = !clipping && (s.detail.adjusts() || s.optics.adjusts() || sharpenMask);
     const size_t width = size_t(k.width()), height = size_t(k.height()), stride = k.stride();
@@ -1001,6 +1027,10 @@ std::string CameraRawSettings::toJson() const {
         j["rawTemperature"] = s.rawTemperature;
         j["rawTint"] = s.rawTint;
     }
+    if (s.blackWhite || s.grayMix != std::array<double, 8>{}) {   // likewise only once Black & White has been used
+        j["blackWhite"] = s.blackWhite;
+        j["grayMix"] = familyJson(s.grayMix);
+    }
     return j.dump();
 }
 
@@ -1026,7 +1056,8 @@ bool CameraRawSettings::parse(const std::string& text, CameraRawSettings& out, s
         NUM(s, glowRange), NUM(s, glowSpread), NUM(s, glowWarmth), NUM(s, vignetteAmount),
         {"vignetteStyle", [&](const json& v, const std::string& k) { r.choice(v, k, s.vignetteStyle, std::array{CameraRawVignetteStyle::HighlightPriority, CameraRawVignetteStyle::ColorPriority, CameraRawVignetteStyle::PaintOverlay}); }},
         NUM(s, vignetteMidpoint), NUM(s, vignetteRoundness), NUM(s, vignetteFeather), NUM(s, vignetteHighlights),
-        NUM(s, grainAmount), NUM(s, grainSize), NUM(s, grainRoughness),
+        NUM(s, grainAmount), NUM(s, grainSize), NUM(s, grainRoughness), BOOL(s, blackWhite),
+        {"grayMix", [&](const json& v, const std::string& k) { r.family(v, k, s.grayMix); }},
         {"curve", [&](const json& v, const std::string& k) {
             r.object(v, k, {NUM(c, shadows), NUM(c, darks), NUM(c, lights), NUM(c, highlights), NUM(c, shadowSplit), NUM(c, darkSplit),
                             NUM(c, lightSplit), NUM(c, refineSaturation),

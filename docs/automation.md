@@ -239,6 +239,8 @@ Channel Mixer `cyan` ... `black` ink rows),
 replies with the settings applied; [mosh.md](mosh.md) lists every effect and parameter),
 `pixels.cameraRaw` (Filter > Camera Raw Filter: `settings` with the model's keys, nested `curve`, `mixer`, `grading`,
 `detail`, `optics`, `geometry` and `calibration` objects, unknown keys refused, `whiteBalance: "Auto"` balances the layer,
+`blackWhite: true` is the Black & White treatment with `grayMix` its B&W Mix (`{"blues": -40, ...}` or `"Auto"`, the mix the
+layer's colours call for),
 `temperature` and `tint` relative, -100..100, as Photoshop's filter has them;
 `rpc.describe` lists every key and range and [camera-raw.md](camera-raw.md) what each does), `pixels.invert`, `pixels.fill`, `pixels.clear`,
 `pixels.copy`, `pixels.copyMerged`, `pixels.cut` and `pixels.paste` (Edit > Copy, Copy Merged, Cut and Paste of pixels: the active

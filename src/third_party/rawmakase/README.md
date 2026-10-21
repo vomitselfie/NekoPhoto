@@ -1,6 +1,6 @@
 # RAWmakase's measured Camera Raw tables
 
-Four tables from [RAWmakase](https://github.com/pch/rawmakase) (`crates/rawmakase-engine/src/develop/*.bin` at commit
+Five tables from [RAWmakase](https://github.com/pch/rawmakase) (`crates/rawmakase-engine/src/develop/*.bin` at commit
 7c19ab8d78fc91ebc18dd9514b4f83e405c27953), unmodified, copyright (c) 2026 RAWmakase contributors, MIT
 ([LICENSES/RAWmakase-MIT.txt](../../../LICENSES/RAWmakase-MIT.txt)). `src/core/CMakeLists.txt` compiles each into the
 core with `embed_blob.cmake`; `src/core/src/rawmeasured.cpp` reads them (a port of the Rust that reads them there), and
@@ -11,7 +11,7 @@ core with `embed_blob.cmake`; `src/core/src/rawmeasured.cpp` reads them (a port 
 RAWmakase fitted every table to Camera Raw 18.7 (Photoshop 2026) renders of synthetic chart DNGs it writes itself: an
 invented camera with made-up matrices and a linear profile (its `tests/color/fit_chart.rs` and `tests/color/chart.rs`),
 rendered with each setting, read back as 16-bit ProPhoto RGB patch means and fitted by its `scripts/corpus/color-mixer.py`
-(`fit`, `fit-vibrance`), `scripts/corpus/parametric-curve.py` and `scripts/corpus/color-grading.py`. Its
+(`fit`, `fit-vibrance`, `fit-black-white`), `scripts/corpus/parametric-curve.py` and `scripts/corpus/color-grading.py`. Its
 `docs/color-mixer.md` and `docs/tone-controls.md` describe the measurements. None of them is derived from the Adobe DNG
 SDK or from Adobe camera profiles: they are measurements of Camera Raw's output, as NekoPhoto's own parity corpus is.
 Two parts were measured on photos rather than charts (RAWmakase's first tables, Camera Raw renders of nine of its own
@@ -33,6 +33,9 @@ Little-endian throughout.
   2 luminance and sign 0 for -100, 1 for +100; 48 and 49 are Saturation -50 and +50, 50 and 51 Vibrance -50 and +50.
 - **`vibrance_chart.bin`** (62,208 bytes): Vibrance's grids in the same layout at -100, -75, -50, -25, +25, +50, +75
   and +100.
+- **`black_white_chart.bin`** (85,536 bytes): 33 single-channel grids (the same 1,296 cells) of int16 at 1/4000 per
+  step: log2 of the grey's luminance over the colour's at a zero mix, then each of the eight bands' change at -100,
+  -50, +50 and +100.
 - **`parametric.bin`** (59,280 bytes): 228 curves of 65 float32 samples over 0..1 of gamma-2.2 encoding, each a change
   to the identity: Shadows (8 amounts x 5 shadow/midtone split ratios, over 0 to the midtone split), Highlights
   (8 x 5, over the midtone split to 1), Darks and Lights (8 amounts x 7 midtone splits each), then Darks and Lights

@@ -151,6 +151,31 @@ template <typename F> void hueKeeping(double c[3], F&& f) {
     c[mid] = l + (h - l) * t;
 }
 
+/// The hue of an RGB colour in degrees (0 for a grey).
+double hslHue(const double e[3]) {
+    const double hi = std::max({e[0], e[1], e[2]}), chroma = hi - std::min({e[0], e[1], e[2]});
+    if (!(chroma > 1e-9)) return 0;
+    if (hi == e[0]) return std::fmod((e[1] - e[2]) / chroma + 6, 6.0) * 60;
+    if (hi == e[1]) return ((e[2] - e[0]) / chroma + 2) * 60;
+    return ((e[0] - e[1]) / chroma + 4) * 60;
+}
+
+/// Each colour mixer band's share of a hue: linear between neighbouring band centres, so the shares add up to 1.
+void mixerWeights(double h, double w[8]) {
+    const auto& centres = CameraRawMixerSettings::centers;
+    for (int b = 0; b < 8; b++) w[b] = 0;
+    for (int b = 0; b < 8; b++) {
+        const double from = centres[size_t(b)], to = b == 7 ? 360 : centres[size_t(b + 1)];
+        const double offset = std::fmod(h - from + 360, 360.0);
+        if (offset < to - from) {
+            const double t = offset / (to - from);
+            w[b] += 1 - t;
+            w[(b + 1) % 8] += t;
+            return;
+        }
+    }
+}
+
 /// A table over the grey ramp (kGradeLuma) at encoded luminance `luma`: linear between the ramp's steps, held past its ends.
 double gradeAt(const double* table, double luma) {
     const int n = int(std::size(kGradeLuma));
@@ -428,10 +453,15 @@ ToneStage::ToneStage(const CameraRawSettings& s) {
         channel_ = {c.channelTable(c.red), c.channelTable(c.green), c.channelTable(c.blue)};
     }
     saturation_ = s.saturation / 100;
-    // The colour mixer's bands and Vibrance: RAWmakase's measured lookup (rawmeasured.h).
+    blackWhite_ = s.blackWhite;
+    if (blackWhite_)
+        grayGrid_ = measured::grayGrid({s.grayMix[0] / 100, s.grayMix[1] / 100, s.grayMix[2] / 100, s.grayMix[3] / 100, s.grayMix[4] / 100,
+                                        s.grayMix[5] / 100, s.grayMix[6] / 100, s.grayMix[7] / 100});
+    // The colour mixer's bands and Vibrance: RAWmakase's measured lookup (rawmeasured.h). Black & White replaces the bands
+    // with the B&W Mix, as Camera Raw's panel does.
     std::array<std::array<double, 8>, 3> bands{};
     for (size_t i = 0; i < 8; i++) bands[0][i] = s.mixer.hue[i] / 100, bands[1][i] = s.mixer.saturation[i] / 100, bands[2][i] = s.mixer.luminance[i] / 100;
-    auto mixer = std::make_shared<measured::ColorMixer>(bands, 0.0, s.vibrance / 100, true, false, true);
+    auto mixer = std::make_shared<measured::ColorMixer>(bands, 0.0, s.vibrance / 100, !blackWhite_, false, true);
     if (mixer->active()) mixer_ = std::move(mixer);
     // Colour Grading: RAWmakase's gain curves per channel of linear ProPhoto RGB.
     const CameraRawGradeWheel* wheels[4] = {&s.grading.shadows, &s.grading.midtones, &s.grading.highlights, &s.grading.global};
@@ -440,7 +470,7 @@ ToneStage::ToneStage(const CameraRawSettings& s) {
     auto grade = std::make_shared<measured::GradeCurves>(w, s.grading.blending / 100, s.grading.balance / 100);
     if (grade->active()) grade_ = std::move(grade);
     identity_ = !gained_ && !calibrated_ && shadowTint_ == 0 && !exposed_ && !toned_ && !curved_ && !channelCurved_ && !mixer_
-             && saturation_ == 0 && !grade_;
+             && saturation_ == 0 && !grade_ && !blackWhite_;
 }
 
 void ToneStage::apply(float rgb[3]) const {
@@ -533,8 +563,50 @@ void ToneStage::apply(float rgb[3]) const {
         for (double& v : c) v = std::max(0.0, y + (v - y) * (1 + saturation_));
     }
     if (grade_) grade_->apply(c);
+    if (blackWhite_) {
+        // Black & White: the grey of the colour's luminance through the B&W Mix (RAWmakase's measured tables).
+        const double y = std::min(1.0, measured::gray(grayGrid_, c));
+        c[0] = c[1] = c[2] = y;
+    }
     const auto& m = toSrgb().m;
     for (int r = 0; r < 3; r++) rgb[r] = float(sqrtIndexed(encode, m[r][0] * c[0] + m[r][1] * c[1] + m[r][2] * c[2]));
+}
+
+void GrayMixStatistics::add(const float rgb[3]) {
+    const auto& decode = decodeTable();
+    const Rgb lin{linearIndexed(decode, rgb[0]), linearIndexed(decode, rgb[1]), linearIndexed(decode, rgb[2])};
+    const Rgb p = proPhotoFromSrgb(lin);
+    const auto& encode = encodeTable();
+    double e[3];
+    for (int k = 0; k < 3; k++) e[k] = sqrtIndexed(encode, std::max(0.0, p[size_t(k)]));
+    const double lightness = std::cbrt(std::max(0.0, 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]));
+    count_ += 1;
+    lightness_ += lightness;
+    const double chroma = std::max({e[0], e[1], e[2]}) - std::min({e[0], e[1], e[2]});
+    if (!(chroma > 1e-6)) return;
+    double w[8];
+    mixerWeights(hslHue(e), w);
+    for (size_t b = 0; b < 8; b++) {
+        weight_[b] += w[b] * chroma;
+        weightedLightness_[b] += w[b] * chroma * lightness;
+    }
+}
+
+std::array<double, 8> GrayMixStatistics::mix() const {
+    std::array<double, 8> out{};
+    if (!(count_ > 0)) return out;
+    // Fixed constants: a band's slider is its colours' lightness against the image's mean, relative to that mean, at
+    // kGain slider units per unit; a band holding less than kFullShare of the image's colour (mean chroma) moves in
+    // proportion; no band goes past kLimit.
+    constexpr double kGain = 100, kFullShare = 0.05, kLimit = 50;
+    const double mean = std::max(0.05, lightness_ / count_);
+    for (size_t b = 0; b < 8; b++) {
+        if (!(weight_[b] > 1e-9)) continue;
+        const double share = std::min(1.0, weight_[b] / count_ / kFullShare);
+        const double v = kGain * (weightedLightness_[b] / weight_[b] - mean) / mean * share;
+        out[b] = std::round(std::clamp(v, -kLimit, kLimit));
+    }
+    return out;
 }
 
 } // namespace nekophoto::rawtone

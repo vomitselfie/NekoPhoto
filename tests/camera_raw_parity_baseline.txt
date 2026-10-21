@@ -5,6 +5,14 @@ synthetic-d65/blacks+100 0.661 1.918
 synthetic-d65/blacks+50 0.344 0.990
 synthetic-d65/blacks-100 0.752 2.667
 synthetic-d65/blacks-50 0.385 1.234
+synthetic-d65/bw-blue-60 0.676 2.900
+synthetic-d65/bw-green+60 0.441 1.730
+synthetic-d65/bw-mix-auto 1.836 9.149
+synthetic-d65/bw-mix-zero 0.422 1.588
+synthetic-d65/bw-orange+100 0.482 1.963
+synthetic-d65/bw-purple+60 0.518 2.197
+synthetic-d65/bw-red+60 0.446 1.784
+synthetic-d65/bw-yellow-60 0.746 3.313
 synthetic-d65/calibration-blue-hue-50 0.341 1.199
 synthetic-d65/calibration-blue-saturation+50 0.372 1.075
 synthetic-d65/calibration-green-hue-50 0.388 1.634

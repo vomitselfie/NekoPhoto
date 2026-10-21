@@ -12,6 +12,8 @@ extern const unsigned char rawmakaseColorMixerChart[];
 extern const unsigned long long rawmakaseColorMixerChartSize;
 extern const unsigned char rawmakaseVibranceChart[];
 extern const unsigned long long rawmakaseVibranceChartSize;
+extern const unsigned char rawmakaseBlackWhiteChart[];
+extern const unsigned long long rawmakaseBlackWhiteChartSize;
 extern const unsigned char rawmakaseParametric[];
 extern const unsigned long long rawmakaseParametricSize;
 extern const unsigned char rawmakaseColorGradeCurves[];
@@ -55,8 +57,15 @@ float vibranceValue(size_t knot, size_t channel, size_t cell) {
     return int16At(blobs::rawmakaseVibranceChart, knot * kTable + channel * kCells + cell, kMixerScale);
 }
 
+// black_white_chart.bin: log2 of the gray's luminance over the colour's at a zero mix, then each band's change at -100,
+// -50, +50 and +100, one value per cell, at 1/4000 per step.
+constexpr float kGrayScale = 1.0f / 4000;
+
+float grayValue(size_t table, size_t cell) { return int16At(blobs::rawmakaseBlackWhiteChart, table * kCells + cell, kGrayScale); }
+
 bool tablesPresent() {
-    return blobs::rawmakaseColorMixerChartSize == kMixerTables * kTable * 2 && blobs::rawmakaseVibranceChartSize == kVibranceKnots.size() * kTable * 2;
+    return blobs::rawmakaseColorMixerChartSize == kMixerTables * kTable * 2 && blobs::rawmakaseVibranceChartSize == kVibranceKnots.size() * kTable * 2
+        && blobs::rawmakaseBlackWhiteChartSize == 33 * kCells * 2;
 }
 
 /// Rec. 709 Y of the colour's linear sRGB: RAWmakase's luminance.
@@ -209,6 +218,40 @@ void ColorMixer::apply(double rgb[3]) const {
     if (graySource_) applyGrid(*graySource_, from);
     const double y = srgbFromProPhotoLuminance(from);
     for (int k = 0; k < 3; k++) rgb[k] += saturationGray_ * (y - rgb[k]);
+}
+
+// ---- Black & White Mix --------------------------------------------------------------------------------------------------
+
+Grid grayGrid(const std::array<double, 8>& mix) {
+    Grid grid(kCells, {0, 0, 0});
+    if (!tablesPresent()) return grid;
+    std::vector<std::pair<size_t, double>> weights{{0, 1}};
+    for (size_t band = 0; band < 8; band++) {
+        const double v = std::clamp(mix[band], -1.0, 1.0);
+        if (v == 0) continue;
+        // Linear between the measured positions (-100, -50, +50, +100), and toward no change at 0.
+        const size_t nearPos = v < 0 ? 1 : 2, farPos = v < 0 ? 0 : 3;
+        auto table = [&](size_t position) { return 1 + band * 4 + position; };
+        constexpr double half = 0.5;
+        if (std::fabs(v) <= half) weights.push_back({table(nearPos), std::fabs(v) / half});
+        else {
+            const double t = (std::fabs(v) - half) / (1 - half);
+            weights.push_back({table(nearPos), 1 - t});
+            weights.push_back({table(farPos), t});
+        }
+    }
+    for (size_t cell = 0; cell < kCells; cell++) {
+        double dv = 0;
+        for (const auto& [t, w] : weights) dv += w * grayValue(t, cell);
+        grid[cell][2] = float(dv);
+    }
+    return grid;
+}
+
+double gray(const Grid& grid, const double rgb[3]) {
+    double p[3] = {std::max(0.0, rgb[0]), std::max(0.0, rgb[1]), std::max(0.0, rgb[2])};
+    applyGrid(grid, p);
+    return std::max(0.0, srgbFromProPhotoLuminance(p));
 }
 
 // ---- Parametric curve ---------------------------------------------------------------------------------------------------

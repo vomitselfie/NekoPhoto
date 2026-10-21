@@ -127,10 +127,14 @@ std::map<std::string, Setter> setters(bool raw) {
         {"ColorNoiseReduction", set([](CameraRawSettings& s) -> double& { return s.detail.noiseColor; })},
         {"ColorNoiseReductionDetail", set([](CameraRawSettings& s) -> double& { return s.detail.noiseColorDetail; })},
         {"ColorNoiseReductionSmoothness", set([](CameraRawSettings& s) -> double& { return s.detail.noiseColorSmoothness; })},
+        {"ConvertToGrayscale", [](CameraRawSettings& s, double, const std::string& t) {
+             s.blackWhite = t == "True" || t == "true";
+             return s.blackWhite || t == "False" || t == "false";
+         }},
+        // Camera Raw stores the mix Auto resolved beside the flag, so the mixer values are what renders.
+        {"AutoGrayscaleMix", [](CameraRawSettings&, double, const std::string& t) { return t == "True" || t == "true" || t == "False" || t == "false"; }},
         // Settings at the value that changes nothing are fine to read; other values are effects this engine lacks.
-        {"ConvertToGrayscale", [](CameraRawSettings&, double, const std::string& t) { return t == "False" || t == "false"; }},
         {"HasCrop", [](CameraRawSettings&, double, const std::string& t) { return t == "False" || t == "false"; }},
-        {"AutoGrayscaleMix", [](CameraRawSettings&, double, const std::string& t) { return t == "False" || t == "false"; }},
     };
     if (raw) {
         m["Temperature"] = [](CameraRawSettings& s, double v, const std::string&) { s.rawTemperature = v; return true; };
@@ -144,6 +148,7 @@ std::map<std::string, Setter> setters(bool raw) {
         m["HueAdjustment" + name] = [b](CameraRawSettings& s, double v, const std::string&) { s.mixer.hue[b] = v; return true; };
         m["SaturationAdjustment" + name] = [b](CameraRawSettings& s, double v, const std::string&) { s.mixer.saturation[b] = v; return true; };
         m["LuminanceAdjustment" + name] = [b](CameraRawSettings& s, double v, const std::string&) { s.mixer.luminance[b] = v; return true; };
+        m["GrayMixer" + name] = [b](CameraRawSettings& s, double v, const std::string&) { s.grayMix[b] = v; return true; };
     }
     return m;
 }
@@ -196,9 +201,7 @@ CameraRawXmp cameraRawFromXmpAttributes(const std::map<std::string, std::string>
     CameraRawSettings& s = out.settings;
     const auto table = setters(raw);
     std::vector<std::pair<std::string, std::string>> switches;
-    bool grayscale = false;
     for (const auto& [key, text] : attributes) {
-        if (key == "ConvertToGrayscale" && (text == "True" || text == "true")) grayscale = true;
         if (key.rfind("Enable", 0) == 0) { switches.push_back({key, text}); continue; }
         if (metadata().count(key)) continue;
         if (key == "WhiteBalance") {
@@ -230,9 +233,6 @@ CameraRawXmp cameraRawFromXmpAttributes(const std::map<std::string, std::string>
         }
         out.applied.push_back(key);
     }
-    if (grayscale)
-        for (const auto& [key, text] : attributes)
-            if (key.rfind("GrayMixer", 0) == 0) out.unsupported.push_back(key + "=" + text);
     for (const auto& [key, items] : sequences) {
         if (key == "ToneCurvePV2012") s.curve.rgb = curvePoints(items);
         else if (key == "ToneCurvePV2012Red") s.curve.red = curvePoints(items);

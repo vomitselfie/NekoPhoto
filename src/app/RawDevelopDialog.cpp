@@ -103,6 +103,11 @@ RawDevelopDialog::RawDevelopDialog(std::shared_ptr<const std::vector<uint8_t>> b
         if (!solved) return std::nullopt;
         return std::array<double, 2>{solved->temperature, solved->tint};
     };
+    // B&W Mix > Auto: the mix the quick decode's colours call for.
+    panels_->autoGrayMix = [this]() -> std::optional<std::array<double, 8>> {
+        if (!base_) return std::nullopt;
+        return CameraRawSettings::autoGrayMix(*base_);
+    };
     connect(panels_, &CameraRawPanels::changed, this, [this] { debounce_->start(); settle_->start(); });
     body->addWidget(panels_);
     layout->addLayout(body, 1);
