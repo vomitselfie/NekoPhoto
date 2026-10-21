@@ -54,10 +54,35 @@ LevelsRange LevelsRange::normalized() const {
     return r;
 }
 
-double LevelsRange::apply(double value) const {
-    LevelsRange s = normalized();
-    double input = std::min(1.0, std::max(0.0, (value * 255 - s.black) / (s.white - s.black)));
-    return (s.outputBlack + std::pow(input, 1 / s.gamma) * (s.outputWhite - s.outputBlack)) / 255;
+double levelsGamma(double u, double g) {
+    // Levels' midtone gamma: u^(1/g), except that above 1, where that power is infinitely steep at black, Photoshop
+    // starts along a toe a u - b u^q of slope a = 2^g that joins the power curve with the same value and slope (q = 2.2,
+    // fitted on whole-level oracles at gamma 1.16 to 2.0; PhotoCraft's levels_gamma, crates/compose/src/adjust.rs at
+    // 04d0212, MIT OR Apache-2.0, used under MIT).
+    const double c = 1 / g;
+    if (g <= 1) return std::pow(u, c);
+    constexpr double q = 2.2;
+    const double a = std::pow(2.0, g);
+    const double u1 = std::pow((1 - c / q) / (a * (1 - 1 / q)), 1 / (1 - c));
+    if (!(u1 > 0) || u >= u1) return std::pow(u, c);
+    const double b = (a * u1 - std::pow(u1, c)) / std::pow(u1, q);
+    return a * u - b * std::pow(u, q);
+}
+
+double LevelsRange::apply(double value, double quantum) const {
+    // Photoshop works on whole levels (`quantum` steps a unit: 255 at 8 bits, 32768 at 16) in three steps, each rounded
+    // half up: the input-range stretch, the midtone gamma and the output range (PhotoCraft's levels_q, as above): a
+    // 44..214 range maps 45, 46, 47, 48 to 2, 3, 5, 6 (psd-tools levels_grayscale.psd). 0: unrounded.
+    const LevelsRange s = normalized();
+    const double black = s.black / 255, range = std::max(1e-6, (s.white - s.black) / 255);
+    auto whole = [&](double x) { return quantum >= 1 ? std::floor(x * quantum + 0.5) / quantum : x; };
+    double u;
+    if (quantum >= 1) {
+        const double v = std::round(value * quantum) / quantum;
+        u = std::floor(std::clamp((v - black) / range, 0.0, 1.0) * quantum + 0.5 + 1e-3) / quantum;
+    } else u = std::clamp((value - black) / range, 0.0, 1.0);
+    const double t = whole(levelsGamma(u, std::max(0.01, s.gamma)));
+    return whole((s.outputBlack + t * (s.outputWhite - s.outputBlack)) / 255);
 }
 
 bool LevelsSettings::isIdentity() const {
@@ -75,7 +100,7 @@ Transfer identityTransfer() {
 
 Transfer levelsTransfer(const LevelsSettings& settings) {
     Transfer t;
-    for (int c = 0; c < 3; c++) for (int i = 0; i < 256; i++) t[size_t(c)][size_t(i)] = float(settings.apply(i / 255.0, c + 1));
+    for (int c = 0; c < 3; c++) for (int i = 0; i < 256; i++) t[size_t(c)][size_t(i)] = float(settings.apply(i / 255.0, c + 1, 255));
     return t;
 }
 

@@ -10,7 +10,7 @@ adjust/gradient_map 5c7c53fee331f0c7
 adjust/grain 77b8fbaf289647b2
 adjust/hue/saturation f9bd14d0d1d9dd8f
 adjust/invert 386275657a7ee48e
-adjust/levels e5237e6fb8e32c97
+adjust/levels a0dcd3a6c8a67945
 adjust/photo_filter a24945cf7e970309
 adjust/posterize 38bdd6bc2fea68d7
 adjust/selective_color 16b6017ea54288e8
@@ -26,7 +26,7 @@ adjust_layer/gradient_map 3fe1f7ff77fea186
 adjust_layer/grain 13eeaf96604c2546
 adjust_layer/hue/saturation 707a96654a63f9d9
 adjust_layer/invert 39757e80a5d23975
-adjust_layer/levels ade7bb30c7801e2c
+adjust_layer/levels 016ff0c4c9b423ae
 adjust_layer/photo_filter 5b5b35281bdf1827
 adjust_layer/posterize 35e56948bd389e80
 adjust_layer/selective_color 6007322c79d547fc
@@ -87,8 +87,8 @@ blend/subtract 58ca99ece2a327ca
 blend/subtract@0.5 085243e9576eedac
 blend/vivid_light dec0c246f9f6c578
 blend/vivid_light@0.5 5f2a648825d4f774
-blendif/layer_folder_clip_adjustment 2852925c88b603f1
-blendif/layer_folder_clip_adjustment@0.5 405b9b6778eb51ce
+blendif/layer_folder_clip_adjustment da19d0ed58770abe
+blendif/layer_folder_clip_adjustment@0.5 3377c06a3b4a4a21
 brush/eraser_selection 56c49d75b3a3454e
 brush/mask_paint c3e7426dbf069588
 brush/round_hard 2ffdb24906dbb2a2
@@ -96,9 +96,9 @@ brush/round_soft_half 4db27ef56abf0571
 brush/round_unstamped 704cbf86272cf505
 brush/tip_jitter_grain 2bd36b973b49cd1a
 brush/tip_square 52c291b922c60133
-channels/base_clip_folder_adjustment e19499f27a9668c1
+channels/base_clip_folder_adjustment 6fa4058d8bfe0b57
 cmyk/adjust/colour a78a1d00d1059e9a
-cmyk/adjust/levels_curves 489eae2cc7709859
+cmyk/adjust/levels_curves c06092a0ddc9d3fb
 cmyk/adjust/tones 9a7c93fc9fa9ecf4
 cmyk/artboard/coloured_background e4e4974ff0127dbf
 cmyk/blend/color 306262e25c00f4e5
@@ -129,8 +129,8 @@ cmyk/blend/screen 5666e0fd505d6f0b
 cmyk/blend/soft_light de55f04f6215d2e1
 cmyk/blend/subtract 92499ed7aae75574
 cmyk/blend/vivid_light 2a1936347569f963
-cmyk/blendif/layer_folder_clip_adjustment 8b1ae172f7abdad3
-cmyk/channels/base_clip_folder_adjustment 53273ad1905483b2
+cmyk/blendif/layer_folder_clip_adjustment 67d778b8a38eba2c
+cmyk/channels/base_clip_folder_adjustment 6fe5c7e0a71c0042
 cmyk/feather/stroked_shape_and_vector_mask 3875fc6e1b6c9f2b
 cmyk/filter/add_noise fc8b7c8d1a82d113
 cmyk/filter/add_noise_mono 85b6676d24642caa
@@ -171,7 +171,7 @@ cmyk/style/pattern_overlay 285cdb6b3cddfcf6
 cmyk/style/satin f684189b7737d001
 cmyk/style/stroke 5dd44d31544cf7f4
 cmyk16/adjust/colour c31f582324749556
-cmyk16/adjust/levels_curves ce6e32a41ca2734d
+cmyk16/adjust/levels_curves b4430465a9adb11b
 cmyk16/adjust/tones c575e032f5dd6326
 cmyk16/artboard/coloured_background b0eb47467b08e240
 cmyk16/blend/color fb3501015a53750d
@@ -202,8 +202,8 @@ cmyk16/blend/screen ba8f18ef8e2e85dc
 cmyk16/blend/soft_light 23b0631f85428056
 cmyk16/blend/subtract 95dc26703b1c914c
 cmyk16/blend/vivid_light b3decfe3da3a9fd8
-cmyk16/blendif/layer_folder_clip_adjustment 4b8eea3a79d5ceb2
-cmyk16/channels/base_clip_folder_adjustment df21e62014401cf8
+cmyk16/blendif/layer_folder_clip_adjustment 4b7c1d0b0ac428f7
+cmyk16/channels/base_clip_folder_adjustment a4c2cb61b006ee38
 cmyk16/feather/stroked_shape_and_vector_mask 1daa35672cf324ca
 cmyk16/filter/add_noise 16c1c7734e5a7dcb
 cmyk16/filter/add_noise_mono 2c552b42ba11bed0
@@ -406,7 +406,7 @@ golden/transformed_layer_nearest dc1e414ea473abb4
 golden/zoomed_region 2ac737d156e610ab
 gradient_method/linear 97a7fc236462d8c3
 gradient_method/perceptual 464d3edb4e1eb772
-lab/adjust/levels_curves 6e8e5d6443b21264
+lab/adjust/levels_curves fd7cf4c7efd48bf4
 lab/adjust/tones 4d92e8c5c720b571
 lab/artboard/coloured_background 2e514e8950ed82c2
 lab/blend/color 96fa7cbe05b06b66
@@ -429,7 +429,7 @@ lab/blend/saturation 2280594cf827508e
 lab/blend/screen e0da3522c9234d2d
 lab/blend/soft_light 03ffc3c7e824d054
 lab/blend/vivid_light 25f705d60cfaa3ef
-lab/blendif/layer_folder_clip_adjustment aa2846de7f89613a
+lab/blendif/layer_folder_clip_adjustment 21915ff9c83d285a
 lab/channels/base_clip_folder_adjustment b1eec30344906e84
 lab/feather/stroked_shape_and_vector_mask 90cfeb1229bc3233
 lab/filter/add_noise 31990614922ee36f
@@ -493,7 +493,7 @@ lab16/blend/saturation 8790952330b55713
 lab16/blend/screen c18bc2241a35d472
 lab16/blend/soft_light ac563be5b0d6fc5c
 lab16/blend/vivid_light a5033852efceab3c
-lab16/blendif/layer_folder_clip_adjustment ed89d79811e2dffd
+lab16/blendif/layer_folder_clip_adjustment 34fbed85eaa4e301
 lab16/channels/base_clip_folder_adjustment e9241f7ca860cfbd
 lab16/feather/stroked_shape_and_vector_mask b788bd4f8d3c2159
 lab16/filter/add_noise f0661eb15bdf88dc
@@ -566,7 +566,7 @@ u16/adjust/gradient_map fa294ed3a400b627
 u16/adjust/grain 91eb916d1f1901bc
 u16/adjust/hue/saturation 8a077054478b563a
 u16/adjust/invert ab6c15a73eb04a4d
-u16/adjust/levels 79d4ac931085446b
+u16/adjust/levels 83181ba91805b006
 u16/adjust/photo_filter 8ff6b14215a0fb21
 u16/adjust/posterize b189f84dde7db248
 u16/adjust/selective_color 1f3c0017dc868362
@@ -582,7 +582,7 @@ u16/adjust_layer/gradient_map 51434c02122e025a
 u16/adjust_layer/grain 28c38be03b053d54
 u16/adjust_layer/hue/saturation 18225d74c77ceb41
 u16/adjust_layer/invert 4c71773c6642b378
-u16/adjust_layer/levels c72d7a4db8b02145
+u16/adjust_layer/levels c16745ac87fef95b
 u16/adjust_layer/photo_filter 1e530f21e0c956ce
 u16/adjust_layer/posterize 6c184944a7fd04b8
 u16/adjust_layer/selective_color ca03e89dffe0c861
@@ -644,13 +644,13 @@ u16/blend/subtract 931b2eaf9b9c82a0
 u16/blend/subtract@0.5 6df7580d0101afa7
 u16/blend/vivid_light a0c7dd41b3f659c9
 u16/blend/vivid_light@0.5 0c38d4572546c49b
-u16/blendif/layer_folder_clip_adjustment f972e0704c77a8a4
+u16/blendif/layer_folder_clip_adjustment a1bec5aea97f6623
 u16/camera_raw/color e054b6ac80b47a54
 u16/camera_raw/detail_optics 93c333faca27340f
 u16/camera_raw/effects e4ec96e1db8af59a
 u16/camera_raw/geometry 6ce3ed08bfa03b7f
 u16/camera_raw/light b822f0efae8aa194
-u16/channels/base_clip_folder_adjustment 0cbe9a549942e8e5
+u16/channels/base_clip_folder_adjustment 8db74b5ad279c672
 u16/export/artboard_rect 96889daae3a81d02
 u16/export/svg 726261fedab83944
 u16/feather/stroked_shape_and_vector_mask e79c578ec38cf685

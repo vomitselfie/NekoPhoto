@@ -139,7 +139,9 @@ TEST_CASE(sixteen_bit_adjustments_match_eight_bit_within_a_level) {
         CHECK(applyAdjustment(s, *deep, Rect(0, 0, 200, 150), 1));
         const Apart a = apart(eight, *deep);
         report(std::string("adjust/") + adjustmentKindName(kind), a);
-        const int opaqueAllowed = kind == AdjustmentKind::HueSaturation ? 3 : 1;
+        // Levels: Photoshop rounds to a whole level three times at 8 bits (the stretch, the gamma, the output), against
+        // 32768 steps at 16, so the two can part by two levels on a few samples.
+        const int opaqueAllowed = kind == AdjustmentKind::HueSaturation ? 3 : kind == AdjustmentKind::Levels ? 2 : 1;
         if (a.worstOpaque > opaqueAllowed || a.beyondOne > 0.01) {
             std::fprintf(stderr, "  %s: worst %d (opaque %d), %.3f%% beyond a level\n", adjustmentKindName(kind), a.worst, a.worstOpaque, a.beyondOne * 100);
             failures++;

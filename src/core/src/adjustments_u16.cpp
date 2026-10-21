@@ -191,7 +191,7 @@ bool applyAdjustment(const AdjustmentSettings& settings, Image16& image, const R
     switch (settings.kind) {
     case AdjustmentKind::HueSaturation: applyHueSaturation16(image, settings.hsv); return true;
     case AdjustmentKind::Levels:
-        if (!settings.levels.isIdentity()) applyFunction(image, [&](int c, double x) { return settings.levels.apply(x, c + 1); });
+        if (!settings.levels.isIdentity()) applyFunction(image, [&](int c, double x) { return settings.levels.apply(x, c + 1, double(one16)); });
         return true;
     case AdjustmentKind::Curves:
         if (settings.curves.isValid() && !settings.curves.isIdentity())

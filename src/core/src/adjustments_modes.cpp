@@ -304,9 +304,11 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
     switch (s.kind) {
     case AdjustmentKind::Levels:
         for (int k = 0; k < C; k++) {
-            if (cmyk) useTable(k, tableOf([&](int i) { return s.levels.apply(i / 255.0, k + 1); }));
-            else if (k == 0) useTable(k, tableOf([&](int i) { return s.levels.apply(i / 255.0, 1); }));
-            else useTable(k, tableOf([&](int i) { return s.levels.ranges[size_t(k) + 1].apply(i / 255.0); }));
+            // Whole levels at 8 bits; the 16-bit lookup reads between the table's entries, so its curve is unrounded.
+            constexpr double q = S == SampleType::U8 ? 255 : 0;
+            if (cmyk) useTable(k, tableOf([&](int i) { return s.levels.apply(i / 255.0, k + 1, q); }));
+            else if (k == 0) useTable(k, tableOf([&](int i) { return s.levels.apply(i / 255.0, 1, q); }));
+            else useTable(k, tableOf([&](int i) { return s.levels.ranges[size_t(k) + 1].apply(i / 255.0, q); }));
         }
         break;
     case AdjustmentKind::Curves:

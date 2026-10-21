@@ -107,9 +107,10 @@ Gradient Map's reading of Photoshop's luminosity (0.30 R + 0.59 G + 0.11 B; `Gra
 `src/core/include/nekophoto/adjustments.h`) and Photo Filter's linear-light XYZ map with its Preserve Luminosity
 (`photoFilterMatrix` in `src/core/src/adjustments_more.cpp`), and the 32-bit Levels, legacy Brightness/Contrast, Channel
 Mixer and Black & White tint (`src/core/src/adjustments_f32.cpp`, `adjustments_more.cpp`) CMYK Threshold's luma
-(`src/core/src/adjustments_modes.cpp`), 16-bit Posterize (`posterizeAt16`) and Vibrance (`vibranceLinear`) follow
+(`src/core/src/adjustments_modes.cpp`), 16-bit Posterize (`posterizeAt16`), Vibrance (`vibranceLinear`) and Levels' whole levels and toe
+(`LevelsRange::apply`, `levelsGamma` in `src/core/src/adjustments.cpp`) follow
 [PhotoCraft](https://github.com/storytold/photocraft)'s Gradient Map, `photo_filter_matrix`, `levels_float`,
-`legacy_brightness_contrast_hdr`, `ink_luma`, `posterize_in`, `vibrance_px` and 32-bit Channel Mixer and Black & White in `crates/compose/src/adjust.rs` at commit 04d0212 (dual MIT / Apache-2.0, used under MIT,
+`legacy_brightness_contrast_hdr`, `ink_luma`, `posterize_in`, `vibrance_px`, `levels_q`, `levels_gamma` and 32-bit Channel Mixer and Black & White in `crates/compose/src/adjust.rs` at commit 04d0212 (dual MIT / Apache-2.0, used under MIT,
 [PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt); Copyright (c) 2026 ArtCraft Team and the PhotoCraft contributors).
 
 Fill in Photoshop's special eight blend modes (`fillIsSpecial`, `blendAtFill` and `compositeAtFill` in

@@ -20,6 +20,13 @@ linear already and are taken as stored. photocraft-corpus `exposure.psd` in rgb8
 `exposure_rgb` and `exposure_grayscale` are within a level or so of Photoshop (they were up to 34 levels off through the
 sRGB curve). Camera Raw's exposure is its own.
 
+**Levels** (`levl`) works on whole levels as Photoshop does (255 a unit at 8 bits, 32768 at 16): the input-range
+stretch, the midtone gamma and the output range are each rounded half up, and a gamma above 1, whose power curve would
+be infinitely steep at black, starts along a toe of slope 2^gamma that joins it (after PhotoCraft's `levels_q` and
+`levels_gamma`). psd-tools' levels_rgb, levels_grayscale and levels_cmyk and every photocraft-corpus `levels.psd` are
+within a level or so (psd-tools' were up to 20 levels off on 1 to 4% of pixels). At 32 bits it works on the linear
+values ([bit-depth.md](bit-depth.md)).
+
 **Curves** (`curv`) is drawn as Photoshop draws it: the natural cubic spline through the points (no bend at the end
 points), flat beyond the first and last point. Every `curves.psd` in photocraft-corpus (RGB, grayscale, CMYK and Lab, 8
 and 16 bits) renders within a level of Photoshop's merged image (max 0 at 8 bits); a monotone cubic, as before, was up

@@ -29,8 +29,9 @@ struct LevelsRange {
     double black = 0, gamma = 1, white = 255, outputBlack = 0, outputWhite = 255;
     bool operator==(const LevelsRange&) const = default;
     LevelsRange normalized() const;
-    /// Output (0..1) for an input (0..1).
-    double apply(double value) const;
+    /// Output (0..1) for an input (0..1), on whole levels of `quantum` steps a unit as Photoshop works (255 at 8 bits,
+    /// 32768 at 16; 0 unrounded).
+    double apply(double value, double quantum = 0) const;
 };
 
 struct LevelsSettings {
@@ -39,7 +40,7 @@ struct LevelsSettings {
     bool operator==(const LevelsSettings&) const = default;
     bool isIdentity() const;
     /// The channel's own range followed by the composite RGB range.
-    double apply(double value, int channel) const { return ranges[0].apply(ranges[size_t(channel)].apply(value)); }
+    double apply(double value, int channel, double quantum = 0) const { return ranges[0].apply(ranges[size_t(channel)].apply(value, quantum), quantum); }
 };
 
 struct CurvePoint { double x = 0, y = 0; bool operator==(const CurvePoint&) const = default; };
