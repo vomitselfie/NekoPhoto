@@ -122,14 +122,16 @@ AdjustmentSettings exampleAdjustment(AdjustmentKind kind) {
 /// samples, where the 8-bit kernels unpremultiply to a whole level (a pixel at alpha 20 has 20 colour steps) and the
 /// 16-bit ones see the exact colour. Hue/Saturation on opaque pixels is held to three levels: at 8 bits it is
 /// Photoshop's byte arithmetic (lightness, half-chroma and hue interpolant each rounded to a level, which a raised
-/// saturation multiplies), at 16 bits the same model unrounded. Posterize and Threshold are exact on opaque pixels; at
-/// partial alpha the 8-bit kernels decide on a colour already rounded (Posterize also interpolates its table between
-/// steps there), so a few such samples land on the neighbouring step.
+/// saturation multiplies), at 16 bits the same model unrounded. Threshold is exact on opaque pixels; at partial alpha the
+/// 8-bit kernel decides on a colour already rounded, so a few such samples land on the other side. Posterize is left
+/// out: Photoshop's 16-bit Posterize bins the 16-bit sample (posterizeAt16), its 8-bit one the byte, so a level near a
+/// bin's edge goes to the neighbouring step at one depth and not the other (psd-tools posterize_16bits_*.psd).
 TEST_CASE(sixteen_bit_adjustments_match_eight_bit_within_a_level) {
     int failures = 0;
     auto source = busyImage(200, 150);
     for (int k = 0; k < adjustmentKindCount; k++) {
         const AdjustmentKind kind = AdjustmentKind(k);
+        if (kind == AdjustmentKind::Posterize) continue;
         const AdjustmentSettings s = exampleAdjustment(kind);
         Image eight = *source;
         CHECK(applyAdjustment(s, eight, Rect(0, 0, 200, 150), 1));

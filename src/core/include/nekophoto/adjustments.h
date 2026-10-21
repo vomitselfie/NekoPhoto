@@ -343,8 +343,8 @@ std::string defaultAdjustmentJson(AdjustmentKind kind);
 // ---- 16 bits (0..32768) ----------------------------------------------------------------------------------------
 // Every kind works on the exact straight colour: the table-driven ones (Levels, Curves, Exposure, Invert,
 // Brightness/Contrast, Posterize) through 32769-entry tables per channel built from their functions, the others
-// with their per-pixel maths in double (adjustments_u16.cpp). Posterize and Threshold decide as the 8-bit kernels
-// do on an 8-bit image converted to 16 bits.
+// with their per-pixel maths in double (adjustments_u16.cpp). Threshold decides as the 8-bit kernel does on an 8-bit
+// image converted to 16 bits; Posterize bins the 16-bit sample, as Photoshop's does (posterizeAt16).
 
 bool applyAdjustment(const AdjustmentSettings& settings, Image16& image, const Rect& region, double scale);
 bool applyAdjustment(const LayerAdjustment& adjustment, Image16& image, const Rect& region, double scale);
@@ -358,6 +358,8 @@ void applyPhotoFilter(Image16& image, const PhotoFilterSettings& settings);
 void applyChannelMixer(Image16& image, const ChannelMixerSettings& settings);
 void applySelectiveColor(Image16& image, const SelectiveColorSettings& settings);
 void applyColorLookup(Image16& image, const ColorLookupSettings& settings);
+/// Photoshop's 16-bit Posterize at a straight value (0..1): binned on the 16-bit sample, landing on 8-bit levels.
+double posterizeAt16(const PosterizeSettings& settings, double value);
 /// Brightness/Contrast's curve at a straight value (0..1), unrounded.
 double brightnessContrastAt(const BrightnessContrastSettings& settings, double value);
 /// The Levels histograms of a 16-bit image, in the same 256 bins.

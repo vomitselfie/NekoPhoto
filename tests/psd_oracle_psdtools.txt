@@ -6,7 +6,7 @@ corpus psd-tools
 commit 96eb134c17b2c65edf4c4151c0f00b802ada86c2
 compared 285
 flatten 0
-floor 221
+floor 223
 pass tests/psd_files/0layers.psb                                      [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/0layers.psd                                      [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass tests/psd_files/0layers_tblocks.psb                              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
@@ -55,9 +55,9 @@ pass tests/psd_files/adjustments/invert_rgb.psd                       [rgb8]    
 FAIL tests/psd_files/adjustments/levels_cmyk.psd                      [cmyk8]            max   20.00  >2:   1.29%  mean   0.174
 FAIL tests/psd_files/adjustments/levels_grayscale.psd                 [rgb8]             max   11.00  >2:   4.08%  mean   0.271
 FAIL tests/psd_files/adjustments/levels_rgb.psd                       [rgb8]             max    6.00  >2:   2.20%  mean   0.235
-FAIL tests/psd_files/adjustments/posterize_16bits_cmyk.psd            [cmyk16]           max  125.52  >2:  10.06%  mean   0.515
-pass tests/psd_files/adjustments/posterize_16bits_grayscale.psd       [rgb16]            max   51.00  >2:   0.97%  mean   0.250
-FAIL tests/psd_files/adjustments/posterize_16bits_rgb.psd             [rgb16]            max  127.50  >2:   4.93%  mean   0.442
+pass tests/psd_files/adjustments/posterize_16bits_cmyk.psd            [cmyk16]           max    0.50  >2:   0.00%  mean   0.093
+pass tests/psd_files/adjustments/posterize_16bits_grayscale.psd       [rgb16]            max    0.50  >2:   0.00%  mean   0.096
+pass tests/psd_files/adjustments/posterize_16bits_rgb.psd             [rgb16]            max    0.50  >2:   0.00%  mean   0.168
 pass tests/psd_files/adjustments/posterize_cmyk.psd                   [cmyk8]            max   43.00  >2:   0.11%  mean   0.330
 pass tests/psd_files/adjustments/posterize_grayscale.psd              [rgb8]             max   21.00  >2:   0.03%  mean   0.368
 pass tests/psd_files/adjustments/posterize_rgb.psd                    [rgb8]             max   43.00  >2:   0.06%  mean   0.341

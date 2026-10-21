@@ -172,7 +172,7 @@ cmyk/style/satin f684189b7737d001
 cmyk/style/stroke 5dd44d31544cf7f4
 cmyk16/adjust/colour c31f582324749556
 cmyk16/adjust/levels_curves ce6e32a41ca2734d
-cmyk16/adjust/tones acd667ae70c135fb
+cmyk16/adjust/tones c575e032f5dd6326
 cmyk16/artboard/coloured_background b0eb47467b08e240
 cmyk16/blend/color fb3501015a53750d
 cmyk16/blend/color_burn d23efd92d8b96ce7
@@ -471,7 +471,7 @@ lab/style/pattern_overlay 318e293d77a81537
 lab/style/satin 5573187cdfe66678
 lab/style/stroke ae05a2012910e2e9
 lab16/adjust/levels_curves 3541748e9c0d0521
-lab16/adjust/tones 83c45fc55dc09ff4
+lab16/adjust/tones 6d3d7eb83259799a
 lab16/artboard/coloured_background e217844300bc9f56
 lab16/blend/color f0f60a90ed01d0b8
 lab16/blend/darker_color d1b1ea19216a3489
@@ -568,7 +568,7 @@ u16/adjust/hue/saturation 8a077054478b563a
 u16/adjust/invert ab6c15a73eb04a4d
 u16/adjust/levels 79d4ac931085446b
 u16/adjust/photo_filter 8ff6b14215a0fb21
-u16/adjust/posterize 713ea58938c381ce
+u16/adjust/posterize b189f84dde7db248
 u16/adjust/selective_color 1f3c0017dc868362
 u16/adjust/threshold 5faf032b511d07a3
 u16/adjust/vibrance a4fdcdeb36b63fb2
@@ -584,7 +584,7 @@ u16/adjust_layer/hue/saturation 18225d74c77ceb41
 u16/adjust_layer/invert 4c71773c6642b378
 u16/adjust_layer/levels c72d7a4db8b02145
 u16/adjust_layer/photo_filter 1e530f21e0c956ce
-u16/adjust_layer/posterize 4c9e4ff148ce3a4e
+u16/adjust_layer/posterize 6c184944a7fd04b8
 u16/adjust_layer/selective_color ca03e89dffe0c861
 u16/adjust_layer/threshold 4fd6346746e4e01c
 u16/adjust_layer/vibrance 58bebb3d9daca328

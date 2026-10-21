@@ -6,7 +6,7 @@ corpus photocraft
 commit f5b1178cab15309e05b7b504545df3c701f6d8fd
 compared 258
 flatten 0
-floor 207
+floor 208
 pass photoshop/adjustments/cmyk16/baseline-layer-copy.psd             [cmyk16]           max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/cmyk16/brightness-contrast-legacy.psd      [cmyk16]           max    0.58  >2:   0.00%  mean   0.058
 pass photoshop/adjustments/cmyk16/brightness-contrast.psd             [cmyk16]           max    0.50  >2:   0.00%  mean   0.083
@@ -19,7 +19,7 @@ pass photoshop/adjustments/cmyk16/hue-saturation.psd                  [cmyk16]  
 pass photoshop/adjustments/cmyk16/invert.psd                          [cmyk16]           max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/cmyk16/levels.psd                          [cmyk16]           max    1.19  >2:   0.00%  mean   0.006
 FAIL photoshop/adjustments/cmyk16/photo-filter.psd                    [cmyk16]           max   30.45  >2:  70.35%  mean   3.200
-pass photoshop/adjustments/cmyk16/posterize-4.psd                     [cmyk16]           max    0.25  >2:   0.00%  mean   0.002
+pass photoshop/adjustments/cmyk16/posterize-4.psd                     [cmyk16]           max    0.01  >2:   0.00%  mean   0.001
 FAIL photoshop/adjustments/cmyk16/selective-color.psd                 [cmyk16]           max    8.65  >2:  12.51%  mean   0.193
 pass photoshop/adjustments/cmyk16/threshold-128.psd                   [cmyk16]           max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/cmyk8/baseline-layer-copy.psd              [cmyk8]            max    0.00  >2:   0.00%  mean   0.000
@@ -73,7 +73,7 @@ FAIL photoshop/adjustments/lab16/hue-saturation.psd                   [lab16]   
 pass photoshop/adjustments/lab16/invert.psd                           [lab16]            max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/lab16/levels.psd                           [lab16]            max    1.19  >2:   0.00%  mean   0.003
 pass photoshop/adjustments/lab16/photo-filter.psd                     [lab16]            max    0.09  >2:   0.00%  mean   0.002
-FAIL photoshop/adjustments/lab16/posterize-4.psd                      [lab16]            max   63.75  >2:  48.68%  mean   9.142
+pass photoshop/adjustments/lab16/posterize-4.psd                      [lab16]            max    0.01  >2:   0.00%  mean   0.001
 pass photoshop/adjustments/lab16/threshold-128.psd                    [lab16]            max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/lab8/baseline-layer-copy.psd               [lab8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/lab8/brightness-contrast-legacy.psd        [lab8]             max    1.00  >2:   0.00%  mean   0.027

@@ -76,13 +76,6 @@ void applyFunction(Image16& image, F&& f) {
 
 double exposureAt(const ExposureSettings& settings, double encoded) { return settings.at(encoded); }
 
-double posterizeAt(const PosterizeSettings& settings, double x) {
-    // Photoshop's buckets are slices of the 256 levels (posterizeTransfer): the bucket is chosen on the input rounded
-    // to a level, so an 8-bit image converted to 16 bits posterizes exactly as it did; the output steps are exact.
-    const int n = std::clamp(settings.levels, 2, 255);
-    const long v = std::lround(std::clamp(x, 0.0, 1.0) * 255);
-    return double(v * n / 256) / (n - 1);
-}
 
 // ---- Hue/Saturation: Photoshop's model on each exact straight colour (no rounding to bytes) ---------------------
 
@@ -217,7 +210,7 @@ bool applyAdjustment(const AdjustmentSettings& settings, Image16& image, const R
     case AdjustmentKind::BrightnessContrast:
         applyFunction(image, [&](int, double x) { return brightnessContrastAt(settings.brightnessContrast, x); });
         return true;
-    case AdjustmentKind::Posterize: applyFunction(image, [&](int, double x) { return posterizeAt(settings.posterize, x); }); return true;
+    case AdjustmentKind::Posterize: applyFunction(image, [&](int, double x) { return posterizeAt16(settings.posterize, x); }); return true;
     case AdjustmentKind::Threshold: applyThreshold(image, settings.threshold); return true;
     case AdjustmentKind::BlackWhite: applyBlackWhite(image, settings.blackWhite); return true;
     case AdjustmentKind::ColorBalance: applyColorBalance(image, settings.colorBalance); return true;

@@ -32,8 +32,10 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
 - **Adjustments**, on pixels (Image ▸ Adjustments, Invert) and as adjustment layers: Levels, Curves, Hue/Saturation,
   Exposure, Gradient Map, Grain, Brightness/Contrast, Vibrance, Color Balance, Black & White, Photo Filter, Channel
   Mixer, Selective Color, Posterize, Threshold, Color Lookup and Invert. Each works on the exact colour, so a smooth
-  16-bit gradient stays smooth through a strong Levels or Curves. Posterize and Threshold choose their steps as the
-  8-bit ones do; the Levels histogram has 256 bins at either depth.
+  16-bit gradient stays smooth through a strong Levels or Curves. Threshold chooses its steps as the 8-bit one does;
+  Posterize, as Photoshop's 16-bit one, bins the 16-bit sample and lands on 8-bit levels (exact on psd-tools'
+  posterize_16bits files and photocraft-corpus posterize-4.psd at 16 bits, CMYK and Lab included). The Levels
+  histogram has 256 bins at either depth.
 - **Filters**: every filter in the Filter menu: the blurs (Gaussian, Motion, Box, Radial, Surface), Add Noise (the same
   pattern for the same seed), Dust & Scratches, Median, Unsharp Mask, High Pass, Emboss, Mosaic, Find Edges, Clouds and
   Difference Clouds, the distortions (Twirl, Pinch, Spherize, Wave, Ripple, Polar Coordinates, ZigZag, Shear), Maximum,
@@ -246,10 +248,10 @@ with no monitor profile, is encoded with the document's own curve, so at exposur
 Everything else is greyed in a 32-bit document, and automation refuses it. Two wordings tell the reason apart:
 
 - **"Not available in 32-bit mode"**: Photoshop itself has no such thing at 32 bits, so it stays greyed: Dodge, Burn
-  and Sponge, the Paint Bucket, the Patch tool, the content-aware tools, the Brightness/Contrast, Posterize, Threshold, Selective Color
-  and Grain adjustments (as adjustment layers they are kept but not drawn; converting says so), Mosh, G'MIC, and the blend
-  modes outside the 32-bit set.
-- **"Not available in 32-bit yet"**: not ported yet: the Camera Raw Filter, Box, Radial and Surface Blur, Dust &
+  and Sponge, the Paint Bucket, the Patch tool, the content-aware tools, the Posterize, Threshold and Grain adjustments
+  (as adjustment layers they are kept but not drawn; converting says so), Mosh, G'MIC, and the blend modes outside the
+  32-bit set.
+- **"Not available in 32-bit yet"**: not ported yet: the Selective Color adjustment, the Camera Raw Filter, Box, Radial and Surface Blur, Dust &
   Scratches, Median, Unsharp Mask, High Pass, Emboss, Mosaic, Find Edges, Clouds and Difference Clouds, Remove Background, text, shape and path
   editing, layer style editing, smart objects and Smart Filters, deleting a clipping base (which bakes its clipped
   layers), artboard, slice and SVG export, the timeline, colour conversion (Assign and Convert to Profile).

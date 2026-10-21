@@ -323,6 +323,11 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
     }
     case AdjustmentKind::Invert: for (int k = 0; k < C; k++) useTable(k, invertTransfer()[0]); break;
     case AdjustmentKind::Posterize: {
+        if constexpr (S == SampleType::U16) {
+            // Each stored sample, binned on its 16-bit value as Photoshop's 16-bit Posterize does (posterizeAt16).
+            eachStraight<S>(image, N, nullptr, [&](double* v, double) { for (int k = 0; k < C; k++) v[k] = posterizeAt16(s.posterize, v[k]); });
+            return true;
+        }
         const Table t = posterizeTransfer(s.posterize)[0];
         for (int k = 0; k < C; k++) useTable(k, t);
         break;

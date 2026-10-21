@@ -174,6 +174,18 @@ Transfer posterizeTransfer(const PosterizeSettings& s) {
     return tableFrom([&](uint8_t v) { return std::clamp(std::lround((v * n / 256) * 255.0 / (n - 1)), 0L, 255L); });
 }
 
+double posterizeAt16(const PosterizeSettings& s, double x) {
+    // Photoshop's 16-bit Posterize bins the 16-bit sample, floor(v * n / 32768), and lands on 8-bit levels through a
+    // 16-bit step: floor(bin * 32768 / (n - 1)) converted with floor((o * 255 + 16384) / 32768), so 127.5 comes out as
+    // 128 but 42.5 as 42 (PhotoCraft's posterize_in, crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used
+    // under MIT; exact on psd-tools posterize_16bits_rgb.psd and posterize_16bits_grayscale.psd).
+    const double n = std::clamp(s.levels, 2, 255);
+    const double v = std::round(std::clamp(std::isfinite(x) ? x : 0.0, 0.0, 1.0) * 32768);
+    const double bin = std::min(n - 1, std::floor(v * n / 32768));
+    const double step = std::floor(bin * 32768 / (n - 1));
+    return std::floor((step * 255 + 16384) / 32768) / 255;
+}
+
 void applyThreshold(Image& image, const ThresholdSettings& s) {
     const int level = std::clamp(s.level, 1, 255);
     parallelRows(0, image.height(), [&](int y0, int y1) {
