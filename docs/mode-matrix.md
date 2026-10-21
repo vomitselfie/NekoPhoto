@@ -65,12 +65,12 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Image > Adjustments (menu) | `adjustment.pixels` | native | native | native | native | native | native | native |  |
 | Levels | `adjustment.Levels` | native | native | native | native | native | native | native |  |
 | Curves | `adjustment.Curves` | native | native | native | native | native | native | native |  |
-| Hue/Saturation | `adjustment.Hue/Saturation` | native | native | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Hue/Saturation | `adjustment.Hue/Saturation` | native | native | native | native | native | native | native |  |
 | Exposure | `adjustment.Exposure` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | native | native |  |
 | Gradient Map | `adjustment.Gradient Map` | native | native | native | native | native | native | native |  |
 | Grain | `adjustment.Grain` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Invert | `adjustment.Invert` | native | native | native | native | native | native | native |  |
-| Brightness/Contrast | `adjustment.Brightness/Contrast` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
+| Brightness/Contrast | `adjustment.Brightness/Contrast` | native | native | native | native | native | native | native |  |
 | Posterize | `adjustment.Posterize` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
 | Threshold | `adjustment.Threshold` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
 | Black & White | `adjustment.Black & White` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
@@ -78,7 +78,7 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Vibrance | `adjustment.Vibrance` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Photo Filter | `adjustment.Photo Filter` | native | native | native | native | native | native | native |  |
 | Channel Mixer | `adjustment.Channel Mixer` | native | native | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
-| Selective Color | `adjustment.Selective Color` | native | native | greyed (Photoshop lacks) | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Selective Color | `adjustment.Selective Color` | native | native | greyed (not yet) | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Color Lookup | `adjustment.Color Lookup` | native | native | native | native | native | native | native |  |
 | Filter menu | `filter.pixels` | native | native | native | native | native | native | native |  |
 | Gaussian Blur | `filter.Gaussian Blur` | native | native | native | native | native | native | native |  |

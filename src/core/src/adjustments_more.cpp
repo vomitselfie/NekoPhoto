@@ -1,9 +1,11 @@
 // Photoshop's other adjustment layers (adjustments.h): Brightness/Contrast, Posterize and Threshold from Patchy's
 // calibration against Photoshop 2026 (src/core/adjustment_layer.cpp there, MIT; Posterize refitted to Photoshop's
 // composite); Color Balance fitted here to Photoshop's composites; Black & White from upstream Compositor's
-// AdjustPixels.c (MIT); Vibrance, Photo Filter, Channel Mixer and Selective Color from their
-// published formulas, unchecked against Photoshop (docs/adjustment-layers.md).
+// AdjustPixels.c (MIT); Photo Filter after PhotoCraft's Photoshop-fitted photo_filter_matrix (MIT OR Apache-2.0,
+// THIRD-PARTY-NOTICES.md), Vibrance after its fit of Photoshop's; Channel Mixer and Selective Color from their
+// published formulas (docs/adjustment-layers.md).
 #include "nekophoto/adjustments.h"
+#include "nekophoto/depth.h"
 #include "nekophoto/imaget.h"
 #include "nekophoto/modeedit.h"
 #include "nekophoto/parallel.h"
@@ -58,6 +60,26 @@ struct EncodedImageF { ImageF& image; const TransferCurve& curve; };
 template <class F>
 void perPixel(EncodedImageF& target, F&& f) { forEachEncodedColour(target.image, target.curve, f); }
 
+// The same on a 32-bit image's straight linear values as stored, unclamped (Photoshop's 32-bit Color Balance and Channel
+// Mixer, photocraft-corpus rgb32); the results are kept at 0 and up (cleanColour).
+struct LinearImageF { ImageF& image; };
+template <class F>
+void perPixel(LinearImageF& target, F&& f) {
+    ImageF& image = target.image;
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            float* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const float a = p[3];
+                if (!(a > 0)) continue;
+                double c[3] = {p[0] / double(a), p[1] / double(a), p[2] / double(a)};
+                f(c[0], c[1], c[2]);
+                for (int i = 0; i < 3; i++) p[i] = cleanColour(float(c[i] * a));
+            }
+        }
+    });
+}
+
 // A CMYK buffer (5 samples) with its stored cyan, magenta and yellow (the complements of the inks, which is how
 // Photoshop's colour adjustments see a CMYK pixel's colour) taken as red, green and blue; black is left as it is.
 template <SampleType S>
@@ -83,6 +105,9 @@ void perPixel(StoredCmy<S>& target, F&& f) {
 }
 
 double luma(double r, double g, double b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
+
+double srgbDecode(double v) { v = std::clamp(v, 0.0, 1.0); return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); }
+double srgbEncode(double v) { v = std::max(0.0, v); return v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1 / 2.4) - 0.055; }
 
 // ---- Brightness/Contrast (Patchy's closed forms; see adjustment_layer.cpp there for the capture record) ----
 
@@ -150,6 +175,18 @@ Transfer posterizeTransfer(const PosterizeSettings& s) {
     // step, as Patchy has it, misses a third of them).
     const int n = std::clamp(s.levels, 2, 255);
     return tableFrom([&](uint8_t v) { return std::clamp(std::lround((v * n / 256) * 255.0 / (n - 1)), 0L, 255L); });
+}
+
+double posterizeAt16(const PosterizeSettings& s, double x) {
+    // Photoshop's 16-bit Posterize bins the 16-bit sample, floor(v * n / 32768), and lands on 8-bit levels through a
+    // 16-bit step: floor(bin * 32768 / (n - 1)) converted with floor((o * 255 + 16384) / 32768), so 127.5 comes out as
+    // 128 but 42.5 as 42 (PhotoCraft's posterize_in, crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used
+    // under MIT; exact on psd-tools posterize_16bits_rgb.psd and posterize_16bits_grayscale.psd).
+    const double n = std::clamp(s.levels, 2, 255);
+    const double v = std::round(std::clamp(std::isfinite(x) ? x : 0.0, 0.0, 1.0) * 32768);
+    const double bin = std::min(n - 1, std::floor(v * n / 32768));
+    const double step = std::floor(bin * 32768 / (n - 1));
+    return std::floor((step * 255 + 16384) / 32768) / 255;
 }
 
 void applyThreshold(Image& image, const ThresholdSettings& s) {
@@ -240,42 +277,111 @@ void applyColorBalanceImpl(I& image, const ColorBalanceSettings& s) {
     });
 }
 
-template <class I>
-void applyVibranceImpl(I& image, const VibranceSettings& s) {
-    // Saturation scales every colour's distance from its luminance; Vibrance does the same weighted towards the
-    // muted ones (a saturated colour moves little), as Photoshop's does.
-    const double sat = std::clamp(s.saturation, -100.0, 100.0) / 100, vib = std::clamp(s.vibrance, -100.0, 100.0) / 100;
-    perPixel(image, [&](double& r, double& g, double& b) {
-        const double l = luma(r, g, b);
-        const double chroma = std::max({r, g, b}) - std::min({r, g, b});
-        double k = 1 + sat;
-        k *= 1 + vib * (vib > 0 ? (1 - chroma) : 1);
-        r = l + (r - l) * k; g = l + (g - l) * k; b = l + (b - l) * k;
-        // Held in gamut by moving towards the luminance.
-        const double hi = std::max({r, g, b}), lo = std::min({r, g, b});
-        double f = 1;
-        if (hi > 1 && hi > l) f = std::min(f, (1 - l) / (hi - l));
-        if (lo < 0 && lo < l) f = std::min(f, l / (l - lo));
-        if (f < 1) { r = l + (r - l) * f; g = l + (g - l) * f; b = l + (b - l) * f; }
-    });
+/// Photoshop's Vibrance on a linear-light colour (`v` the slider / 100), after PhotoCraft's black-box fit of Photoshop 25.4
+/// (`vibrance_lin`, crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used under MIT). With t = 1 - min / max
+/// (HSV saturation) and V = max: lowered, t' = t (1 - a/4) (1 - a + a t (1 + t) / 2) and V' = V - a t (1 - t)
+/// (2 - t + t^2) V (1 - V) with a = -v; raised, V' = V + v/4 of the same shape and a saturation boost that grows as t and
+/// V fall, damped on reds and skin (HSV hue 0 to 30 degrees, fading out by 45 and in from 300).
+void vibranceLinear(double c[3], double v) {
+    const double mx = std::max({c[0], c[1], c[2]}), mn = std::min({c[0], c[1], c[2]});
+    if (mx <= 0 || mx - mn <= 1e-9) return;
+    const double t = 1 - mn / mx;
+    const double shape = t * (1 - t) * (2 - t + t * t) * mx * std::max(0.0, 1 - mx);
+    double t2, v2;
+    if (v < 0) {
+        const double a = -v;
+        t2 = t * (1 - a / 4) * (1 - a + a * t * (1 + t) / 2);
+        v2 = mx - a * shape;
+    } else {
+        static constexpr double c0 = 0.5001, c1 = 0.0887, p = 0.4374, q = 0.7573, r0 = -0.8113, ra = 0.5154, rt = 2.8026;
+        const double d = mx - mn;
+        double h = mx == c[0] ? std::fmod((c[1] - c[2]) / d + 6, 6.0) : mx == c[1] ? (c[2] - c[0]) / d + 2 : (c[0] - c[1]) / d + 4;
+        h *= 60;
+        const double skin = h <= 30 ? 1 : h < 45 ? (45 - h) / 15 : h < 300 ? 0 : (h - 300) / 60;
+        const double a = v * (1 - skin) + 0.64 * std::pow(v, 1.6) * skin;
+        const double boost = (c0 * a + c1 * a * a) * std::pow(t, p) * std::pow(1 - t, q) * std::exp((r0 + ra * a + rt * (1 - t)) * std::max(0.0, 1 - mx));
+        t2 = std::min(1.0, t * (1 + boost));
+        v2 = mx + v / 4 * shape;
+    }
+    const double m2 = v2 * (1 - t2), k = (v2 - m2) / (mx - mn);
+    for (int i = 0; i < 3; i++) c[i] = m2 + (c[i] - mn) * k;
 }
 
 template <class I>
-void applyPhotoFilterImpl(I& image, const PhotoFilterSettings& s) {
-    // The colour laid over the image as a lens filter would: each channel multiplied by the filter's, mixed in by the
-    // density; Preserve Luminosity keeps each pixel's luminance.
-    const double d = std::clamp(s.density, 0.0, 100.0) / 100;
-    const AdjustmentColor f = s.color.clamped();
+void applyVibranceImpl(I& image, const VibranceSettings& s) {
+    // Photoshop's Vibrance and Saturation work in linear light, Vibrance first (vibranceLinear); Saturation moves each
+    // colour away from (or towards) the grey 0.288 R + 0.712 G (blue has no weight) by 1 + s, cutting each channel
+    // (after PhotoCraft's vibrance_px, fitted on 7,400-colour charts at 8 and 16 bits).
+    const double sat = std::clamp(s.saturation, -100.0, 100.0) / 100, vib = std::clamp(s.vibrance, -100.0, 100.0) / 100;
     perPixel(image, [&](double& r, double& g, double& b) {
-        const double before = luma(r, g, b);
-        r = r * (1 - d) + r * f.red * 2 * d;
-        g = g * (1 - d) + g * f.green * 2 * d;
-        b = b * (1 - d) + b * f.blue * 2 * d;
-        r = std::min(r, 1.0); g = std::min(g, 1.0); b = std::min(b, 1.0);
-        if (s.preserveLuminosity) {
-            const double after = luma(r, g, b);
-            if (after > 0.0001) { const double k = before / after; r *= k; g *= k; b *= k; }
+        double l[3] = {srgbDecode(r), srgbDecode(g), srgbDecode(b)};
+        if (vib != 0) vibranceLinear(l, vib);
+        if (sat != 0) {
+            const double grey = 0.288 * l[0] + 0.712 * l[1];
+            for (double& x : l) x = std::clamp(grey + (1 + sat) * (x - grey), 0.0, 1.0);
         }
+        r = srgbEncode(std::clamp(l[0], 0.0, 1.0)); g = srgbEncode(std::clamp(l[1], 0.0, 1.0)); b = srgbEncode(std::clamp(l[2], 0.0, 1.0));
+    });
+}
+
+namespace {
+
+/// Photoshop's luminosity (the blend modes' Lum) and its SetLum: `c` moved to luminosity `l`, then pulled towards its grey
+/// until every channel is within 0..1 (ClipColor).
+double lum(const double c[3]) { return 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]; }
+void setLum(double c[3], double l) {
+    const double d = l - lum(c);
+    for (int k = 0; k < 3; k++) c[k] += d;
+    const double m = lum(c), lo = std::min({c[0], c[1], c[2]}), hi = std::max({c[0], c[1], c[2]});
+    if (lo < 0) for (int k = 0; k < 3; k++) c[k] = m > 0 && m - lo > 0 ? m + (c[k] - m) * m / (m - lo) : m;
+    if (hi > 1) for (int k = 0; k < 3; k++) c[k] = m < 1 && hi - m > 0 ? m + (c[k] - m) * (1 - m) / (hi - m) : m;
+}
+
+double srgbToLinear(double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); }
+double linearToSrgb(double v) { v = std::max(0.0, v); return v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1 / 2.4) - 0.055; }
+
+} // namespace
+
+namespace {
+// Linear sRGB to D50 XYZ (Bradford-adapted, as the ICC sRGB profile has it) and back.
+constexpr double toXyz[3][3] = {{0.436074, 0.385064, 0.143080}, {0.222504, 0.716878, 0.060618}, {0.013932, 0.097104, 0.714173}};
+constexpr double fromXyz[3][3] = {{3.133856, -1.616867, -0.490615}, {-0.978768, 1.916142, 0.033454}, {0.071945, -0.228991, 1.405243}};
+} // namespace
+
+std::array<double, 3> photoFilterScale(const PhotoFilterSettings& s) {
+    static constexpr double d50[3] = {0.96422, 1.0, 0.82521};
+    const double d = std::clamp(std::isfinite(s.density) ? s.density : 0.0, 0.0, 100.0) / 100;
+    const AdjustmentColor f = s.color.clamped();
+    const double lin[3] = {srgbToLinear(f.red), srgbToLinear(f.green), srgbToLinear(f.blue)};
+    std::array<double, 3> scale{};
+    for (int k = 0; k < 3; k++) scale[size_t(k)] = 1 - d + d * (toXyz[k][0] * lin[0] + toXyz[k][1] * lin[1] + toXyz[k][2] * lin[2]) / d50[k];
+    return scale;
+}
+
+PhotoFilterMatrix photoFilterMatrix(const PhotoFilterSettings& s, bool keepLuminance) {
+    std::array<double, 3> scale = photoFilterScale(s);
+    if (keepLuminance && scale[1] > 1e-6) { const double y = scale[1]; for (double& v : scale) v /= y; }
+    PhotoFilterMatrix m{};
+    for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 3; c++)
+            for (int k = 0; k < 3; k++) m[size_t(r)][size_t(c)] += fromXyz[r][k] * scale[k] * toXyz[k][c];
+    return m;
+}
+
+
+template <class I>
+void applyPhotoFilterImpl(I& image, const PhotoFilterSettings& s) {
+    // Photoshop's lens: the colour's linear light through photoFilterMatrix, encoded again; Preserve Luminosity then puts
+    // back the encoded colour's luminosity as the Luminosity blend mode does (SetLum, ClipColor).
+    const PhotoFilterMatrix m = photoFilterMatrix(s, false);
+    perPixel(image, [&](double& r, double& g, double& b) {
+        const double before[3] = {r, g, b};
+        double lin[3];
+        for (int k = 0; k < 3; k++) lin[k] = srgbToLinear(before[k]);
+        double out[3];
+        for (int k = 0; k < 3; k++) out[k] = linearToSrgb(m[size_t(k)][0] * lin[0] + m[size_t(k)][1] * lin[1] + m[size_t(k)][2] * lin[2]);
+        if (s.preserveLuminosity) setLum(out, lum(before));
+        r = std::clamp(out[0], 0.0, 1.0); g = std::clamp(out[1], 0.0, 1.0); b = std::clamp(out[2], 0.0, 1.0);
     });
 }
 
@@ -341,6 +447,17 @@ void applyColorBalanceStoredCmy(Image16& image, const ColorBalanceSettings& s) {
     applyColorBalanceImpl(t, s);
 }
 
+void applyPhotoFilterStoredCmy(ImageC8& image, const PhotoFilterSettings& s) {
+    if (image.channels() != 5) return;
+    StoredCmy<SampleType::U8> t{image};
+    applyPhotoFilterImpl(t, s);
+}
+void applyPhotoFilterStoredCmy(Image16& image, const PhotoFilterSettings& s) {
+    if (image.channels() != 5) return;
+    StoredCmy<SampleType::U16> t{image};
+    applyPhotoFilterImpl(t, s);
+}
+
 void applyBlackWhite(Image& image, const BlackWhiteSettings& s) { applyBlackWhiteImpl(image, s); }
 void applyBlackWhite(Image16& image, const BlackWhiteSettings& s) { applyBlackWhiteImpl(image, s); }
 void applyColorBalance(Image& image, const ColorBalanceSettings& s) { applyColorBalanceImpl(image, s); }
@@ -353,11 +470,39 @@ void applyChannelMixer(Image& image, const ChannelMixerSettings& s) { applyChann
 void applyChannelMixer(Image16& image, const ChannelMixerSettings& s) { applyChannelMixerImpl(image, s); }
 void applySelectiveColor(Image& image, const SelectiveColorSettings& s) { applySelectiveColorImpl(image, s); }
 void applySelectiveColor(Image16& image, const SelectiveColorSettings& s) { applySelectiveColorImpl(image, s); }
-void applyBlackWhite(ImageF& image, const BlackWhiteSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyBlackWhiteImpl(t, s); }
-void applyColorBalance(ImageF& image, const ColorBalanceSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyColorBalanceImpl(t, s); }
+void applyBlackWhite(ImageF& image, const BlackWhiteSettings& s, const TransferCurve&) {
+    // Photoshop's 32-bit Black & White: the grey from the linear values as stored; the tint, its colour's values as
+    // given, moved to that grey's luminosity as the Color blend mode does at 32 bits (only negatives pulled in, light
+    // above 1 kept). After PhotoCraft's (crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used under MIT);
+    // photocraft-corpus rgb32 black-white-tint.psd within half a level.
+    BlackWhiteSettings plain = s;
+    plain.tint = false;
+    LinearImageF t{image};
+    applyBlackWhiteImpl(t, plain);
+    if (!s.tint) return;
+    const double tint[3] = {s.tintColor.red, s.tintColor.green, s.tintColor.blue};
+    perPixel(t, [&](double& r, double& g, double& b) {
+        const double d = r - lum(tint);   // r, g and b are the grey
+        double c[3] = {tint[0] + d, tint[1] + d, tint[2] + d};
+        const double m = lum(c), lo = std::min({c[0], c[1], c[2]});
+        if (lo < 0) for (double& v : c) v = m > 0 && m - lo > 0 ? m + (v - m) * m / (m - lo) : m;
+        r = c[0]; g = c[1]; b = c[2];
+    });
+}
+void applyColorBalance(ImageF& image, const ColorBalanceSettings& s, const TransferCurve&) { LinearImageF t{image}; applyColorBalanceImpl(t, s); }
 void applyVibrance(ImageF& image, const VibranceSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyVibranceImpl(t, s); }
-void applyPhotoFilter(ImageF& image, const PhotoFilterSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyPhotoFilterImpl(t, s); }
-void applyChannelMixer(ImageF& image, const ChannelMixerSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyChannelMixerImpl(t, s); }
+void applyChannelMixer(ImageF& image, const ChannelMixerSettings& s, const TransferCurve&) {
+    // Photoshop's 32-bit Channel Mixer on the linear values, unclipped: each source percentage cut to 1/1024 towards
+    // zero and the constant counting 255/512 of its value (PhotoCraft's, crates/compose/src/adjust.rs at 04d0212, MIT
+    // OR Apache-2.0, used under MIT; photocraft-corpus rgb32 channel-mixer.psd exact).
+    ChannelMixerSettings cut = s;
+    for (auto& row : cut.rows) {
+        for (int k = 0; k < 3; k++) row[size_t(k)] = std::trunc(std::clamp(row[size_t(k)], -200.0, 200.0) / 100 * 1024) / 1024 * 100;
+        row[3] = std::clamp(row[3], -200.0, 200.0) * 255 / 512;
+    }
+    LinearImageF t{image};
+    applyChannelMixerImpl(t, cut);
+}
 
 void applyThreshold(Image16& image, const ThresholdSettings& s) {
     // Photoshop's luminance weights on the exact straight colour. The half-unit allowance makes a 16-bit copy of an

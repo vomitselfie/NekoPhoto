@@ -15,12 +15,12 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 | Check | Result | How to rerun |
 |---|---|---|
 | Photoshop as the oracle | **61 of 72** Patchy files render within 2 levels of what Photoshop shows on 99% of pixels, mean under 1 level: Photoshop's own flatten beside the file for 48 of them, the merged image stored in the file for the rest, each file's status in `tests/psd_oracle.txt` | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
-| Photoshop as the oracle: photocraft-corpus | **179 of 258** files within the same bar, compared in each file's own mode and depth (10/15 cmyk16, 10/15 cmyk8, 4/20 f32, 7/12 lab16, 8/12 lab8, 23/29 rgb16, 117/155 rgb8); each file's status in `tests/psd_oracle_photocraft.txt` | `PHOTOSHOP_CORPUS=<checkout> ctest -R psd_oracle_photocraft` |
-| Photoshop as the oracle: psd-tools | **226 of 285** files within the same bar, compared in each file's own mode and depth (1/2 cmyk16, 10/13 cmyk8, 8/17 f32, 0/1 lab16, 4/4 lab8, 7/8 rgb16, 196/240 rgb8); each file's status in `tests/psd_oracle_psdtools.txt` | `PSD_TOOLS_CORPUS=<checkout> ctest -R psd_oracle_psdtools` |
-| Render hashes | **711 scenes**: 158 at 8-bit RGB, 157 at 16-bit RGB, 122 at 32-bit RGB, 73 at 8-bit CMYK, 73 at 16-bit CMYK, 64 at 8-bit Lab, 64 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
+| Photoshop as the oracle: photocraft-corpus | **208 of 258** files within the same bar, compared in each file's own mode and depth (12/15 cmyk16, 12/15 cmyk8, 18/20 f32, 10/12 lab16, 10/12 lab8, 27/29 rgb16, 119/155 rgb8); each file's status in `tests/psd_oracle_photocraft.txt` | `PHOTOSHOP_CORPUS=<checkout> ctest -R psd_oracle_photocraft` |
+| Photoshop as the oracle: psd-tools | **232 of 285** files within the same bar, compared in each file's own mode and depth (2/2 cmyk16, 12/13 cmyk8, 8/17 f32, 0/1 lab16, 4/4 lab8, 8/8 rgb16, 198/240 rgb8); each file's status in `tests/psd_oracle_psdtools.txt` | `PSD_TOOLS_CORPUS=<checkout> ctest -R psd_oracle_psdtools` |
+| Render hashes | **713 scenes**: 158 at 8-bit RGB, 157 at 16-bit RGB, 124 at 32-bit RGB, 73 at 8-bit CMYK, 73 at 16-bit CMYK, 64 at 8-bit Lab, 64 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
-| Test suites | **105 CTest tests** registered (789 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
+| Test suites | **105 CTest tests** registered (790 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
 | Automation | **184 methods**, 183 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
@@ -30,11 +30,11 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 |---|---:|---:|---:|---:|
 | RGB8 | 115 | 0 | 0 | 0 |
 | RGB16 | 115 | 0 | 0 | 0 |
-| RGB32 | 72 | 0 | 11 | 32 |
+| RGB32 | 73 | 0 | 9 | 33 |
 | CMYK8 | 88 | 17 | 8 | 2 |
 | CMYK16 | 88 | 17 | 8 | 2 |
-| Lab8 | 85 | 17 | 11 | 2 |
-| Lab16 | 85 | 17 | 11 | 2 |
+| Lab8 | 86 | 17 | 10 | 2 |
+| Lab16 | 86 | 17 | 10 | 2 |
 <!-- END GENERATED at-a-glance -->
 
 Measured by hand over the corpus (2026-10-09, NekoPhoto 1.8.10):
@@ -221,9 +221,9 @@ NekoPhoto 1.8.10 でツールを実行して集計したものです。
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 21 個は編集可能なテキストとして開きます。
 <!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
 - **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **61 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(各ファイルの状態は `tests/psd_oracle.txt`)。
-- **Photoshop の表示との比較(photocraft-corpus)**: 258 個のうち **179 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 10/15 cmyk16, 10/15 cmyk8, 4/20 f32, 7/12 lab16, 8/12 lab8, 23/29 rgb16, 117/155 rgb8。各ファイルの状態は `tests/psd_oracle_photocraft.txt`)。
-- **Photoshop の表示との比較(psd-tools)**: 285 個のうち **226 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 1/2 cmyk16, 10/13 cmyk8, 8/17 f32, 0/1 lab16, 4/4 lab8, 7/8 rgb16, 196/240 rgb8。各ファイルの状態は `tests/psd_oracle_psdtools.txt`)。
-- **描画のハッシュ**: 711 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 105 個(789 `TEST_CASE`)。
+- **Photoshop の表示との比較(photocraft-corpus)**: 258 個のうち **208 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 12/15 cmyk16, 12/15 cmyk8, 18/20 f32, 10/12 lab16, 10/12 lab8, 27/29 rgb16, 119/155 rgb8。各ファイルの状態は `tests/psd_oracle_photocraft.txt`)。
+- **Photoshop の表示との比較(psd-tools)**: 285 個のうち **232 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 2/2 cmyk16, 12/13 cmyk8, 8/17 f32, 0/1 lab16, 4/4 lab8, 8/8 rgb16, 198/240 rgb8。各ファイルの状態は `tests/psd_oracle_psdtools.txt`)。
+- **描画のハッシュ**: 713 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 105 個(790 `TEST_CASE`)。
 - **自動操作**: メソッド 184 個、うち 183 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、

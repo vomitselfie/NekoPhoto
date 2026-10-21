@@ -32,8 +32,10 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
 - **Adjustments**, on pixels (Image ▸ Adjustments, Invert) and as adjustment layers: Levels, Curves, Hue/Saturation,
   Exposure, Gradient Map, Grain, Brightness/Contrast, Vibrance, Color Balance, Black & White, Photo Filter, Channel
   Mixer, Selective Color, Posterize, Threshold, Color Lookup and Invert. Each works on the exact colour, so a smooth
-  16-bit gradient stays smooth through a strong Levels or Curves. Posterize and Threshold choose their steps as the
-  8-bit ones do; the Levels histogram has 256 bins at either depth.
+  16-bit gradient stays smooth through a strong Levels or Curves. Threshold chooses its steps as the 8-bit one does;
+  Posterize, as Photoshop's 16-bit one, bins the 16-bit sample and lands on 8-bit levels (exact on psd-tools'
+  posterize_16bits files and photocraft-corpus posterize-4.psd at 16 bits, CMYK and Lab included). The Levels
+  histogram has 256 bins at either depth.
 - **Filters**: every filter in the Filter menu: the blurs (Gaussian, Motion, Box, Radial, Surface), Add Noise (the same
   pattern for the same seed), Dust & Scratches, Median, Unsharp Mask, High Pass, Emboss, Mosaic, Find Edges, Clouds and
   Difference Clouds, the distortions (Twirl, Pinch, Spherize, Wave, Ripple, Polar Coordinates, ZigZag, Shear), Maximum,
@@ -213,8 +215,8 @@ with no monitor profile, is encoded with the document's own curve, so at exposur
   formulas are the W3C Compositing and Blending ones; Hue, Saturation, Color, Luminosity and Darker and Lighter Color
   take luminance from the profile's own primaries.
 - **Adjustments**, on pixels (Image ▸ Adjustments) and as adjustment layers: Photoshop's 32-bit set, Levels, Curves,
-  Exposure, Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and
-  Color Lookup. How they treat light above white is below.
+  Brightness/Contrast, Exposure, Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance,
+  Gradient Map, Invert and Color Lookup. How they work there is below.
 - **Filters**: Gaussian Blur and Motion Blur (light averaged as it is, nothing rounded), Add Noise (the same pattern for
   a seed as at 8 and 16 bits), Lens Correction (exact bilinear or Catmull-Rom weights), the distortions (Twirl, Pinch,
   Spherize, Wave, Ripple, Polar Coordinates, ZigZag, Shear), Maximum, Minimum and Offset.
@@ -246,10 +248,10 @@ with no monitor profile, is encoded with the document's own curve, so at exposur
 Everything else is greyed in a 32-bit document, and automation refuses it. Two wordings tell the reason apart:
 
 - **"Not available in 32-bit mode"**: Photoshop itself has no such thing at 32 bits, so it stays greyed: Dodge, Burn
-  and Sponge, the Paint Bucket, the Patch tool, the content-aware tools, the Brightness/Contrast, Posterize, Threshold, Selective Color
-  and Grain adjustments (as adjustment layers they are kept but not drawn; converting says so), Mosh, G'MIC, and the blend
-  modes outside the 32-bit set.
-- **"Not available in 32-bit yet"**: not ported yet: the Camera Raw Filter, Box, Radial and Surface Blur, Dust &
+  and Sponge, the Paint Bucket, the Patch tool, the content-aware tools, the Posterize, Threshold and Grain adjustments
+  (as adjustment layers they are kept but not drawn; converting says so), Mosh, G'MIC, and the blend modes outside the
+  32-bit set.
+- **"Not available in 32-bit yet"**: not ported yet: the Selective Color adjustment, the Camera Raw Filter, Box, Radial and Surface Blur, Dust &
   Scratches, Median, Unsharp Mask, High Pass, Emboss, Mosaic, Find Edges, Clouds and Difference Clouds, Remove Background, text, shape and path
   editing, layer style editing, smart objects and Smart Filters, deleting a clipping base (which bakes its clipped
   layers), artboard, slice and SVG export, the timeline, colour conversion (Assign and Convert to Profile).
@@ -289,38 +291,37 @@ every untouched float as it was; spot healing brings a dark dot in light at 2.5 
 
 ### Adjustments and filters at 32 bits
 
-The pixels stay linear and nothing is clamped above 1. Each adjustment's settings (its sliders, points and histogram)
-are the 8-bit ones, written for encoded values, so at 32 bits each pixel's straight colour is taken to the document's
-encoding (its profile's curve; above 1 the curve's power law carried on, sRGB's own formula for sRGB), the adjustment's
-function is applied there, and the result is linearised again. An 8- or 16-bit document converted to 32 bits therefore
-adjusts as it did, and light above white goes on through the function:
+The pixels stay linear and nothing is clamped above 1. Photoshop runs most adjustments on the linear values as stored,
+with the same settings as at 8 bits (photocraft-corpus rgb32 and gray32, every file below exact or within half a level
+of Photoshop's merged image), so a 32-bit adjustment is not the 8-bit one on encoded values:
 
-- **Exposure** is the exception: an exact multiply by 2^exposure in linear light, the offset added there, the gamma a
-  power, nothing clamped above.
-- **Levels** loses its clamp at the white point: input above it goes on rising along the same formula (at 8 bits it is
-  cut at white). The black point still cuts below.
-- **Curves** is exactly the 8-bit curve from 0 to 255; above 255 it continues as a straight line along its end tangent
-  (the spline's slope at the last point when that point is at 255, flat when the last point stops short of 255, as the curve is
-  already flat there). Photoshop does not document how its 32-bit Curves and Levels carry on above 1; these are
-  NekoPhoto's stated choices.
-- **Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance and Color Lookup** are defined on
-  0 to 1: a colour brighter than white is adjusted as the same colour at white's brightness (its linear channels divided
-  by the brightest) and scaled back up, so hue and saturation move and the light level stays.
-- **Invert** is 1 minus the encoded value, so light above white inverts to black. **Gradient Map** maps the encoded
-  luma, cut at white.
+- **Levels**: the range formula with neither the input cut to the input range nor the result to the output range, the
+  midtone gamma a plain power mirrored below the black point (after PhotoCraft's `levels_float`).
+- **Curves**: the 8-bit curve on the linear value (0 to 1 as 0 to 255); above 1 it continues as a straight line along
+  its end tangent (the spline's slope at the last point when that point is at 255, flat when the last point stops short
+  of 255). Photoshop's own extension above 1 is not documented; this is NekoPhoto's stated choice.
+- **Brightness/Contrast** (which Photoshop 27 offers at 32 bits): legacy unclipped, the contrast pivoting at 127 of 255,
+  brightness added before a raised contrast and after a lowered one; modern its curve within 0 to 1.
+- **Exposure**: an exact multiply by 2^exposure, the offset added, the gamma a power, nothing clamped above.
+- **Hue/Saturation**: its model on the linear values, its sliders unquantised and nothing limited or cut (a raised
+  saturation takes channels below 0, which a 32-bit document here keeps at 0).
+- **Color Balance**: its per-channel Levels on the linear values. **Channel Mixer**: each source percentage cut to
+  1/1024 towards zero, the constant counting 255/512 of its value, nothing clipped. **Black & White**: the grey from the
+  linear values; the tint colour's values as given moved to that grey's luminosity, as the Color blend mode does at 32
+  bits.
+- **Photo Filter**: its linear-light map with the luminance kept in the map under Preserve Luminosity, nothing clipped
+  above (white filters to red 1.19). The map is not yet Photoshop's at 32 bits (mean 1.3 levels, at most 9).
+- **Vibrance and Color Lookup** are defined on 0 to 1 of the encoded colour: a colour brighter than white is adjusted as
+  the same colour at white's brightness and scaled back up. **Invert** is 1 minus the encoded value, so light above
+  white inverts to black. **Gradient Map** maps the encoded luminosity (0.30, 0.59, 0.11), cut at white.
+- **Selective Color** is in Photoshop's 32-bit set too, by a rule not known yet: greyed here. Posterize and Threshold
+  are not.
 - **Add Noise** adds its noise to the encoded colour, so an amount looks as it does at 8 bits; light above white is not
   cut. The blurs and Lens Correction work on the linear values.
 
-On an 8-bit picture converted to 32 bits, adjusted there and converted back at exposure 0, every kind is within one
-level of the 8-bit adjustment on opaque pixels but Hue/Saturation, within three: at 8 bits it is Photoshop's byte
-arithmetic (lightness, half-chroma and hue each rounded to a level, which a raised saturation multiplies), at 16 and 32
-bits the same model unrounded; and Exposure, a few levels apart, as in Photoshop: at 8 and 16 bits it linearises
-through a 2.2 power (1.732 for a grayscale file), at 32 bits it takes the stored linear values. On half-transparent pixels Levels, Curves, Invert, Black &
-White, Channel Mixer and Gradient Map stay within a level; Hue/Saturation, Color Balance, Photo Filter and Vibrance
-reach 2 to 5 levels on under 0.1% of samples, because the 8-bit kernels round the straight colour to a whole level
-(value × 255 / alpha, cut) before their function, which at a low alpha is off by up to a level divided by the alpha.
-Levels matches wherever the 8-bit Levels does not cut at its white point with an output white below 255: there 32 bits
-carries on by design.
+On an 8-bit picture converted to 32 bits, adjusted there and converted back at exposure 0, Invert, Gradient Map,
+Vibrance and Color Lookup are within a level of the 8-bit adjustment on opaque pixels; the kinds above that work on
+linear values are different functions at the two depths, in Photoshop too.
 
 The **Camera Raw Filter** stays greyed ("yet") although Photoshop offers it at 32 bits: its sliders (Whites,
 Highlights, the tone curve, Clarity's masks) are written for display-referred values from 0 to 1, and porting it means
@@ -390,8 +391,9 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
   色相・彩度、露光量、グラデーションマップ、粒子、明るさ・コントラスト、自然な彩度、カラーバランス、白黒、
   レンズフィルター、チャンネルミキサー、特定色域の選択、ポスタリゼーション、2 階調化、カラールックアップ、
   階調の反転。どれも正確な色で計算するので、滑らかな 16 bit のグラデーションは強いレベル補正やトーンカーブでも
-  滑らかなままです。ポスタリゼーションと 2 階調化は 8 bit と同じ段階を選びます。レベル補正のヒストグラムは
-  どちらのビット数でも 256 段階です。
+  滑らかなままです。2 階調化は 8 bit と同じ段階を選びます。ポスタリゼーションは Photoshop の 16 bit 版と同じく 16 bit の
+  値で区分けし、8 bit の段階に落とします(psd-tools の posterize_16bits と photocraft-corpus の 16 bit の posterize-4.psd
+  で、CMYK・Lab も含めて一致)。レベル補正のヒストグラムはどちらのビット数でも 256 段階です。
 - **フィルター**:フィルターメニューのすべてのフィルター:ぼかし(ガウス・移動・ボックス・放射状・表面)、ノイズを加える
   (同じシードで同じパターン)、ダスト&スクラッチ、中間値、アンシャープマスク、ハイパス、エンボス、モザイク、輪郭検出、
   雲模様 1・2、変形(ツイスト、つまむ、球面、波形、波紋、極座標、ジグザグ、シアー)、明るさの最大値・最小値、オフセット、
@@ -542,9 +544,10 @@ CMYK と Lab のドキュメントも 16 bit で使えます([color-modes.md](co
 - **描画モード**:Photoshop の 32 bit で使えるもの(通常、ディザ合成、比較(暗)、乗算、比較(明)、覆い焼き(リニア)- 加算、
   差の絶対値、減算、除算、色相、彩度、カラー、輝度、カラー比較(暗)、カラー比較(明))を選べます。それ以外はグレー表示
   (「32 bit/チャンネルモードでは使用できません」)で、すでに設定されているレイヤーは値を 0〜1 に収めて描画します。
-- **色調補正**(イメージ ▸ 色調補正と調整レイヤー):Photoshop の 32 bit で使えるもの、レベル補正、トーンカーブ、露光量、
-  色相・彩度、カラーバランス、白黒、フォトフィルター、チャンネルミキサー、自然な彩度、グラデーションマップ、階調の反転、
-  カラールックアップ。白より明るい光の扱いは下の「32 bit での色調補正とフィルター」を参照してください。
+- **色調補正**(イメージ ▸ 色調補正と調整レイヤー):Photoshop の 32 bit で使えるもの、レベル補正、トーンカーブ、
+  明るさ・コントラスト、露光量、色相・彩度、カラーバランス、白黒、フォトフィルター、チャンネルミキサー、自然な彩度、
+  グラデーションマップ、階調の反転、カラールックアップ。32 bit での計算は下の「32 bit での色調補正とフィルター」を
+  参照してください。
 - **フィルター**:ぼかし (ガウス) とぼかし (移動)(光をそのまま平均し、途中で丸めません)、ノイズを加える(シードが同じなら
   8 bit・16 bit と同じ模様)、レンズ補正(バイリニアまたは Catmull-Rom の正確な重み)、変形(ツイスト、つまむ、球面、波形、
   波紋、極座標、ジグザグ、シアー)、明るさの最大値・最小値、オフセット。
@@ -574,10 +577,10 @@ CMYK と Lab のドキュメントも 16 bit で使えます([color-modes.md](co
 それ以外はグレー表示になり、自動化でも使えません。理由は 2 通りの表示で区別します。
 
 - 「**32 bit/チャンネルモードでは使用できません**」:Photoshop 自体が 32 bit で持たないもので、今後もグレー表示のままです。
-  覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチツール、コンテンツに応じた各機能、明るさ・コントラスト、ポスタリゼーション、
-  2 階調化、特定色域の選択、粒子の色調補正(調整レイヤーは保持されますが 32 bit では描画しません。変換のときにお知らせします)、
+  覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチツール、コンテンツに応じた各機能、ポスタリゼーション、
+  2 階調化、粒子の色調補正(調整レイヤーは保持されますが 32 bit では描画しません。変換のときにお知らせします)、
   Mosh、G'MIC、32 bit で使えない描画モード。
-- 「**32 bit/チャンネルではまだ使用できません**」:まだ移植していないもの。Camera Raw フィルター、ぼかし(ボックス・放射状・
+- 「**32 bit/チャンネルではまだ使用できません**」:まだ移植していないもの。特定色域の選択、Camera Raw フィルター、ぼかし(ボックス・放射状・
   表面)、ダスト&スクラッチ、中間値、アンシャープマスク、ハイパス、エンボス、モザイク、輪郭検出、雲模様 1・2、背景を削除、テキスト・
   シェイプ・パスの編集、レイヤースタイルの編集、スマートオブジェクトとスマートフィルター、クリッピングの基点の削除
   (クリップされたレイヤーに焼き込む処理)、アートボード・スライス・SVG の書き出し、タイムライン、色の変換(プロファイルの
@@ -609,31 +612,36 @@ CMYK と Lab のドキュメントも 16 bit で使えます([color-modes.md](co
 
 **32 bit での色調補正とフィルター**
 
-ピクセルはリニアのままで、1 を超える値も切り捨てません。色調補正の設定(スライダー、ポイント、ヒストグラム)は 8 bit と
-同じく書き出した値に対するものなので、32 bit では各ピクセルの色をドキュメントのエンコード(プロファイルのカーブ。1 を超える
-部分はカーブのべき乗則をそのまま延長し、sRGB は sRGB 自身の式)に移し、そこで補正を適用してから、再びリニアに戻します。
-そのため 8 bit・16 bit から変換したドキュメントは元と同じように補正され、白より明るい光もそのまま補正を通ります。
+ピクセルはリニアのままで、1 を超える値も切り捨てません。Photoshop はほとんどの色調補正を、8 bit と同じ設定のまま
+保存されたリニアな値に適用します(photocraft-corpus の rgb32・gray32 で、以下はどれも Photoshop の統合画像と一致するか
+0.5 段階以内)。そのため 32 bit の補正は、書き出した値に対する 8 bit の補正とは別の関数です。
 
-- **露光量**だけは例外で、リニアな光に 2^露光量 を正確に掛け、オフセットもそこで加え、ガンマはべき乗です。上限で切りません。
-- **レベル補正**は白色点での切り捨てがなくなり、白色点を超える入力は同じ式のまま上がり続けます(8 bit では白で切れます)。
-  黒色点より下は従来どおり切れます。
-- **トーンカーブ**は 0〜255 では 8 bit のカーブそのもので、255 を超えると終点の接線に沿った直線で延長します(最後のポイントが
-  255 にあればその区間の傾き、255 より手前で終わっていれば水平。カーブはそこですでに水平だからです)。Photoshop は 32 bit の
-  トーンカーブとレベル補正が 1 を超えてどう続くかを公開していないので、これは NekoPhoto の決めごととして明記します。
-- **色相・彩度、カラーバランス、白黒、フォトフィルター、チャンネルミキサー、自然な彩度、カラールックアップ**は 0〜1 で
-  定義されているので、白より明るい色は、同じ色を白の明るさにしたもの(リニアのチャンネルを一番明るいチャンネルで割ったもの)
-  で補正し、元の明るさに戻します。色相と彩度は動き、光の強さは保たれます。
-- **階調の反転**は書き出した値を 1 から引くので、白より明るい光は黒になります。**グラデーションマップ**は書き出した値の
-  輝度(白で切る)を使います。
+- **レベル補正**:入力を入力範囲で、結果を出力範囲で切らず、中間調のガンマは黒色点の下で折り返した単純なべき乗です
+  (PhotoCraft の `levels_float` に基づく)。
+- **トーンカーブ**:8 bit のカーブをリニアな値(0〜1 を 0〜255 として)に適用します。1 を超えると終点の接線に沿った直線で
+  延長します(最後のポイントが 255 にあればその区間の傾き、255 より手前で終わっていれば水平)。Photoshop は 1 を超えて
+  どう続くかを公開していないので、これは NekoPhoto の決めごとです。
+- **明るさ・コントラスト**(Photoshop 27 は 32 bit でも使えます):従来方式は切らずに、コントラストは 255 中 127 を中心に、
+  コントラストを上げるときは明るさを先に、下げるときは後に加えます。新方式はそのカーブ(0〜1 の範囲)です。
+- **露光量**:2^露光量 を正確に掛け、オフセットを加え、ガンマはべき乗です。上限で切りません。
+- **色相・彩度**:そのモデルをリニアな値に適用し、スライダーは丸めず、何も制限・切り捨てしません(彩度を上げると 0 未満に
+  なるチャンネルがありますが、ここの 32 bit ドキュメントでは 0 に保ちます)。
+- **カラーバランス**:チャンネルごとのレベル補正をリニアな値に適用します。**チャンネルミキサー**:各入力の割合を 1/1024
+  単位で 0 の方向に切り捨て、定数はその値の 255/512 として数え、何も切りません。**白黒**:グレーはリニアな値から作り、
+  着色はその色の値のまま、32 bit のカラー描画モードと同じくグレーの輝度に合わせます。
+- **フォトフィルター**:リニアな光での変換で、輝度を保持するときは輝度 Y を変換の中で保ちます。1 を超えても切りません
+  (白は赤 1.19 になります)。この変換はまだ Photoshop の 32 bit のものではありません(平均 1.3 段階、最大 9)。
+- **自然な彩度とカラールックアップ**は書き出した色の 0〜1 で定義されているので、白より明るい色は同じ色を白の明るさに
+  したもので補正し、元の明るさに戻します。**階調の反転**は書き出した値を 1 から引くので、白より明るい光は黒になります。
+  **グラデーションマップ**は書き出した値の輝度(0.30・0.59・0.11、白で切る)を使います。
+- **特定色域の選択**も Photoshop の 32 bit で使えますが、規則がまだ分からないためここではグレー表示です。ポスタリゼーションと
+  2 階調化は Photoshop にもありません。
 - **ノイズを加える**はノイズを書き出した色に加えるので、同じ量なら 8 bit と同じように見えます。白より明るい光は切りません。
   ぼかしとレンズ補正はリニアな値で計算します。
 
-8 bit の画像を 32 bit に変換して補正し、露光量 0 で戻すと、不透明なピクセルではどの補正も 8 bit での補正と 1 段階以内で
-一致します。半透明のピクセルでは、露光量・レベル補正・トーンカーブ・階調の反転・白黒・チャンネルミキサー・
-グラデーションマップは 1 段階以内、色相・彩度・カラーバランス・フォトフィルター・自然な彩度は 0.1% 未満のサンプルで 2〜5
-段階の差になります。8 bit の処理が補正の前に色を整数の段階に丸める(値 × 255 ÷ アルファ、切り捨て)ためで、アルファが
-小さいと最大で「1 段階 ÷ アルファ」ずれるからです。レベル補正は、8 bit のレベル補正が出力の白を 255 未満にして白色点で
-切っている部分を除いて一致します(そこでは 32 bit は意図して値を延ばします)。
+8 bit の画像を 32 bit に変換して補正し、露光量 0 で戻すと、不透明なピクセルでは階調の反転・グラデーションマップ・
+自然な彩度・カラールックアップが 8 bit での補正と 1 段階以内で一致します。上のリニアな値で計算する種類は、Photoshop でも
+2 つのビット数で別の関数です。
 
 **Camera Raw フィルター**は、Photoshop では 32 bit でも使えますが、ここではグレー表示(「まだ」)のままです。スライダー
 (白レベル、ハイライト、トーンカーブ、明瞭度のマスク)が 0〜1 の表示用の値を前提にしているため、移植には HDR トーンの

@@ -37,6 +37,10 @@ std::array<std::vector<double>, 5> levelsHistogramInMode(const AnyImage& image, 
 /// kernel's maths (adjustments_more.cpp).
 void applyColorBalanceStoredCmy(ImageC8& image, const ColorBalanceSettings& settings);
 void applyColorBalanceStoredCmy(Image16& image, const ColorBalanceSettings& settings);
+/// Photo Filter the same way (unverified against Photoshop, whose CMYK filter keeps the black plate and the stored
+/// colour's luminosity as this does but moves the colour differently).
+void applyPhotoFilterStoredCmy(ImageC8& image, const PhotoFilterSettings& settings);
+void applyPhotoFilterStoredCmy(Image16& image, const PhotoFilterSettings& settings);
 
 /// Whether the Filter menu's `kind` runs in a document of `mode`: all four built-in filters do.
 bool filterAppliesInMode(FilterKind kind, ColorMode mode);

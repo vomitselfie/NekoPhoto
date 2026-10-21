@@ -17,7 +17,7 @@ pass photoshop-bevel-smooth.psd                                       [bmp]     
 FAIL photoshop-bevel-subs.psd                                         [bmp]              max   94.00  >2:  14.53%  mean   3.101
 FAIL photoshop-bevel-texture-clouds.psd                               [bmp]              max   95.00  >2:  19.99%  mean   1.246
 pass photoshop-bevel-texture-ramp.psd                                 [bmp]              max   29.00  >2:   0.60%  mean   0.390
-pass photoshop-blend-if-4b-roundtrip.psd                              [bmp]              max    2.00  >2:   0.00%  mean   0.521
+pass photoshop-blend-if-4b-roundtrip.psd                              [bmp]              max    1.00  >2:   0.00%  mean   0.007
 pass photoshop-both-masks-params.psd                                  [bmp]              max    3.00  >2:   0.26%  mean   0.076
 pass photoshop-both-masks.psd                                         [bmp]              max    2.00  >2:   0.00%  mean   0.067
 pass photoshop-brightness-contrast-legacy.psd                         [rgb8]             max    1.00  >2:   0.00%  mean   0.562

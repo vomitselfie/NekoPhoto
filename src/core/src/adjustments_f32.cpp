@@ -1,28 +1,22 @@
 // The adjustments at 32 bits (adjustments.h, "32 bits"): Photoshop's 32-bit set on premultiplied linear float.
 //
-// The pixels stay linear and unclamped. Each kind's settings are written for encoded values (the sliders, points and
-// histogram are the 8-bit ones), so a kernel takes each pixel's straight linear colour to the document's encoding
-// (encodeExtended: the curve within 0..1, its power law carried on above 1), applies the kind's function there and
-// linearises the result. An 8-bit or 16-bit document converted to 32 bits therefore adjusts as it did, within the
-// rounding of the narrower depth, and light above 1 goes on through the function:
+// The pixels stay linear. Photoshop runs most kinds on the linear values as stored, with the 8-bit settings
+// (photocraft-corpus rgb32 and gray32, exact or within half a level of its merged images; docs/bit-depth.md):
 //
-// - Levels: the range formula without its upper clamp, so input above the white point goes on rising (at 8 bits it is
-//   cut at white); the black point still cuts below.
-// - Curves: within 0..255 exactly CurvesSettings::value; above 255 the curve continues as a straight line with its end
-//   tangent (the spline's slope at the last point when that point is at 255; flat when the last point stops short of 255, as
-//   the curve already is between that point and 255). Photoshop's own extension above 1 is not documented; this is the
-//   stated assumption (docs/bit-depth.md).
-// - Exposure: the exact multiply by 2^exposure in linear light, the offset added there, the gamma as a power; nothing
-//   clamped above.
-// - Invert: 1 - the encoded value, so light above 1 inverts to black.
-// - Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance and Color Lookup: their
-//   functions are defined on 0..1; a colour brighter than white is adjusted as the same colour at white's brightness
-//   (its linear channels divided by the brightest) and scaled back up, so hue and saturation move while the light
-//   level stays. Hue/Saturation samples a 33-point float cube tetrahedrally, as at 16 bits.
-// - Gradient Map: the colour at the encoded luma, cut at white.
+// - Levels: the range formula unclipped, the gamma a power mirrored below the black point (PhotoCraft's levels_float).
+// - Curves: the curve on the linear value; above 1 along its end tangent (NekoPhoto's stated choice).
+// - Brightness/Contrast: legacy unclipped about 127 of 255; modern its curve within 0..1.
+// - Exposure: the exact multiply by 2^exposure, the offset, the gamma as a power.
+// - Hue/Saturation: the model on the linear values, unlimited (HueSaturationSettings::linearAdjuster).
+// - Color Balance, Black & White and Channel Mixer: on the linear values (adjustments_more.cpp).
+// - Photo Filter: its linear-light matrix, the luminance kept in it with Preserve Luminosity.
+// - Vibrance and Color Lookup: on the colour encoded through `curve` (encodeExtended), a colour brighter than white
+//   adjusted as the same colour at white and scaled back up. Invert: 1 - the encoded value. Gradient Map: the colour at
+//   the encoded luminosity, cut at white.
 //
-// Brightness/Contrast, Posterize, Threshold, Selective Color and Grain are not in Photoshop's 32-bit set: they return
-// false and are greyed ("Not available in 32-bit mode").
+// Posterize, Threshold, Selective Color and Grain are not drawn at 32 bits: they return false and are greyed ("Not
+// available in 32-bit mode"). Photoshop 27 offers Selective Color there (photocraft-corpus rgb32), by a rule not known
+// yet.
 #include "nekophoto/adjustments.h"
 #include "nekophoto/colormgmt.h"
 #include "nekophoto/depth.h"
@@ -37,22 +31,25 @@ namespace {
 
 // ---- Levels ----------------------------------------------------------------------------------------------------------
 
-/// LevelsRange::apply without the clamp above white: equal to it wherever its input is at most the white point.
+/// Photoshop's 32-bit Levels on a linear value: neither the input cut to the input range nor the result to the output
+/// range, and the midtone gamma a plain power mirrored below the black point (PhotoCraft's `levels_float`,
+/// crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used under MIT; photocraft-corpus rgb32 and gray32
+/// levels.psd exact).
 struct LevelsCurve {
     double black, span, inverseGamma, outBlack, outSpan;
     bool linear;
     explicit LevelsCurve(const LevelsRange& range) {
         const LevelsRange n = range.normalized();
         black = n.black / 255;
-        span = (n.white - n.black) / 255;
+        span = std::max(1e-6, (n.white - n.black) / 255);
         inverseGamma = 1 / n.gamma;
         outBlack = n.outputBlack / 255;
         outSpan = (n.outputWhite - n.outputBlack) / 255;
         linear = n.gamma == 1;
     }
     double operator()(double x) const {
-        const double input = std::max(0.0, (x - black) / span);
-        return outBlack + (linear ? input : double(std::pow(float(input), float(inverseGamma)))) * outSpan;
+        const double t = (x - black) / span;
+        return outBlack + (linear ? t : std::copysign(std::pow(std::fabs(t), inverseGamma), t)) * outSpan;
     }
 };
 
@@ -112,6 +109,21 @@ struct Encoding {
     }
 };
 
+/// Each pixel's straight linear colour, per channel through `f` (linear in, linear out), premultiplied again.
+template <class F>
+void perLinearChannel(ImageF& image, F&& f) {
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            float* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const float a = p[3];
+                if (!(a > 0)) continue;
+                for (int c = 0; c < 3; c++) p[c] = cleanColour(float(f(c, double(p[c]) / a) * a));
+            }
+        }
+    });
+}
+
 /// Each pixel's straight linear colour, per channel through `f` (encoded in, encoded out), premultiplied again.
 template <class F>
 void perChannel(ImageF& image, const TransferCurve& curve, F&& f) {
@@ -160,18 +172,28 @@ namespace {
 
 // ---- Hue/Saturation: Photoshop's model on each encoded colour ----------------------------------------------------
 
-void applyHueSaturationF(ImageF& image, const HueSaturationSettings& settings, const TransferCurve& curve) {
+void applyHueSaturationF(ImageF& image, const HueSaturationSettings& settings, const TransferCurve&) {
+    // Photoshop's 32-bit Hue/Saturation works on the linear values as stored (HueSaturationSettings::linearAdjuster).
     if (settings.isIdentity()) return;
-    forEachEncodedColour(image, curve, settings.adjuster());
+    const auto adjust = settings.linearAdjuster();
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            float* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const float a = p[3];
+                if (!(a > 0)) continue;
+                double c[3] = {p[0] / a, p[1] / a, p[2] / a};
+                adjust(c[0], c[1], c[2]);
+                for (int k = 0; k < 3; k++) p[k] = cleanColour(float(c[k] * a));
+            }
+        }
+    });
 }
 
 void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const TransferCurve& curve) {
-    const AdjustmentColor dark = (settings.reversed ? settings.highlights : settings.shadows).clamped();
-    const AdjustmentColor light = (settings.reversed ? settings.shadows : settings.highlights).clamped();
-    const double from[3] = {dark.red, dark.green, dark.blue}, span[3] = {light.red - dark.red, light.green - dark.green, light.blue - dark.blue};
     const Encoding encoding(curve);
-    // Perceptual and Linear: the method's ramp (in the encoded values, as Classic's).
-    const std::optional<GradientStops> ramp = settings.method == GradientMethod::Classic ? std::nullopt : std::optional<GradientStops>(settings.ramp());
+    // The ramp in the encoded values, at the encoded colour's luminosity.
+    const GradientStops ramp = settings.ramp();
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             float* p = image.row(y);
@@ -180,20 +202,32 @@ void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const
                 if (!(a > 0)) continue;
                 double e[3];
                 for (int c = 0; c < 3; c++) e[c] = encoding.encode(p[c] / a);
-                const double t = std::min(1.0, 0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2]);
-                if (ramp) {
-                    float col[4];
-                    ramp->sample(float(std::max(0.0, t)), col);
-                    for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(col[c]) * a);
-                    continue;
-                }
-                for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(float(from[c] + span[c] * t)) * a);
+                const double t = std::clamp(GradientMapSettings::luminosity(e[0], e[1], e[2]), 0.0, 1.0);
+                float col[4];
+                ramp.sample(float(t), col);
+                for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(col[c]) * a);
             }
         }
     });
 }
 
 } // namespace
+
+void applyPhotoFilter(ImageF& image, const PhotoFilterSettings& settings, const TransferCurve&) {
+    // On the linear samples as stored, unclipped (photocraft-corpus rgb32 photo-filter.psd: white filters to red 1.19);
+    // Preserve Luminosity keeps the luminance Y in the matrix itself.
+    const PhotoFilterMatrix m = photoFilterMatrix(settings, settings.preserveLuminosity);
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            float* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                if (!(p[3] > 0)) continue;
+                const double c[3] = {p[0], p[1], p[2]};   // premultiplied: the map is linear
+                for (int k = 0; k < 3; k++) p[k] = cleanColour(float(m[size_t(k)][0] * c[0] + m[size_t(k)][1] * c[1] + m[size_t(k)][2] * c[2]));
+            }
+        }
+    });
+}
 
 void applyInvert(ImageF& image, const TransferCurve& curve) {
     perChannel(image, curve, [](int, double e) { return std::max(0.0, 1 - e); });
@@ -206,7 +240,7 @@ void applyInvert(GrayF& mask) {
 
 bool adjustmentAt32(AdjustmentKind kind) {
     switch (kind) {
-    case AdjustmentKind::BrightnessContrast: case AdjustmentKind::Posterize: case AdjustmentKind::Threshold:
+    case AdjustmentKind::Posterize: case AdjustmentKind::Threshold:
     case AdjustmentKind::SelectiveColor: case AdjustmentKind::Grain:
         return false;
     default: return true;
@@ -220,14 +254,22 @@ bool applyAdjustment(const AdjustmentSettings& settings, ImageF& image, const Re
         if (settings.levels.isIdentity()) return true;
         const LevelsCurve composite(settings.levels.ranges[0]);
         const LevelsCurve own[3] = {LevelsCurve(settings.levels.ranges[1]), LevelsCurve(settings.levels.ranges[2]), LevelsCurve(settings.levels.ranges[3])};
-        perChannel(image, curve, [&](int c, double e) { return composite(own[c](e)); });
+        // On the linear values as stored, each channel's own range then the composite's.
+        const bool identity[4] = {settings.levels.ranges[0] == LevelsRange(), settings.levels.ranges[1] == LevelsRange(),
+                                  settings.levels.ranges[2] == LevelsRange(), settings.levels.ranges[3] == LevelsRange()};
+        perLinearChannel(image, [&](int c, double v) {
+            if (!identity[c + 1]) v = own[c](v);
+            return identity[0] ? v : composite(v);
+        });
         return true;
     }
     case AdjustmentKind::Curves: {
+        // On the linear values as stored too (photocraft-corpus rgb32 and gray32 curves.psd and curves-per-channel.psd
+        // exact); above 1 a curve goes on along its end tangent.
         if (!settings.curves.isValid() || settings.curves.isIdentity()) return true;
         const CurveSpline composite(settings.curves, 0);
         const CurveSpline own[3] = {CurveSpline(settings.curves, 1), CurveSpline(settings.curves, 2), CurveSpline(settings.curves, 3)};
-        perChannel(image, curve, [&](int c, double e) { return composite(own[c](e * 255)) / 255; });
+        perLinearChannel(image, [&](int c, double v) { return composite(own[c](v * 255)) / 255; });
         return true;
     }
     case AdjustmentKind::Exposure: {
@@ -248,6 +290,22 @@ bool applyAdjustment(const AdjustmentSettings& settings, ImageF& image, const Re
                 }
             }
         });
+        return true;
+    }
+    case AdjustmentKind::BrightnessContrast: {
+        // Photoshop 27 offers it at 32 bits, on the linear values as stored. Legacy: unclipped, the contrast pivoting
+        // at 127 of 255, brightness added before a raised contrast and after a lowered one (PhotoCraft's
+        // legacy_brightness_contrast_hdr, crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used under MIT;
+        // photocraft-corpus rgb32 and gray32 brightness-contrast-legacy.psd exact). Modern: its curve, within 0..1.
+        const BrightnessContrastSettings b = settings.brightnessContrast.normalized();
+        if (b.brightness == 0 && b.contrast == 0) return true;
+        if (b.legacy) {
+            const double pivot = 127.0 / 255, c = std::min(b.contrast, 99), k = c >= 0 ? 1 / (1 - c / 100) : 1 + c / 100;
+            const double pre = c >= 0 ? b.brightness / 255.0 : 0, post = c >= 0 ? 0 : b.brightness / 255.0;
+            perLinearChannel(image, [&](int, double v) { return (v + pre - pivot) * k + pivot + post; });
+        } else {
+            perLinearChannel(image, [&](int, double v) { return brightnessContrastAt(b, v); });
+        }
         return true;
     }
     case AdjustmentKind::HueSaturation: applyHueSaturationF(image, settings.hsv, curve); return true;

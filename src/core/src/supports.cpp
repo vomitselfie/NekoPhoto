@@ -55,8 +55,8 @@ constexpr FeatureSupport table[] = {
     {"view", allDepths},
 
     // P3a: adjustments, on pixels (Image > Adjustments, pixels.adjust) and as adjustment layers, every kind. P5b:
-    // Photoshop's 32-bit set (adjustments_f32.cpp); Brightness/Contrast, Posterize, Threshold, Selective Color and Grain
-    // are not in it (photoshopLacksAt32).
+    // Photoshop's 32-bit set (adjustments_f32.cpp); Posterize, Threshold and Grain are not in it (photoshopLacksAt32), and
+    // Selective Color, which Photoshop 27 has at 32 bits, waits for its rule there.
     {"adjustment.pixels", allDepths},
     {"adjustment.Levels", allDepths},
     {"adjustment.Curves", allDepths},
@@ -65,7 +65,7 @@ constexpr FeatureSupport table[] = {
     {"adjustment.Gradient Map", allDepths},
     {"adjustment.Grain", eightAndSixteen},
     {"adjustment.Invert", allDepths},
-    {"adjustment.Brightness/Contrast", eightAndSixteen},
+    {"adjustment.Brightness/Contrast", allDepths},
     {"adjustment.Posterize", eightAndSixteen},
     {"adjustment.Threshold", eightAndSixteen},
     {"adjustment.Black & White", allDepths},
@@ -260,7 +260,7 @@ constexpr FeatureModes modeTable[] = {
     {"adjustment.Threshold", allModes},
     {"adjustment.Gradient Map", allModes},
     {"adjustment.Photo Filter", allModes},
-    {"adjustment.Hue/Saturation", colorModeBit(ColorMode::CMYK)},
+    {"adjustment.Hue/Saturation", allModes},
     {"adjustment.Color Balance", colorModeBit(ColorMode::CMYK)},
     {"adjustment.Selective Color", colorModeBit(ColorMode::CMYK)},
     {"adjustment.Channel Mixer", colorModeBit(ColorMode::CMYK)},
@@ -375,7 +375,7 @@ namespace {
 // available in 32-bit mode", for good, where features not ported yet say "yet".
 constexpr std::string_view lackedAt32[] = {
     "tool.dodge", "tool.paintBucket", "tool.patch", "edit.contentAware",
-    "adjustment.Brightness/Contrast", "adjustment.Posterize", "adjustment.Threshold", "adjustment.Selective Color", "adjustment.Grain",
+    "adjustment.Posterize", "adjustment.Threshold", "adjustment.Grain",
     "filter.Mosh", "filter.G'MIC",
     // The blend modes outside Photoshop's 32-bit set (blendModeAt32): greyed in the picker, refused by automation.
     "blend.outside32",
@@ -404,7 +404,7 @@ bool photoshopLacksInMode(std::string_view feature, ColorMode mode) {
     if (mode == ColorMode::RGB) return false;
     for (std::string_view f : rgbOnly) if (f == feature) return true;
     // The adjustments Photoshop's Image > Adjustments greys in the mode (Vibrance and Black & White in CMYK and Lab,
-    // Exposure in CMYK; Hue/Saturation, Color Balance, Selective Color and Channel Mixer in Lab), and Grain.
+    // Exposure in CMYK; Color Balance, Selective Color and Channel Mixer in Lab), and Grain.
     constexpr std::string_view prefix = "adjustment.";
     if (feature.substr(0, prefix.size()) == prefix) {
         AdjustmentKind kind;

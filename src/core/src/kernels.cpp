@@ -153,9 +153,10 @@ void gradientMap(Image& image, const uint8_t* table) {
             for (int x = 0; x < image.width(); x++, p += 4) {
                 const unsigned a = p[3];
                 if (a == 0) continue;
-                // Luma of the straight colour: the premultiplied luma scaled by 255/a, one rounded division.
-                const unsigned luma = 2126u * p[0] + 7152u * p[1] + 722u * p[2];
-                unsigned level = a == 255 ? (luma + 5000u) / 10000u : (luma * 255u + 5000u * a) / (10000u * a);
+                // Photoshop's luminosity (30 R + 59 G + 11 B) / 100 of the straight colour: the premultiplied sum scaled
+                // by 255/a, one rounded division.
+                const unsigned luma = 30u * p[0] + 59u * p[1] + 11u * p[2];
+                unsigned level = a == 255 ? (luma + 50u) / 100u : (luma * 255u + 50u * a) / (100u * a);
                 const uint8_t* color = table + std::min(255u, level) * 3;
                 p[0] = premultiplied(color[0], a);
                 p[1] = premultiplied(color[1], a);

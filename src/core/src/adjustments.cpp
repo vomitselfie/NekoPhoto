@@ -54,10 +54,35 @@ LevelsRange LevelsRange::normalized() const {
     return r;
 }
 
-double LevelsRange::apply(double value) const {
-    LevelsRange s = normalized();
-    double input = std::min(1.0, std::max(0.0, (value * 255 - s.black) / (s.white - s.black)));
-    return (s.outputBlack + std::pow(input, 1 / s.gamma) * (s.outputWhite - s.outputBlack)) / 255;
+double levelsGamma(double u, double g) {
+    // Levels' midtone gamma: u^(1/g), except that above 1, where that power is infinitely steep at black, Photoshop
+    // starts along a toe a u - b u^q of slope a = 2^g that joins the power curve with the same value and slope (q = 2.2,
+    // fitted on whole-level oracles at gamma 1.16 to 2.0; PhotoCraft's levels_gamma, crates/compose/src/adjust.rs at
+    // 04d0212, MIT OR Apache-2.0, used under MIT).
+    const double c = 1 / g;
+    if (g <= 1) return std::pow(u, c);
+    constexpr double q = 2.2;
+    const double a = std::pow(2.0, g);
+    const double u1 = std::pow((1 - c / q) / (a * (1 - 1 / q)), 1 / (1 - c));
+    if (!(u1 > 0) || u >= u1) return std::pow(u, c);
+    const double b = (a * u1 - std::pow(u1, c)) / std::pow(u1, q);
+    return a * u - b * std::pow(u, q);
+}
+
+double LevelsRange::apply(double value, double quantum) const {
+    // Photoshop works on whole levels (`quantum` steps a unit: 255 at 8 bits, 32768 at 16) in three steps, each rounded
+    // half up: the input-range stretch, the midtone gamma and the output range (PhotoCraft's levels_q, as above): a
+    // 44..214 range maps 45, 46, 47, 48 to 2, 3, 5, 6 (psd-tools levels_grayscale.psd). 0: unrounded.
+    const LevelsRange s = normalized();
+    const double black = s.black / 255, range = std::max(1e-6, (s.white - s.black) / 255);
+    auto whole = [&](double x) { return quantum >= 1 ? std::floor(x * quantum + 0.5) / quantum : x; };
+    double u;
+    if (quantum >= 1) {
+        const double v = std::round(value * quantum) / quantum;
+        u = std::floor(std::clamp((v - black) / range, 0.0, 1.0) * quantum + 0.5 + 1e-3) / quantum;
+    } else u = std::clamp((value - black) / range, 0.0, 1.0);
+    const double t = whole(levelsGamma(u, std::max(0.01, s.gamma)));
+    return whole((s.outputBlack + t * (s.outputWhite - s.outputBlack)) / 255);
 }
 
 bool LevelsSettings::isIdentity() const {
@@ -75,7 +100,7 @@ Transfer identityTransfer() {
 
 Transfer levelsTransfer(const LevelsSettings& settings) {
     Transfer t;
-    for (int c = 0; c < 3; c++) for (int i = 0; i < 256; i++) t[size_t(c)][size_t(i)] = float(settings.apply(i / 255.0, c + 1));
+    for (int c = 0; c < 3; c++) for (int i = 0; i < 256; i++) t[size_t(c)][size_t(i)] = float(settings.apply(i / 255.0, c + 1, 255));
     return t;
 }
 
@@ -291,31 +316,76 @@ void applyExposure(Image& image, const ExposureSettings& settings) {
 AdjustmentColor AdjustmentColor::clamped() const { return {clampFinite(red, 0, 1, 0), clampFinite(green, 0, 1, 0), clampFinite(blue, 0, 1, 0)}; }
 
 GradientStops GradientMapSettings::ramp() const {
-    const AdjustmentColor dark = (reversed ? highlights : shadows).clamped(), light = (reversed ? shadows : highlights).clamped();
-    GradientStops stops;
-    stops.start[0] = float(dark.red); stops.start[1] = float(dark.green); stops.start[2] = float(dark.blue); stops.start[3] = 1;
-    stops.end[0] = float(light.red); stops.end[1] = float(light.green); stops.end[2] = float(light.blue); stops.end[3] = 1;
-    stops.method = method;
-    return stops.baked();
+    const AdjustmentColor dark = shadows.clamped(), light = highlights.clamped();
+    GradientStops g;
+    g.start[0] = float(dark.red); g.start[1] = float(dark.green); g.start[2] = float(dark.blue); g.start[3] = 1;
+    g.end[0] = float(light.red); g.end[1] = float(light.green); g.end[2] = float(light.blue); g.end[3] = 1;
+    if (stops.size() >= 2) {
+        g.colors = stops;
+        std::stable_sort(g.colors.begin(), g.colors.end(), [](const GradientColorStop& a, const GradientColorStop& b) { return a.location < b.location; });
+        for (auto& stop : g.colors) {
+            stop.location = std::clamp(std::isfinite(stop.location) ? stop.location : 0.0f, 0.0f, 1.0f);
+            for (float& v : stop.rgb) v = std::clamp(std::isfinite(v) ? v : 0.0f, 0.0f, 1.0f);
+        }
+        // The ends are the shadows and highlights colours, which the editors change.
+        for (int k = 0; k < 3; k++) { g.colors.front().rgb[k] = g.start[k]; g.colors.back().rgb[k] = g.end[k]; }
+    }
+    if (reversed) g.reverse();
+    g.method = method;
+    if (method != GradientMethod::Classic) return g.baked();   // eased in full, as before Smoothness was read
+    const double smooth = clampFinite(smoothness, 0, 1, 0);
+    if (smooth <= 0) return g;
+    // Classic with Smoothness: each run eased towards the Catmull-Rom through its neighbours, kept between its own two
+    // stops (the layer styles' Classic smoothRun), sampled at 1025 even stops. Two stops ease too, each end standing
+    // in for its missing neighbour.
+    std::vector<GradientColorStop> stopsIn = g.colors;
+    if (stopsIn.empty()) {
+        stopsIn.resize(2);
+        stopsIn[1].location = 1;
+        for (int k = 0; k < 3; k++) { stopsIn[0].rgb[k] = g.start[k]; stopsIn[1].rgb[k] = g.end[k]; }
+    }
+    constexpr int runs = 1024;
+    GradientStops out;
+    out.colors.reserve(runs + 1);
+    auto catmullRom = [](double p0, double p1, double p2, double p3, double t) {
+        const double t2 = t * t, t3 = t2 * t;
+        return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+    };
+    for (int j = 0; j <= runs; j++) {
+        const double t = double(j) / runs;
+        GradientColorStop stop;
+        stop.location = float(t);
+        size_t i = 1;
+        while (i < stopsIn.size() && t > stopsIn[i].location) i++;
+        if (t <= stopsIn.front().location || i >= stopsIn.size()) {
+            const GradientColorStop& end = t <= stopsIn.front().location ? stopsIn.front() : stopsIn.back();
+            for (int k = 0; k < 3; k++) stop.rgb[k] = end.rgb[k];
+        } else {
+            const GradientColorStop &l = stopsIn[i - 1], &r = stopsIn[i];
+            const GradientColorStop& p = i > 1 ? stopsIn[i - 2] : l;
+            const GradientColorStop& n = i + 1 < stopsIn.size() ? stopsIn[i + 1] : r;
+            const double span = r.location - l.location;
+            double u = span > 1e-6 ? (t - l.location) / span : 1;
+            const double m = std::clamp(double(r.midpoint), 0.001, 0.999);
+            if (std::fabs(m - 0.5) > 1e-6) u = u <= m ? 0.5 * u / m : 0.5 + 0.5 * (u - m) / (1 - m);
+            for (int k = 0; k < 3; k++) {
+                const double lin = l.rgb[k] + (r.rgb[k] - l.rgb[k]) * u;
+                const double curve = std::clamp(catmullRom(p.rgb[k], l.rgb[k], r.rgb[k], n.rgb[k], u), double(std::min(l.rgb[k], r.rgb[k])), double(std::max(l.rgb[k], r.rgb[k])));
+                stop.rgb[k] = float(lin + (curve - lin) * smooth);
+            }
+        }
+        out.colors.push_back(stop);
+    }
+    return out;
 }
 
 std::vector<uint8_t> GradientMapSettings::table() const {
-    if (method != GradientMethod::Classic) {
-        const GradientStops stops = ramp();
-        std::vector<uint8_t> result(256 * 3);
-        for (int i = 0; i < 256; i++) {
-            float c[4];
-            stops.sample(i / 255.0f, c);
-            for (int k = 0; k < 3; k++) result[size_t(i * 3 + k)] = uint8_t(std::clamp(std::lround(c[k] * 255.0), 0L, 255L));
-        }
-        return result;
-    }
-    AdjustmentColor dark = (reversed ? highlights : shadows).clamped(), light = (reversed ? shadows : highlights).clamped();
+    const GradientStops g = ramp();
     std::vector<uint8_t> result(256 * 3);
     for (int i = 0; i < 256; i++) {
-        double t = i / 255.0;
-        double rgb[3] = {dark.red + (light.red - dark.red) * t, dark.green + (light.green - dark.green) * t, dark.blue + (light.blue - dark.blue) * t};
-        for (int c = 0; c < 3; c++) result[size_t(i * 3 + c)] = uint8_t(std::min(255.0, std::max(0.0, std::round(rgb[c] * 255))));
+        float c[4];
+        g.sample(i / 255.0f, c);
+        for (int k = 0; k < 3; k++) result[size_t(i * 3 + k)] = uint8_t(std::clamp(std::lround(c[k] * 255.0), 0L, 255L));
     }
     return result;
 }
@@ -557,15 +627,15 @@ void wheelSplit(double position, int& sector, double& interpolant) {
 
 /// The colour at a lightness and half-chroma in a sector. On bytes (`exact`) the brightest channel rounds and the
 /// darkest truncates, which makes all-zero sliders an exact identity.
-void hslRebuild(double light, double halfChroma, int sector, double interpolant, bool exact, double out[3]) {
+void hslRebuild(double light, double halfChroma, int sector, double interpolant, bool exact, double out[3], bool bounded = true) {
     double q, p, m;
     if (exact) {
         q = std::min(255.0, light + std::floor(halfChroma + 0.5));
         p = std::max(0.0, light - std::floor(halfChroma));
         m = p + std::floor((q - p) * interpolant / 255 + 0.5);
     } else {
-        q = std::min(255.0, light + halfChroma);
-        p = std::max(0.0, light - halfChroma);
+        q = bounded ? std::min(255.0, light + halfChroma) : light + halfChroma;
+        p = bounded ? std::max(0.0, light - halfChroma) : light - halfChroma;
         m = p + (q - p) * interpolant / 255;
     }
     switch (sector) {
@@ -592,7 +662,8 @@ struct HueSatModel {
     bool colorize = false;
     // Colorize
     int colorizeHue = 0;
-    double colorizeScale = 0, colorizeLightness = 0;
+    double colorizeHueExact = 0;
+    double colorizeScale = 0, colorizeLightness = 0, colorizeSaturation = 0;
     // Master
     double lightness = 0, ratio = 1, rotation = 0;
     struct Range { int range; double hue, lightness, saturationOffset; };
@@ -607,8 +678,10 @@ struct HueSatModel {
         if (colorize) {
             const RangeAdjustment a = s.currentValue();
             colorizeHue = int(std::lround(wrap360(a.hue))) % 360;
+            colorizeHueExact = wrap360(a.hue);
             colorizeScale = tableAt(colorizeSaturationScale, std::clamp(a.saturation, 0.0, 100.0));
             colorizeLightness = std::clamp(a.lightness, -100.0, 100.0);
+            colorizeSaturation = std::clamp(a.saturation, 0.0, 100.0);
             return;
         }
         RangeAdjustment master;
@@ -624,13 +697,73 @@ struct HueSatModel {
         for (int v = 0; v < 256; v++) ramp[size_t(v)] = uint8_t(lightnessValue(v, lightness, true));
     }
 
+    /// One linear colour (0..1, unbounded) as Photoshop's 32-bit Hue/Saturation adjusts it: the same model on the linear
+    /// values themselves, the sliders unquantised and nothing limited or cut (photocraft-corpus rgb32
+    /// hue-saturation.psd and hue-saturation-colorize.psd: the master goes below 0 and above 1 there). Colorize builds
+    /// the colour at the lightened lightness with its half-chroma also scaled by 1 - |lightness|.
+    void applyLinear(double c[3]) const {
+        auto lighten = [](double v, double l) { return l > 0 ? v + (1 - v) * l : v * (1 + l); };
+        if (colorize) {
+            const double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
+            const double l = colorizeLightness / 100;
+            const double light = lighten((high + low) / 2, l);
+            const double halfChroma = std::max(0.0, std::min(light, 1 - light)) * colorizeSaturation / 100 * (1 - std::fabs(l));
+            int sector;
+            double interpolant;
+            wheelSplit(colorizeHueExact * 4.25, sector, interpolant);
+            hslRebuild(light * 255, halfChroma * 255, sector, interpolant, false, c, false);
+            for (int k = 0; k < 3; k++) c[k] /= 255;
+            return;
+        }
+        for (int k = 0; k < 3; k++) c[k] *= 255;
+        double weights[7] = {0, 0, 0, 0, 0, 0, 0};
+        if (!ranges.empty()) {
+            const double wheel = wheelPosition(c);
+            int sector;
+            double interpolant;
+            wheelSplit(wheel, sector, interpolant);
+            double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
+            double bandLightness = 0;
+            if (high > low)
+                for (const Range& r : ranges) {
+                    weights[r.range] = settings.weight(r.range, wheel / 4.25);
+                    bandLightness += weights[r.range] * r.lightness;
+                }
+            if (bandLightness > 0) low += (high - low) * std::min(bandLightness, 100.0) / 100;
+            else if (bandLightness < 0) high += (low - high) * std::min(-bandLightness, 100.0) / 100;
+            if (bandLightness != 0) hslRebuild((high + low) / 2, (high - low) / 2, sector, interpolant, false, c, false);
+        }
+        double lit[3];
+        for (int i = 0; i < 3; i++) lit[i] = lighten(c[i] / 255, lightness / 100) * 255;
+        const double high = std::max({lit[0], lit[1], lit[2]}), low = std::min({lit[0], lit[1], lit[2]});
+        if (high == low) { for (int k = 0; k < 3; k++) c[k] = lit[k] / 255; return; }
+        double offset = 0, turn = rotation;
+        for (const Range& r : ranges) {
+            const double w = weights[r.range];
+            if (w <= 0) continue;
+            offset += w * r.saturationOffset;
+            if (r.hue != 0) turn += w * r.hue * 4.25;
+        }
+        int sector;
+        double interpolant;
+        wheelSplit(wheelPosition(lit) + turn, sector, interpolant);
+        hslRebuild((high + low) / 2, (high - low) / 2 * ratio * std::max(0.0, 1 + offset), sector, interpolant, false, c, false);
+        for (int k = 0; k < 3; k++) c[k] /= 255;
+    }
+
     /// One colour on the 0..255 scale; whole numbers in and out when `exact`.
     void apply(double c[3], bool exact) const {
         if (colorize) {
             const double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
             const double light = lightnessValue(exact ? std::floor((high + low) / 2) : (high + low) / 2, colorizeLightness, exact);
             const double halfChroma = std::min(light, 255 - light) * colorizeScale;
-            hslRebuild(light, halfChroma, colorizeHue / 60, colorizeHueInterp[size_t(colorizeHue)], exact, c);
+            if (exact) { hslRebuild(light, halfChroma, colorizeHue / 60, colorizeHueInterp[size_t(colorizeHue)], exact, c); return; }
+            // Unrounded (16 and 32 bits): the hue's own place on the wheel, as Photoshop's 16-bit Colorize has it
+            // (photocraft-corpus rgb16 hue-saturation-colorize.psd), not the byte table's measured steps.
+            int sector;
+            double interpolant;
+            wheelSplit(colorizeHueExact * 4.25, sector, interpolant);
+            hslRebuild(light, halfChroma, sector, interpolant, exact, c);
             return;
         }
         // The ranges, chosen by the colour's own hue (a master rotation does not move them); their lightness first.
@@ -688,6 +821,15 @@ std::function<void(double&, double&, double&)> HueSaturationSettings::adjuster()
         double c[3] = {std::clamp(r, 0.0, 1.0) * 255, std::clamp(g, 0.0, 1.0) * 255, std::clamp(b, 0.0, 1.0) * 255};
         model->apply(c, false);
         r = c[0] / 255; g = c[1] / 255; b = c[2] / 255;
+    };
+}
+
+std::function<void(double&, double&, double&)> HueSaturationSettings::linearAdjuster() const {
+    auto model = std::make_shared<const HueSatModel>(*this);
+    return [model](double& r, double& g, double& b) {
+        double c[3] = {r, g, b};
+        model->applyLinear(c);
+        r = c[0]; g = c[1]; b = c[2];
     };
 }
 
@@ -1027,6 +1169,38 @@ bool AdjustmentSettings::parse(const std::string& text, AdjustmentSettings& out)
         if (method != gradient->end()) {
             if (!method->is_string() || !parseGradientMethod(method->get<std::string>(), s.gradientMap.method)) return false;
         }
+        s.gradientMap.dither = boolean(*gradient, "dither", false);
+        s.gradientMap.smoothness = num(*gradient, "smoothness", 0);
+        if (!(s.gradientMap.smoothness >= 0 && s.gradientMap.smoothness <= 1)) return false;
+        auto stops = gradient->find("stops");
+        if (stops != gradient->end()) {
+            if (!stops->is_array() || stops->size() == 1 || stops->size() > 1024) return false;
+            for (const json& stop : *stops) {
+                if (!stop.is_object()) return false;
+                GradientColorStop c;
+                c.location = float(num(stop, "location", 0));
+                c.midpoint = float(num(stop, "midpoint", 0.5));
+                c.rgb[0] = float(num(stop, "red", 0)); c.rgb[1] = float(num(stop, "green", 0)); c.rgb[2] = float(num(stop, "blue", 0));
+                if (!(c.location >= 0 && c.location <= 1 && c.midpoint >= 0 && c.midpoint <= 1)) return false;
+                for (float v : c.rgb) if (!(v >= 0 && v <= 1)) return false;
+                s.gradientMap.stops.push_back(c);
+                auto native = stop.find("native");
+                if (native != stop.end()) {
+                    if (!native->is_array() || native->size() != 4) return false;
+                    std::array<double, 4> v{};
+                    for (size_t k = 0; k < 4; k++) { if (!(*native)[k].is_number()) return false; v[k] = (*native)[k].get<double>(); if (!std::isfinite(v[k])) return false; }
+                    s.gradientMap.native.push_back(v);
+                }
+            }
+            auto mode = gradient->find("nativeMode");
+            if (mode != gradient->end()) {
+                const std::string m = mode->is_string() ? mode->get<std::string>() : "";
+                if (m == "CMYK") s.gradientMap.nativeMode = ColorMode::CMYK;
+                else if (m == "Lab") s.gradientMap.nativeMode = ColorMode::Lab;
+                else return false;
+            }
+            if (!s.gradientMap.native.empty() && (s.gradientMap.native.size() != s.gradientMap.stops.size() || s.gradientMap.nativeMode == ColorMode::RGB)) return false;
+        }
     }
     auto grain = j.find("grainSettings");
     if (grain != j.end() && grain->is_object()) {
@@ -1063,6 +1237,20 @@ std::string AdjustmentSettings::toJson() const {
     j["gradientMapSettings"] = {{"shadows", {{"red", number(gradientMap.shadows.red)}, {"green", number(gradientMap.shadows.green)}, {"blue", number(gradientMap.shadows.blue)}}},
                                 {"highlights", {{"red", number(gradientMap.highlights.red)}, {"green", number(gradientMap.highlights.green)}, {"blue", number(gradientMap.highlights.blue)}}},
                                 {"reversed", gradientMap.reversed}, {"interpolation", gradientMethodKey(gradientMap.method)}};
+    if (gradientMap.dither) j["gradientMapSettings"]["dither"] = true;
+    if (gradientMap.smoothness != 0) j["gradientMapSettings"]["smoothness"] = number(gradientMap.smoothness);
+    if (!gradientMap.stops.empty()) {
+        json stops = json::array();
+        const bool native = gradientMap.native.size() == gradientMap.stops.size() && gradientMap.nativeMode != ColorMode::RGB;
+        for (size_t i = 0; i < gradientMap.stops.size(); i++) {
+            const GradientColorStop& c = gradientMap.stops[i];
+            json stop = {{"location", number(c.location)}, {"midpoint", number(c.midpoint)}, {"red", number(c.rgb[0])}, {"green", number(c.rgb[1])}, {"blue", number(c.rgb[2])}};
+            if (native) stop["native"] = {number(gradientMap.native[i][0]), number(gradientMap.native[i][1]), number(gradientMap.native[i][2]), number(gradientMap.native[i][3])};
+            stops.push_back(stop);
+        }
+        j["gradientMapSettings"]["stops"] = stops;
+        if (native) j["gradientMapSettings"]["nativeMode"] = colorModeName(gradientMap.nativeMode);
+    }
     j["grainSettings"] = {{"amount", number(grain.amount)}, {"size", number(grain.size)}, {"roughness", number(grain.roughness)}, {"seed", grain.seed}};
     moreJson(*this, j);
     return j.dump();

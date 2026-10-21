@@ -13,7 +13,10 @@ enum class GradientShape { Linear, Radial };
 
 /// A colour stop of a multi-stop gradient: `location` 0..1 along it; `midpoint` 0..1 of the way from the previous stop
 /// to this one is where their blend is half done (Photoshop's diamond, which it stores on the run's end stop).
-struct GradientColorStop { float location = 0; float rgb[3] = {0, 0, 0}; float midpoint = 0.5f; };
+struct GradientColorStop {
+    float location = 0; float rgb[3] = {0, 0, 0}; float midpoint = 0.5f;
+    bool operator==(const GradientColorStop&) const = default;
+};
 struct GradientAlphaStop { float location = 0; float opacity = 1; float midpoint = 0.5f; };
 
 /// A gradient's colours (straight RGBA, 0..1). With no `colors`, a two-stop ramp from `start` to `end`; with them,

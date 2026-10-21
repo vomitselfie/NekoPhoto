@@ -20,10 +20,28 @@ linear already and are taken as stored. photocraft-corpus `exposure.psd` in rgb8
 `exposure_rgb` and `exposure_grayscale` are within a level or so of Photoshop (they were up to 34 levels off through the
 sRGB curve). Camera Raw's exposure is its own.
 
+**Levels** (`levl`) works on whole levels as Photoshop does (255 a unit at 8 bits, 32768 at 16): the input-range
+stretch, the midtone gamma and the output range are each rounded half up, and a gamma above 1, whose power curve would
+be infinitely steep at black, starts along a toe of slope 2^gamma that joins it (after PhotoCraft's `levels_q` and
+`levels_gamma`). psd-tools' levels_rgb, levels_grayscale and levels_cmyk and every photocraft-corpus `levels.psd` are
+within a level or so (psd-tools' were up to 20 levels off on 1 to 4% of pixels). At 32 bits it works on the linear
+values ([bit-depth.md](bit-depth.md)).
+
 **Curves** (`curv`) is drawn as Photoshop draws it: the natural cubic spline through the points (no bend at the end
 points), flat beyond the first and last point. Every `curves.psd` in photocraft-corpus (RGB, grayscale, CMYK and Lab, 8
 and 16 bits) renders within a level of Photoshop's merged image (max 0 at 8 bits); a monotone cubic, as before, was up
 to 4 levels off. Camera Raw's point curve is its own and keeps its monotone cubic.
+
+**Gradient Map** (`grdm`) reads every colour stop with its location and midpoint, the Method, Reverse and the
+Smoothness. The stops are stored in the document's colour space (a CMYK file's in CMYK, a Lab file's in Lab, a Grayscale
+file's as grey ink); a CMYK or Lab document maps to those values as the file holds them, so a CMYK stop keeps its own
+black. The map reads Photoshop's luminosity 0.30 R + 0.59 G + 0.11 B (the blend modes' Lum, not Rec. 709), L in Lab, and
+in CMYK the luminosity of the inks' plain complement (stored cyan times stored black, and so on) whatever the profile; a
+Classic map at Smoothness 100% eases each run towards the Catmull-Rom through its neighbours, kept between the run's own
+stops, as the layer styles' Classic gradients do. Every `gradient-map.psd` in photocraft-corpus (RGB, grayscale, CMYK
+and Lab at 8 and 16 bits) is within a level of Photoshop's merged image. The shadows and highlights colours edit the end
+stops; the stops between are kept as read. Dither is read and written back but not drawn (its pattern is not known; it
+moves a colour by under a level). A map made here is the plain two-stop blend.
 
 | Kind | Block | How it is drawn | Checked against Photoshop |
 |---|---|---|---|
@@ -33,8 +51,8 @@ to 4 levels off. Camera Raw's point curve is its own and keeps its monotone cubi
 | Threshold | `thrs` | Photoshop's integer luminance (30 R + 59 G + 11 B) / 100, white at or above the level | exact |
 | Color Balance | `blnc` | a Levels per channel, ((v - black) / (white - black))^gamma. Preserve Luminosity on: the shadows raise each channel's black point by how far its slider sits below the highest of the three (in levels), the highlights lower the white point by how far it sits above the lowest, the midtones give the gamma 2^-((v - (max + min) / 2) / 100). Off: each slider moves its own channel only (a negative shadow raises the black point, a positive highlight lowers the white point; the midtones bend the gamma by 2^(-v / 100), shadows and highlights by 2^(-v / 200)) | within a level on both files (mean 0.2 and 0.3) |
 | Black & White | `blwh` | upstream Compositor's decomposition (grey + secondary + primary, each weighted by its slider); the tint is the tint colour at the grey's lightness | not yet (no Photoshop file) |
-| Vibrance | `vibA` | Saturation scales every colour's distance from its luminance; Vibrance does so weighted towards muted colours | not yet |
-| Photo Filter | `phfl` | each channel multiplied by the filter's, mixed in by the density; Preserve Luminosity keeps the luminance. Version 3 files store the colour as XYZ in an undocumented scale (read as 16.16, else hundredths); NekoPhoto writes version 2 (RGB) | not yet |
+| Vibrance | `vibA` | PhotoCraft's black-box fit of Photoshop (`vibrance_px`): in linear light, Vibrance an HSV change keeping the hue (raised, a saturation boost that grows as saturation and value fall, damped on reds and skin), then Saturation moving each colour from the grey 0.288 R + 0.712 G by 1 + s | photocraft-corpus rgb8 and rgb16 vibrance.psd mean 8.8 -> 0.1, up to 5 levels on skin-like oranges (8.5% of pixels beyond 2), where the fit is approximate |
+| Photo Filter | `phfl` | Photoshop's lens (after PhotoCraft's `photo_filter_matrix`): the colour's D50 XYZ in linear light multiplied by the filter's, relative to white and mixed in by the density, encoded again; Preserve Luminosity puts back the luminosity 0.30 R + 0.59 G + 0.11 B as the Luminosity blend mode does. At 32 bits the linear samples go through the same map with the luminance Y kept in it, unclipped; in Lab, X, Y and Z are scaled and L kept. The colour is read from any colour record (Photoshop 27 saves it in Lab); version 3 files store XYZ in an undocumented scale (read as 16.16, else hundredths); NekoPhoto writes version 2 (RGB) | photocraft-corpus rgb16, lab8 and lab16 within a level; rgb8 mean 0.2 but up to 5 levels where the colour clips (2% of pixels; 8-bit Photoshop clips differently from 16-bit there, rule unknown); rgb32 mean 1.3, max 9 (its 32-bit map is a linear matrix, but not this one); CMYK mean 3.2, max 30 (the RGB kernel on the stored cyan, magenta and yellow: Photoshop keeps the black plate and the stored colour's luminosity, as this does, but moves the colour otherwise) |
 | Channel Mixer | `mixr` | each output a percent mix of the sources plus a constant; monochrome's grey row | not yet |
 | Color Lookup | `clrL` | the embedded .cube / .3dl, or the ICC profile through lcms2; trilinear (see below) | not yet |
 | Selective Color | `selc` | each colour's share of the nine ranges (hue ranges by their channel's lead, whites, neutrals, blacks) moves the cyan, magenta and yellow inks, black moving all three; relative scales by the ink there is | not yet |
@@ -65,7 +83,9 @@ back exactly. A range (Reds ... Magentas) is chosen by the colour's own hue thro
 collapses the chroma towards the brightest (positive) or darkest (negative) channel before the master, its saturation
 adds `weight * (table - 1)` to the master's factor and its hue adds `weight * degrees` in steps. Colorize keeps the
 lightness and rebuilds from measured per-percent saturation and per-degree hue tables. On bytes this is Photoshop's
-integer arithmetic; at 16 and 32 bits and in CMYK the same model runs unrounded on each colour. Without the Photoshop
+integer arithmetic; at 16 bits and in CMYK the same model runs unrounded on each colour (Colorize at the hue's own place
+on the wheel, not the byte table's steps); at 32 bits on the linear values, unlimited (bit-depth.md). Lab (which
+Photoshop offers) and CMYK Colorize go through sRGB and back, an approximation (color-modes.md). Without the Photoshop
 saturation curve (`"saturationCurve": "scale"`, the default for a layer made here) Saturation scales the half-chroma by
 1 + percent / 100 instead. Against Photoshop's flatten of Patchy's probes (`photoshop-hue-saturation-{master,bands}.bmp`;
 the merged image stored in those two PSDs is the probe before the settings were written into them, so

@@ -242,10 +242,11 @@ Canvas canvasOf(const ImageF& image) {
 
 namespace {
 
+/// Photoshop's 32-bit Levels on a linear value: unclipped, the gamma a power mirrored below the black point.
 double levelsAt(const LevelsRange& range, double x) {
     const LevelsRange n = range.normalized();
-    const double input = std::max(0.0, (x * 255 - n.black) / (n.white - n.black));
-    return (n.outputBlack + std::pow(input, 1 / n.gamma) * (n.outputWhite - n.outputBlack)) / 255;
+    const double t = (x * 255 - n.black) / (n.white - n.black);
+    return (n.outputBlack + std::copysign(std::pow(std::fabs(t), 1 / n.gamma), t) * (n.outputWhite - n.outputBlack)) / 255;
 }
 
 double curveAt(const CurvesSettings& curves, int channel, double x) {
@@ -265,6 +266,28 @@ void perChannel(Canvas& canvas, const Encoding& encoding, F&& f) {
     }
 }
 
+/// Per channel on the linear values as stored (32-bit Levels and Curves), kept at 0 and up.
+template <class F>
+void perLinearChannel(Canvas& canvas, F&& f) {
+    for (size_t i = 0; i < canvas.pixels.size(); i += 4) {
+        const double a = canvas.pixels[i + 3];
+        if (!(a > 0)) continue;
+        for (int c = 0; c < 3; c++) canvas.pixels[i + size_t(c)] = std::clamp(f(c, canvas.pixels[i + size_t(c)] / a), 0.0, 65504.0) * a;
+    }
+}
+
+/// Per colour on the linear values as stored (32-bit Color Balance, Channel Mixer, Black & White), kept at 0 and up.
+template <class F>
+void perLinearColour(Canvas& canvas, F&& f) {
+    for (size_t i = 0; i < canvas.pixels.size(); i += 4) {
+        const double a = canvas.pixels[i + 3];
+        if (!(a > 0)) continue;
+        double c[3] = {canvas.pixels[i] / a, canvas.pixels[i + 1] / a, canvas.pixels[i + 2] / a};
+        f(c[0], c[1], c[2]);
+        for (int k = 0; k < 3; k++) canvas.pixels[i + size_t(k)] = std::clamp(c[k], 0.0, 65504.0) * a;
+    }
+}
+
 /// The colour kinds' frame: brighter than white scaled down to it, encoded, f, cut to 0..1, back up.
 template <class F>
 void perColour(Canvas& canvas, const Encoding& encoding, F&& f) {
@@ -281,7 +304,6 @@ void perColour(Canvas& canvas, const Encoding& encoding, F&& f) {
     }
 }
 
-double luma601(double r, double g, double b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
 
 void blackWhite(double& r, double& g, double& b, const BlackWhiteSettings& s) {
     double w[6];
@@ -293,12 +315,13 @@ void blackWhite(double& r, double& g, double& b, const BlackWhiteSettings& s) {
     else { primary = 4; secondary = g >= r ? 3 : 5; }
     const double grey = std::clamp(mn + (md - mn) * w[secondary] + (mx - md) * w[primary], 0.0, 1.0);
     if (!s.tint) { r = g = b = grey; return; }
+    // The tint colour at the grey's luminosity (0.30, 0.59, 0.11), negatives pulled in (the 32-bit Color blend).
     const double tr = s.tintColor.red, tg = s.tintColor.green, tb = s.tintColor.blue;
-    const double shift = grey - luma601(tr, tg, tb);
+    auto lum = [](double x, double y, double z) { return 0.3 * x + 0.59 * y + 0.11 * z; };
+    const double shift = grey - lum(tr, tg, tb);
     r = tr + shift; g = tg + shift; b = tb + shift;
-    const double l = luma601(r, g, b), lo = std::min({r, g, b}), hi = std::max({r, g, b});
+    const double l = lum(r, g, b), lo = std::min({r, g, b});
     if (lo < 0 && l > lo) { const double k = l / (l - lo); r = l + (r - l) * k; g = l + (g - l) * k; b = l + (b - l) * k; }
-    if (hi > 1 && hi > l) { const double k = (1 - l) / (hi - l); r = l + (r - l) * k; g = l + (g - l) * k; b = l + (b - l) * k; }
 }
 
 void colorBalance(double& r, double& g, double& b, const ColorBalanceSettings& s) {
@@ -323,28 +346,36 @@ void colorBalance(double& r, double& g, double& b, const ColorBalanceSettings& s
 }
 
 void vibrance(double& r, double& g, double& b, const VibranceSettings& s) {
-    const double sat = std::clamp(s.saturation, -100.0, 100.0) / 100, vib = std::clamp(s.vibrance, -100.0, 100.0) / 100;
-    const double l = luma601(r, g, b), chroma = std::max({r, g, b}) - std::min({r, g, b});
-    const double k = (1 + sat) * (1 + vib * (vib > 0 ? (1 - chroma) : 1));
-    r = l + (r - l) * k; g = l + (g - l) * k; b = l + (b - l) * k;
-    const double hi = std::max({r, g, b}), lo = std::min({r, g, b});
-    double f = 1;
-    if (hi > 1 && hi > l) f = std::min(f, (1 - l) / (hi - l));
-    if (lo < 0 && lo < l) f = std::min(f, l / (l - lo));
-    if (f < 1) { r = l + (r - l) * f; g = l + (g - l) * f; b = l + (b - l) * f; }
-}
-
-void photoFilter(double& r, double& g, double& b, const PhotoFilterSettings& s) {
-    const double d = std::clamp(s.density, 0.0, 100.0) / 100;
-    const AdjustmentColor f = s.color.clamped();
-    const double before = luma601(r, g, b);
-    r = std::min(1.0, r * (1 - d) + r * f.red * 2 * d);
-    g = std::min(1.0, g * (1 - d) + g * f.green * 2 * d);
-    b = std::min(1.0, b * (1 - d) + b * f.blue * 2 * d);
-    if (s.preserveLuminosity) {
-        const double after = luma601(r, g, b);
-        if (after > 0.0001) { const double k = before / after; r *= k; g *= k; b *= k; }
+    // Photoshop's (PhotoCraft's fit): Vibrance then Saturation on the sRGB-linearised colour.
+    const double sat = std::clamp(s.saturation, -100.0, 100.0) / 100, v = std::clamp(s.vibrance, -100.0, 100.0) / 100;
+    auto decode = [](double x) { x = std::clamp(x, 0.0, 1.0); return x <= 0.04045 ? x / 12.92 : std::pow((x + 0.055) / 1.055, 2.4); };
+    auto encode = [](double x) { x = std::clamp(x, 0.0, 1.0); return x <= 0.0031308 ? x * 12.92 : 1.055 * std::pow(x, 1 / 2.4) - 0.055; };
+    double c[3] = {decode(r), decode(g), decode(b)};
+    const double mx = std::max({c[0], c[1], c[2]}), mn = std::min({c[0], c[1], c[2]});
+    if (v != 0 && mx > 0 && mx - mn > 1e-9) {
+        const double t = 1 - mn / mx, shape = t * (1 - t) * (2 - t + t * t) * mx * std::max(0.0, 1 - mx);
+        double t2, v2;
+        if (v < 0) {
+            t2 = t * (1 + v / 4) * (1 + v - v * t * (1 + t) / 2);
+            v2 = mx + v * shape;
+        } else {
+            const double d = mx - mn;
+            double h = mx == c[0] ? std::fmod((c[1] - c[2]) / d + 6, 6.0) : mx == c[1] ? (c[2] - c[0]) / d + 2 : (c[0] - c[1]) / d + 4;
+            h *= 60;
+            const double skin = h <= 30 ? 1 : h < 45 ? (45 - h) / 15 : h < 300 ? 0 : (h - 300) / 60;
+            const double a = v * (1 - skin) + 0.64 * std::pow(v, 1.6) * skin;
+            const double boost = (0.5001 * a + 0.0887 * a * a) * std::pow(t, 0.4374) * std::pow(1 - t, 0.7573) * std::exp((-0.8113 + 0.5154 * a + 2.8026 * (1 - t)) * std::max(0.0, 1 - mx));
+            t2 = std::min(1.0, t * (1 + boost));
+            v2 = mx + v / 4 * shape;
+        }
+        const double m2 = v2 * (1 - t2), k = (v2 - m2) / (mx - mn);
+        for (double& x : c) x = m2 + (x - mn) * k;
     }
+    if (sat != 0) {
+        const double grey = 0.288 * c[0] + 0.712 * c[1];
+        for (double& x : c) x = std::clamp(grey + (1 + sat) * (x - grey), 0.0, 1.0);
+    }
+    r = encode(c[0]); g = encode(c[1]); b = encode(c[2]);
 }
 
 void channelMixer(double& r, double& g, double& b, const ChannelMixerSettings& s) {
@@ -358,11 +389,17 @@ void channelMixer(double& r, double& g, double& b, const ChannelMixerSettings& s
     r = nr; g = ng; b = nb;
 }
 
-void hueSaturation(Canvas& canvas, const HueSaturationSettings& settings, const Encoding& encoding) {
+void hueSaturation(Canvas& canvas, const HueSaturationSettings& settings, const Encoding&) {
     if (settings.isIdentity()) return;
-    // The model itself, colour by colour (it is what the 16- and 32-bit kernels evaluate).
-    const auto adjust = settings.adjuster();
-    perColour(canvas, encoding, [&](double& r, double& g, double& b) { adjust(r, g, b); });
+    // The model's linear form colour by colour, on the straight linear values (Photoshop's 32-bit Hue/Saturation).
+    const auto adjust = settings.linearAdjuster();
+    for (size_t i = 0; i < canvas.pixels.size(); i += 4) {
+        const double a = canvas.pixels[i + 3];
+        if (!(a > 0)) continue;
+        double c[3] = {canvas.pixels[i] / a, canvas.pixels[i + 1] / a, canvas.pixels[i + 2] / a};
+        adjust(c[0], c[1], c[2]);
+        for (size_t k = 0; k < 3; k++) canvas.pixels[i + k] = std::clamp(c[k] * a, 0.0, 65504.0);   // cleanColour
+    }
 }
 
 inline uint32_t hash32(uint32_t x) {
@@ -383,11 +420,11 @@ bool adjust(Canvas& canvas, const AdjustmentSettings& settings, const Encoding& 
     switch (settings.kind) {
     case AdjustmentKind::Levels:
         if (settings.levels.isIdentity()) return true;
-        perChannel(canvas, encoding, [&](int c, double e) { return levelsAt(settings.levels.ranges[0], levelsAt(settings.levels.ranges[size_t(c + 1)], e)); });
+        perLinearChannel(canvas, [&](int c, double v) { return levelsAt(settings.levels.ranges[0], levelsAt(settings.levels.ranges[size_t(c + 1)], v)); });
         return true;
     case AdjustmentKind::Curves:
         if (!settings.curves.isValid() || settings.curves.isIdentity()) return true;
-        perChannel(canvas, encoding, [&](int c, double e) { return curveAt(settings.curves, 0, curveAt(settings.curves, c + 1, e * 255)) / 255; });
+        perLinearChannel(canvas, [&](int c, double v) { return curveAt(settings.curves, 0, curveAt(settings.curves, c + 1, v * 255)) / 255; });
         return true;
     case AdjustmentKind::Exposure: {
         const ExposureSettings s = settings.exposure.normalized();
@@ -400,25 +437,43 @@ bool adjust(Canvas& canvas, const AdjustmentSettings& settings, const Encoding& 
     }
     case AdjustmentKind::Invert: perChannel(canvas, encoding, [](int, double e) { return std::max(0.0, 1 - e); }); return true;
     case AdjustmentKind::GradientMap: {
-        const GradientMapSettings& g = settings.gradientMap;
-        const AdjustmentColor dark = (g.reversed ? g.highlights : g.shadows).clamped(), light = (g.reversed ? g.shadows : g.highlights).clamped();
-        const double from[3] = {dark.red, dark.green, dark.blue}, to[3] = {light.red, light.green, light.blue};
+        const GradientStops ramp = settings.gradientMap.ramp();
         for (size_t i = 0; i < canvas.pixels.size(); i += 4) {
             const double a = canvas.pixels[i + 3];
             if (!(a > 0)) continue;
             double e[3];
             for (int c = 0; c < 3; c++) e[c] = encode(encoding, canvas.pixels[i + size_t(c)] / a);
-            const double t = std::min(1.0, 0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2]);
-            for (int c = 0; c < 3; c++) canvas.pixels[i + size_t(c)] = decode(encoding, from[c] + (to[c] - from[c]) * t) * a;
+            const double t = std::clamp(GradientMapSettings::luminosity(e[0], e[1], e[2]), 0.0, 1.0);
+            float col[4];
+            ramp.sample(float(t), col);
+            for (int c = 0; c < 3; c++) canvas.pixels[i + size_t(c)] = decode(encoding, col[c]) * a;
         }
         return true;
     }
     case AdjustmentKind::HueSaturation: hueSaturation(canvas, settings.hsv, encoding); return true;
-    case AdjustmentKind::BlackWhite: perColour(canvas, encoding, [&](double& r, double& g, double& b) { blackWhite(r, g, b, settings.blackWhite); }); return true;
-    case AdjustmentKind::ColorBalance: perColour(canvas, encoding, [&](double& r, double& g, double& b) { colorBalance(r, g, b, settings.colorBalance); }); return true;
+    case AdjustmentKind::BlackWhite: perLinearColour(canvas, [&](double& r, double& g, double& b) { blackWhite(r, g, b, settings.blackWhite); }); return true;
+    case AdjustmentKind::ColorBalance: perLinearColour(canvas, [&](double& r, double& g, double& b) { colorBalance(r, g, b, settings.colorBalance); }); return true;
     case AdjustmentKind::Vibrance: perColour(canvas, encoding, [&](double& r, double& g, double& b) { vibrance(r, g, b, settings.vibrance); }); return true;
-    case AdjustmentKind::PhotoFilter: perColour(canvas, encoding, [&](double& r, double& g, double& b) { photoFilter(r, g, b, settings.photoFilter); }); return true;
-    case AdjustmentKind::ChannelMixer: perColour(canvas, encoding, [&](double& r, double& g, double& b) { channelMixer(r, g, b, settings.channelMixer); }); return true;
+    case AdjustmentKind::PhotoFilter: {
+        // Photoshop's 32-bit Photo Filter: the linear samples through the filter's matrix, unclipped.
+        const PhotoFilterMatrix m = photoFilterMatrix(settings.photoFilter, settings.photoFilter.preserveLuminosity);
+        for (size_t i = 0; i < canvas.pixels.size(); i += 4) {
+            if (!(canvas.pixels[i + 3] > 0)) continue;
+            const double c[3] = {canvas.pixels[i], canvas.pixels[i + 1], canvas.pixels[i + 2]};
+            for (size_t k = 0; k < 3; k++) canvas.pixels[i + k] = std::clamp(m[k][0] * c[0] + m[k][1] * c[1] + m[k][2] * c[2], 0.0, 65504.0);   // cleanColour
+        }
+        return true;
+    }
+    case AdjustmentKind::ChannelMixer: {
+        // Photoshop's 32-bit mixer: each source percentage cut to 1/1024 towards zero, the constant counting 255/512.
+        ChannelMixerSettings cut = settings.channelMixer;
+        for (auto& row : cut.rows) {
+            for (size_t k = 0; k < 3; k++) row[k] = std::trunc(std::clamp(row[k], -200.0, 200.0) / 100 * 1024) / 1024 * 100;
+            row[3] = std::clamp(row[3], -200.0, 200.0) * 255 / 512;
+        }
+        perLinearColour(canvas, [&](double& r, double& g, double& b) { channelMixer(r, g, b, cut); });
+        return true;
+    }
     default: return false;
     }
 }

@@ -6,17 +6,17 @@
 //   slot goes with lightness, as older files hold it) and a and b take their own. Brightness/Contrast on every ink in
 //   CMYK and on L in Lab; Invert and Posterize on every channel.
 // - Exposure (Lab): on L, through relative luminance, as the RGB kernel works on linear light.
-// - Threshold and Gradient Map: on the pixel's lightness (L in Lab, the CMYK colour's L* through the profile, read for
-//   deciding only), to the settings' colours converted through the profile once (Threshold's black is the profile's
-//   black, as the brush paints black).
+// - Threshold: on L in Lab; in CMYK on the Rec. 601 luma of the inks' plain complement, to paper or black ink alone.
 // - Hue/Saturation and Color Balance (CMYK): the RGB kernels' maths on the stored cyan, magenta and yellow (the
 //   complements of the inks) as red, green and blue; black is kept.
-// - Photo Filter: the filter colour in the document's mode, laid over each ink (CMYK) as the RGB kernel lays it over
-//   each channel, or moved onto a and b (Lab); Preserve Luminosity keeps the lightness.
+// - Photo Filter: Lab scales the colour's X, Y and Z by the filter's (Preserve Luminosity keeps L), as Photoshop does;
+//   CMYK runs the RGB kernel on the stored cyan, magenta and yellow, black kept (an approximation).
+// - Gradient Map: the stops in the document's own values, read on L (Lab) or the inks' plain luminosity (CMYK).
 // - Channel Mixer (CMYK): four ink rows over the four inks and a constant (ChannelMixerSettings::inks).
 // - Selective Color (CMYK, its home): each colour range's cyan, magenta, yellow and black move those inks, black on
 //   the black plate.
-// These are the published formulas adapted to each mode; none is checked against Photoshop's own output yet.
+// Gradient Map and Lab's Photo Filter are checked against photocraft-corpus; the others are the published formulas adapted
+// to each mode.
 #include "nekophoto/colormgmt.h"
 #include "nekophoto/colormodes.h"
 #include "nekophoto/depth.h"
@@ -141,6 +141,54 @@ bool nativeColour(double r, double g, double b, ColorMode mode, const ColorProfi
 template <SampleType S> double labValue(double stored) { return (stored * double(SampleTraits<S>::one) - labOffset<S>()) / labScale<S>(); }
 template <SampleType S> double labStored(double value) { return (value * labScale<S>() + labOffset<S>()) / double(SampleTraits<S>::one); }
 
+/// Each pixel's colour as straight sRGB (0..1) through `f`, converted from the document's mode through the profile and
+/// back, a row at a time; transparent pixels are left alone. False when the profile cannot be used.
+template <SampleType S, ColorMode M, class Img, class F>
+bool eachViaRgb(Img& image, const ColorProfile& profile, F&& f) {
+    using T = SampleOf<S>;
+    constexpr int N = colorModeChannels(M), C = N - 1;
+    constexpr bool cmyk = M == ColorMode::CMYK;
+    const PixelFormat native = cmyk ? PixelFormat::CMYKFloat : PixelFormat::LabFloat;
+    const ColorTransformPtr in = transformBetween(profile, ColorProfile(), ConvertOptions(), native, PixelFormat::RGBFloat);
+    const ColorTransformPtr out = transformBetween(ColorProfile(), profile, ConvertOptions(), PixelFormat::RGBFloat, native);
+    if (!in || !out) return false;
+    parallelRows(0, image.height(), [&](int ya, int yb) {
+        const size_t w = size_t(image.width());
+        constexpr size_t stride = cmyk ? 4 : 3;   // CMYKFloat holds four floats, LabFloat three
+        std::vector<float> values(w * stride), rgb(w * 3);
+        for (int y = ya; y < yb; y++) {
+            T* row = image.row(y);
+            for (size_t x = 0; x < w; x++) {
+                const T* q = row + x * size_t(N);
+                const double a = q[C];
+                float* v = values.data() + x * stride;
+                double st[4] = {0, 0, 0, 0};
+                for (int k = 0; k < C; k++) st[k] = a > 0 ? std::min(1.0, q[k] / a) : (cmyk ? 1.0 : 0.0);
+                if (cmyk) for (int k = 0; k < 4; k++) v[k] = float(100 * (1 - st[k]));
+                else { v[0] = float(st[0] * 100); v[1] = float(labValue<S>(st[1])); v[2] = float(labValue<S>(st[2])); }
+            }
+            in->apply(values.data(), rgb.data(), w);
+            for (size_t x = 0; x < w; x++) {
+                double c[3] = {rgb[x * 3], rgb[x * 3 + 1], rgb[x * 3 + 2]};
+                f(c[0], c[1], c[2]);
+                for (int k = 0; k < 3; k++) rgb[x * 3 + size_t(k)] = float(std::clamp(c[k], 0.0, 1.0));
+            }
+            out->apply(rgb.data(), values.data(), w);
+            for (size_t x = 0; x < w; x++) {
+                T* q = row + x * size_t(N);
+                const double a = q[C];
+                if (!(a > 0)) continue;
+                const float* v = values.data() + x * stride;
+                double st[4];
+                if (cmyk) for (int k = 0; k < 4; k++) st[k] = 1 - std::clamp(double(v[k]) / 100, 0.0, 1.0);
+                else { st[0] = std::clamp(double(v[0]) / 100, 0.0, 1.0); st[1] = std::clamp(labStored<S>(v[1]), 0.0, 1.0); st[2] = std::clamp(labStored<S>(v[2]), 0.0, 1.0); }
+                for (int k = 0; k < C; k++) q[k] = T(std::clamp(std::lround(st[k] * a), 0L, long(a)));
+            }
+        }
+    });
+    return true;
+}
+
 // CIE L* and relative luminance.
 double luminanceOf(double l) {
     const double fy = (l + 16) / 116, e = 6.0 / 29;
@@ -152,7 +200,86 @@ double lightnessOf(double y) {
     return 116 * f - 16;
 }
 
-double luma(double r, double g, double b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
+
+/// A Gradient Map stop in the document's own straight samples (0..1, as stored).
+struct NativeStop { double location, midpoint; double v[4]; };
+
+/// The map's stops in the mode's samples, Reverse applied: each the file's own CMYK or Lab colour while the stop keeps
+/// the sRGB colour read with it, else its sRGB colour converted through the profile. A Perceptual or Linear map is its
+/// method's ramp sampled at 257 even stops first. Empty when the profile cannot be used.
+template <SampleType S>
+std::vector<NativeStop> nativeStops(const GradientMapSettings& g, ColorMode mode, const ColorProfile& profile) {
+    std::vector<NativeStop> out;
+    const double one = double(SampleTraits<S>::one);
+    if (g.method == GradientMethod::Classic && g.stops.size() >= 2) {
+        const GradientStops ramp = [&] { GradientMapSettings plain = g; plain.reversed = false; plain.smoothness = 0; return plain.ramp(); }();
+        std::vector<size_t> order(g.stops.size());
+        for (size_t i = 0; i < order.size(); i++) order[i] = i;
+        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return g.stops[a].location < g.stops[b].location; });
+        const bool native = g.nativeMode == mode && g.native.size() == g.stops.size();
+        for (size_t j = 0; j < order.size(); j++) {
+            const GradientColorStop& read = g.stops[order[j]];
+            const GradientColorStop& now = ramp.colors[j];
+            NativeStop stop{double(now.location), double(now.midpoint), {0, 0, 0, 0}};
+            const bool kept = native && read.rgb[0] == now.rgb[0] && read.rgb[1] == now.rgb[1] && read.rgb[2] == now.rgb[2];
+            if (kept) {
+                const std::array<double, 4>& n = g.native[order[j]];
+                if (mode == ColorMode::CMYK) for (int k = 0; k < 4; k++) stop.v[k] = 1 - std::clamp(n[size_t(k)], 0.0, 1.0);
+                else {
+                    stop.v[0] = std::clamp(n[0] / 100, 0.0, 1.0);
+                    for (int k = 1; k < 3; k++) stop.v[k] = std::clamp((n[size_t(k)] * labScale<S>() + labOffset<S>()) / one, 0.0, 1.0);
+                }
+            } else if (!nativeColour<S>(now.rgb[0], now.rgb[1], now.rgb[2], mode, profile, stop.v)) return {};
+            out.push_back(stop);
+        }
+    } else {
+        // Two ends, or a Perceptual or Linear ramp sampled at 257 even stops.
+        const GradientStops ramp = [&] { GradientMapSettings plain = g; plain.reversed = false; if (g.method == GradientMethod::Classic) plain.smoothness = 0; return plain.ramp(); }();
+        const int steps = g.method == GradientMethod::Classic ? 1 : 256;
+        for (int j = 0; j <= steps; j++) {
+            float c[4];
+            ramp.sample(float(j) / steps, c);
+            NativeStop stop{double(j) / steps, 0.5, {0, 0, 0, 0}};
+            if (!nativeColour<S>(c[0], c[1], c[2], mode, profile, stop.v)) return {};
+            out.push_back(stop);
+        }
+    }
+    if (g.reversed) {
+        // Mirrored end for end: a stop's midpoint belongs to the run ending at it (GradientStops::reverse).
+        std::reverse(out.begin(), out.end());
+        for (auto& stop : out) stop.location = 1 - stop.location;
+        for (size_t j = out.size(); j-- > 1;) out[j].midpoint = 1 - out[j - 1].midpoint;
+        if (!out.empty()) out.front().midpoint = 0.5;
+    }
+    return out;
+}
+
+/// The stops' samples at `t` (0..1): each run blended after its midpoint, the ends held beyond the outer stops. With
+/// `smoothness` (a Classic map's), the blend eases towards the Catmull-Rom through the neighbours, kept between the run's
+/// two stops (GradientMapSettings::ramp).
+void sampleNative(const std::vector<NativeStop>& stops, double t, double smoothness, double out[4]) {
+    size_t i = 1;
+    while (i < stops.size() && t > stops[i].location) i++;
+    if (t <= stops.front().location || i >= stops.size()) {
+        const NativeStop& end = t <= stops.front().location ? stops.front() : stops.back();
+        for (int k = 0; k < 4; k++) out[k] = end.v[k];
+        return;
+    }
+    const NativeStop &l = stops[i - 1], &r = stops[i];
+    const NativeStop& p = i > 1 ? stops[i - 2] : l;
+    const NativeStop& n = i + 1 < stops.size() ? stops[i + 1] : r;
+    const double span = r.location - l.location;
+    double u = span > 1e-9 ? (t - l.location) / span : 1;
+    const double m = std::clamp(r.midpoint, 0.001, 0.999);
+    if (std::fabs(m - 0.5) > 1e-6) u = u <= m ? 0.5 * u / m : 0.5 + 0.5 * (u - m) / (1 - m);
+    const double u2 = u * u, u3 = u2 * u;
+    for (int k = 0; k < 4; k++) {
+        const double lin = l.v[k] + (r.v[k] - l.v[k]) * u;
+        if (smoothness <= 0) { out[k] = lin; continue; }
+        const double cr = 0.5 * ((2 * l.v[k]) + (-p.v[k] + r.v[k]) * u + (2 * p.v[k] - 5 * l.v[k] + 4 * r.v[k] - n.v[k]) * u2 + (-p.v[k] + 3 * l.v[k] - 3 * r.v[k] + n.v[k]) * u3);
+        out[k] = lin + (std::clamp(cr, std::min(l.v[k], r.v[k]), std::max(l.v[k], r.v[k])) - lin) * smoothness;
+    }
+}
 
 template <SampleType S, ColorMode M, class Img>
 bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& profile) {
@@ -174,17 +301,14 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
     std::array<Table, 4> tables;
     std::array<const Table*, 4> use{nullptr, nullptr, nullptr, nullptr};
     auto useTable = [&](int k, const Table& t) { tables[size_t(k)] = t; if (!isIdentity(t)) use[size_t(k)] = &tables[size_t(k)]; };
-    ColorTransformPtr lightness;
-    if (cmyk && (s.kind == AdjustmentKind::Threshold || s.kind == AdjustmentKind::GradientMap)) {
-        lightness = transformBetween(profile, ColorProfile(), ConvertOptions(), PixelFormat::CMYKFloat, PixelFormat::LabFloat);
-        if (!lightness) return false;
-    }
     switch (s.kind) {
     case AdjustmentKind::Levels:
         for (int k = 0; k < C; k++) {
-            if (cmyk) useTable(k, tableOf([&](int i) { return s.levels.apply(i / 255.0, k + 1); }));
-            else if (k == 0) useTable(k, tableOf([&](int i) { return s.levels.apply(i / 255.0, 1); }));
-            else useTable(k, tableOf([&](int i) { return s.levels.ranges[size_t(k) + 1].apply(i / 255.0); }));
+            // Whole levels at 8 bits; the 16-bit lookup reads between the table's entries, so its curve is unrounded.
+            constexpr double q = S == SampleType::U8 ? 255 : 0;
+            if (cmyk) useTable(k, tableOf([&](int i) { return s.levels.apply(i / 255.0, k + 1, q); }));
+            else if (k == 0) useTable(k, tableOf([&](int i) { return s.levels.apply(i / 255.0, 1, q); }));
+            else useTable(k, tableOf([&](int i) { return s.levels.ranges[size_t(k) + 1].apply(i / 255.0, q); }));
         }
         break;
     case AdjustmentKind::Curves:
@@ -201,6 +325,11 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
     }
     case AdjustmentKind::Invert: for (int k = 0; k < C; k++) useTable(k, invertTransfer()[0]); break;
     case AdjustmentKind::Posterize: {
+        if constexpr (S == SampleType::U16) {
+            // Each stored sample, binned on its 16-bit value as Photoshop's 16-bit Posterize does (posterizeAt16).
+            eachStraight<S>(image, N, nullptr, [&](double* v, double) { for (int k = 0; k < C; k++) v[k] = posterizeAt16(s.posterize, v[k]); });
+            return true;
+        }
         const Table t = posterizeTransfer(s.posterize)[0];
         for (int k = 0; k < C; k++) useTable(k, t);
         break;
@@ -216,80 +345,69 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
         break;
     }
     case AdjustmentKind::Threshold: {
-        // Photoshop's level on the lightness; black the profile's black (CMYK) or L 0 (Lab), white no ink or L 100.
-        double black[4] = {0, 0, 0, 0}, white[4] = {1, 1, 1, 1};
-        if (cmyk) { if (!nativeColour<S>(0, 0, 0, M, profile, black)) return false; }
-        else { black[1] = black[2] = white[1] = white[2] = labStored<S>(0); }
-        const double level = std::clamp(s.threshold.level, 1, 255) - 0.005;
-        eachStraight<S>(image, N, lightness.get(), [&](double* v, double l) {
-            const double* to = l * 2.55 >= level ? white : black;
+        // Lab: on L, black L 0 and white L 100, a and b neutral. CMYK: Photoshop compares the Rec. 601 luma of the inks'
+        // plain complement (stored cyan times stored black, and so on), whatever the profile, rounded to a level, and
+        // makes paper or 100% black ink alone (PhotoCraft's ink_luma, crates/compose/src/adjust.rs at 04d0212, MIT OR
+        // Apache-2.0, used under MIT; photocraft-corpus cmyk8 and cmyk16 threshold-128.psd).
+        double black[4] = {1, 1, 1, 0}, white[4] = {1, 1, 1, 1};
+        if (!cmyk) { black[0] = 0; black[1] = black[2] = white[1] = white[2] = labStored<S>(0); }
+        const int level = std::clamp(s.threshold.level, 1, 255);
+        eachStraight<S>(image, N, nullptr, [&](double* v, double l) {
+            const double luma = cmyk ? (0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]) * v[3] : l / 100;
+            const double* to = std::lround(luma * 255) >= level ? white : black;
             for (int k = 0; k < C; k++) v[k] = to[k];
         });
         return true;
     }
     case AdjustmentKind::GradientMap: {
         const GradientMapSettings& g = s.gradientMap;
-        const AdjustmentColor dark = (g.reversed ? g.highlights : g.shadows).clamped(), light = (g.reversed ? g.shadows : g.highlights).clamped();
-        double from[4], to[4];
-        if (!nativeColour<S>(dark.red, dark.green, dark.blue, M, profile, from) || !nativeColour<S>(light.red, light.green, light.blue, M, profile, to)) return false;
-        if (g.method != GradientMethod::Classic) {
-            // Perceptual and Linear: the method's ramp at 257 even steps in the mode's own values, blended between them.
-            constexpr int steps = 256;
-            const GradientStops ramp = g.ramp();
-            std::vector<std::array<double, 4>> native(steps + 1);
-            for (int j = 0; j <= steps; j++) {
-                float c[4];
-                ramp.sample(float(j) / steps, c);
-                if (!nativeColour<S>(c[0], c[1], c[2], M, profile, native[size_t(j)].data())) return false;
-            }
-            eachStraight<S>(image, N, lightness.get(), [&](double* v, double l) {
-                const double at = std::clamp(l / 100, 0.0, 1.0) * steps;
-                const int j = std::min(steps - 1, int(at));
-                const double f = at - j;
-                for (int k = 0; k < C; k++) v[k] = native[size_t(j)][size_t(k)] + (native[size_t(j + 1)][size_t(k)] - native[size_t(j)][size_t(k)]) * f;
-            });
-            return true;
-        }
-        eachStraight<S>(image, N, lightness.get(), [&](double* v, double l) {
-            const double t = std::clamp(l / 100, 0.0, 1.0);
-            for (int k = 0; k < C; k++) v[k] = from[k] + (to[k] - from[k]) * t;
+        const std::vector<NativeStop> stops = nativeStops<S>(g, M, profile);
+        if (stops.empty()) return false;
+        const double smooth = g.method == GradientMethod::Classic ? std::clamp(g.smoothness, 0.0, 1.0) : 0.0;
+        eachStraight<S>(image, N, nullptr, [&](double* v, double l) {
+            // Lab: L. CMYK: the luminosity of the inks' plain complement (stored cyan times stored black, and so on),
+            // whatever the profile (photocraft-corpus cmyk8 and cmyk16 gradient-map.psd: within a level).
+            const double t = cmyk ? GradientMapSettings::luminosity(v[0] * v[3], v[1] * v[3], v[2] * v[3]) : l / 100;
+            double out[4];
+            sampleNative(stops, std::clamp(t, 0.0, 1.0), smooth, out);
+            for (int k = 0; k < C; k++) v[k] = out[k];
         });
         return true;
     }
     case AdjustmentKind::HueSaturation: {
-        if constexpr (!cmyk) return false;
         if (s.hsv.isIdentity()) return true;
         const auto adjust = s.hsv.adjuster();
-        eachStraight<S>(image, N, nullptr, [&](double* v, double) { adjust(v[0], v[1], v[2]); });
-        return true;
+        // CMYK: on the stored cyan, magenta and yellow as red, green and blue, black kept; Colorize, which Photoshop
+        // separates again (black and all), and Lab go through RGB and back.
+        if (cmyk && !s.hsv.colorize) {
+            eachStraight<S>(image, N, nullptr, [&](double* v, double) { adjust(v[0], v[1], v[2]); });
+            return true;
+        }
+        return eachViaRgb<S, M>(image, profile, adjust);
     }
     case AdjustmentKind::ColorBalance:
         if constexpr (cmyk) { applyColorBalanceStoredCmy(image, s.colorBalance); return true; }
         else return false;
     case AdjustmentKind::PhotoFilter: {
         const PhotoFilterSettings& f = s.photoFilter;
-        const double d = std::clamp(f.density, 0.0, 100.0) / 100;
-        const AdjustmentColor colour = f.color.clamped();
-        double filter[4];
-        if (!nativeColour<S>(colour.red, colour.green, colour.blue, M, profile, filter)) return false;
         if constexpr (cmyk) {
-            // Each stored ink multiplied by the filter's, mixed in by the density (the RGB kernel's lens on each channel).
-            eachStraight<S>(image, N, nullptr, [&](double* v, double) {
-                const double before = luma(v[0], v[1], v[2]) * v[3];
-                for (int k = 0; k < 4; k++) v[k] = std::min(1.0, v[k] * (1 - d) + v[k] * filter[k] * 2 * d);
-                if (f.preserveLuminosity) {
-                    const double after = luma(v[0], v[1], v[2]) * v[3];
-                    if (after > 0.0001) for (int k = 0; k < 3; k++) v[k] = std::min(1.0, v[k] * before / after);
-                }
-            });
+            // The RGB kernel on the stored cyan, magenta and yellow, black kept (as Photoshop keeps it).
+            applyPhotoFilterStoredCmy(image, f);
         } else {
-            // The filter's a and b added in by the density; L multiplied as the RGB kernel multiplies (the filter's
-            // lightness against mid-grey) unless Preserve Luminosity keeps it.
-            const double fl = filter[0], fa = labValue<S>(filter[1]), fb = labValue<S>(filter[2]);
+            // Lab: the colour's D50 XYZ multiplied by the filter's, relative to white and mixed in by the density (the
+            // diagonal of photoFilterMatrix); Preserve Luminosity keeps L. photocraft-corpus lab8 and lab16
+            // photo-filter.psd: a and b within a quarter of a unit.
+            const std::array<double, 3> scale = photoFilterScale(f);
             eachStraight<S>(image, N, nullptr, [&](double* v, double) {
-                if (!f.preserveLuminosity) v[0] = std::min(1.0, v[0] * (1 - d) + v[0] * fl * 2 * d);
-                v[1] = labStored<S>(labValue<S>(v[1]) + fa * d);
-                v[2] = labStored<S>(labValue<S>(v[2]) + fb * d);
+                const double L = v[0] * 100, A = labValue<S>(v[1]), B = labValue<S>(v[2]);
+                const double fy = (L + 16) / 116, fx = fy + A / 500, fz = fy - B / 200;
+                auto inverse = [](double t) { return t > 6.0 / 29 ? t * t * t : 3 * (6.0 / 29) * (6.0 / 29) * (t - 4.0 / 29); };
+                double xyz[3] = {inverse(fx) * scale[0], inverse(fy) * scale[1], inverse(fz) * scale[2]};
+                auto forward = [](double t) { return t > 216.0 / 24389 ? std::cbrt(t) : t * 24389.0 / 3132 + 4.0 / 29; };
+                const double gx = forward(xyz[0]), gy = forward(xyz[1]), gz = forward(xyz[2]);
+                if (!f.preserveLuminosity) v[0] = std::clamp((116 * gy - 16) / 100, 0.0, 1.0);
+                v[1] = std::clamp(labStored<S>(500 * (gx - gy)), 0.0, 1.0);
+                v[2] = std::clamp(labStored<S>(200 * (gy - gz)), 0.0, 1.0);
             });
         }
         return true;

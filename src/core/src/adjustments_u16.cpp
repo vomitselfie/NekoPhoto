@@ -76,13 +76,6 @@ void applyFunction(Image16& image, F&& f) {
 
 double exposureAt(const ExposureSettings& settings, double encoded) { return settings.at(encoded); }
 
-double posterizeAt(const PosterizeSettings& settings, double x) {
-    // Photoshop's buckets are slices of the 256 levels (posterizeTransfer): the bucket is chosen on the input rounded
-    // to a level, so an 8-bit image converted to 16 bits posterizes exactly as it did; the output steps are exact.
-    const int n = std::clamp(settings.levels, 2, 255);
-    const long v = std::lround(std::clamp(x, 0.0, 1.0) * 255);
-    return double(v * n / 256) / (n - 1);
-}
 
 // ---- Hue/Saturation: Photoshop's model on each exact straight colour (no rounding to bytes) ---------------------
 
@@ -107,25 +100,17 @@ void applyHueSaturation16(Image16& image, const HueSaturationSettings& settings)
 // ---- Gradient Map: the colour at the exact luma, not a 256-step table -------------------------------------------
 
 void applyGradientMap16(Image16& image, const GradientMapSettings& settings) {
-    const AdjustmentColor dark = (settings.reversed ? settings.highlights : settings.shadows).clamped();
-    const AdjustmentColor light = (settings.reversed ? settings.shadows : settings.highlights).clamped();
-    const double from[3] = {dark.red, dark.green, dark.blue}, span[3] = {light.red - dark.red, light.green - dark.green, light.blue - dark.blue};
-    // Perceptual and Linear: the method's ramp, sampled at the exact luma.
-    const std::optional<GradientStops> ramp = settings.method == GradientMethod::Classic ? std::nullopt : std::optional<GradientStops>(settings.ramp());
+    const GradientStops ramp = settings.ramp();
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             uint16_t* p = image.row(y);
             for (int x = 0; x < image.width(); x++, p += 4) {
                 const uint32_t a = p[3];
                 if (!a) continue;
-                const double t = std::min(1.0, (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]) / a);
-                if (ramp) {
-                    float col[4];
-                    ramp->sample(float(t), col);
-                    for (int c = 0; c < 3; c++) p[c] = uint16_t(std::min<long>(long(a), std::lround(std::clamp(double(col[c]), 0.0, 1.0) * a)));
-                    continue;
-                }
-                for (int c = 0; c < 3; c++) p[c] = uint16_t(std::min<long>(long(a), std::lround((from[c] + span[c] * t) * a)));
+                const double t = std::min(1.0, GradientMapSettings::luminosity(p[0], p[1], p[2]) / a);
+                float col[4];
+                ramp.sample(float(t), col);
+                for (int c = 0; c < 3; c++) p[c] = uint16_t(std::min<long>(long(a), std::lround(std::clamp(double(col[c]), 0.0, 1.0) * a)));
             }
         }
     });
@@ -206,7 +191,7 @@ bool applyAdjustment(const AdjustmentSettings& settings, Image16& image, const R
     switch (settings.kind) {
     case AdjustmentKind::HueSaturation: applyHueSaturation16(image, settings.hsv); return true;
     case AdjustmentKind::Levels:
-        if (!settings.levels.isIdentity()) applyFunction(image, [&](int c, double x) { return settings.levels.apply(x, c + 1); });
+        if (!settings.levels.isIdentity()) applyFunction(image, [&](int c, double x) { return settings.levels.apply(x, c + 1, double(one16)); });
         return true;
     case AdjustmentKind::Curves:
         if (settings.curves.isValid() && !settings.curves.isIdentity())
@@ -225,7 +210,7 @@ bool applyAdjustment(const AdjustmentSettings& settings, Image16& image, const R
     case AdjustmentKind::BrightnessContrast:
         applyFunction(image, [&](int, double x) { return brightnessContrastAt(settings.brightnessContrast, x); });
         return true;
-    case AdjustmentKind::Posterize: applyFunction(image, [&](int, double x) { return posterizeAt(settings.posterize, x); }); return true;
+    case AdjustmentKind::Posterize: applyFunction(image, [&](int, double x) { return posterizeAt16(settings.posterize, x); }); return true;
     case AdjustmentKind::Threshold: applyThreshold(image, settings.threshold); return true;
     case AdjustmentKind::BlackWhite: applyBlackWhite(image, settings.blackWhite); return true;
     case AdjustmentKind::ColorBalance: applyColorBalance(image, settings.colorBalance); return true;

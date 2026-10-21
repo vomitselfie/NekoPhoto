@@ -94,8 +94,11 @@ bool adjustmentOfferedInMode(AdjustmentKind kind, ColorMode mode) {
     case AdjustmentKind::Invert: case AdjustmentKind::Posterize: case AdjustmentKind::Threshold:
     case AdjustmentKind::GradientMap: case AdjustmentKind::PhotoFilter: case AdjustmentKind::ColorLookup:
         return true;
-    // Channel Mixer mixes RGB or CMYK channels; Photoshop greys it in Lab.
-    case AdjustmentKind::HueSaturation: case AdjustmentKind::ColorBalance: case AdjustmentKind::SelectiveColor:
+    // Hue/Saturation in Lab too (photocraft-corpus has Photoshop 27's lab8 and lab16 files). Channel Mixer mixes RGB or
+    // CMYK channels; Photoshop greys it, Color Balance and Selective Color in Lab.
+    case AdjustmentKind::HueSaturation:
+        return true;
+    case AdjustmentKind::ColorBalance: case AdjustmentKind::SelectiveColor:
     case AdjustmentKind::ChannelMixer:
         return mode == ColorMode::CMYK;
     case AdjustmentKind::Exposure:
@@ -215,7 +218,7 @@ bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& t
             AdjustmentSettings settings;
             if (AdjustmentSettings::parse(layer.adjustment->json, settings)) {
                 if (settings.kind == AdjustmentKind::PhotoFilter) colours(settings.photoFilter.color);
-                if (settings.kind == AdjustmentKind::GradientMap) { colours(settings.gradientMap.shadows); colours(settings.gradientMap.highlights); }
+                if (settings.kind == AdjustmentKind::GradientMap) settings.gradientMap.convertColours(colours);
                 for (size_t c = 1; c < settings.levels.ranges.size(); c++) settings.levels.ranges[c] = LevelsRange();
                 for (size_t c = 1; c < settings.curves.channels.size(); c++) settings.curves.channels[c] = {{0, 0}, {255, 255}};
                 settings.levels.channel = 0;

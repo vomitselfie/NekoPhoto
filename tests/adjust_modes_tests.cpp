@@ -193,16 +193,15 @@ TEST_CASE(cmyk_selective_color) {
 
 template <SampleType S>
 void thresholdAndGradientMap() {
-    // Threshold: a dark pixel becomes the profile's black (the brush's black, all four inks), a light one no ink.
-    const AnyImage before = cmykImage<S>(2, 1, [](int x, int) { return x == 0 ? Inks{70, 60, 60, 60} : Inks{5, 5, 5, 0}; });
+    // Threshold: a dark pixel becomes 100% black ink alone, a light one no ink, as Photoshop's CMYK Threshold makes them
+    // (photocraft-corpus cmyk8 and cmyk16 threshold-128.psd). The split is on the inks' plain complement: 30% of each
+    // ink and 50% black reads (0.7 * 0.5) * 255, level 89, under 128.
+    const AnyImage before = cmykImage<S>(3, 1, [](int x, int) { return x == 0 ? Inks{70, 60, 60, 60} : x == 1 ? Inks{5, 5, 5, 0} : Inks{30, 30, 30, 50}; });
     const AnyImage after = adjustedInMode(settingsOf(AdjustmentKind::Threshold), before, ColorMode::CMYK, cmykProfile());
     REQUIRE(after);
-    const ColorTransformPtr t = transformBetween(ColorProfile(), cmykProfile(), ConvertOptions(), PixelFormat::RGBFloat, PixelFormat::CMYKFloat);
-    const float black[3] = {0, 0, 0};
-    float inks[4] = {};
-    t->apply(black, inks, 1);
-    for (int k = 0; k < 4; k++) CHECK_NEAR(ink(after, 0, 0, k), inks[k], 0.5);
+    for (int k = 0; k < 4; k++) CHECK_NEAR(ink(after, 0, 0, k), k == 3 ? 100 : 0, 0.5);
     for (int k = 0; k < 4; k++) CHECK_NEAR(ink(after, 1, 0, k), 0, 1e-9);
+    for (int k = 0; k < 4; k++) CHECK_NEAR(ink(after, 2, 0, k), k == 3 ? 100 : 0, 0.5);
     // Gradient Map black to white in Lab: lightness kept, colour gone.
     const AnyImage lab = labImage<S>(3, 1, [](int x, int) { return std::array<double, 3>{20.0 + 30 * x, 40, -30}; });
     AdjustmentSettings g = settingsOf(AdjustmentKind::GradientMap);
@@ -256,14 +255,16 @@ void colourKinds() {
     const AnyImage warm = adjustedInMode(settingsOf(AdjustmentKind::PhotoFilter), lab, ColorMode::Lab, ColorProfile());
     REQUIRE(warm);
     CHECK_EQ(stored(warm, 0, 0, 0), stored(lab, 0, 0, 0));
-    CHECK(labAt(warm, 0, 0, 2) > 5);
+    CHECK(labAt(warm, 0, 0, 2) > 3);   // Photoshop's XYZ filter at density 25: b +3.6 and a +2.9 on mid grey
+    CHECK(labAt(warm, 0, 0, 1) > 2);
     AdjustmentSettings e = settingsOf(AdjustmentKind::Exposure);
     e.exposure.exposure = 1;
     const AnyImage bright = adjustedInMode(e, lab, ColorMode::Lab, ColorProfile());
     REQUIRE(bright);
     CHECK(labAt(bright, 0, 0, 0) > 60);
     CHECK_EQ(stored(bright, 0, 0, 1), stored(lab, 0, 0, 1));
-    CHECK(!adjustedInMode(settingsOf(AdjustmentKind::HueSaturation), lab, ColorMode::Lab, ColorProfile()));
+    // Hue/Saturation is offered in Lab (Photoshop 27's corpus files have it): drawn through RGB and back.
+    CHECK(bool(adjustedInMode(settingsOf(AdjustmentKind::HueSaturation), lab, ColorMode::Lab, ColorProfile())));
     CHECK(!adjustedInMode(settingsOf(AdjustmentKind::ChannelMixer), lab, ColorMode::Lab, ColorProfile()));
 }
 

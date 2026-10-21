@@ -29,8 +29,9 @@ struct LevelsRange {
     double black = 0, gamma = 1, white = 255, outputBlack = 0, outputWhite = 255;
     bool operator==(const LevelsRange&) const = default;
     LevelsRange normalized() const;
-    /// Output (0..1) for an input (0..1).
-    double apply(double value) const;
+    /// Output (0..1) for an input (0..1), on whole levels of `quantum` steps a unit as Photoshop works (255 at 8 bits,
+    /// 32768 at 16; 0 unrounded).
+    double apply(double value, double quantum = 0) const;
 };
 
 struct LevelsSettings {
@@ -39,7 +40,7 @@ struct LevelsSettings {
     bool operator==(const LevelsSettings&) const = default;
     bool isIdentity() const;
     /// The channel's own range followed by the composite RGB range.
-    double apply(double value, int channel) const { return ranges[0].apply(ranges[size_t(channel)].apply(value)); }
+    double apply(double value, int channel, double quantum = 0) const { return ranges[0].apply(ranges[size_t(channel)].apply(value, quantum), quantum); }
 };
 
 struct CurvePoint { double x = 0, y = 0; bool operator==(const CurvePoint&) const = default; };
@@ -93,11 +94,43 @@ struct GradientMapSettings {
     bool reversed = false;
     /// Photoshop's Method (Classic: the straight blend it always had).
     GradientMethod method = GradientMethod::Classic;
+    /// Every colour stop of a gradient with more than its two ends (a Photoshop map's, sorted by location; straight
+    /// sRGB). The first stop takes its colour from `shadows` and the last from `highlights`, so editing the ends edits
+    /// them. Empty: the two-stop ramp from `shadows` to `highlights`.
+    std::vector<GradientColorStop> stops;
+    /// The stops' colours as a CMYK or Lab file holds them (`nativeMode`; CMYK ink 0..1, Lab L 0..100 and signed a, b),
+    /// parallel to `stops`: a document of that mode maps to these, as Photoshop does, while a stop keeps the sRGB colour
+    /// read with it (separating the sRGB colour again would move a CMYK stop's black). Empty otherwise.
+    ColorMode nativeMode = ColorMode::RGB;
+    std::vector<std::array<double, 4>> native;
+    /// Photoshop's Smoothness for a Classic map (0..1; a PSD's gradient holds 1): each run eased towards the Catmull-Rom
+    /// through its neighbours, as the layer styles' Classic gradients are. 0 is the plain blend between the stops (a map
+    /// made here). Perceptual and Linear are always eased in full.
+    double smoothness = 0;
+    /// Photoshop's Dither, read and written back; not drawn (its pattern is not known, and it moves a colour by under a level).
+    bool dither = false;
     bool operator==(const GradientMapSettings&) const = default;
+    /// The luminosity the map reads (0..1), Photoshop's 0.30 R + 0.59 G + 0.11 B (the blend modes' Lum, not Rec. 709), as
+    /// PhotoCraft's Gradient Map has it (crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used under MIT).
+    static double luminosity(double r, double g, double b) { return 0.3 * r + 0.59 * g + 0.11 * b; }
     /// 256 x 3 straight sRGB bytes, darkest first.
     std::vector<uint8_t> table() const;
-    /// The ramp from the dark end to the light one (straight sRGB 0..1, Reverse applied) for a Perceptual or Linear
-    /// method: Classic stops sampled from it (GradientStops::baked).
+    /// Every colour (the ends and the stops between) through `convert`; the file's own CMYK or Lab colours are dropped,
+    /// since they belong to the space the document had.
+    template <class F>
+    void convertColours(F&& convert) {
+        convert(shadows);
+        convert(highlights);
+        for (GradientColorStop& stop : stops) {
+            AdjustmentColor c{stop.rgb[0], stop.rgb[1], stop.rgb[2]};
+            convert(c);
+            stop.rgb[0] = float(c.red); stop.rgb[1] = float(c.green); stop.rgb[2] = float(c.blue);
+        }
+        native.clear();
+        nativeMode = ColorMode::RGB;
+    }
+    /// The ramp from the dark end to the light one (straight sRGB 0..1, Reverse applied); a Perceptual or Linear
+    /// method's as Classic stops sampled from it (GradientStops::baked).
     GradientStops ramp() const;
 };
 
@@ -150,6 +183,8 @@ struct HueSaturationSettings {
     void adjust(double& r, double& g, double& b) const;
     /// adjust() with the per-hue response worked out once, for adjusting many colours.
     std::function<void(double&, double&, double&)> adjuster() const;
+    /// Photoshop's 32-bit Hue/Saturation on a straight linear colour (unbounded in and out).
+    std::function<void(double&, double&, double&)> linearAdjuster() const;
     /// The hue a spectrum swatch becomes.
     double shiftedHue(double hue) const;
 };
@@ -157,9 +192,9 @@ struct HueSaturationSettings {
 // ---- Photoshop's other adjustment layers ----------------------------------------------------------------------
 // Brightness/Contrast, Posterize and Threshold follow Patchy's calibration against Photoshop 2026 (MIT,
 // src/third_party/patchy_psd/README.md), as Hue/Saturation does; Color Balance is Photoshop's per-channel Levels
-// (adjustments_more.cpp); Black & White follows upstream Compositor's C (MIT, LICENSES/MIT-Compositor.txt); Vibrance,
-// Photo Filter, Channel Mixer and Selective Color are the published formulas, not yet checked against Photoshop
-// (docs/adjustment-layers.md).
+// (adjustments_more.cpp); Black & White follows upstream Compositor's C (MIT, LICENSES/MIT-Compositor.txt); Photo Filter
+// PhotoCraft's Photoshop-fitted map (photoFilterMatrix); Vibrance, Channel Mixer and Selective Color are the published
+// formulas, not yet checked against Photoshop (docs/adjustment-layers.md).
 
 struct BrightnessContrastSettings {
     int brightness = 0, contrast = 0;   // modern: -150..150 and -50..100; legacy: -100..100 each
@@ -227,6 +262,15 @@ void applyBlackWhite(Image& image, const BlackWhiteSettings& settings);
 void applyColorBalance(Image& image, const ColorBalanceSettings& settings);
 void applyVibrance(Image& image, const VibranceSettings& settings);
 void applyPhotoFilter(Image& image, const PhotoFilterSettings& settings);
+/// Photo Filter's map of linear sRGB: Photoshop multiplies the colour's D50 XYZ, relative to white, by the filter
+/// colour's, mixed in by the density, a fixed linear map folded into one matrix. With `keepLuminance` the map keeps the
+/// luminance Y (32 bits' Preserve Luminosity). After PhotoCraft's `photo_filter_matrix` (crates/compose/src/adjust.rs at
+/// 04d0212, MIT OR Apache-2.0, used under MIT).
+using PhotoFilterMatrix = std::array<std::array<double, 3>, 3>;
+PhotoFilterMatrix photoFilterMatrix(const PhotoFilterSettings& settings, bool keepLuminance);
+/// The diagonal of that map in D50 XYZ: each of X, Y and Z multiplied by 1 - density + density * the filter colour's,
+/// relative to white.
+std::array<double, 3> photoFilterScale(const PhotoFilterSettings& settings);
 void applyChannelMixer(Image& image, const ChannelMixerSettings& settings);
 void applySelectiveColor(Image& image, const SelectiveColorSettings& settings);
 
@@ -300,8 +344,8 @@ std::string defaultAdjustmentJson(AdjustmentKind kind);
 // ---- 16 bits (0..32768) ----------------------------------------------------------------------------------------
 // Every kind works on the exact straight colour: the table-driven ones (Levels, Curves, Exposure, Invert,
 // Brightness/Contrast, Posterize) through 32769-entry tables per channel built from their functions, the others
-// with their per-pixel maths in double (adjustments_u16.cpp). Posterize and Threshold decide as the 8-bit kernels
-// do on an 8-bit image converted to 16 bits.
+// with their per-pixel maths in double (adjustments_u16.cpp). Threshold decides as the 8-bit kernel does on an 8-bit
+// image converted to 16 bits; Posterize bins the 16-bit sample, as Photoshop's does (posterizeAt16).
 
 bool applyAdjustment(const AdjustmentSettings& settings, Image16& image, const Rect& region, double scale);
 bool applyAdjustment(const LayerAdjustment& adjustment, Image16& image, const Rect& region, double scale);
@@ -315,22 +359,22 @@ void applyPhotoFilter(Image16& image, const PhotoFilterSettings& settings);
 void applyChannelMixer(Image16& image, const ChannelMixerSettings& settings);
 void applySelectiveColor(Image16& image, const SelectiveColorSettings& settings);
 void applyColorLookup(Image16& image, const ColorLookupSettings& settings);
+/// Photoshop's 16-bit Posterize at a straight value (0..1): binned on the 16-bit sample, landing on 8-bit levels.
+double posterizeAt16(const PosterizeSettings& settings, double value);
 /// Brightness/Contrast's curve at a straight value (0..1), unrounded.
 double brightnessContrastAt(const BrightnessContrastSettings& settings, double value);
 /// The Levels histograms of a 16-bit image, in the same 256 bins.
 std::array<std::vector<double>, 4> levelsHistogram(const Image16& image, const Gray16* coverage);
 
 // ---- 32 bits (premultiplied linear float) -----------------------------------------------------------------------
-// Photoshop's 32-bit set (adjustments_f32.cpp): Levels, Curves, Exposure, Hue/Saturation, Color Balance, Black & White,
-// Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and Color Lookup. The pixels stay linear and unclamped;
-// each kind's function works on the colour encoded through `curve` (the document's, encodedTransfer), continued above 1
-// (encodeExtended), except Exposure, an exact multiply in linear light. Levels and Curves go on above 1 (Levels without
-// its clamp at white, Curves along its end tangent); the colour kinds adjust a colour brighter than white as the same
-// colour at white and scale it back up. docs/bit-depth.md lists the choices.
+// Photoshop's 32-bit set (adjustments_f32.cpp): Levels, Curves, Brightness/Contrast, Exposure, Hue/Saturation, Color
+// Balance, Black & White, Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and Color Lookup. The pixels stay
+// linear; most kinds work on the linear values as stored, as Photoshop's do, Vibrance, Color Lookup, Invert and
+// Gradient Map on the colour encoded through `curve` (the document's, encodedTransfer), continued above 1
+// (encodeExtended). docs/bit-depth.md lists each.
 
 class TransferCurve;
-/// Whether Photoshop offers `kind` in a 32-bit document (not Brightness/Contrast, Posterize, Threshold, Selective Color
-/// or Grain).
+/// Whether `kind` is drawn in a 32-bit document (not Posterize, Threshold, Selective Color or Grain).
 bool adjustmentAt32(AdjustmentKind kind);
 /// Applies `settings` at 32 bits; false for a kind adjustmentAt32 does not offer (the pixels are left alone).
 bool applyAdjustment(const AdjustmentSettings& settings, ImageF& image, const Rect& region, double scale, const TransferCurve& curve);
