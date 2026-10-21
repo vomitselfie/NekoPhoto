@@ -409,7 +409,46 @@ TEST_CASE(real_camera_files_round_trip_their_as_shot_balance) {
         const auto automatic = rawAutoWhiteBalance(*decoded, balance.asShot, balance);
         REQUIRE(automatic);
         std::printf(" Auto %.0f K %+.1f\n", automatic->temperature, automatic->tint);
+        // How bright the as-shot develop comes out: the mean of its encoded green and its median, on 0..1.
+        std::vector<int> greens;
+        double sum = 0;
+        for (int y = 0; y < decoded->height(); y++)
+            for (int x = 0; x < decoded->width(); x++) {
+                greens.push_back(decoded->pixel(x, y)[1]);
+                sum += decoded->pixel(x, y)[1];
+            }
+        std::nth_element(greens.begin(), greens.begin() + long(greens.size() / 2), greens.end());
+        RawInfo info;
+        REQUIRE(readRawInfo(bytes, info, &error));
+        std::printf("  %s %s: green mean %.4f, median %.4f\n", info.make.c_str(), info.model.c_str(), sum / double(greens.size()) / 32768,
+                    greens[greens.size() / 2] / 32768.0);
     }
+}
+
+TEST_CASE(non_dng_files_take_the_cameras_exposure_offset) {
+    using From = CameraExposureOffset::From;
+    // A body in the table, by its model name or another name, whatever the spelling of spaces and hyphens.
+    auto z7 = cameraExposureOffset("Nikon", "Z 7");
+    CHECK(z7.from == From::Body);
+    CHECK_NEAR(z7.ev, 0.25, 1e-12);
+    CHECK_NEAR(cameraExposureOffset("SONY", "ilce 7m5").ev, 0.5, 1e-12);
+    CHECK_NEAR(cameraExposureOffset("Sony", "A7CR").ev, 0.3, 1e-12);
+    // A body without a row takes its make's median (Nikon's four rows: 0.1, 0.2, 0.2, 0.25), a make without rows the
+    // median of every row.
+    auto z6 = cameraExposureOffset("Nikon", "Z 6");
+    CHECK(z6.from == From::Make);
+    CHECK_NEAR(z6.ev, 0.2, 1e-12);
+    CHECK_NEAR(cameraExposureOffset("Sony", "ILCE-7M3").ev, 0.3, 1e-12);
+    auto other = cameraExposureOffset("Panasonic", "DC-S5M2");
+    CHECK(other.from == From::AllBodies);
+    CHECK_NEAR(other.ev, 0.05, 1e-12);
+    // Fujifilm rows hold at DR100 (X-Trans: a shift of -0.72); DR200 records a stop more and develops a stop brighter.
+    CHECK_NEAR(cameraExposureOffset("Fujifilm", "X-T5", -0.72, true).ev, -0.1, 1e-9);
+    CHECK_NEAR(cameraExposureOffset("Fujifilm", "X-T5", -1.72, true).ev, 0.9, 1e-9);
+    CHECK_NEAR(cameraExposureOffset("Fujifilm", "X-T5", -999, true).ev, -0.1, 1e-9);   // LibRaw's "not recorded"
+    CHECK_NEAR(cameraExposureOffset("Fujifilm", "X-T4", -0.72, true).ev, -0.1, 1e-9);   // the make's median, at DR100
+    CHECK_NEAR(cameraExposureOffset("Fujifilm", "X-H1", -1.72, true).ev, -0.1, 1e-9);   // X-Trans III ignores the shift
+    CHECK_NEAR(cameraExposureOffset("Fujifilm", "GFX100S", -0.49, false).ev, -0.1, 1e-9);
 }
 
 TEST_MAIN()

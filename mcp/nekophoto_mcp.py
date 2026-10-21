@@ -878,7 +878,8 @@ def pixels_camera_raw(settings: dict, seed: int = 1) -> str:
     """Filter > Camera Raw Filter on the active layer's pixels, inside the selection. settings uses the model's keys and
     ranges (describe_method pixels.cameraRaw lists them all); anything left out keeps its default, which changes nothing.
     Common ones: temperature, tint, exposure (-5..5 stops), contrast, highlights, shadows, whites, blacks, texture, clarity,
-    dehaze, vibrance, saturation (-100..100); whiteBalance "Auto" balances the layer; nested objects curve, mixer, grading,
+    dehaze, vibrance, saturation (-100..100); whiteBalance "Auto" balances the layer; blackWhite True converts to black and
+    white through grayMix (eight bands reds..magentas, -100..100, or "Auto" for the layer's own mix); nested objects curve, mixer, grading,
     detail, optics, geometry, calibration, e.g. {"detail": {"sharpenAmount": 40}, "grading": {"shadows": {"hue": 220, "saturation": 30}}}.
     Replies with the settings it applied."""
     return text(call("pixels.cameraRaw", settings=settings, seed=seed))

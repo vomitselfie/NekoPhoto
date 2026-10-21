@@ -3,7 +3,7 @@
 // file (developRaw), once per settings case, each patch measured as its mean encoded sRGB and compared by CIEDE2000 with
 // Camera Raw 18.7's render of the same case (camera-raw-synthetic-d65.json, from the corpus).
 //
-// The cases are Camera Raw XMP attributes (cases.json); those this engine has no control for (B&W, looks, Point Color)
+// The cases are Camera Raw XMP attributes (cases.json); those this engine has no control for (looks, Point Color)
 // are listed and skipped. Each case's mean and 95th-percentile ΔE00 over the patches (the wide-gamut row left out, as
 // the corpus does) are held to tests/camera_raw_parity_baseline.txt: a case fails when it gets worse by more than 0.1 on
 // the mean or 0.3 on the 95th percentile, RAWmakase's margins. NEKOPHOTO_BLESS_CAMERA_RAW_PARITY=1 rewrites the baseline
@@ -140,6 +140,7 @@ std::string controlOf(const std::string& key) {
     if (starts("PostCropVignette")) return "Vignette";
     if (starts("Perspective")) return "Transform";
     if (starts("Grain")) return "Grain";
+    if (key == "ConvertToGrayscale" || starts("GrayMixer")) return "Black & White";
     return {};
 }
 
@@ -172,7 +173,8 @@ MappedCase mapCase(const json& base, const json& entry) {
     for (const auto& [key, text] : attributes) {
         const std::string control = controlOf(key);
         if (control.empty() || key == "ProcessVersion") continue;
-        if (control == "White balance" ? text != "As Shot" : std::atof(text.c_str()) != 0) m.controls.insert(control);
+        if (control == "White balance" ? text != "As Shot" : control == "Black & White" ? text == "True" : std::atof(text.c_str()) != 0)
+            m.controls.insert(control);
     }
     for (const auto& item : sequences)
         if (item.first.rfind("ToneCurve", 0) == 0) m.controls.insert("Point curve");

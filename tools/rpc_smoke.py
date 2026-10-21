@@ -2454,6 +2454,15 @@ def main():
     rpc.call("history.undo")
     assert rpc.call("layers.render", id=target["id"], maxSize=64) == before, "one undo takes it back"
     assert rpc.call("pixels.cameraRaw", settings={})["applied"] is False
+    # Treatment: Black & White with the B&W Mix's Auto: the layer turns grey, the reply carries the mix Auto chose.
+    mono = rpc.call("pixels.cameraRaw", settings={"blackWhite": True, "grayMix": "Auto"})
+    assert mono["applied"] and mono["settings"]["blackWhite"] is True and len(mono["settings"]["grayMix"]) == 8, mono
+    assert rpc.call("history.info")["undo"] == "Camera Raw Filter"
+    rpc.call("history.undo")
+    mixed = rpc.call("pixels.cameraRaw", settings={"blackWhite": True, "grayMix": {"blues": -40, "reds": 20}})
+    assert mixed["settings"]["grayMix"]["blues"] == -40 and mixed["settings"]["grayMix"]["reds"] == 20, mixed
+    rpc.call("history.undo")
+    expect_refused(rpc, "settings.grayMix", "pixels.cameraRaw", settings={"blackWhite": True, "grayMix": {"teals": 10}})
     for bad in ({"exposure": 1, "sparkle": 2}, {"detail": {"sharpen": 1}}, {"glowStyle": "Sparkle"}):
         try:
             rpc.call("pixels.cameraRaw", settings=bad)

@@ -83,7 +83,7 @@ CameraRawPanels::CameraRawPanels(Mode mode, const CameraRawSettings& settings, Q
         panels->addItem(name);
         stack->addWidget(scrolled(page));
     }
-    panels->item(3)->setToolTip(tr("Color Mixer and Color Grading"));
+    panels->item(3)->setToolTip(tr("Color Mixer (B&W Mix in Black & White) and Color Grading"));
     panels->setFixedWidth(panels->sizeHintForColumn(0) + 2 * panels->frameWidth() + 16);
     panels->setCurrentRow(0);
     connect(panels, &QListWidget::currentRowChanged, stack, &QStackedWidget::setCurrentIndex);
@@ -331,12 +331,27 @@ QString CameraRawPanels::whiteBalanceName(CameraRawWhiteBalance mode) {
     }
 }
 
+void CameraRawPanels::applyAutoGrayMix() {
+    if (!autoGrayMix) return;
+    if (const auto mix = autoGrayMix()) settings_.grayMix = *mix;
+}
+
 // ---- panels -----------------------------------------------------------------------------------------
 
 QWidget* CameraRawPanels::basicPage() {
     auto* page = new QWidget;
     QFormLayout* v = newForm(page);
     CameraRawSettings& s = settings_;
+
+    // Camera Raw's Treatment. Converting to Black & White sets the B&W Mix's Auto when no mix has been set yet (Camera
+    // Raw's "Apply auto mix when first converting to black and white"); a mix already set is kept, both ways.
+    choice(v, tr("Treatment"), {tr("Color"), tr("Black & White")}, [&s] { return s.blackWhite ? 1 : 0; },
+        [this, &s](int index) {
+            s.blackWhite = index == 1;
+            if (s.blackWhite && s.grayMix == std::array<double, 8>{}) applyAutoGrayMix();
+            sync();
+            emitChanged();
+        });
 
     QFormLayout* white = section(v, tr("White Balance"));
     if (mode_ == Mode::Raw && raw_ && raw_->kelvin) {
@@ -455,6 +470,7 @@ QWidget* CameraRawPanels::colorPage() {
     auto* page = new QWidget;
     QFormLayout* v = newForm(page);
     CameraRawMixerSettings& m = settings_.mixer;
+    const int mixerFrom = v->rowCount();
     QFormLayout* mixer = section(v, tr("Color Mixer"));
     choice(mixer, tr("Adjust"), {tr("Hue"), tr("Saturation"), tr("Luminance")}, [this] { return mixerChannel_; },
            [this](int index) { mixerChannel_ = index; sync(); });
@@ -462,6 +478,24 @@ QWidget* CameraRawPanels::colorPage() {
         slider(mixer, app::names::core(CameraRawMixerSettings::names[i]), -100, 100, 1, [this, &m, i]() -> double& {
             return mixerChannel_ == 0 ? m.hue[i] : mixerChannel_ == 1 ? m.saturation[i] : m.luminance[i];
         });
+
+    // Black & White replaces the Color Mixer with the B&W Mix, as in Camera Raw: how light each colour band turns.
+    const int grayFrom = v->rowCount();
+    QFormLayout* gray = section(v, tr("B&W Mix"));
+    auto* autoMix = new QPushButton(tr("Auto"));
+    autoMix->setObjectName("cameraRawAutoGrayMix");
+    autoMix->setToolTip(tr("Set the mix from the image's colours"));
+    connect(autoMix, &QPushButton::clicked, this, [this] { applyAutoGrayMix(); sync(); emitChanged(); });
+    auto* autoRow = new QHBoxLayout;
+    autoRow->addWidget(autoMix);
+    autoRow->addStretch(1);
+    gray->addRow(QString(), autoRow);
+    for (size_t i = 0; i < 8; i++)
+        slider(gray, app::names::core(CameraRawMixerSettings::names[i]), -100, 100, 1, [this, i]() -> double& { return settings_.grayMix[i]; });
+    const int grayTo = v->rowCount();
+    syncers_.push_back([this, v, mixerFrom, grayFrom, grayTo] {
+        for (int row = mixerFrom; row < grayTo; row++) v->setRowVisible(row, (row >= grayFrom) == settings_.blackWhite);
+    });
 
     CameraRawGradingSettings& g = settings_.grading;
     auto wheel = [this, &g]() -> CameraRawGradeWheel& {

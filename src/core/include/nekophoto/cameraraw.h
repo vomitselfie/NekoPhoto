@@ -196,6 +196,11 @@ struct CameraRawSettings {
     CameraRawVignetteStyle vignetteStyle = CameraRawVignetteStyle::HighlightPriority;
     double vignetteMidpoint = 50, vignetteRoundness = 0, vignetteFeather = 50, vignetteHighlights = 0;
     double grainAmount = 0, grainSize = 25, grainRoughness = 50;
+    /// The Basic panel's Treatment: Black & White renders the photo in greys, each colour as light as `grayMix` makes it.
+    bool blackWhite = false;
+    /// The B&W Mix panel: how light each of the colour mixer's eight bands turns in Black & White, -100...100. Kept while
+    /// the treatment is Color, as Camera Raw keeps it.
+    std::array<double, 8> grayMix{};
     CameraRawCurveSettings curve;
     CameraRawMixerSettings mixer;
     CameraRawGradingSettings grading;
@@ -206,7 +211,7 @@ struct CameraRawSettings {
     bool operator==(const CameraRawSettings&) const = default;
 
     bool adjustsLight() const { return exposure != 0 || contrast != 0 || highlights != 0 || shadows != 0 || whites != 0 || blacks != 0; }
-    bool adjustsColor() const { return temperature != 0 || tint != 0 || vibrance != 0 || saturation != 0; }
+    bool adjustsColor() const { return temperature != 0 || tint != 0 || vibrance != 0 || saturation != 0 || blackWhite; }
     bool adjustsEffects() const { return texture != 0 || clarity != 0 || dehaze != 0 || glow != 0 || vignetteAmount != 0 || grainAmount != 0; }
     bool isIdentity() const;
     /// Every scalar finite and within its range.
@@ -227,6 +232,11 @@ struct CameraRawSettings {
     /// Gray-world balance of the covered pixels (White Balance > Auto). Empty for an image with no coverage.
     static std::optional<std::array<double, 2>> autoBalance(const Image& image);
     static std::optional<std::array<double, 2>> autoBalance(const Image16& image);
+    /// The B&W Mix's Auto (docs/camera-raw.md#black--white): from whole-image statistics of the covered pixels, the
+    /// share of colour in each band and how light it is against the image's mean, with fixed constants. Each band that
+    /// is lighter than the mean is lightened and each darker one darkened, so the colours stay apart in grey.
+    static std::array<double, 8> autoGrayMix(const Image& image);
+    static std::array<double, 8> autoGrayMix(const Image16& image);
 
     /// JSON with the same keys as the fields above (nested objects for curve, mixer, grading, detail, optics,
     /// geometry, calibration; enums by their names such as "Halation").

@@ -42,7 +42,7 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
   filter rounds to a byte after each), and the result is rounded to 16 bits once, so a smooth 16-bit gradient keeps its
   steps through Exposure and the curves. Defringe decides which pixels are fringe on their colour rounded to 8 bits, so
   a colour at the edge of a hue window is treated as at 8 bits. On an 8-bit image converted to 16 bits, each panel lands
-  within a level of the 8-bit filter; every panel at once lands up to five levels off on 0.4% of samples, the 8-bit
+  within a level of the 8-bit filter; every panel at once lands up to nine levels off on 0.4% of samples, the 8-bit
   filter's own rounding after each of its steps, which the fitted tone curves (steep in the shadows) magnify.
 - **G'MIC**: G'MIC works in float on a 0..255 scale, so a 16-bit layer goes to it as float colour on that scale and
   comes back at 16 bits, in-process through libgmic or through a float file for the `gmic` program; nothing is

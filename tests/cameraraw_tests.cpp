@@ -609,8 +609,9 @@ TEST_CASE(sixteen_bit_agrees_with_eight_bit_on_eight_bit_input) {
              s.exposure = 0.4; s.contrast = 20; s.shadows = 30; s.vibrance = 20; s.clarity = 20; s.curve.rgb = CameraRawCurveSettings::mediumContrast();
              s.grading.midtones = {30, 20, 0}; s.detail.sharpenAmount = 40; s.vignetteAmount = -20; },
          // The 8-bit grade rounds after the tone, clarity, vignette and sharpening passes, and the fitted curves are steep
-         // in the shadows, so their roundings add up on a few pixels.
-         5},
+         // in the shadows, so their roundings add up on a few pixels: the low channel of strongly saturated colours, which
+         // Vibrance's measured lookup pushes toward the edge of sRGB, where encoding is steepest.
+         9},
     };
     bool within = true;
     for (const Case& c : cases) {
@@ -697,8 +698,10 @@ TEST_CASE(an_xmp_preset_patches_the_settings_and_lists_what_it_cannot) {
     auto listed = [&](const std::string& key) {
         return std::any_of(onPixels->unsupported.begin(), onPixels->unsupported.end(), [&](const std::string& u) { return u.rfind(key, 0) == 0; });
     };
-    CHECK(listed("ConvertToGrayscale=True"));
-    CHECK(listed("GrayMixerRed"));
+    CHECK(s.blackWhite);   // Treatment: Black & White and its mix are read
+    CHECK_EQ(s.grayMix[0], 10.0);
+    CHECK_EQ(s.grading.blending, 100.0);   // legacy split toning (no ColorGrade keys) renders at Blending 100
+    CHECK(!listed("ConvertToGrayscale") && !listed("GrayMixerRed"));
     CHECK(listed("HasCrop=True"));
     CHECK(listed("Look"));
     CHECK(listed("Temperature=5600"));   // kelvin has no meaning on pixels
@@ -715,6 +718,60 @@ TEST_CASE(an_xmp_preset_patches_the_settings_and_lists_what_it_cannot) {
     const std::string junk = "not xml";
     CHECK(!readCameraRawXmp(std::vector<uint8_t>(junk.begin(), junk.end()), base, false, &error));
     CHECK(!error.empty());
+}
+
+TEST_CASE(black_and_white_mixes_colours_into_greys) {
+    // Two flat colours side by side, a blue and a yellow, and a grey.
+    Image image(30, 2);
+    for (int y = 0; y < 2; y++)
+        for (int x = 0; x < 30; x++) {
+            uint8_t* p = image.pixel(x, y);
+            const uint8_t blue[3] = {40, 70, 200}, yellow[3] = {230, 200, 40}, grey[3] = {128, 128, 128};
+            const uint8_t* c = x < 10 ? blue : x < 20 ? yellow : grey;
+            p[0] = c[0], p[1] = c[1], p[2] = c[2], p[3] = 255;
+        }
+    auto grey = [&](const CameraRawSettings& settings, int x) {
+        Image out = image;
+        CHECK(applyCameraRaw(out, settings));
+        const uint8_t* p = out.pixel(x, 0);
+        CHECK(std::abs(int(p[0]) - int(p[1])) <= 1 && std::abs(int(p[1]) - int(p[2])) <= 1);
+        return int(p[1]);
+    };
+    CameraRawSettings bw;
+    bw.blackWhite = true;
+    CHECK(!bw.isIdentity());
+    const int blue = grey(bw, 0), yellow = grey(bw, 10), neutral = grey(bw, 20);
+    CHECK(yellow > blue);
+    CHECK(std::abs(neutral - 128) <= 2);
+    // A band darkens or lightens its colours and leaves a grey where it was.
+    CameraRawSettings darker = bw;
+    darker.grayMix[5] = -60;   // Blues
+    CHECK(grey(darker, 0) < blue - 5);
+    CHECK(std::abs(grey(darker, 20) - neutral) <= 1);
+    CameraRawSettings lighter = bw;
+    lighter.grayMix[2] = 60;   // Yellows
+    CHECK(grey(lighter, 10) > yellow + 3);
+    // The colour mixer's bands have no say in Black & White, as Camera Raw's B&W panel replaces them.
+    CameraRawSettings mixed = bw;
+    mixed.mixer.luminance[5] = -80;
+    CHECK_EQ(grey(mixed, 0), blue);
+    // The settings round-trip, and a mix is kept while the treatment is Color.
+    CameraRawSettings back;
+    REQUIRE(CameraRawSettings::parse(darker.toJson(), back));
+    CHECK(back == darker);
+    CHECK(CameraRawSettings::parse(R"({"blackWhite": false, "grayMix": {"blues": -60}})", back));
+    CHECK(!back.blackWhite && back.grayMix[5] == -60);
+    CHECK(!CameraRawSettings::parse(R"({"grayMix": {"teals": 10}})", back));
+
+    // Auto: the yellow is lighter than the image's mean and goes lighter, the blue darker; a grey image gets no mix.
+    const auto mix = CameraRawSettings::autoGrayMix(image);
+    CHECK(mix[2] > 0);
+    CHECK(mix[5] < 0);
+    for (double v : mix) CHECK(v >= -50 && v <= 50 && v == std::round(v));
+    Image flat(8, 8);
+    for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++) { uint8_t* p = flat.pixel(x, y); p[0] = p[1] = p[2] = 90; p[3] = 255; }
+    CHECK((CameraRawSettings::autoGrayMix(flat) == std::array<double, 8>{}));
 }
 
 TEST_MAIN()

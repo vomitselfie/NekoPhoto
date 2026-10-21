@@ -285,7 +285,9 @@ const MethodDoc methodDocs[] = {
      "active layer in the document; text:string The text caption stamps (required for caption)"},
     {"pixels.cameraRaw", "Filter > Camera Raw Filter on the active layer's pixels, inside the selection; replies with the normalized settings it applied.",
      "settings:object! The grade, keys as the model (defaults leave the image alone): whiteBalance (Custom|Auto), temperature, tint (relative, -100..100), exposure -5..5, "
-     "contrast, highlights, shadows, whites, blacks, vibrance, saturation, texture, clarity, dehaze (-100..100), glow 0..100, glowStyle (Diffusion|Bloom|Halation), "
+     "contrast, highlights, shadows, whites, blacks, vibrance, saturation, texture, clarity, dehaze (-100..100), blackWhite (Treatment: Black & White), "
+     "grayMix (the B&W Mix: {reds, oranges, yellows, greens, aquas, blues, purples, magentas} -100..100, 8 numbers, or \"Auto\" for the mix the layer's "
+     "colours call for), glow 0..100, glowStyle (Diffusion|Bloom|Halation), "
      "glowRange, glowSpread, glowWarmth, vignetteAmount, vignetteStyle (Highlight Priority|Color Priority|Paint Overlay), vignetteMidpoint, vignetteRoundness, "
      "vignetteFeather, vignetteHighlights, grainAmount, grainSize, grainRoughness, and objects curve {shadows, darks, lights, highlights, shadowSplit, darkSplit, "
      "lightSplit, rgb, red, green, blue ([[x, y], ...] on 0..1), refineSaturation}, mixer {hue, saturation, luminance ({reds, oranges, yellows, greens, aquas, "

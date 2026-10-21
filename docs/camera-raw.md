@@ -8,20 +8,21 @@ destructive: on a smart object it asks first, like the other pixel filters, and 
 |---|---|---|
 | Settings, ranges, normalization, apply order | `Document/CameraRaw*.swift` | `src/core/include/nekophoto/cameraraw.h`, `src/core/src/cameraraw.cpp` |
 | Pixel kernels (`adjust_camera_raw_*`: texture, glow, grain, defringe, profile corrections, detail, point colours, the clipping views) | `Rendering/AdjustPixels.c` | `src/pixels/CameraRawPixels.c`, extracted unchanged apart from warning fixes |
-| Tone and colour responses fitted to Camera Raw ([Fitted responses](#fitted-responses)) | none | `src/core/src/rawtone.cpp`, tables from `tools/camera_raw_fit.py` |
+| Tone and colour responses fitted to Camera Raw ([Fitted responses](#fitted-responses)) | none | `src/core/src/rawtone.cpp`, tables from `tools/camera_raw_fit.py`; RAWmakase's measured tables in `src/third_party/rawmakase`, read by `src/core/src/rawmeasured.cpp` |
 | Panels | `UI/CameraRaw*.swift`, `UI/RawDevelopSheet.swift` | `src/app/CameraRawDialog.cpp` |
 | Tests | upstream `CompositorTests/CameraRawTests.swift` | `tests/cameraraw_tests.cpp`, `tests/camera_raw_parity.cpp` |
 | Automation | none | `pixels.cameraRaw`, MCP `pixels_camera_raw` |
 
 The grade runs in this order: manual Distortion and the Transform sliders; then, per pixel, the relative white balance,
-Camera Calibration, Exposure, the Basic panel's tone sliders, the Tone Curve, Vibrance and Saturation, the colour mixer
-and Colour Grading; point colours; Clarity, Texture and Glow, the post-crop vignette and Grain; lens vignetting and the
+Camera Calibration, Exposure, the Basic panel's tone sliders, the Tone Curve, the colour mixer and Vibrance, Saturation,
+Colour Grading and Black & White; point colours (left out in Black & White, as Camera Raw leaves them); Clarity, Texture and Glow, the post-crop vignette and Grain; lens vignetting and the
 lens profile and defringe; then detail. Alpha is kept. A reduced preview scales every radius, so it matches the
 full-size result.
 
 ## Panels
 
-- **Basic**: White Balance (Custom, or Auto, the gray-world balance of the layer), Temperature and Tint
+- **Basic**: Treatment (Color or Black & White, see [Black & White](#black--white)), White Balance (Custom, or Auto, the
+  gray-world balance of the layer), Temperature and Tint
   (relative, −100…100, as Photoshop's Camera Raw Filter has them for pixels; a RAW file has kelvin, see
   [White balance](#white-balance)), Exposure in stops, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity,
   Dehaze, Vibrance (protects skin tones) and Saturation. Two check boxes paint clipped shadows blue and
@@ -30,8 +31,9 @@ full-size result.
   curve preset (Linear, Medium or Strong Contrast) and Refine Saturation.
 - **Detail**: sharpening (Amount, Radius, Detail, Masking, with a preview of the mask), luminance and colour
   noise reduction.
-- **Color**: the colour mixer (hue, saturation and luminance of eight colour families) and colour grading
-  (shadow, midtone, highlight and global wheels as hue, saturation and luminance, with Blending and Balance).
+- **Color**: the colour mixer (hue, saturation and luminance of eight colour families), or in Black & White the B&W Mix
+  in its place, and colour grading (shadow, midtone, highlight and global wheels as hue, saturation and luminance, with
+  Blending and Balance).
 - **Optics**: chromatic aberration, generic profile corrections, distortion, lens vignetting, and purple and
   green defringe with their hue ranges.
 - **Geometry**: Perspective or Rectilinear projection, Vertical, Horizontal, Rotate, Aspect, Scale, Offset X
@@ -62,7 +64,8 @@ open document.
 
 The develop is `nekophoto/raw.h`: LibRaw demosaics with the white balance's multipliers (the camera's own for As
 Shot) and the camera's colour matrix into linear ProPhoto RGB at 16 bits, the raw white point at 1; a DNG's
-BaselineExposure scales it; the [default tone curve](#the-default-render) takes it to display light and sRGB. Then
+BaselineExposure, or for other formats the [camera's exposure offset](#camera-exposure-offsets), scales it; the
+[default tone curve](#the-default-render) takes it to display light and sRGB. Then
 `applyCameraRaw` grades it with the settings, the same code as the filter (so the dialog's result equals Open with no
 settings followed by Filter ▸ Camera Raw Filter with them, which `raw_tests` checks).
 
@@ -80,15 +83,42 @@ rendering, with its BT.709 gamma and automatic brightening, was 14.9.
 
 What the fit cannot know:
 
-- Camera Raw brightens most cameras by an exposure offset of its own (their Adobe profiles' baseline). A DNG says
-  what it wants in BaselineExposure, which NekoPhoto applies; other formats develop without an offset, so they can
-  look darker than in Camera Raw.
+- Camera Raw brightens most cameras by an exposure offset of its own. A DNG says what it wants in BaselineExposure,
+  which NekoPhoto applies; other formats take the [camera's exposure offset](#camera-exposure-offsets), which is
+  measured for a few bodies and estimated for the rest.
 - Camera Raw rebuilds clipped channels from the ones that are not; LibRaw clips them. Pulling Exposure down shows the
   difference in blown highlights.
 - Colours follow the camera's colour matrix (LibRaw's, or the DNG's ColorMatrix): a DNG's forward matrices and a
   camera's Adobe profile (its hue and saturation tables) are not used. The chart's embedded profile is matrices only,
   and its colours come out within the default render's 0.28 of Camera Raw's; with a camera's Adobe Standard profile
   Camera Raw's colours differ by what the profile's tables do.
+
+### Camera exposure offsets
+
+Camera Raw brightens an unedited photo by an amount that depends on the camera, about 0.3 EV for most Sony, Canon and
+Nikon bodies, as RAWmakase measured; without it a RAW file opens darker than in Camera Raw. A DNG carries the amount
+itself (BaselineExposure). For the other formats NekoPhoto takes it from a table (`src/core/src/rawcameras.cpp`,
+`cameraExposureOffset` in `nekophoto/raw.h`):
+
+1. The camera's own row, by make and model (or another name for the body).
+2. For a camera without a row, the median of the rows of the same make, or the median of all rows when the make has none.
+
+The rows are the 17 bodies of RAWmakase's camera table (MIT, `data/cameras.toml`) whose offsets it fitted to Camera Raw
+18.7's renders of unedited photos from them: Canon PowerShot G5 X Mark II; Fujifilm X-H2, X-H2S, X-S10, X-S20, X-T30 II,
+X-T5 and X100VI; Nikon D500, D5600, D850 and Z 7; Olympus PEN-F; Pentax K-70; Sony RX100 VII, A7CR and A7 V. The rest
+of that table (about 260 bodies) holds the BaselineExposure Adobe's DNG Converter writes, or values from Adobe's camera
+profiles: that is Adobe's own data, so it is not used, and the medians are of the fitted rows alone (Canon 0.05, Fujifilm
+−0.1, Nikon 0.2, Olympus 0.55, Pentax 0.35, Sony 0.3; all rows 0.05 EV). With so few rows the make medians are rough:
+RAWmakase's own test, with the whole table, put a make's median 0.14 EV from a body's value on average.
+
+Fujifilm rows hold at DR100 and base ISO. Camera Raw's value for a Fujifilm raw follows the exposure midpoint shift the
+maker notes record (about −0.72 EV at DR100 on X-Trans, −0.49 on GFX, 0 on the small Bayer bodies, a stop lower per DR
+step), so DR200 and DR400 photos develop a stop and two brighter; the X-Trans III bodies (X-T2, X-E3, X-Pro2, X-T20,
+X100F, X-H1) keep one value. Camera Raw's extra stop off at a Sony's extended low ISO is not applied.
+
+The offset scales the scene light before the default tone curve, the same as a DNG's BaselineExposure; the Exposure
+slider stays at 0. Settings saved with a develop keep developing with whatever the table says when they are opened, so
+a change to the table changes how a RAW smart object develops the next time it is developed.
 
 Where it is kept:
 
@@ -182,8 +212,8 @@ of [RAWmakase](https://github.com/pch/rawmakase) (MIT; `tests/fixtures/camera-ra
 
 The test develops the chart as File ▸ Open does (`developRaw`), once per case with its attributes mapped onto
 `CameraRawSettings`, measures the same patches and scores each case by CIEDE2000: the mean and the 95th percentile over
-the patches, the wide-gamut row left out. Cases for controls NekoPhoto has no counterpart for (Convert to Black & White
-and its mix, look profiles, Point Color) are listed and skipped. Every case is held to
+the patches, the wide-gamut row left out. Cases for controls NekoPhoto has no counterpart for (look profiles, Point
+Color) are listed and skipped. Every case is held to
 `tests/camera_raw_parity_baseline.txt`: one that gets worse by more than 0.1 on its mean or 0.3 on its 95th percentile
 fails. After an intended change, `NEKOPHOTO_BLESS_CAMERA_RAW_PARITY=1 build/tests/camera_raw_parity` rewrites the
 baseline (commit its diff with the change); `NEKOPHOTO_CAMERA_RAW_PARITY_DUMP=<file>` writes every case's patch values
@@ -212,23 +242,29 @@ in its place, which keeps hues, unless the fit says otherwise.
   between amounts. They apply in the order Whites, Blacks, Highlights, Shadows, Dehaze, Contrast, which is the order that
   fits the chart's pairs. Lowering Whites and Highlights works on the colour's luminance (its channels scaled together),
   raising Blacks and either way Shadows half on the luminance and half on the channels: whichever fits the colours.
-- **Parametric curve**: the four regions the same way at ±50 and ±100; moved splits warp each region's input so its range
-  follows them. Shadows then Highlights, then Darks and Lights.
+- **Parametric curve**: one region at the default splits is fitted the same way at ±50 and ±100. Several regions, or
+  moved splits, take RAWmakase's measured curves (`parametric.bin`: each region at eight amounts, Shadows and Highlights
+  over five split ratios, Darks and Lights over seven midtone splits and on a joint grid), applied in gamma-2.2 encoding,
+  Shadows below the midtone split and Highlights above it, then Darks and Lights. Where both exist, our own fit of a single
+  region was closer (Shadows −100: 0.36 against 0.50); for moved splits and combined regions the measured curves are far
+  closer (`parametric-lights+50-splits-25-35-75` 2.54 → 0.53, `parametric-all+50` 1.52 → 0.68).
 - **Point curves**: the RGB curve on the brightest and darkest channel; Refine Saturation is Lightroom's (0–200, 100 the
   curve as drawn) less 100: at −100 a colour keeps its channel differences from before the curve and takes its brightness
   (Rec. 601 luma) from it, and values in between blend. The red, green and blue curves run on each channel of ProPhoto RGB.
-- **Vibrance and Saturation**: Saturation scales a colour's distance from its luminance in linear ProPhoto RGB by
-  1 + amount / 100 (which matches the chart from −100 to +100). Vibrance scales colourfulness by
-  1 + amount · gain · (1 − S)^power, S the colour's (max − min) / max; raising it keeps the brightest channel and spares
-  skin hues (around 15°) by half, lowering it pulls the channels toward their mean (gain and power fitted per sign).
-- **Colour mixer**: the HSL of ProPhoto RGB with the sRGB transfer, each band's share of a hue linear between the
-  neighbouring band centres, and a gain per band and direction for Hue (degrees at ±100), Saturation and Luminance, fitted
-  to the 96 single-band cases. Luminance moves with the square root of the colour's chroma, so greys stay.
-- **Colour Grading**: each wheel pushes the colour (on ProPhoto RGB with the sRGB transfer) along its hue, the fully
-  saturated colour of that hue less its mean, by its saturation and the weight its region has at the colour's encoded
-  luminance, read off the grey ramp per region. Blending and Balance move the shadow and highlight weights toward those
-  read off Blending 100 and Balance +50 (linearly; other values are extrapolated). The Luminance sliders add grey by their
-  own ramp tables.
+- **Colour mixer and Vibrance**: RAWmakase's measured lookup (`color_mixer_chart.bin`, `vibrance_chart.bin`): each slider's
+  change to the colour as a hue shift and saturation and value factors on a grid of 36 hues × 6 saturations × 6 values of
+  HSV in linear ProPhoto RGB, interpolated trilinearly; the sliders add their changes. Band Luminance scales its ±100 change
+  by the slider to the power 1.6 darkening and 0.79 lightening, as Camera Raw's is not linear; negative Saturation of a band
+  scales its saturation factor itself. Vibrance up to ±50 scales the ±50 tables, beyond takes the grids measured at ±75 and
+  ±100. Below the lowest saturation the grid measured, a grey's change fades to none, so a nearly grey colour keeps its
+  brightness whatever its hue (RAWmakase holds the row; the ±50 Vibrance tables move it by up to 6% by hue).
+- **Saturation**: scales a colour's distance from its luminance in linear ProPhoto RGB by 1 + amount / 100 (which matches
+  the chart from −100 to +100; RAWmakase's ±50 Saturation tables were further from Camera Raw, 1.32 against 0.96, and
+  are not used).
+- **Colour Grading**: RAWmakase's measured gain curves (`color_grade_curves.bin`): a curve per channel of linear ProPhoto
+  RGB, each region's tint 1 + Σ A(x)·p with profiles A along the channel that Blending and Balance shape and coefficients
+  p that hue and saturation set; regions multiply, and Luminance is one curve for all channels before the tint. A preset
+  with legacy split toning (SplitToning keys and no ColorGrade keys) renders at Blending 100, as Camera Raw renders one.
 - **Camera Calibration**: a matrix on scene light that keeps greys: each primary's Hue moves it into the other two channels
   in opposite directions and its Saturation out of both (about 0.33 and 0.40 per 100, fitted per slider). Shadow Tint
   pushes along its measured green–magenta direction by a ramp table. Older process versions scale the sliders down as
@@ -261,12 +297,13 @@ rendering, before both, was 13–26 on every control:
 | Clarity | 4 | 3.46 | 2.93 |
 | Texture | 4 | 1.58 | 1.58 |
 | Dehaze | 4 | 11.96 | 3.16 |
-| Vibrance | 4 | 4.31 | 1.91 |
+| Vibrance | 4 | 4.31 | 0.80 |
 | Saturation | 4 | 2.40 | 0.96 |
-| Parametric curve | 24 | 4.75 | 0.72 |
+| Parametric curve | 24 | 4.75 | 0.47 |
 | Point curve | 7 | 3.01 | 0.84 |
-| Colour mixer | 105 | 1.53 | 0.91 |
-| Colour grading | 20 | 5.85 | 1.73 |
+| Colour mixer | 105 | 1.53 | 0.42 |
+| Colour grading | 20 | 5.85 | 0.47 |
+| Black & White | 8 | – | 0.70 |
 | Camera Calibration | 9 | 2.77 | 0.38 |
 | Post-crop vignette | 16 | 4.45 | 1.46 |
 | Lens vignetting | 3 | 9.54 | 0.72 |
@@ -275,7 +312,14 @@ rendering, before both, was 13–26 on every control:
 | White balance | 9 | 0.94 | 0.94 |
 | Grain | 1 | 1.17 | 1.17 |
 | Sharpening, noise reduction | 4 | 0.28 | 0.28 |
-| Pairs and the combined look | 24 | 7.04 | 2.39 |
+| Pairs and the combined look | 24 | 7.04 | 2.30 |
+
+RAWmakase's measured tables replaced our own fits on 2026-10-21 where the chart says they are closer: mean ΔE00 per
+control, our fit → the tables, Vibrance 1.91 → 0.80, colour mixer 0.91 → 0.42, Colour Grading 1.73 → 0.47 (with
+legacy split toning at Blending 100), parametric curve 0.72 → 0.47 (moved splits and combined regions only). Two
+combined cases got a little worse: `pair-parametric-lights+50-vibrance+50` (mean 0.91 → 0.77, its 95th percentile
+2.24 → 2.64) and `look-warm-contrast` (nine controls at once, 2.89 → 3.00); the tables measure each slider's change to
+Camera Raw's default render, and both cases move the colours before Vibrance sees them.
 
 What does not match yet:
 
@@ -287,7 +331,32 @@ What does not match yet:
   Exposure −1.5 is far off (`pair-exposure-1.5-whites+100`, 14.8).
 - **Texture** works on edges and fine detail, which the chart's flat patches hardly show; it keeps upstream's operator.
 - **White balance** at 2500 and 3200 K is 2–3.3 ΔE00 off (the other temperatures and tints 0.3–0.9).
-- Colour mixer bands combine by adding their changes, so alternating luminance (`mixer-alternate-luminance`, 3.8) is off.
+- Colour mixer bands combine by adding their changes, so alternating luminance (`mixer-alternate-luminance`, 1.4) is the
+  furthest of the mixer's cases.
+- **Black & White's** greys are 0.4–0.75 ΔE00 from Camera Raw's with one band moved; a mix of every band
+  (`bw-mix-auto`, Camera Raw's own Auto values) is 1.8, with strongly saturated blues and yellows furthest.
+
+## Black & White
+
+The Basic panel's **Treatment** turns the photo to greys (Camera Raw's Convert to Black & White, `ConvertToGrayscale` in
+XMP), and the Color panel's colour mixer gives way to the **B&W Mix**: eight sliders, one per colour band, −100…100, for
+how light that band's colours turn. The grey is the colour's luminance through RAWmakase's measured tables
+(`black_white_chart.bin`, Camera Raw 18.7's greys of its chart at a zero mix and with each band at −100, −50, +50 and
++100, interpolated between): at a zero mix close to the colour's luminance, blues and purples a little brighter; −100
+takes a band's saturated colours nearly to black. A grey stays where it is whatever the mix. It is worked out after
+Colour Grading, so a grade's tint changes the grey only through its brightness; the colour mixer's bands and Point Color
+take no part, as in Camera Raw. The mix stays in the settings while the treatment is Color, as Camera Raw keeps it.
+
+**Auto** sets the mix from the image. Converting to Black & White applies it when no mix has been set yet (Camera Raw's
+"Apply auto mix when first converting to black and white"); a mix already set is kept. NekoPhoto's Auto is its own and
+reads only whole-image statistics through fixed constants (`rawtone::GrayMixStatistics`): over every covered pixel, each
+band's share of the image's colour (the chroma of its pixels, shared between neighbouring bands by hue) and the mean
+lightness (the cube root of luminance) of those pixels. A band whose colours are lighter than the image's mean is
+lightened and one darker is darkened, by 100 slider steps per unit of that difference relative to the mean, scaled down
+for a band holding less than 5% of the image's colour and held within ±50, so colours that differ in brightness stay
+apart in grey. A grey image gets no mix. Camera Raw's own Auto is not reproduced: RAWmakase predicts it with a linear map
+fitted to Camera Raw's choices, a learned rule, and NekoPhoto's automatic adjustments keep to whole-image statistics
+with fixed constants ([legal-boundaries.md](legal-boundaries.md#camera-raw)).
 
 ## XMP presets
 
@@ -299,7 +368,9 @@ settings are read as attributes or elements, the point curves as sequences.
 - Read: Exposure2012, Contrast2012, Highlights2012, Shadows2012, Whites2012, Blacks2012, Texture, Clarity2012, Dehaze,
   Vibrance, Saturation; the Parametric* regions and splits; ToneCurvePV2012 (and Red, Green, Blue) and
   CurveRefineSaturation (stored less 100); Hue/Saturation/LuminanceAdjustment for the eight bands; SplitToning* and
-  ColorGrade* (wheels, Luminance, Blending, Balance); ShadowTint and the Red/Green/Blue Hue and Saturation; PostCropVignette*
+  ColorGrade* (wheels, Luminance, Blending, Balance; a preset with SplitToning keys and no ColorGrade keys renders at Blending
+  100, as Camera Raw renders legacy split toning); ConvertToGrayscale, AutoGrayscaleMix (Camera Raw stores the mix Auto chose,
+  so the values are used) and the GrayMixer* bands; ShadowTint and the Red/Green/Blue Hue and Saturation; PostCropVignette*
   (style codes 1 Highlight Priority, 2 Color Priority, 3 Paint Overlay); Grain*; VignetteAmount and VignetteMidpoint;
   LensManualDistortionAmount, LensProfileEnable with its distortion and vignetting scales, AutoLateralCA and the Defringe*
   settings; Perspective* (Scale less 100); Sharpness, SharpenRadius (0.5–3 px onto the slider), SharpenDetail,
@@ -308,14 +379,14 @@ settings are read as attributes or elements, the point curves as sequences.
   records (from the file); on pixels IncrementalTemperature and IncrementalTint, the relative ones the Camera Raw Filter
   saves.
 - Descriptive attributes (name, group, UUID, version, the Supports* flags, lens profile names) are skipped.
-- Everything else is listed when the preset is loaded and left out: a camera profile or look, Convert to Black & White
-  and its mix, Point Color, a crop, Upright analysis, the 2010 process's sliders, masks and retouching, and any setting at
+- Everything else is listed when the preset is loaded and left out: a camera profile or look, Point Color, a crop, Upright analysis, the 2010 process's sliders, masks and retouching, and any setting at
   a value this engine has no control for. A setting at the value that changes nothing is not listed.
 
 ## Automation
 
 `pixels.cameraRaw` takes `settings`, an object with the model's keys. Nested objects hold `curve`, `mixer`,
-`grading`, `detail`, `optics`, `geometry` and `calibration`. Keys that are left out keep their defaults, which
+`grading`, `detail`, `optics`, `geometry` and `calibration`. `blackWhite: true` is the Black & White treatment and
+`grayMix` its B&W Mix (`{"reds": …, "blues": …}` or eight numbers; `"Auto"` takes the mix Auto chooses for the layer). Keys that are left out keep their defaults, which
 change nothing. Unknown keys and wrong types are refused. The reply carries the normalized settings that were
 applied. `rpc.describe {"method": "pixels.cameraRaw"}` lists every key and range.
 

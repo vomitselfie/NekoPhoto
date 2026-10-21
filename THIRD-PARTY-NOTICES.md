@@ -135,8 +135,23 @@ Camera Raw parity (`tests/camera_raw_parity.cpp`, [docs/camera-raw.md](docs/came
 chart DNG, its patch layout, the settings cases and Camera Raw 18.7's renders of them in `tests/fixtures/camera-raw-parity`
 come from the test corpus of [RAWmakase](https://github.com/pch/rawmakase) (`tests/corpus`, commit
 0f1bc320207658c9778922a4d6cf87bd174be2b2; the renders cut down to the cases NekoPhoto renders), copyright (c) 2026
-RAWmakase contributors, MIT ([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)). The Camera Raw look fitted to those renders
-(`tools/camera_raw_fit.py`, `src/core/src/rawtone_tables.inc`) is fitted here; no RAWmakase code or table is used.
+RAWmakase contributors, MIT ([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)); the Black & White cases (`bw-*`) come from
+the same file at commit 7c19ab8d78fc91ebc18dd9514b4f83e405c27953, where the renders are unchanged. The tone curve, the
+Basic panel's sliders, Calibration and the vignettes fitted to those renders (`tools/camera_raw_fit.py`,
+`src/core/src/rawtone_tables.inc`) are fitted here.
+
+Camera Raw's colour mixer, Vibrance, Colour Grading, Black & White and the parametric curve's composed regions
+(`src/core/src/rawmeasured.cpp`) render through RAWmakase's measured tables, `src/third_party/rawmakase/*.bin`
+(`crates/rawmakase-engine/src/develop/` at commit 7c19ab8d78fc91ebc18dd9514b4f83e405c27953, unmodified; their origin and
+format are in [src/third_party/rawmakase/README.md](src/third_party/rawmakase/README.md)), read by a C++ port of the Rust that
+reads them there (`color_mixer.rs`, `black_white.rs`, `parametric.rs`, `color_grade_curves.rs`), copyright (c) 2026
+RAWmakase contributors, MIT ([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)).
+
+The camera exposure offsets in `src/core/src/rawcameras.cpp` are the rows of RAWmakase's `data/cameras.toml` (commit
+7c19ab8d78fc91ebc18dd9514b4f83e405c27953) that it fitted to Camera Raw's renders (`source = "fitted"`), with its rule for
+Fujifilm's exposure midpoint shift (`docs/cameras.md`), copyright (c) 2026 RAWmakase contributors, MIT
+([RAWmakase-MIT.txt](LICENSES/RAWmakase-MIT.txt)). The table's rows read from Adobe-written DNGs or Adobe profiles are not
+used.
 
 The Photoshop oracle (`tests/psd_composite_oracle.cpp`) judges files with a Dissolve layer by the rule of
 [PhotoCraft](https://github.com/storytold/photocraft)'s `crates/io/tests/corpus.rs` (`dissolve_matches`) at commit

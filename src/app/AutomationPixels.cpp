@@ -253,7 +253,11 @@ void AutomationServer::registerPixelsHandlers() {
         if (!s->canAdjustPixels()) fail("the active layer has no pixels to filter; select a pixel layer");
         CameraRawSettings settings;
         std::string error;
-        const QByteArray text = QJsonDocument(obj(p, "settings")).toJson(QJsonDocument::Compact);
+        // grayMix "Auto": the B&W Mix's Auto on the layer's colours (as the dialog's Auto button), filled in below.
+        QJsonObject given = obj(p, "settings");
+        const bool autoGray = given.value("grayMix").toString() == QLatin1String("Auto");
+        if (autoGray) given.remove("grayMix");
+        const QByteArray text = QJsonDocument(given).toJson(QJsonDocument::Compact);
         if (!CameraRawSettings::parse(text.toStdString(), settings, &error)) fail("settings." + qs(error), invalidParams);
         if (settings.rawTemperature != 0 || settings.rawTint != 0
             || (settings.whiteBalance != CameraRawWhiteBalance::Custom && settings.whiteBalance != CameraRawWhiteBalance::Auto))
@@ -269,6 +273,11 @@ void AutomationServer::registerPixelsHandlers() {
                 settings.temperature = std::clamp((*solved)[0], -100.0, 100.0);
                 settings.tint = std::clamp((*solved)[1], -100.0, 100.0);
             }
+        }
+        if (autoGray) {
+            LayerTransform probe;
+            if (auto deep = s->adjustmentSource16(0, probe)) settings.grayMix = CameraRawSettings::autoGrayMix(*deep);
+            else if (auto layer = s->adjustmentSource(0, probe)) settings.grayMix = CameraRawSettings::autoGrayMix(*layer);
         }
         const CameraRawSettings normalized = settings.normalized();
         QJsonObject applied = QJsonDocument::fromJson(QByteArray::fromStdString(normalized.toJson())).object();

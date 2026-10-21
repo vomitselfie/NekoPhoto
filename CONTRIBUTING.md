@@ -31,6 +31,12 @@ tools/ci-in-docker.sh ubuntu:24.04 clang
 OpenCV is vendored: CI builds `tools/build-opencv.sh` (a pinned 4.x, static, three modules) and configures with
 `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4`. A local build takes the system OpenCV unless you pass that too.
 
+CI compiles through ccache, its cache kept between runs per OS and compiler (`.github/workflows/linux.yml` and
+`windows.yml`; releases build from scratch). The same works locally with `-DCMAKE_C_COMPILER_LAUNCHER=ccache
+-DCMAKE_CXX_COMPILER_LAUNCHER=ccache`; with the precompiled headers on, ccache needs
+`CCACHE_SLOPPINESS=pch_defines,time_macros`, and Clang also `-DCMAKE_CXX_FLAGS="-Xclang -fno-pch-timestamp"`, or files
+built with the PCH are not cached.
+
 **Windows** builds with MinGW-w64 in MSYS2's UCRT64 shell (MSVC is not supported); the packages and steps are in
 [docs/linux-port.md](docs/linux-port.md#windows). From Linux, `tools/windows-cross.sh` cross-compiles the same
 tree in a Fedora container and runs the tests, the offscreen smoke test and an automation call under Wine,
