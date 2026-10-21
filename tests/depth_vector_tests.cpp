@@ -302,7 +302,8 @@ std::vector<StyleScene> styleScenes() {
     add("pillow emboss", [](LayerStyle& s) { Bevel b; b.kind = Bevel::Kind::Pillow; b.size = 8; s.bevels.push_back(b); });
     add("stroke emboss", [](LayerStyle& s) { Stroke k; k.size = 4; s.strokes.push_back(k); Bevel b; b.kind = Bevel::Kind::StrokeEmboss; b.size = 4; s.bevels.push_back(b); });
     add("bevel texture", [](LayerStyle& s) { Bevel b; b.size = 5; b.useTexture = true; b.texturePattern = "tile"; s.bevels.push_back(b); });
-    // Every effect at once: the 8-bit engine rounds to a byte after each effect it composites, ten times here.
+    // Every effect at once: the 8-bit engine rounds to a byte after each effect it composites, ten times here, and
+    // the stroke blends with the shadow and glow beneath the layer, where the layer's own edge pixels show that rounding.
     add("everything", [](LayerStyle& s) {
         DropShadow d; d.distance = 5; d.size = 5; s.dropShadows.push_back(d);
         OuterGlow o; o.size = 6; s.outerGlows.push_back(o);
@@ -314,7 +315,7 @@ std::vector<StyleScene> styleScenes() {
         PatternOverlay p; p.patternId = "tile"; p.opacity = 0.2f; s.patternOverlays.push_back(p);
         Stroke k; k.size = 2; s.strokes.push_back(k);
         Bevel b; b.size = 4; s.bevels.push_back(b);
-    }, 2, 0.0001);
+    }, 2, 0.0002);
     // The layer in a mode over its shadow, and at a Fill below 100% (the overlays then paint their own pass).
     StyleScene blended; blended.name = "multiply layer over its shadow"; blended.mode = BlendMode::Multiply;
     { DropShadow d; d.distance = 6; d.size = 6; blended.style.dropShadows.push_back(d); ColorOverlay c; c.opacity = 0.5f; blended.style.colorOverlays.push_back(c); }

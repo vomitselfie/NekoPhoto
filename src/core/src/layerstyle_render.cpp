@@ -327,8 +327,11 @@ bool reachesHalf(const Mask& matte, int w, int h, int x, int y, float reach) {
 }
 
 /// The stroke band: Outside `size` out, Inside `size` in, Center half each way, measured from the matte's
-/// half-coverage contour, 1 px antialiasing ramp.
-Mask strokeBand(const Mask& base, int w, int h, float size, Stroke::Position position, Mask* burst = nullptr) {
+/// half-coverage contour, 1 px antialiasing ramp. With `inPart` and `outPart`, its two parts as Photoshop draws them:
+/// the inside one relative to the shape (1 over the whole of a covered pixel the band reaches), the outside one over
+/// the part of each pixel the shape leaves uncovered.
+Mask strokeBand(const Mask& base, int w, int h, float size, Stroke::Position position, Mask* burst = nullptr,
+                Mask* inPart = nullptr, Mask* outPart = nullptr) {
     const float bandOut = position == Stroke::Position::Inside ? 0 : position == Stroke::Position::Center ? size / 2 : size;
     const float bandIn = position == Stroke::Position::Outside ? 0 : position == Stroke::Position::Center ? size / 2 : size;
     // The contour: half-covered pixels, plus faint ones that are a flat wash rather than an antialiased fringe
@@ -372,6 +375,14 @@ Mask strokeBand(const Mask& base, int w, int h, float size, Stroke::Position pos
         const float a = base[i];
         const float o = outside.empty() ? 0 : coverage(outside[i], bandOut), in = inside.empty() ? 0 : coverage(inside[i], bandIn);
         band[i] = unit(a * in + (1 - a) * o);
+    }
+    if (inPart) {
+        inPart->assign(base.size(), 0);
+        if (!inside.empty()) for (size_t i = 0; i < base.size(); i++) if (base[i] > 0) (*inPart)[i] = coverage(inside[i], bandIn);
+    }
+    if (outPart) {
+        outPart->assign(base.size(), 0);
+        if (!outside.empty()) for (size_t i = 0; i < base.size(); i++) if (base[i] < 1) (*outPart)[i] = coverage(outside[i], bandOut);
     }
     if (burst) {
         // Shape Burst: linear in the band's distance, 0 at its outer limit, 1 at its inner one; each side that is a
@@ -897,6 +908,70 @@ void drawStyled(const StyledDraw& in, Img& target) {
     const bool drawOverlays = in.phase != Phase::InteriorRest, drawRest = in.phase != Phase::InteriorOverlays;
     const bool ownContent = in.phase == StyledDraw::Phase::Whole;
 
+    // Strokes: their bands, in two parts. The outside part lies beneath the layer, over the backdrop, and fills the
+    // part of each pixel the layer's shape leaves uncovered; the inside part is drawn over the layer within its shape
+    // and takes the shape's coverage. Photoshop's model as PhotoCraft draws it (crates/compose/src/effects.rs,
+    // composite_with_effects_prepared; MIT OR Apache-2.0): psd-tools antialiased-stroke-edge, a 25% covered edge
+    // pixel ending opaque under an Outside stroke and 25% stroke colour under an Inside one. The first stroke listed
+    // is the top one.
+    std::vector<Mask> bands, inParts, outParts, burstPositions;
+    bool knocks = false, outsides = false;
+    for (const Stroke& stroke : style.strokes) {
+        const bool burst = stroke.gradientFill && stroke.gradient.type == StyleGradient::Type::ShapeBurst;
+        burstPositions.emplace_back(); inParts.emplace_back(); outParts.emplace_back();
+        bands.push_back(strokeBand(alpha, w, h, stroke.size * float(s), stroke.position, burst ? &burstPositions.back() : nullptr,
+                                   &inParts.back(), &outParts.back()));
+        knocks |= !stroke.overprint && ownContent && stroke.position != Stroke::Position::Outside;
+        outsides |= stroke.position != Stroke::Position::Inside && stroke.opacity > 0;
+    }
+    // A stroke's colour at an output pixel (into `c`) and the alpha it is drawn with there, at band coverage `cover`.
+    auto strokeAt = [&](size_t k, float cover, int ox, int oy, size_t i, float* c) {
+        const Stroke& stroke = style.strokes[k];
+        float a = cover * stroke.opacity * master * coverAt(ox, oy);
+        if (a <= 0) return 0.0f;
+        rgb(stroke.color, c);
+        if (stroke.gradientFill && stroke.gradient.type == StyleGradient::Type::ShapeBurst) {
+            // Photoshop supersamples the ramp over the pixel: a 1-2-1 tent of the colours around it.
+            const float step = 1.0f / std::max(1.0f, stroke.size * float(s) + 2);
+            float t = burstPositions[k][i];
+            if (stroke.gradient.reverse) t = 1 - t;
+            float acc[4] = {0, 0, 0, 0};
+            for (int j = -1; j <= 1; j++) {
+                float cc[4] = {}; gradRgb(stroke.gradient, unit(t + j * step), cc);
+                const float wgt = j == 0 ? 0.5f : 0.25f;
+                for (int q = 0; q < nc; q++) acc[q] += cc[q] * wgt;
+            }
+            for (int q = 0; q < nc; q++) c[q] = acc[q];
+            a *= gradientOpacity(stroke.gradient, t);
+        } else if (stroke.gradientFill) {
+            double gx, gy, gw, gh;
+            gradientBounds(stroke.gradient, gx, gy, gw, gh);
+            const float t = gradientPosition(stroke.gradient, gx, gy, gw, gh, docX(ox), docY(oy));
+            gradRgb(stroke.gradient, t, c);
+            a *= gradientOpacity(stroke.gradient, t);
+        }
+        return a;
+    };
+    // Overprint off (the default): the inside part knocks the layer's content out, even at 0% opacity, so the content
+    // keeps a x (1 - part) under the stroke. A Normal stroke is then drawn source-over, which scales what is under it by
+    // (1 - its alpha) once more: the factor divides that back out (an opaque Normal stroke knocks out nothing it does
+    // not cover anyway). Other modes blend with the backdrop in the band: plain (1 - part). Patchy's
+    // stroke_knockout_factor (MIT), from Photoshop's probes.
+    auto knock = [&](int ox, int oy, size_t i) {
+        if (!knocks) return 1.0f;
+        float f = 1;
+        for (size_t k = 0; k < style.strokes.size(); k++) {
+            const Stroke& stroke = style.strokes[k];
+            const float part = inParts[k][i];
+            if (stroke.overprint || part <= 0) continue;
+            if (stroke.mode != EffectBlend::Normal || stroke.opacity <= 0) { f *= unit(1 - part); continue; }
+            float c[4] = {};
+            const float remaining = 1 - strokeAt(k, alpha[i] * part, ox, oy, i, c);
+            f *= remaining <= 1e-6f ? 0.0f : unit((1 - part) / remaining);
+        }
+        return f;
+    };
+
     // Exterior: drop shadows, then outer glows.
     if (drawExterior) for (const DropShadow& shadow : style.dropShadows) {
         if (shadow.opacity <= 0) continue;
@@ -926,64 +1001,41 @@ void drawStyled(const StyledDraw& in, Img& target) {
         });
     }
 
-    if (!drawInterior) return;
 
-    // Strokes: their bands, and (Overprint off, the default) the knockout they make in the layer's own content.
-    std::vector<Mask> bands, burstPositions;
-    bool knocks = false;
-    for (const Stroke& stroke : style.strokes) {
-        const bool burst = stroke.gradientFill && stroke.gradient.type == StyleGradient::Type::ShapeBurst;
-        burstPositions.emplace_back();
-        bands.push_back(strokeBand(alpha, w, h, stroke.size * float(s), stroke.position, burst ? &burstPositions.back() : nullptr));
-        knocks |= !stroke.overprint && ownContent;
-    }
-    // A stroke's colour at an output pixel (into `c`) and the alpha it is drawn with there.
-    auto strokeAt = [&](size_t k, int ox, int oy, size_t i, float* c) {
-        const Stroke& stroke = style.strokes[k];
-        float a = bands[k][i] * stroke.opacity * master * coverAt(ox, oy);
-        if (a <= 0) return 0.0f;
-        rgb(stroke.color, c);
-        if (stroke.gradientFill && stroke.gradient.type == StyleGradient::Type::ShapeBurst) {
-            // Photoshop supersamples the ramp over the pixel: a 1-2-1 tent of the colours around it.
-            const float step = 1.0f / std::max(1.0f, stroke.size * float(s) + 2);
-            float t = burstPositions[k][i];
-            if (stroke.gradient.reverse) t = 1 - t;
-            float acc[4] = {0, 0, 0, 0};
-            for (int j = -1; j <= 1; j++) {
-                float cc[4] = {}; gradRgb(stroke.gradient, unit(t + j * step), cc);
-                const float wgt = j == 0 ? 0.5f : 0.25f;
-                for (int q = 0; q < nc; q++) acc[q] += cc[q] * wgt;
-            }
-            for (int q = 0; q < nc; q++) c[q] = acc[q];
-            a *= gradientOpacity(stroke.gradient, t);
-        } else if (stroke.gradientFill) {
-            double gx, gy, gw, gh;
-            gradientBounds(stroke.gradient, gx, gy, gw, gh);
-            const float t = gradientPosition(stroke.gradient, gx, gy, gw, gh, docX(ox), docY(oy));
-            gradRgb(stroke.gradient, t, c);
-            a *= gradientOpacity(stroke.gradient, t);
-        }
-        return a;
-    };
-    // Overprint off (the default): the band knocks the layer's content out, even at 0% opacity, so the content keeps
-    // a x (1 - band) under the stroke. A Normal stroke is then drawn source-over, which scales what is under it by
-    // (1 - its alpha) once more: the factor divides that back out (an opaque Normal stroke knocks out nothing it does
-    // not cover anyway). Other modes blend with the backdrop in the band: plain (1 - band). Patchy's
-    // stroke_knockout_factor (MIT), from Photoshop's probes.
-    auto knock = [&](int ox, int oy, size_t i) {
-        if (!knocks) return 1.0f;
-        float f = 1;
+    // The strokes' outside parts, beneath the layer: each blended with the backdrop at full strength and taking its
+    // coverage less what the strokes above it took (a Multiply stroke over a wider Normal one multiplies the
+    // backdrop, not the lower stroke). Under a partly covered pixel the share is (1 - a) / (1 - c), c the coverage the
+    // layer then composites with, so the stroke ends with the (1 - a) the shape leaves (Fill 0% leaves the interior
+    // clear).
+    if (drawExterior && outsides) paintOut([&](int ox, int oy, T* d, size_t i) {
+        float cover = 0, acc[n] = {}, base[n];
+        for (int q = 0; q < n; q++) base[q] = float(d[q]) / one;
+        const float a = alpha[i];
+        const float layerCover = ownContent ? unit(a * fill * master * coverAt(ox, oy) * knock(ox, oy, i)) : unit(a * master * coverAt(ox, oy));
         for (size_t k = 0; k < style.strokes.size(); k++) {
-            const Stroke& stroke = style.strokes[k];
-            const float band = bands[k][i];
-            if (stroke.overprint || band <= 0) continue;
-            if (stroke.mode != EffectBlend::Normal || stroke.opacity <= 0) { f *= unit(1 - band); continue; }
+            const float part = outParts[k][i];
+            if (part <= 0 || style.strokes[k].opacity <= 0) continue;
             float c[4] = {};
-            const float remaining = 1 - strokeAt(k, ox, oy, i, c);
-            f *= remaining <= 1e-6f ? 0.0f : unit((1 - band) / remaining);
+            float sa = strokeAt(k, part, ox, oy, i, c);
+            if (a > 0) sa *= layerCover >= 1 ? 1.0f : unit((1 - a) / (1 - layerCover));
+            const float share = unit(sa) * (1 - cover);
+            if (share <= 0) continue;
+            cover += share;
+            float blended[n];
+            for (int q = 0; q < n; q++) blended[q] = base[q];
+            compositeEffect<float, M>(blended, c, 1, style.strokes[k].mode);
+            for (int q = 0; q < n; q++) acc[q] += share * blended[q];
         }
-        return f;
-    };
+        if (cover <= 0) return;
+        for (int q = 0; q < n; q++) {
+            const float v = base[q] * (1 - cover) + acc[q];
+            if constexpr (std::is_same_v<T, float>) d[q] = q == nc ? unit(v) : std::max(0.0f, v);
+            else d[q] = T(std::clamp(v * one + 0.5f, 0.0f, one));
+        }
+        if constexpr (!std::is_same_v<T, float>) for (int q = 0; q < nc; q++) d[q] = std::min(d[q], d[nc]);
+    });
+
+    if (!drawInterior) return;
 
     // Interior overlays (pattern under gradient under colour) and satins, folded into the layer's colour.
     auto patterns = in.patterns;
@@ -1185,13 +1237,13 @@ void drawStyled(const StyledDraw& in, Img& target) {
         });
     }
 
-    // Strokes.
-    for (size_t k = 0; k < style.strokes.size(); k++) {
+    // The strokes' inside parts, over the layer, the bottom one first.
+    for (size_t k = style.strokes.size(); k-- > 0;) {
         const Stroke& stroke = style.strokes[k];
-        if (stroke.opacity <= 0) continue;
+        if (stroke.opacity <= 0 || stroke.position == Stroke::Position::Outside) continue;
         paintOut([&](int ox, int oy, T* d, size_t i) {
             float c[4] = {};
-            const float a = strokeAt(k, ox, oy, i, c);
+            const float a = strokeAt(k, alpha[i] * inParts[k][i], ox, oy, i, c);
             if (a > 0) compositeEffect<T, M>(d, c, a, stroke.mode);
         });
     }
