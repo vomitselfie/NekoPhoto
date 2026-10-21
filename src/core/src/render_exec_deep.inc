@@ -77,6 +77,19 @@ struct RenderExecDeep {
     /// While a styled clipping base is drawn: the colours of its pixels with the layers clipped to it over them (straight,
     /// over the output), which its effects then take as its content.
     const Img* clippedColours = nullptr;
+    /// And the share of the base's shape that content covers, where the base's Fill is below 100%.
+    const std::function<float(int, int)>* clippedFill = nullptr;
+
+    /// Premultiplied pixels held opaque scaled to `share` (a clipping base's own pixels at its Fill).
+    static void fadeTo(Img& image, float share) {
+        const Sample a = O::coverage(share);
+        const size_t count = size_t(image.width()) * size_t(image.height());
+        for (size_t i = 0; i < count; i++) {
+            Sample* p = image.data() + i * N;
+            for (int c = 0; c < C; c++) p[c] = O::mul(p[c], a);
+            p[C] = a;
+        }
+    }
     /// A Blend If layer's gate, for its styled draw to run between its pixels and its interior effects.
     std::function<void()>* interiorGate = nullptr;
     bool ungated = false;   // drawing a Blend If layer's own pass (blendif.h)
@@ -561,6 +574,7 @@ struct RenderExecDeep {
                     }
                 }
             });
+            if (clippedFill) draw.fillAt = *clippedFill;
             O::drawStyled(draw, target);
             drawStroke();
             return;
@@ -707,12 +721,20 @@ struct RenderExecDeep {
             // A styled base: its pixels with the clipped layers over them (within its own transparency) are the
             // content its effects are drawn around and over, as in Photoshop: an overlay covers the clipped layers too,
             // and a stroke lies over them (psd-tools stroke-composite; PhotoCraft composites a styled base the same way).
-            // Drawn whole, never resumed mid-stack (`keep` stays unreached).
+            // The base's Fill fades its own pixels, not the clipped layers (at Fill 0% they show at full strength
+            // within its shape); its Opacity fades the whole group. Drawn whole, never resumed mid-stack (`keep` stays
+            // unreached).
+            const float fill = float(std::clamp(layer.fill, 0.0, 1.0));
+            const bool fillApart = fill < 1 && !fillIsSpecial(blendModeFor(blendOf(layer), document.colorMode));
             Img group = blank(outWidth, outHeight);
-            const bool wasPlain = plainOnly, wasUngated = ungated;
-            plainOnly = true; ungated = true;
-            drawOwn(layer, group, nullptr);
-            plainOnly = wasPlain; ungated = wasUngated;
+            {
+                Layer full = layer;   // its colours wherever its shape is, whatever its Fill and Opacity
+                full.fill = 1; full.opacity = 1;
+                const bool wasPlain = plainOnly, wasUngated = ungated;
+                plainOnly = true; ungated = true;
+                drawOwn(full, group, nullptr);
+                plainOnly = wasPlain; ungated = wasUngated;
+            }
             const size_t count = size_t(outWidth) * size_t(outHeight);
             for (size_t i = 0; i < count; i++) {
                 Sample* p = group.data() + i * N;
@@ -720,6 +742,7 @@ struct RenderExecDeep {
                 for (int c = 0; c < C; c++) p[c] = a ? O::unpremultiply(p[c], a) : Sample(0);
                 p[C] = O::one;
             }
+            if (fillApart) fadeTo(group, fill);
             for (const Uuid& childId : stack->second) {
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
@@ -728,9 +751,19 @@ struct RenderExecDeep {
                     else drawOwn(*it->second, group, nullptr);
                 });
             }
+            // Straight colours, the alpha left as the share of the shape the content covers.
+            for (size_t i = 0; i < count; i++) {
+                Sample* p = group.data() + i * N;
+                const Sample a = p[C];
+                if (a && a < O::one) for (int c = 0; c < C; c++) p[c] = O::unpremultiply(p[c], a);
+            }
+            std::function<float(int, int)> fillAt;
+            if (fillApart) fillAt = [&group](int x, int y) { return O::unit(group.row(y)[x * N + C]); };
             clippedColours = &group;
+            clippedFill = fillApart ? &fillAt : nullptr;
             drawOwn(layer, out, folders.get());
             clippedColours = nullptr;
+            clippedFill = nullptr;
             return;
         }
         // A clipping stack: the base's alpha is shared by the layers clipped to it.
@@ -739,6 +772,8 @@ struct RenderExecDeep {
         // the shape the clipped layers take.
         const std::optional<BlendIf> blendIf = plainOnly ? std::nullopt : layerBlendIf(layer, document.colorMode);
         const size_t n = size_t(outWidth) * size_t(outHeight);
+        const float baseFill = float(std::clamp(layer.fill, 0.0, 1.0));
+        const bool fillApart = baseFill < 1 && !fillIsSpecial(blendModeFor(blendOf(layer), document.colorMode));
         std::vector<Sample> alpha;
         size_t first = 0;
         if (resume) {
@@ -748,7 +783,10 @@ struct RenderExecDeep {
         } else {
             const bool wasUngated = ungated;
             if (blendIf) ungated = true;
-            drawOwn(layer, group, nullptr);
+            // The base's Fill fades its own pixels, not the clipped layers: the clip is its shape at its Opacity, and
+            // its pixels go under the clipped layers at Fill (Fill in the special eight blends its own way).
+            if (fillApart) { Layer full = layer; full.fill = 1; drawOwn(full, group, nullptr); }
+            else drawOwn(layer, group, nullptr);
             ungated = wasUngated;
             alpha.resize(n);
             for (size_t i = 0; i < n; i++) {
@@ -758,6 +796,7 @@ struct RenderExecDeep {
                 for (int c = 0; c < C; c++) p[c] = a ? O::unpremultiply(p[c], a) : Sample(0);
                 p[C] = O::one;
             }
+            if (fillApart) fadeTo(group, baseFill);
         }
         for (size_t c = first; c < stack->second.size(); c++) {
             const Uuid& childId = stack->second[c];
@@ -774,7 +813,7 @@ struct RenderExecDeep {
             Sample* p = group.data() + i * N;
             const Sample a = alpha[i];
             for (int c = 0; c < C; c++) p[c] = O::mul(p[c], a);
-            p[C] = a;
+            p[C] = fillApart ? O::mul(p[C], a) : a;   // within the shape, as the base at Fill and the clipped layers left it
         }
         std::optional<Img> before;
         if (blendIf) before.emplace(out);

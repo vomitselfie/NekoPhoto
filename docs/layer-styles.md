@@ -36,7 +36,9 @@ blends its own pixels and the interior effects land on that, with it on they fol
 folder that isolates, the overlays and satins join the folder's result, which its mode then blends: Patchy's
 photoshop-group-fx-interior); a
 clipped layer is masked by the base's pixels, never its effects, and a styled base draws its effects around and
-over its pixels with the clipped layers on them (an overlay tints the clipped layers, a stroke lies over them); with
+over its pixels with the clipped layers on them (an overlay tints the clipped layers, a stroke lies over them). A
+clipping base's Fill hides only its own pixels: at Fill 0% its shape still clips and its effects still draw, and the
+clipped layers show at full strength within it; its Opacity fades the whole group. With
 Fill below 100% the overlays are their own passes.
 
 Strokes follow PhotoCraft (MIT OR Apache-2.0), which matches Photoshop on psd-tools' stroke files. A stroke's width

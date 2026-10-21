@@ -31,6 +31,9 @@ struct StyledDraw {
     const TransferCurve* linear = nullptr;
     BlendMode mode = BlendMode::Normal;
     float master = 1, fill = 1;
+    /// Per output pixel, the share of the layer's shape its content covers, where that is not `fill`: a clipping base
+    /// below 100% Fill, whose clipped layers show at full strength over its own pixels at Fill. Null: `fill`.
+    std::function<float(int x, int y)> fillAt;
     /// Per output pixel, what folder masks and clipping allow; null for all.
     const GrayImage* coverage = nullptr;
     const Gray16* coverage16 = nullptr;   // the same for a 16-bit target

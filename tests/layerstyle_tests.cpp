@@ -2,6 +2,7 @@
 // would write and checks the pixels. The calibration itself is checked against Photoshop's own renders by
 // build/tests/psd_roundtrip's sibling scripts over Patchy's fixtures (docs/layer-styles.md).
 #include "check.h"
+#include "nekophoto/depth.h"
 #include "nekophoto/document.h"
 #include "nekophoto/layerstyle.h"
 #include "nekophoto/psd_carry.h"
@@ -420,5 +421,67 @@ TEST_CASE(an_isolated_folder_carries_its_folded_overlay_in_its_mode) {
         CHECK_EQ(int(p[1]), asGroup ? 150 : 255);
         CHECK_EQ(int(p[2]), 0);
         CHECK_EQ(int(at(*out, 2, 2)[0]), 200);   // outside the folder's pixels: the backdrop
+    }
+}
+
+namespace {
+
+/// A white document, a grey 10 x 10 base at (15, 15) (with a 2 px blue Outside stroke when `styled`) at `opacity` and
+/// `fill`, and a green layer over the whole canvas at `clippedOpacity` clipped to it.
+Document clippingGroup(bool styled, double opacity, double fill, double clippedOpacity = 1) {
+    auto doc = squareWith(lfx2({{"FrFX", object(descriptor("FrFX", {{"enab", boolean(true)}, {"Styl", enumeration("FStl", "OutF")},
+        {"PntT", enumeration("FrFl", "SClr")}, {"Md  ", enumeration("BlnM", "Nrml")}, {"Opct", number(100, "#Prc")},
+        {"Sz  ", number(2, "#Pxl")}, {"Clr ", rgb(0, 0, 255)}}))}}));
+    if (!styled) doc.layers[1].psdCarry = nullptr;
+    doc.layers[1].opacity = opacity;
+    doc.layers[1].fill = fill;
+    auto green = std::make_shared<Image>(40, 40);
+    green->fill(0, 255, 0, 255);
+    Layer clipped(Asset::make(green, "Clipped"), Point(0, 0));
+    clipped.maskSourceId = doc.layers[1].id;
+    clipped.opacity = clippedOpacity;
+    doc.layers.push_back(clipped);
+    return doc;
+}
+
+} // namespace
+
+/// The flattened colour at (x, y), at 8 bits or (`deep`) through a 16-bit document narrowed back.
+std::array<int, 3> flatAt(Document doc, bool deep, int x, int y) {
+    if (!deep) { auto out = renderFlattened(doc); const uint8_t* p = at(*out, x, y); return {p[0], p[1], p[2]}; }
+    doc.sampleType = SampleType::U16;
+    for (Layer& l : doc.layers) if (l.asset) if (auto u8 = l.asset->image.u8()) l.asset = Asset::make(Image16Ptr(widenImage(*u8)), l.asset->name);
+    auto out = renderFlattened16(doc);
+    const uint16_t* p = out->pixel(x, y);
+    return {narrow16(p[0]), narrow16(p[1]), narrow16(p[2])};
+}
+
+bool near(std::array<int, 3> p, int r, int g, int b) {
+    const bool ok = std::abs(p[0] - r) <= 2 && std::abs(p[1] - g) <= 2 && std::abs(p[2] - b) <= 2;
+    if (!ok) std::fprintf(stderr, "  got %d %d %d, want %d %d %d\n", p[0], p[1], p[2], r, g, b);
+    return ok;
+}
+
+TEST_CASE(a_clipping_bases_fill_hides_only_its_own_pixels) {
+    // Photoshop: a base at Fill 0% still clips (its alpha shapes the group) and still draws its effects; only its own
+    // pixels are hidden. The clipped layer shows at full strength inside the shape, nothing outside it. At 8 and 16 bits,
+    // without and with a layer style.
+    for (bool deep : {false, true}) for (bool styled : {false, true}) {
+        CHECK(near(flatAt(clippingGroup(styled, 1, 0), deep, 20, 20), 0, 255, 0));
+        CHECK(near(flatAt(clippingGroup(styled, 1, 0), deep, 5, 5), 255, 255, 255));
+        if (styled) CHECK(near(flatAt(clippingGroup(styled, 1, 0), deep, 13, 20), 0, 0, 255));   // the stroke still draws
+        // A half-strength clipped layer over the hidden base: half green over the white below.
+        CHECK(near(flatAt(clippingGroup(styled, 1, 0, 0.5), deep, 20, 20), 128, 255, 128));
+        // Fill 50%: the clipped layer covers the half-faded base wholly.
+        CHECK(near(flatAt(clippingGroup(styled, 1, 0.5), deep, 20, 20), 0, 255, 0));
+        // Fill 50% under a half-strength clipped layer: grey at half, then green at half, over white.
+        CHECK(near(flatAt(clippingGroup(styled, 1, 0.5, 0.5), deep, 20, 20), 96, 223, 96));
+    }
+}
+
+TEST_CASE(a_clipping_bases_opacity_fades_the_whole_group) {
+    for (bool deep : {false, true}) for (bool styled : {false, true}) {
+        CHECK(near(flatAt(clippingGroup(styled, 0.5, 1), deep, 20, 20), 128, 255, 128));   // green at half over white
+        if (styled) CHECK(near(flatAt(clippingGroup(styled, 0.5, 1), deep, 13, 20), 128, 128, 255));   // the stroke at half too
     }
 }

@@ -837,6 +837,8 @@ void drawStyled(const StyledDraw& in, Img& target) {
     }
     if (!any) return;
     const float master = in.master, fill = in.fill;
+    // The share of the shape the content covers at an output pixel: Fill, or a clipping base's own (StyledDraw::fillAt).
+    auto fillAt = [&](int ox, int oy) { return in.fillAt ? in.fillAt(ox, oy) : fill; };
     const GrayOf<S>* cover = nullptr;
     if constexpr (S == SampleType::U8) cover = in.coverage;
     else if constexpr (S == SampleType::U16) cover = in.coverage16;
@@ -1008,7 +1010,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
         float color[4] = {}; rgb(shadow.color, color);
         paintOut([&](int ox, int oy, T* d, size_t i) {
             float a = m[i] * shadow.opacity * master * coverAt(ox, oy);
-            if (shadow.layerConceals) a *= exteriorKnockout(alpha[i], alpha[i] * fill * master);
+            if (shadow.layerConceals) a *= exteriorKnockout(alpha[i], alpha[i] * fillAt(ox, oy) * master);
             compositeEffect<T, M>(d, color, a, shadow.mode);
         });
     }
@@ -1023,7 +1025,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
         }
         float color[4] = {}; rgb(glow.color, color);
         paintOut([&](int ox, int oy, T* d, size_t i) {
-            compositeEffect<T, M>(d, color, m[i] * exteriorKnockout(alpha[i], alpha[i] * fill * master) * glow.opacity * master * coverAt(ox, oy), glow.mode);
+            compositeEffect<T, M>(d, color, m[i] * exteriorKnockout(alpha[i], alpha[i] * fillAt(ox, oy) * master) * glow.opacity * master * coverAt(ox, oy), glow.mode);
         });
     }
 
@@ -1038,7 +1040,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
         for (int q = 0; q < n; q++) base[q] = float(d[q]) / one;
         const float a = alpha[i];
         // What the layer then covers: its content and the strokes' inside parts over it.
-        float layerCover = ownContent ? unit(a * fill * master * coverAt(ox, oy) * knock(ox, oy, i)) : unit(a * master * coverAt(ox, oy));
+        float layerCover = ownContent ? unit(a * fillAt(ox, oy) * master * coverAt(ox, oy) * knock(ox, oy, i)) : unit(a * master * coverAt(ox, oy));
         if (a > 0) for (size_t k = 0; k < style.strokes.size(); k++) {
             const float part = inParts[k][i];
             if (part <= 0 || style.strokes[k].opacity <= 0) continue;
@@ -1154,7 +1156,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
             if constexpr (S == SampleType::F32) c[k] = std::max(0.0f, p[k] / a);   // linear, above 1 kept
             else c[k] = std::min(1.0f, p[k] / one / a);
         }
-        const float paint = a * master * (fillInside ? 1.0f : fill) * knock(ox, oy, i) * coverAt(ox, oy);
+        const float paint = a * master * (fillInside ? 1.0f : fillAt(ox, oy)) * knock(ox, oy, i) * coverAt(ox, oy);
         if (paint <= 0) return;
         if (foldInteriors && interiorsFirst) foldInto(c, ox, oy, i);
         if (in.mode != BlendMode::Normal && foldInteriors && !interiorsFirst) {

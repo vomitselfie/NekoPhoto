@@ -55,6 +55,20 @@ struct RenderExec<SampleType::U8> {
     /// While a styled clipping base is drawn: the colours of its pixels with the layers clipped to it over them (straight,
     /// over the output), which its effects then take as its content.
     const Image* clippedColours = nullptr;
+    /// And the share of the base's shape that content covers, where the base's Fill is below 100%.
+    const std::function<float(int, int)>* clippedFill = nullptr;
+
+    /// Premultiplied pixels held opaque scaled to `share` (a clipping base's own pixels at its Fill).
+    static void fadeTo(Image& image, float share) {
+        const uint8_t a = uint8_t(std::lround(share * 255));
+        for (int y = 0; y < image.height(); y++) {
+            uint8_t* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                for (int k = 0; k < 3; k++) p[k] = uint8_t((p[k] * a + 127) / 255);
+                p[3] = a;
+            }
+        }
+    }
     /// A Blend If layer's gate, for its styled draw to run between its pixels and its interior effects.
     std::function<void()>* interiorGate = nullptr;
     bool ungated = false;     // drawing a Blend If layer's own pass (blendif.h)
@@ -532,6 +546,7 @@ struct RenderExec<SampleType::U8> {
             };
             // The folders' coverage alone: the vector mask is already in the source.
             if (vector) draw.coverage = coverageWithoutVector;
+            if (clippedFill) draw.fillAt = *clippedFill;
             drawStyledLayer(draw, target);
             drawStroke();
             return;
@@ -710,13 +725,22 @@ struct RenderExec<SampleType::U8> {
             // A styled base: its pixels with the clipped layers over them (within its own transparency) are the
             // content its effects are drawn around and over, as in Photoshop: an overlay covers the clipped layers too,
             // and a stroke lies over them (psd-tools stroke-composite; PhotoCraft composites a styled base the same way).
-            // Drawn whole, never resumed mid-stack (`keep` stays unreached).
+            // The base's Fill fades its own pixels, not the clipped layers (at Fill 0% they show at full strength
+            // within its shape); its Opacity fades the whole group. Drawn whole, never resumed mid-stack (`keep` stays
+            // unreached).
+            const float fill = float(std::clamp(layer.fill, 0.0, 1.0));
+            const bool fillApart = fill < 1 && !fillIsSpecial(blendModeFor(blendOf(layer), document.colorMode));
             Image group(outWidth, outHeight);
-            const bool wasPlain = plainOnly, wasUngated = ungated;
-            plainOnly = true; ungated = true;
-            drawOwn(layer, group, nullptr);
-            plainOnly = wasPlain; ungated = wasUngated;
+            {
+                Layer full = layer;   // its colours wherever its shape is, whatever its Fill and Opacity
+                full.fill = 1; full.opacity = 1;
+                const bool wasPlain = plainOnly, wasUngated = ungated;
+                plainOnly = true; ungated = true;
+                drawOwn(full, group, nullptr);
+                plainOnly = wasPlain; ungated = wasUngated;
+            }
             layer_unpremultiply_opaque(group.data(), size_t(group.stride()), size_t(outWidth), size_t(outHeight));
+            if (fillApart) fadeTo(group, fill);
             for (const Uuid& childId : stack->second) {
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
@@ -725,9 +749,19 @@ struct RenderExec<SampleType::U8> {
                     else drawOwn(*it->second, group, nullptr);
                 });
             }
+            // Straight colours, the alpha left as the share of the shape the content covers.
+            for (int y = 0; y < outHeight; y++) {
+                uint8_t* p = group.row(y);
+                for (int x = 0; x < outWidth; x++, p += 4)
+                    if (p[3] && p[3] < 255) for (int k = 0; k < 3; k++) p[k] = uint8_t(std::min(255, (p[k] * 255 + p[3] / 2) / p[3]));
+            }
+            std::function<float(int, int)> fillAt;
+            if (fillApart) fillAt = [&group](int x, int y) { return group.row(y)[x * 4 + 3] / 255.0f; };
             clippedColours = &group;
+            clippedFill = fillApart ? &fillAt : nullptr;
             drawOwn(layer, out, folders.get());
             clippedColours = nullptr;
+            clippedFill = nullptr;
             return;
         }
         // A clipping stack: the base's alpha is shared by the layers clipped to it.
@@ -735,6 +769,8 @@ struct RenderExec<SampleType::U8> {
         // A base with Blend If: its gate applies to the clipped result against the backdrop, so it does not shrink
         // the shape the clipped layers take.
         const std::optional<BlendIf> blendIf = plainOnly ? std::nullopt : layerBlendIf(layer, document.colorMode);
+        const float baseFill = float(std::clamp(layer.fill, 0.0, 1.0));
+        const bool fillApart = baseFill < 1 && !fillIsSpecial(blendModeFor(blendOf(layer), document.colorMode));
         std::vector<uint8_t> alpha;
         size_t first = 0;
         if (resume) {
@@ -744,11 +780,15 @@ struct RenderExec<SampleType::U8> {
         } else {
             const bool wasUngated = ungated;
             if (blendIf) ungated = true;
-            drawOwn(layer, group, nullptr);
+            // The base's Fill fades its own pixels, not the clipped layers: the clip is its shape at its Opacity, and
+            // its pixels go under the clipped layers at Fill (Fill in the special eight blends its own way).
+            if (fillApart) { Layer full = layer; full.fill = 1; drawOwn(full, group, nullptr); }
+            else drawOwn(layer, group, nullptr);
             ungated = wasUngated;
             alpha.resize(size_t(outWidth) * outHeight);
             layer_extract_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
             layer_unpremultiply_opaque(group.data(), size_t(group.stride()), size_t(outWidth), size_t(outHeight));
+            if (fillApart) fadeTo(group, baseFill);
         }
         for (size_t c = first; c < stack->second.size(); c++) {
             const Uuid& childId = stack->second[c];
@@ -761,7 +801,13 @@ struct RenderExec<SampleType::U8> {
                 else drawOwn(*it->second, group, nullptr);
             });
         }
-        layer_restore_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
+        if (!fillApart) layer_restore_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
+        else for (int y = 0; y < outHeight; y++) {
+            // Within the shape: the base at Fill under the clipped layers, as they left the alpha.
+            uint8_t* p = group.row(y);
+            const uint8_t* a = alpha.data() + size_t(y) * size_t(outWidth);
+            for (int x = 0; x < outWidth; x++, p += 4) for (int k = 0; k < 4; k++) p[k] = uint8_t((p[k] * a[x] + 127) / 255);
+        }
         BlendMode mode = blendOf(layer);
         std::optional<Image> before;
         if (blendIf) before.emplace(out);
