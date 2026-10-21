@@ -110,6 +110,13 @@ coverage and Fill as coverage over transparency) is adapted from [PhotoCraft](ht
 (dual MIT / Apache-2.0, used under MIT, [PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt); Copyright (c) 2026 ArtCraft
 Team and the PhotoCraft contributors).
 
+The Stroke layer effect's distances (`chamferFrom` and its use in `strokeBand`, `src/core/src/layerstyle_render.cpp`: a
+5 × 5 chamfer with exact step lengths, partly covered pixels seeding at their uncovered share, the exact transform from
+20 px out) are adapted from [PhotoCraft](https://github.com/storytold/photocraft)'s `chamfer_from`, `dist_outside_by`
+and `stroke_outside_exact` in `crates/compose/src/effects.rs` at commit 04d0212c7a1006b00f6ec9dd144affc98f8e7d83 (dual
+MIT / Apache-2.0, used under MIT, [PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt); Copyright (c) 2026 ArtCraft Team
+and the PhotoCraft contributors).
+
 Edit ▸ Search's fuzzy match (`fuzzyScore` in `src/app/CommandPalette.cpp`: a subsequence match scored by contiguous
 runs and word starts, less for long texts) is adapted from [PhotoCraft](https://github.com/storytold/photocraft)'s
 `crates/ui-egui/src/palette.rs` at commit b07a2e5b43939497032a0c27489df55a1a1a7295 (dual MIT / Apache-2.0, used under

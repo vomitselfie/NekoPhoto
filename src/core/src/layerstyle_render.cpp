@@ -131,6 +131,30 @@ Mask distanceField(const Mask& base, int w, int h, bool toPainted) {
     return field;
 }
 
+/// Outside widths from which a stroke's outer edge is measured exactly rather than with the chamfer below.
+constexpr float kStrokeChamferMax = 20;
+
+/// Photoshop's stroke distance: a chamfer transform over a 5 x 5 neighbourhood with exact step lengths (1, sqrt 2,
+/// sqrt 5), from per-pixel start values (kUnreached: not a seed). Its corners measure sqrt 5 + 1 at offset (1, 3) and
+/// sqrt 5 + sqrt 2 at (2, 3), as Photoshop's strokes do (psd-tools outside-stroke), where the exact distances are 3.162
+/// and 3.606. Adapted from PhotoCraft's chamfer_from (crates/compose/src/effects.rs, MIT OR Apache-2.0).
+Mask chamferFrom(Mask d, int w, int h) {
+    constexpr float s2 = 1.41421356f, s5 = 2.23606798f;
+    struct Step { int dx, dy; float length; };
+    static constexpr Step forward[8] = {{-1, 0, 1}, {-1, -1, s2}, {0, -1, 1}, {1, -1, s2}, {-1, -2, s5}, {1, -2, s5}, {-2, -1, s5}, {2, -1, s5}};
+    auto relax = [&](int x, int y, int sign) {
+        float& best = d[size_t(y) * w + x];
+        for (const Step& st : forward) {
+            const int nx = x + st.dx * sign, ny = y + st.dy * sign;
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            best = std::min(best, d[size_t(ny) * w + nx] + st.length);
+        }
+    };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) relax(x, y, 1);
+    for (int y = h - 1; y >= 0; y--) for (int x = w - 1; x >= 0; x--) relax(x, y, -1);
+    return d;
+}
+
 /// Chamfer distance to painted pixels, carrying each connected component's strongest value.
 void chamfer(const Mask& input, int w, int h, Mask& dist, Mask& strength) {
     Mask source(input.size(), 0);
@@ -328,10 +352,19 @@ Mask strokeBand(const Mask& base, int w, int h, float size, Stroke::Position pos
         if (anchor[i] > 0 && anchor[i] < 1) fringe = true;
     }
     Mask outside, inside;
-    if (fringe) subpixelFields(anchor, w, h, bandOut > 0, bandIn > 0, outside, inside);
+    const bool exactOut = bandOut >= kStrokeChamferMax;
+    if (fringe) subpixelFields(anchor, w, h, exactOut, bandIn > 0, outside, inside);
     else {
-        if (bandOut > 0) outside = distanceField(contour, w, h, true);
+        if (exactOut) outside = distanceField(contour, w, h, true);
         if (bandIn > 0) inside = distanceField(contour, w, h, false);
+    }
+    // An outside edge under 20 px measures Photoshop's chamfer from every painted pixel, a partly covered one starting
+    // at its uncovered share (PhotoCraft's stroke_outside_exact: past 20 px the chamfer's octagon would facet the
+    // stroke, and the exact field above stays).
+    if (bandOut > 0 && bandOut < kStrokeChamferMax) {
+        Mask start(base.size(), kUnreached);
+        for (size_t i = 0; i < base.size(); i++) if (base[i] > 0) start[i] = 1 - unit(base[i]);
+        outside = chamferFrom(std::move(start), w, h);
     }
     auto coverage = [](float d, float band) { return band <= 0 ? 0.0f : unit(band + 1 - d); };
     Mask band(base.size(), 0);
