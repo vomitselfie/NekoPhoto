@@ -1037,7 +1037,14 @@ void drawStyled(const StyledDraw& in, Img& target) {
         float cover = 0, acc[n] = {}, base[n];
         for (int q = 0; q < n; q++) base[q] = float(d[q]) / one;
         const float a = alpha[i];
-        const float layerCover = ownContent ? unit(a * fill * master * coverAt(ox, oy) * knock(ox, oy, i)) : unit(a * master * coverAt(ox, oy));
+        // What the layer then covers: its content and the strokes' inside parts over it.
+        float layerCover = ownContent ? unit(a * fill * master * coverAt(ox, oy) * knock(ox, oy, i)) : unit(a * master * coverAt(ox, oy));
+        if (a > 0) for (size_t k = 0; k < style.strokes.size(); k++) {
+            const float part = inParts[k][i];
+            if (part <= 0 || style.strokes[k].opacity <= 0) continue;
+            float c[4] = {};
+            layerCover = 1 - (1 - layerCover) * (1 - unit(strokeAt(k, a * part, ox, oy, i, c)));
+        }
         for (size_t k = 0; k < style.strokes.size(); k++) {
             const float part = outParts[k][i];
             if (part <= 0 || style.strokes[k].opacity <= 0) continue;
