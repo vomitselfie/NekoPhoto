@@ -100,8 +100,9 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
   red, green and blue; the black plate is kept. **Selective Color** moves each ink by colour range, its Black slider
   the black plate. **Channel Mixer** in CMYK has four ink rows (cyan, magenta, yellow and black from the four inks and
   a constant); Monochrome makes the black plate alone.
-- **Photo Filter** converts its colour through the profile: in CMYK it is laid over each ink, in Lab it moves a and b
-  (and L too without Preserve Luminosity). **Exposure** in Lab changes L through relative luminance.
+- **Photo Filter** in Lab scales the colour's X, Y and Z by the filter's, as at 8 and 16 bits in RGB, and keeps L with
+  Preserve Luminosity (within a level of Photoshop). In CMYK it is the RGB kernel on the stored cyan, magenta and yellow,
+  the black plate kept, which only approximates Photoshop's (adjustment-layers.md). **Exposure** in Lab changes L through relative luminance.
 - **Color Lookup** takes an ICC **abstract profile** (run from the document's profile through it and back, so it works
   on the colours as they look) or a **device link** from the document's colour space to itself (a CMYK-to-CMYK link in
   a CMYK document, the usual way to apply one in Photoshop). **3DLUT files** (.cube, .3dl) work in RGB documents only:

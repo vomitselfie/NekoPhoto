@@ -230,6 +230,12 @@ TEST_CASE(adjustments_at_32_bits_match_8_bits_on_8_bit_pixels) {
             CHECK(worst <= 8);
             continue;
         }
+        if (settings.kind == AdjustmentKind::PhotoFilter) {
+            // Photoshop's 32-bit Photo Filter is its linear-light matrix with the luminance kept in it, unclipped; at 8
+            // and 16 bits the encoded luminosity is put back as the Luminosity blend mode does (photocraft-corpus
+            // photo-filter.psd at each depth), so the two part, most on saturated colours.
+            continue;
+        }
         switch (opaque ? AdjustmentKind::Levels : settings.kind) {
         case AdjustmentKind::Levels: case AdjustmentKind::Curves: case AdjustmentKind::Invert:
         case AdjustmentKind::BlackWhite: case AdjustmentKind::ChannelMixer: case AdjustmentKind::GradientMap:

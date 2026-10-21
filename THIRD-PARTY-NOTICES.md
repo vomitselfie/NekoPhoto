@@ -104,8 +104,9 @@ snapped to the pixel grid (`gradientPosition` in `src/core/src/layerstyle.cpp`) 
 ArtCraft Team and the PhotoCraft contributors).
 
 Gradient Map's reading of Photoshop's luminosity (0.30 R + 0.59 G + 0.11 B; `GradientMapSettings::luminosity` in
-`src/core/include/nekophoto/adjustments.h`) follows [PhotoCraft](https://github.com/storytold/photocraft)'s Gradient Map
-in `crates/compose/src/adjust.rs` at commit 04d0212 (dual MIT / Apache-2.0, used under MIT,
+`src/core/include/nekophoto/adjustments.h`) and Photo Filter's linear-light XYZ map with its Preserve Luminosity
+(`photoFilterMatrix` in `src/core/src/adjustments_more.cpp`) follow [PhotoCraft](https://github.com/storytold/photocraft)'s Gradient Map and
+`photo_filter_matrix` in `crates/compose/src/adjust.rs` at commit 04d0212 (dual MIT / Apache-2.0, used under MIT,
 [PhotoCraft-MIT.txt](LICENSES/PhotoCraft-MIT.txt); Copyright (c) 2026 ArtCraft Team and the PhotoCraft contributors).
 
 Fill in Photoshop's special eight blend modes (`fillIsSpecial`, `blendAtFill` and `compositeAtFill` in

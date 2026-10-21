@@ -188,6 +188,22 @@ void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const
 
 } // namespace
 
+void applyPhotoFilter(ImageF& image, const PhotoFilterSettings& settings, const TransferCurve&) {
+    // On the linear samples as stored, unclipped (photocraft-corpus rgb32 photo-filter.psd: white filters to red 1.19);
+    // Preserve Luminosity keeps the luminance Y in the matrix itself.
+    const PhotoFilterMatrix m = photoFilterMatrix(settings, settings.preserveLuminosity);
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            float* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                if (!(p[3] > 0)) continue;
+                const double c[3] = {p[0], p[1], p[2]};   // premultiplied: the map is linear
+                for (int k = 0; k < 3; k++) p[k] = cleanColour(float(m[size_t(k)][0] * c[0] + m[size_t(k)][1] * c[1] + m[size_t(k)][2] * c[2]));
+            }
+        }
+    });
+}
+
 void applyInvert(ImageF& image, const TransferCurve& curve) {
     perChannel(image, curve, [](int, double e) { return std::max(0.0, 1 - e); });
 }

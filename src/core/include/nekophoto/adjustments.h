@@ -189,9 +189,9 @@ struct HueSaturationSettings {
 // ---- Photoshop's other adjustment layers ----------------------------------------------------------------------
 // Brightness/Contrast, Posterize and Threshold follow Patchy's calibration against Photoshop 2026 (MIT,
 // src/third_party/patchy_psd/README.md), as Hue/Saturation does; Color Balance is Photoshop's per-channel Levels
-// (adjustments_more.cpp); Black & White follows upstream Compositor's C (MIT, LICENSES/MIT-Compositor.txt); Vibrance,
-// Photo Filter, Channel Mixer and Selective Color are the published formulas, not yet checked against Photoshop
-// (docs/adjustment-layers.md).
+// (adjustments_more.cpp); Black & White follows upstream Compositor's C (MIT, LICENSES/MIT-Compositor.txt); Photo Filter
+// PhotoCraft's Photoshop-fitted map (photoFilterMatrix); Vibrance, Channel Mixer and Selective Color are the published
+// formulas, not yet checked against Photoshop (docs/adjustment-layers.md).
 
 struct BrightnessContrastSettings {
     int brightness = 0, contrast = 0;   // modern: -150..150 and -50..100; legacy: -100..100 each
@@ -259,6 +259,15 @@ void applyBlackWhite(Image& image, const BlackWhiteSettings& settings);
 void applyColorBalance(Image& image, const ColorBalanceSettings& settings);
 void applyVibrance(Image& image, const VibranceSettings& settings);
 void applyPhotoFilter(Image& image, const PhotoFilterSettings& settings);
+/// Photo Filter's map of linear sRGB: Photoshop multiplies the colour's D50 XYZ, relative to white, by the filter
+/// colour's, mixed in by the density, a fixed linear map folded into one matrix. With `keepLuminance` the map keeps the
+/// luminance Y (32 bits' Preserve Luminosity). After PhotoCraft's `photo_filter_matrix` (crates/compose/src/adjust.rs at
+/// 04d0212, MIT OR Apache-2.0, used under MIT).
+using PhotoFilterMatrix = std::array<std::array<double, 3>, 3>;
+PhotoFilterMatrix photoFilterMatrix(const PhotoFilterSettings& settings, bool keepLuminance);
+/// The diagonal of that map in D50 XYZ: each of X, Y and Z multiplied by 1 - density + density * the filter colour's,
+/// relative to white.
+std::array<double, 3> photoFilterScale(const PhotoFilterSettings& settings);
 void applyChannelMixer(Image& image, const ChannelMixerSettings& settings);
 void applySelectiveColor(Image& image, const SelectiveColorSettings& settings);
 

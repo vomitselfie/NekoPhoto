@@ -11,7 +11,7 @@ adjust/grain 77b8fbaf289647b2
 adjust/hue/saturation f9bd14d0d1d9dd8f
 adjust/invert 386275657a7ee48e
 adjust/levels e5237e6fb8e32c97
-adjust/photo_filter 9de37fa0a112bde1
+adjust/photo_filter a24945cf7e970309
 adjust/posterize 38bdd6bc2fea68d7
 adjust/selective_color 16b6017ea54288e8
 adjust/threshold 6ab288f63b15b5f8
@@ -27,7 +27,7 @@ adjust_layer/grain 13eeaf96604c2546
 adjust_layer/hue/saturation 707a96654a63f9d9
 adjust_layer/invert 39757e80a5d23975
 adjust_layer/levels ade7bb30c7801e2c
-adjust_layer/photo_filter 1155f95c296ddcef
+adjust_layer/photo_filter 5b5b35281bdf1827
 adjust_layer/posterize 35e56948bd389e80
 adjust_layer/selective_color 6007322c79d547fc
 adjust_layer/threshold d4017530e27bf272
@@ -252,7 +252,7 @@ f32/adjust/gradient_map e497e94c0bf2ecdc
 f32/adjust/hue/saturation 42568583a46fc6f9
 f32/adjust/invert 75a347cbf28a64b2
 f32/adjust/levels c48d1202e5c548a1
-f32/adjust/photo_filter d17c082122de3746
+f32/adjust/photo_filter 46732f7f66564322
 f32/adjust/vibrance f73da4d51b0f09ff
 f32/adjust_layer/black_&_white be612aee0803e044
 f32/adjust_layer/channel_mixer 0ff95762b20f8cb6
@@ -263,7 +263,7 @@ f32/adjust_layer/gradient_map f33e473ed940ec7f
 f32/adjust_layer/hue/saturation 55d24b9d4f07db66
 f32/adjust_layer/invert e422d68dc2771380
 f32/adjust_layer/levels 4f77b91326667217
-f32/adjust_layer/photo_filter 558ed64449427613
+f32/adjust_layer/photo_filter 11a840ec08195579
 f32/adjust_layer/posterize_not_drawn 173ff4d8b3b1efbc
 f32/adjust_layer/stack 3dc47d545ba32180
 f32/adjust_layer/vibrance 4ea7b377acf42a2d
@@ -565,7 +565,7 @@ u16/adjust/grain 91eb916d1f1901bc
 u16/adjust/hue/saturation 8a077054478b563a
 u16/adjust/invert ab6c15a73eb04a4d
 u16/adjust/levels 79d4ac931085446b
-u16/adjust/photo_filter 128fb5ccd734105a
+u16/adjust/photo_filter 8ff6b14215a0fb21
 u16/adjust/posterize 713ea58938c381ce
 u16/adjust/selective_color 1f3c0017dc868362
 u16/adjust/threshold 5faf032b511d07a3
@@ -581,7 +581,7 @@ u16/adjust_layer/grain 28c38be03b053d54
 u16/adjust_layer/hue/saturation 18225d74c77ceb41
 u16/adjust_layer/invert 4c71773c6642b378
 u16/adjust_layer/levels c72d7a4db8b02145
-u16/adjust_layer/photo_filter 51135fad8b335f98
+u16/adjust_layer/photo_filter 1e530f21e0c956ce
 u16/adjust_layer/posterize 4c9e4ff148ce3a4e
 u16/adjust_layer/selective_color ca03e89dffe0c861
 u16/adjust_layer/threshold 4fd6346746e4e01c

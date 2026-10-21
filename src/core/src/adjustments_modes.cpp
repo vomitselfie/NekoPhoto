@@ -6,17 +6,18 @@
 //   slot goes with lightness, as older files hold it) and a and b take their own. Brightness/Contrast on every ink in
 //   CMYK and on L in Lab; Invert and Posterize on every channel.
 // - Exposure (Lab): on L, through relative luminance, as the RGB kernel works on linear light.
-// - Threshold and Gradient Map: on the pixel's lightness (L in Lab, the CMYK colour's L* through the profile, read for
-//   deciding only), to the settings' colours converted through the profile once (Threshold's black is the profile's
-//   black, as the brush paints black).
+// - Threshold: on the pixel's lightness (L in Lab, the CMYK colour's L* through the profile, read for deciding only),
+//   its black the profile's black, as the brush paints black.
 // - Hue/Saturation and Color Balance (CMYK): the RGB kernels' maths on the stored cyan, magenta and yellow (the
 //   complements of the inks) as red, green and blue; black is kept.
-// - Photo Filter: the filter colour in the document's mode, laid over each ink (CMYK) as the RGB kernel lays it over
-//   each channel, or moved onto a and b (Lab); Preserve Luminosity keeps the lightness.
+// - Photo Filter: Lab scales the colour's X, Y and Z by the filter's (Preserve Luminosity keeps L), as Photoshop does;
+//   CMYK runs the RGB kernel on the stored cyan, magenta and yellow, black kept (an approximation).
+// - Gradient Map: the stops in the document's own values, read on L (Lab) or the inks' plain luminosity (CMYK).
 // - Channel Mixer (CMYK): four ink rows over the four inks and a constant (ChannelMixerSettings::inks).
 // - Selective Color (CMYK, its home): each colour range's cyan, magenta, yellow and black move those inks, black on
 //   the black plate.
-// These are the published formulas adapted to each mode; none is checked against Photoshop's own output yet.
+// Gradient Map and Lab's Photo Filter are checked against photocraft-corpus; the others are the published formulas adapted
+// to each mode.
 #include "nekophoto/colormgmt.h"
 #include "nekophoto/colormodes.h"
 #include "nekophoto/depth.h"
@@ -152,7 +153,6 @@ double lightnessOf(double y) {
     return 116 * f - 16;
 }
 
-double luma(double r, double g, double b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
 
 /// A Gradient Map stop in the document's own straight samples (0..1, as stored).
 struct NativeStop { double location, midpoint; double v[4]; };
@@ -334,28 +334,24 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
         else return false;
     case AdjustmentKind::PhotoFilter: {
         const PhotoFilterSettings& f = s.photoFilter;
-        const double d = std::clamp(f.density, 0.0, 100.0) / 100;
-        const AdjustmentColor colour = f.color.clamped();
-        double filter[4];
-        if (!nativeColour<S>(colour.red, colour.green, colour.blue, M, profile, filter)) return false;
         if constexpr (cmyk) {
-            // Each stored ink multiplied by the filter's, mixed in by the density (the RGB kernel's lens on each channel).
-            eachStraight<S>(image, N, nullptr, [&](double* v, double) {
-                const double before = luma(v[0], v[1], v[2]) * v[3];
-                for (int k = 0; k < 4; k++) v[k] = std::min(1.0, v[k] * (1 - d) + v[k] * filter[k] * 2 * d);
-                if (f.preserveLuminosity) {
-                    const double after = luma(v[0], v[1], v[2]) * v[3];
-                    if (after > 0.0001) for (int k = 0; k < 3; k++) v[k] = std::min(1.0, v[k] * before / after);
-                }
-            });
+            // The RGB kernel on the stored cyan, magenta and yellow, black kept (as Photoshop keeps it).
+            applyPhotoFilterStoredCmy(image, f);
         } else {
-            // The filter's a and b added in by the density; L multiplied as the RGB kernel multiplies (the filter's
-            // lightness against mid-grey) unless Preserve Luminosity keeps it.
-            const double fl = filter[0], fa = labValue<S>(filter[1]), fb = labValue<S>(filter[2]);
+            // Lab: the colour's D50 XYZ multiplied by the filter's, relative to white and mixed in by the density (the
+            // diagonal of photoFilterMatrix); Preserve Luminosity keeps L. photocraft-corpus lab8 and lab16
+            // photo-filter.psd: a and b within a quarter of a unit.
+            const std::array<double, 3> scale = photoFilterScale(f);
             eachStraight<S>(image, N, nullptr, [&](double* v, double) {
-                if (!f.preserveLuminosity) v[0] = std::min(1.0, v[0] * (1 - d) + v[0] * fl * 2 * d);
-                v[1] = labStored<S>(labValue<S>(v[1]) + fa * d);
-                v[2] = labStored<S>(labValue<S>(v[2]) + fb * d);
+                const double L = v[0] * 100, A = labValue<S>(v[1]), B = labValue<S>(v[2]);
+                const double fy = (L + 16) / 116, fx = fy + A / 500, fz = fy - B / 200;
+                auto inverse = [](double t) { return t > 6.0 / 29 ? t * t * t : 3 * (6.0 / 29) * (6.0 / 29) * (t - 4.0 / 29); };
+                double xyz[3] = {inverse(fx) * scale[0], inverse(fy) * scale[1], inverse(fz) * scale[2]};
+                auto forward = [](double t) { return t > 216.0 / 24389 ? std::cbrt(t) : t * 24389.0 / 3132 + 4.0 / 29; };
+                const double gx = forward(xyz[0]), gy = forward(xyz[1]), gz = forward(xyz[2]);
+                if (!f.preserveLuminosity) v[0] = std::clamp((116 * gy - 16) / 100, 0.0, 1.0);
+                v[1] = std::clamp(labStored<S>(500 * (gx - gy)), 0.0, 1.0);
+                v[2] = std::clamp(labStored<S>(200 * (gy - gz)), 0.0, 1.0);
             });
         }
         return true;

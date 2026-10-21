@@ -334,19 +334,6 @@ void vibrance(double& r, double& g, double& b, const VibranceSettings& s) {
     if (f < 1) { r = l + (r - l) * f; g = l + (g - l) * f; b = l + (b - l) * f; }
 }
 
-void photoFilter(double& r, double& g, double& b, const PhotoFilterSettings& s) {
-    const double d = std::clamp(s.density, 0.0, 100.0) / 100;
-    const AdjustmentColor f = s.color.clamped();
-    const double before = luma601(r, g, b);
-    r = std::min(1.0, r * (1 - d) + r * f.red * 2 * d);
-    g = std::min(1.0, g * (1 - d) + g * f.green * 2 * d);
-    b = std::min(1.0, b * (1 - d) + b * f.blue * 2 * d);
-    if (s.preserveLuminosity) {
-        const double after = luma601(r, g, b);
-        if (after > 0.0001) { const double k = before / after; r *= k; g *= k; b *= k; }
-    }
-}
-
 void channelMixer(double& r, double& g, double& b, const ChannelMixerSettings& s) {
     auto mix = [&](int row) {
         double w[4];
@@ -417,7 +404,16 @@ bool adjust(Canvas& canvas, const AdjustmentSettings& settings, const Encoding& 
     case AdjustmentKind::BlackWhite: perColour(canvas, encoding, [&](double& r, double& g, double& b) { blackWhite(r, g, b, settings.blackWhite); }); return true;
     case AdjustmentKind::ColorBalance: perColour(canvas, encoding, [&](double& r, double& g, double& b) { colorBalance(r, g, b, settings.colorBalance); }); return true;
     case AdjustmentKind::Vibrance: perColour(canvas, encoding, [&](double& r, double& g, double& b) { vibrance(r, g, b, settings.vibrance); }); return true;
-    case AdjustmentKind::PhotoFilter: perColour(canvas, encoding, [&](double& r, double& g, double& b) { photoFilter(r, g, b, settings.photoFilter); }); return true;
+    case AdjustmentKind::PhotoFilter: {
+        // Photoshop's 32-bit Photo Filter: the linear samples through the filter's matrix, unclipped.
+        const PhotoFilterMatrix m = photoFilterMatrix(settings.photoFilter, settings.photoFilter.preserveLuminosity);
+        for (size_t i = 0; i < canvas.pixels.size(); i += 4) {
+            if (!(canvas.pixels[i + 3] > 0)) continue;
+            const double c[3] = {canvas.pixels[i], canvas.pixels[i + 1], canvas.pixels[i + 2]};
+            for (size_t k = 0; k < 3; k++) canvas.pixels[i + k] = std::clamp(m[k][0] * c[0] + m[k][1] * c[1] + m[k][2] * c[2], 0.0, 65504.0);   // cleanColour
+        }
+        return true;
+    }
     case AdjustmentKind::ChannelMixer: perColour(canvas, encoding, [&](double& r, double& g, double& b) { channelMixer(r, g, b, settings.channelMixer); }); return true;
     default: return false;
     }

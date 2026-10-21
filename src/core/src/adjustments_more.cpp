@@ -1,8 +1,9 @@
 // Photoshop's other adjustment layers (adjustments.h): Brightness/Contrast, Posterize and Threshold from Patchy's
 // calibration against Photoshop 2026 (src/core/adjustment_layer.cpp there, MIT; Posterize refitted to Photoshop's
 // composite); Color Balance fitted here to Photoshop's composites; Black & White from upstream Compositor's
-// AdjustPixels.c (MIT); Vibrance, Photo Filter, Channel Mixer and Selective Color from their
-// published formulas, unchecked against Photoshop (docs/adjustment-layers.md).
+// AdjustPixels.c (MIT); Photo Filter after PhotoCraft's Photoshop-fitted photo_filter_matrix (MIT OR Apache-2.0,
+// THIRD-PARTY-NOTICES.md); Vibrance, Channel Mixer and Selective Color from their published formulas, unchecked
+// against Photoshop (docs/adjustment-layers.md).
 #include "nekophoto/adjustments.h"
 #include "nekophoto/imaget.h"
 #include "nekophoto/modeedit.h"
@@ -260,22 +261,64 @@ void applyVibranceImpl(I& image, const VibranceSettings& s) {
     });
 }
 
+namespace {
+
+/// Photoshop's luminosity (the blend modes' Lum) and its SetLum: `c` moved to luminosity `l`, then pulled towards its grey
+/// until every channel is within 0..1 (ClipColor).
+double lum(const double c[3]) { return 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]; }
+void setLum(double c[3], double l) {
+    const double d = l - lum(c);
+    for (int k = 0; k < 3; k++) c[k] += d;
+    const double m = lum(c), lo = std::min({c[0], c[1], c[2]}), hi = std::max({c[0], c[1], c[2]});
+    if (lo < 0) for (int k = 0; k < 3; k++) c[k] = m > 0 && m - lo > 0 ? m + (c[k] - m) * m / (m - lo) : m;
+    if (hi > 1) for (int k = 0; k < 3; k++) c[k] = m < 1 && hi - m > 0 ? m + (c[k] - m) * (1 - m) / (hi - m) : m;
+}
+
+double srgbToLinear(double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); }
+double linearToSrgb(double v) { v = std::max(0.0, v); return v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1 / 2.4) - 0.055; }
+
+} // namespace
+
+namespace {
+// Linear sRGB to D50 XYZ (Bradford-adapted, as the ICC sRGB profile has it) and back.
+constexpr double toXyz[3][3] = {{0.436074, 0.385064, 0.143080}, {0.222504, 0.716878, 0.060618}, {0.013932, 0.097104, 0.714173}};
+constexpr double fromXyz[3][3] = {{3.133856, -1.616867, -0.490615}, {-0.978768, 1.916142, 0.033454}, {0.071945, -0.228991, 1.405243}};
+} // namespace
+
+std::array<double, 3> photoFilterScale(const PhotoFilterSettings& s) {
+    static constexpr double d50[3] = {0.96422, 1.0, 0.82521};
+    const double d = std::clamp(std::isfinite(s.density) ? s.density : 0.0, 0.0, 100.0) / 100;
+    const AdjustmentColor f = s.color.clamped();
+    const double lin[3] = {srgbToLinear(f.red), srgbToLinear(f.green), srgbToLinear(f.blue)};
+    std::array<double, 3> scale{};
+    for (int k = 0; k < 3; k++) scale[size_t(k)] = 1 - d + d * (toXyz[k][0] * lin[0] + toXyz[k][1] * lin[1] + toXyz[k][2] * lin[2]) / d50[k];
+    return scale;
+}
+
+PhotoFilterMatrix photoFilterMatrix(const PhotoFilterSettings& s, bool keepLuminance) {
+    std::array<double, 3> scale = photoFilterScale(s);
+    if (keepLuminance && scale[1] > 1e-6) { const double y = scale[1]; for (double& v : scale) v /= y; }
+    PhotoFilterMatrix m{};
+    for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 3; c++)
+            for (int k = 0; k < 3; k++) m[size_t(r)][size_t(c)] += fromXyz[r][k] * scale[k] * toXyz[k][c];
+    return m;
+}
+
+
 template <class I>
 void applyPhotoFilterImpl(I& image, const PhotoFilterSettings& s) {
-    // The colour laid over the image as a lens filter would: each channel multiplied by the filter's, mixed in by the
-    // density; Preserve Luminosity keeps each pixel's luminance.
-    const double d = std::clamp(s.density, 0.0, 100.0) / 100;
-    const AdjustmentColor f = s.color.clamped();
+    // Photoshop's lens: the colour's linear light through photoFilterMatrix, encoded again; Preserve Luminosity then puts
+    // back the encoded colour's luminosity as the Luminosity blend mode does (SetLum, ClipColor).
+    const PhotoFilterMatrix m = photoFilterMatrix(s, false);
     perPixel(image, [&](double& r, double& g, double& b) {
-        const double before = luma(r, g, b);
-        r = r * (1 - d) + r * f.red * 2 * d;
-        g = g * (1 - d) + g * f.green * 2 * d;
-        b = b * (1 - d) + b * f.blue * 2 * d;
-        r = std::min(r, 1.0); g = std::min(g, 1.0); b = std::min(b, 1.0);
-        if (s.preserveLuminosity) {
-            const double after = luma(r, g, b);
-            if (after > 0.0001) { const double k = before / after; r *= k; g *= k; b *= k; }
-        }
+        const double before[3] = {r, g, b};
+        double lin[3];
+        for (int k = 0; k < 3; k++) lin[k] = srgbToLinear(before[k]);
+        double out[3];
+        for (int k = 0; k < 3; k++) out[k] = linearToSrgb(m[size_t(k)][0] * lin[0] + m[size_t(k)][1] * lin[1] + m[size_t(k)][2] * lin[2]);
+        if (s.preserveLuminosity) setLum(out, lum(before));
+        r = std::clamp(out[0], 0.0, 1.0); g = std::clamp(out[1], 0.0, 1.0); b = std::clamp(out[2], 0.0, 1.0);
     });
 }
 
@@ -341,6 +384,17 @@ void applyColorBalanceStoredCmy(Image16& image, const ColorBalanceSettings& s) {
     applyColorBalanceImpl(t, s);
 }
 
+void applyPhotoFilterStoredCmy(ImageC8& image, const PhotoFilterSettings& s) {
+    if (image.channels() != 5) return;
+    StoredCmy<SampleType::U8> t{image};
+    applyPhotoFilterImpl(t, s);
+}
+void applyPhotoFilterStoredCmy(Image16& image, const PhotoFilterSettings& s) {
+    if (image.channels() != 5) return;
+    StoredCmy<SampleType::U16> t{image};
+    applyPhotoFilterImpl(t, s);
+}
+
 void applyBlackWhite(Image& image, const BlackWhiteSettings& s) { applyBlackWhiteImpl(image, s); }
 void applyBlackWhite(Image16& image, const BlackWhiteSettings& s) { applyBlackWhiteImpl(image, s); }
 void applyColorBalance(Image& image, const ColorBalanceSettings& s) { applyColorBalanceImpl(image, s); }
@@ -356,7 +410,6 @@ void applySelectiveColor(Image16& image, const SelectiveColorSettings& s) { appl
 void applyBlackWhite(ImageF& image, const BlackWhiteSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyBlackWhiteImpl(t, s); }
 void applyColorBalance(ImageF& image, const ColorBalanceSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyColorBalanceImpl(t, s); }
 void applyVibrance(ImageF& image, const VibranceSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyVibranceImpl(t, s); }
-void applyPhotoFilter(ImageF& image, const PhotoFilterSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyPhotoFilterImpl(t, s); }
 void applyChannelMixer(ImageF& image, const ChannelMixerSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyChannelMixerImpl(t, s); }
 
 void applyThreshold(Image16& image, const ThresholdSettings& s) {

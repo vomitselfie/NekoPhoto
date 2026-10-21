@@ -413,6 +413,45 @@ const char* blendDescription(const std::string& key) {
     return it == names.end() ? key.c_str() : it->second;
 }
 
+/// A Photoshop colour record (colour space and four values) as straight sRGB, and in a CMYK or Lab document of `mode` the
+/// document's own values (CMYK ink 0..1; Lab L 0..100, signed a and b) in `native`. Grayscale's one value is the grey a
+/// Grayscale file opens with as R = G = B. False for a space it does not read.
+bool colourRecord(int space, const uint16_t v[4], int mode, const ColorProfile& profile, AdjustmentColor& rgb, std::optional<std::array<double, 4>>& native) {
+    native.reset();
+    switch (space) {
+    case 0: rgb = {v[0] / 65535.0, v[1] / 65535.0, v[2] / 65535.0}; return true;
+    case 1: {   // HSB
+        const double h = v[0] / 65535.0 * 6, sat = v[1] / 65535.0, bright = v[2] / 65535.0;
+        const int sector = int(std::floor(h)) % 6;
+        const double f = h - std::floor(h), p = bright * (1 - sat), q = bright * (1 - sat * f), t = bright * (1 - sat * (1 - f));
+        const double table[6][3] = {{bright, t, p}, {q, bright, p}, {p, bright, t}, {p, q, bright}, {t, p, bright}, {bright, p, q}};
+        rgb = {table[sector][0], table[sector][1], table[sector][2]};
+        return true;
+    }
+    case 2: case 7: {   // CMYK (65535: no ink) and Lab (L in hundredths, a and b signed hundredths)
+        const bool cmyk = space == 2;
+        float in[4];
+        std::array<double, 4> values{};
+        if (cmyk) for (int k = 0; k < 4; k++) { values[size_t(k)] = 1 - v[k] / 65535.0; in[k] = float(values[size_t(k)] * 100); }
+        else {
+            values = {v[0] / 100.0, int16_t(v[1]) / 100.0, int16_t(v[2]) / 100.0, 0};
+            for (int k = 0; k < 3; k++) in[k] = float(values[size_t(k)]);
+            in[3] = 0;
+        }
+        const ColorTransformPtr t = transformBetween(cmyk && mode == CMYK ? profile : ColorProfile(), ColorProfile(), ConvertOptions(),
+                                                     cmyk ? PixelFormat::CMYKFloat : PixelFormat::LabFloat, PixelFormat::RGBFloat);
+        if (!t) return false;
+        float out[3] = {0, 0, 0};
+        t->apply(in, out, 1);
+        rgb = AdjustmentColor{out[0], out[1], out[2]}.clamped();
+        if ((cmyk && mode == CMYK) || (!cmyk && mode == Lab)) native = values;
+        return true;
+    }
+    case 8: rgb = AdjustmentColor{1 - v[0] / 10000.0, 1 - v[0] / 10000.0, 1 - v[0] / 10000.0}.clamped(); return true;   // Grayscale: 10000 is black
+    default: return false;
+    }
+}
+
 std::optional<AdjustmentSettings> levelsFrom(const uint8_t* data, size_t size, bool grey) {
     Reader r(data, size);
     if (r.u16() != 2) return std::nullopt;
@@ -598,11 +637,12 @@ std::optional<AdjustmentSettings> simpleAdjustmentFrom(const std::string& key, c
                 for (double& v : lin) { v = std::clamp(v, 0.0, 1.0); v = v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1 / 2.4) - 0.055; }
                 s.photoFilter.color = {lin[0], lin[1], lin[2]};
             } else if (version == 2) {
-                const uint16_t space = r.u16();
-                const double a = r.u16() / 65535.0, b = r.u16() / 65535.0, c = r.u16() / 65535.0;
-                r.u16();
-                if (space != 0) return std::nullopt;   // RGB only here
-                s.photoFilter.color = {a, b, c};
+                // A colour record: Photoshop 27 saves its filters in Lab whatever the document's mode.
+                const int space = r.i16();
+                uint16_t v[4];
+                for (uint16_t& x : v) x = r.u16();
+                std::optional<std::array<double, 4>> native;
+                if (!colourRecord(space, v, 3, ColorProfile(), s.photoFilter.color, native)) return std::nullopt;
             } else return std::nullopt;
             s.photoFilter.density = std::clamp(double(r.u32()), 0.0, 100.0);
             s.photoFilter.preserveLuminosity = r.remaining() > 0 && r.u8() != 0;
@@ -664,45 +704,6 @@ std::optional<AdjustmentSettings> simpleAdjustmentFrom(const std::string& key, c
         }
     } catch (...) {}
     return std::nullopt;
-}
-
-/// A Photoshop colour record (colour space and four values) as straight sRGB, and in a CMYK or Lab document of `mode` the
-/// document's own values (CMYK ink 0..1; Lab L 0..100, signed a and b) in `native`. Grayscale's one value is the grey a
-/// Grayscale file opens with as R = G = B. False for a space it does not read.
-bool colourRecord(int space, const uint16_t v[4], int mode, const ColorProfile& profile, AdjustmentColor& rgb, std::optional<std::array<double, 4>>& native) {
-    native.reset();
-    switch (space) {
-    case 0: rgb = {v[0] / 65535.0, v[1] / 65535.0, v[2] / 65535.0}; return true;
-    case 1: {   // HSB
-        const double h = v[0] / 65535.0 * 6, sat = v[1] / 65535.0, bright = v[2] / 65535.0;
-        const int sector = int(std::floor(h)) % 6;
-        const double f = h - std::floor(h), p = bright * (1 - sat), q = bright * (1 - sat * f), t = bright * (1 - sat * (1 - f));
-        const double table[6][3] = {{bright, t, p}, {q, bright, p}, {p, bright, t}, {p, q, bright}, {t, p, bright}, {bright, p, q}};
-        rgb = {table[sector][0], table[sector][1], table[sector][2]};
-        return true;
-    }
-    case 2: case 7: {   // CMYK (65535: no ink) and Lab (L in hundredths, a and b signed hundredths)
-        const bool cmyk = space == 2;
-        float in[4];
-        std::array<double, 4> values{};
-        if (cmyk) for (int k = 0; k < 4; k++) { values[size_t(k)] = 1 - v[k] / 65535.0; in[k] = float(values[size_t(k)] * 100); }
-        else {
-            values = {v[0] / 100.0, int16_t(v[1]) / 100.0, int16_t(v[2]) / 100.0, 0};
-            for (int k = 0; k < 3; k++) in[k] = float(values[size_t(k)]);
-            in[3] = 0;
-        }
-        const ColorTransformPtr t = transformBetween(cmyk && mode == CMYK ? profile : ColorProfile(), ColorProfile(), ConvertOptions(),
-                                                     cmyk ? PixelFormat::CMYKFloat : PixelFormat::LabFloat, PixelFormat::RGBFloat);
-        if (!t) return false;
-        float out[3] = {0, 0, 0};
-        t->apply(in, out, 1);
-        rgb = AdjustmentColor{out[0], out[1], out[2]}.clamped();
-        if ((cmyk && mode == CMYK) || (!cmyk && mode == Lab)) native = values;
-        return true;
-    }
-    case 8: rgb = AdjustmentColor{1 - v[0] / 10000.0, 1 - v[0] / 10000.0, 1 - v[0] / 10000.0}.clamped(); return true;   // Grayscale: 10000 is black
-    default: return false;
-    }
 }
 
 std::optional<AdjustmentSettings> gradientMapFrom(const uint8_t* data, size_t size, int mode, const ColorProfile& profile) {

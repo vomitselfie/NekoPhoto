@@ -256,7 +256,8 @@ void colourKinds() {
     const AnyImage warm = adjustedInMode(settingsOf(AdjustmentKind::PhotoFilter), lab, ColorMode::Lab, ColorProfile());
     REQUIRE(warm);
     CHECK_EQ(stored(warm, 0, 0, 0), stored(lab, 0, 0, 0));
-    CHECK(labAt(warm, 0, 0, 2) > 5);
+    CHECK(labAt(warm, 0, 0, 2) > 3);   // Photoshop's XYZ filter at density 25: b +3.6 and a +2.9 on mid grey
+    CHECK(labAt(warm, 0, 0, 1) > 2);
     AdjustmentSettings e = settingsOf(AdjustmentKind::Exposure);
     e.exposure.exposure = 1;
     const AnyImage bright = adjustedInMode(e, lab, ColorMode::Lab, ColorProfile());
