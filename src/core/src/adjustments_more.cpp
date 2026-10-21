@@ -5,6 +5,7 @@
 // THIRD-PARTY-NOTICES.md); Vibrance, Channel Mixer and Selective Color from their published formulas, unchecked
 // against Photoshop (docs/adjustment-layers.md).
 #include "nekophoto/adjustments.h"
+#include "nekophoto/depth.h"
 #include "nekophoto/imaget.h"
 #include "nekophoto/modeedit.h"
 #include "nekophoto/parallel.h"
@@ -58,6 +59,26 @@ void perPixel(Image16& image, F&& f) {
 struct EncodedImageF { ImageF& image; const TransferCurve& curve; };
 template <class F>
 void perPixel(EncodedImageF& target, F&& f) { forEachEncodedColour(target.image, target.curve, f); }
+
+// The same on a 32-bit image's straight linear values as stored, unclamped (Photoshop's 32-bit Color Balance and Channel
+// Mixer, photocraft-corpus rgb32); the results are kept at 0 and up (cleanColour).
+struct LinearImageF { ImageF& image; };
+template <class F>
+void perPixel(LinearImageF& target, F&& f) {
+    ImageF& image = target.image;
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            float* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const float a = p[3];
+                if (!(a > 0)) continue;
+                double c[3] = {p[0] / double(a), p[1] / double(a), p[2] / double(a)};
+                f(c[0], c[1], c[2]);
+                for (int i = 0; i < 3; i++) p[i] = cleanColour(float(c[i] * a));
+            }
+        }
+    });
+}
 
 // A CMYK buffer (5 samples) with its stored cyan, magenta and yellow (the complements of the inks, which is how
 // Photoshop's colour adjustments see a CMYK pixel's colour) taken as red, green and blue; black is left as it is.
@@ -407,10 +428,39 @@ void applyChannelMixer(Image& image, const ChannelMixerSettings& s) { applyChann
 void applyChannelMixer(Image16& image, const ChannelMixerSettings& s) { applyChannelMixerImpl(image, s); }
 void applySelectiveColor(Image& image, const SelectiveColorSettings& s) { applySelectiveColorImpl(image, s); }
 void applySelectiveColor(Image16& image, const SelectiveColorSettings& s) { applySelectiveColorImpl(image, s); }
-void applyBlackWhite(ImageF& image, const BlackWhiteSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyBlackWhiteImpl(t, s); }
-void applyColorBalance(ImageF& image, const ColorBalanceSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyColorBalanceImpl(t, s); }
+void applyBlackWhite(ImageF& image, const BlackWhiteSettings& s, const TransferCurve&) {
+    // Photoshop's 32-bit Black & White: the grey from the linear values as stored; the tint, its colour's values as
+    // given, moved to that grey's luminosity as the Color blend mode does at 32 bits (only negatives pulled in, light
+    // above 1 kept). After PhotoCraft's (crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used under MIT);
+    // photocraft-corpus rgb32 black-white-tint.psd within half a level.
+    BlackWhiteSettings plain = s;
+    plain.tint = false;
+    LinearImageF t{image};
+    applyBlackWhiteImpl(t, plain);
+    if (!s.tint) return;
+    const double tint[3] = {s.tintColor.red, s.tintColor.green, s.tintColor.blue};
+    perPixel(t, [&](double& r, double& g, double& b) {
+        const double d = r - lum(tint);   // r, g and b are the grey
+        double c[3] = {tint[0] + d, tint[1] + d, tint[2] + d};
+        const double m = lum(c), lo = std::min({c[0], c[1], c[2]});
+        if (lo < 0) for (double& v : c) v = m > 0 && m - lo > 0 ? m + (v - m) * m / (m - lo) : m;
+        r = c[0]; g = c[1]; b = c[2];
+    });
+}
+void applyColorBalance(ImageF& image, const ColorBalanceSettings& s, const TransferCurve&) { LinearImageF t{image}; applyColorBalanceImpl(t, s); }
 void applyVibrance(ImageF& image, const VibranceSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyVibranceImpl(t, s); }
-void applyChannelMixer(ImageF& image, const ChannelMixerSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyChannelMixerImpl(t, s); }
+void applyChannelMixer(ImageF& image, const ChannelMixerSettings& s, const TransferCurve&) {
+    // Photoshop's 32-bit Channel Mixer on the linear values, unclipped: each source percentage cut to 1/1024 towards
+    // zero and the constant counting 255/512 of its value (PhotoCraft's, crates/compose/src/adjust.rs at 04d0212, MIT
+    // OR Apache-2.0, used under MIT; photocraft-corpus rgb32 channel-mixer.psd exact).
+    ChannelMixerSettings cut = s;
+    for (auto& row : cut.rows) {
+        for (int k = 0; k < 3; k++) row[size_t(k)] = std::trunc(std::clamp(row[size_t(k)], -200.0, 200.0) / 100 * 1024) / 1024 * 100;
+        row[3] = std::clamp(row[3], -200.0, 200.0) * 255 / 512;
+    }
+    LinearImageF t{image};
+    applyChannelMixerImpl(t, cut);
+}
 
 void applyThreshold(Image16& image, const ThresholdSettings& s) {
     // Photoshop's luminance weights on the exact straight colour. The half-unit allowance makes a 16-bit copy of an

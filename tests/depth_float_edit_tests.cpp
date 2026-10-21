@@ -134,7 +134,10 @@ TEST_CASE(adjustments_match_the_double_reference) {
 }
 
 TEST_CASE(kinds_photoshop_lacks_at_32_bits_are_refused) {
-    for (AdjustmentKind kind : {AdjustmentKind::BrightnessContrast, AdjustmentKind::Posterize, AdjustmentKind::Threshold, AdjustmentKind::SelectiveColor, AdjustmentKind::Grain}) {
+    // Brightness/Contrast is in Photoshop 27's 32-bit set (photocraft-corpus rgb32 and gray32); Selective Color is too,
+    // but its rule there is not known yet.
+    CHECK(adjustmentAt32(AdjustmentKind::BrightnessContrast));
+    for (AdjustmentKind kind : {AdjustmentKind::Posterize, AdjustmentKind::Threshold, AdjustmentKind::SelectiveColor, AdjustmentKind::Grain}) {
         CHECK(!adjustmentAt32(kind));
         ImageF image(4, 4);
         const float px[4] = {0.2f, 0.4f, 0.6f, 1.0f};
@@ -153,7 +156,7 @@ TEST_CASE(levels_and_curves_go_on_above_one) {
     CHECK(encodeExtended(srgb, 1.0001f) > 1.0f);
     for (float v : {0.001f, 0.2f, 0.9f, 1.5f, 4.0f, 100.0f}) CHECK_NEAR(decodeExtended(srgb, encodeExtended(srgb, v)), v, 1e-5 * v);
     auto one = [](float value) { auto i = std::make_shared<ImageF>(1, 1); float p[4] = {value, value, value, 1}; i->fill(p); return i; };
-    // Levels: input white at 200, so the level at 200/255 encoded is white and above it the output goes on rising.
+    // Levels: input white at 200, so the linear value 200/255 is white and above it the output goes on rising.
     AdjustmentSettings levels = AdjustmentSettings::defaults(AdjustmentKind::Levels);
     levels.levels.ranges[0] = {0, 1, 200, 0, 255};
     float previous = 0;
@@ -228,11 +231,14 @@ TEST_CASE(adjustments_at_32_bits_match_8_bits_on_8_bit_pixels) {
             CHECK(worst <= 8);
             continue;
         }
-        if (settings.kind == AdjustmentKind::PhotoFilter) {
-            // Photoshop's 32-bit Photo Filter is its linear-light matrix with the luminance kept in it, unclipped; at 8
-            // and 16 bits the encoded luminosity is put back as the Luminosity blend mode does (photocraft-corpus
-            // photo-filter.psd at each depth), so the two part, most on saturated colours.
+        switch (settings.kind) {
+        case AdjustmentKind::PhotoFilter: case AdjustmentKind::Levels: case AdjustmentKind::Curves: case AdjustmentKind::ColorBalance:
+        case AdjustmentKind::BlackWhite: case AdjustmentKind::ChannelMixer:
+            // Photoshop runs these on the linear values as stored at 32 bits and on the encoded colour at 8 and 16
+            // (photocraft-corpus rgb32 and gray32, each exact or within half a level), so the two are different
+            // functions there; Photo Filter also keeps the luminance in its matrix at 32 bits.
             continue;
+        default: break;
         }
         switch (opaque ? AdjustmentKind::Levels : settings.kind) {
         case AdjustmentKind::Levels: case AdjustmentKind::Curves: case AdjustmentKind::Invert:

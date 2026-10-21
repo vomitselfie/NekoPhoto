@@ -1117,7 +1117,7 @@ def thirty_two_bit_editing(rpc):
     rpc.call("selection.fromLayer")
     # Photoshop's 32-bit adjustments, on pixels and as layers; the others are refused for good.
     rpc.call("selection.rect", x=10, y=10, width=40, height=30)
-    for kind in ("Levels", "Curves", "Exposure", "Hue/Saturation", "Color Balance", "Black & White", "Photo Filter", "Channel Mixer", "Vibrance", "Gradient Map"):
+    for kind in ("Levels", "Curves", "Brightness/Contrast", "Exposure", "Hue/Saturation", "Color Balance", "Black & White", "Photo Filter", "Channel Mixer", "Vibrance", "Gradient Map"):
         rpc.call("pixels.adjust", kind=kind, settings={"exposure": 0.5} if kind == "Exposure" else {})
     rpc.call("pixels.invert")
     expect_refused(rpc, "in 32-bit mode", "pixels.adjust", kind="Posterize")
@@ -1125,7 +1125,8 @@ def thirty_two_bit_editing(rpc):
     levels = rpc.call("layers.add", kind="adjustment", adjustmentKind="Levels")
     rpc.call("adjustments.set", id=levels["id"], settings=rpc.call("adjustments.defaults", kind="Levels"))
     rpc.call("layers.add", kind="adjustment", adjustmentKind="Exposure")
-    expect_refused(rpc, "32-bit mode", "layers.add", kind="adjustment", adjustmentKind="Brightness/Contrast")
+    rpc.call("layers.add", kind="adjustment", adjustmentKind="Brightness/Contrast")
+    expect_refused(rpc, "32-bit mode", "layers.add", kind="adjustment", adjustmentKind="Posterize")
     rpc.call("render", maxSize=64)
     rpc.call("layers.render", id=pixel["id"], masked=False, maxSize=32)
     rpc.call("layers.select", id=pixel["id"])

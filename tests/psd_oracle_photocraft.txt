@@ -6,7 +6,7 @@ corpus photocraft
 commit f5b1178cab15309e05b7b504545df3c701f6d8fd
 compared 258
 flatten 0
-floor 193
+floor 205
 pass photoshop/adjustments/cmyk16/baseline-layer-copy.psd             [cmyk16]           max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/cmyk16/brightness-contrast-legacy.psd      [cmyk16]           max    0.58  >2:   0.00%  mean   0.058
 pass photoshop/adjustments/cmyk16/brightness-contrast.psd             [cmyk16]           max    0.50  >2:   0.00%  mean   0.083
@@ -48,11 +48,11 @@ pass photoshop/adjustments/gray16/levels.psd                          [rgb16]   
 pass photoshop/adjustments/gray16/posterize-4.psd                     [rgb16]            max    0.01  >2:   0.00%  mean   0.002
 pass photoshop/adjustments/gray16/threshold-128.psd                   [rgb16]            max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/gray32/baseline-layer-copy.psd             [f32]              max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/gray32/brightness-contrast-legacy.psd      [f32]              max   90.57  >2:  96.59%  mean  33.056
-FAIL photoshop/adjustments/gray32/brightness-contrast.psd             [f32]              max   32.32  >2:  53.35%  mean   7.521
-FAIL photoshop/adjustments/gray32/curves.psd                          [f32]              max   57.21  >2:  63.08%  mean  13.752
+pass photoshop/adjustments/gray32/brightness-contrast-legacy.psd      [f32]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop/adjustments/gray32/brightness-contrast.psd             [f32]              max    0.00  >2:   0.00%  mean   0.001
+pass photoshop/adjustments/gray32/curves.psd                          [f32]              max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/gray32/exposure.psd                        [f32]              max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/gray32/levels.psd                          [f32]              max   20.57  >2:  98.07%  mean   7.954
+pass photoshop/adjustments/gray32/levels.psd                          [f32]              max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/gray8/baseline-layer-copy.psd              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/gray8/brightness-contrast-legacy.psd       [rgb8]             max    1.00  >2:   0.00%  mean   0.050
 pass photoshop/adjustments/gray8/brightness-contrast.psd              [rgb8]             max    0.00  >2:   0.00%  mean   0.000
@@ -107,17 +107,17 @@ FAIL photoshop/adjustments/rgb16/selective-color.psd                  [rgb16]   
 pass photoshop/adjustments/rgb16/threshold-128.psd                    [rgb16]            max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/rgb16/vibrance.psd                         [rgb16]            max   74.12  >2:  59.38%  mean   8.780
 pass photoshop/adjustments/rgb32/baseline-layer-copy.psd              [f32]              max    0.00  >2:   0.00%  mean   0.000
-FAIL photoshop/adjustments/rgb32/black-white-tint.psd                 [f32]              max   72.03  >2:  95.44%  mean  22.569
-FAIL photoshop/adjustments/rgb32/brightness-contrast-legacy.psd       [f32]              max   90.57  >2:  97.40%  mean  35.662
-FAIL photoshop/adjustments/rgb32/brightness-contrast.psd              [f32]              max   32.31  >2:  49.21%  mean   3.808
-FAIL photoshop/adjustments/rgb32/channel-mixer.psd                    [f32]              max   67.17  >2:  98.05%  mean  11.879
-FAIL photoshop/adjustments/rgb32/color-balance.psd                    [f32]              max   28.61  >2:  55.38%  mean   3.170
-FAIL photoshop/adjustments/rgb32/curves-per-channel.psd               [f32]              max   28.22  >2:  77.37%  mean   4.987
-FAIL photoshop/adjustments/rgb32/curves.psd                           [f32]              max   57.21  >2:  51.01%  mean   6.276
+pass photoshop/adjustments/rgb32/black-white-tint.psd                 [f32]              max    0.50  >2:   0.00%  mean   0.024
+pass photoshop/adjustments/rgb32/brightness-contrast-legacy.psd       [f32]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop/adjustments/rgb32/brightness-contrast.psd              [f32]              max    0.00  >2:   0.00%  mean   0.001
+pass photoshop/adjustments/rgb32/channel-mixer.psd                    [f32]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop/adjustments/rgb32/color-balance.psd                    [f32]              max    0.50  >2:   0.00%  mean   0.035
+pass photoshop/adjustments/rgb32/curves-per-channel.psd               [f32]              max    0.00  >2:   0.00%  mean   0.000
+pass photoshop/adjustments/rgb32/curves.psd                           [f32]              max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/rgb32/exposure.psd                         [f32]              max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/rgb32/hue-saturation-colorize.psd          [f32]              max    0.00  >2:   0.00%  mean   0.000
 pass photoshop/adjustments/rgb32/hue-saturation.psd                   [f32]              max    0.60  >2:   0.00%  mean   0.118
-FAIL photoshop/adjustments/rgb32/levels.psd                           [f32]              max   20.60  >2:  98.05%  mean   7.355
+pass photoshop/adjustments/rgb32/levels.psd                           [f32]              max    0.00  >2:   0.00%  mean   0.000
 FAIL photoshop/adjustments/rgb32/photo-filter.psd                     [f32]              max    8.93  >2:  61.04%  mean   1.341
 FAIL photoshop/adjustments/rgb32/selective-color.psd                  [f32]              max  109.44  >2:  44.94%  mean   3.623
 pass photoshop/adjustments/rgb8/baseline-layer-copy.psd               [rgb8]             max    0.00  >2:   0.00%  mean   0.000

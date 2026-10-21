@@ -364,16 +364,14 @@ double brightnessContrastAt(const BrightnessContrastSettings& settings, double v
 std::array<std::vector<double>, 4> levelsHistogram(const Image16& image, const Gray16* coverage);
 
 // ---- 32 bits (premultiplied linear float) -----------------------------------------------------------------------
-// Photoshop's 32-bit set (adjustments_f32.cpp): Levels, Curves, Exposure, Hue/Saturation, Color Balance, Black & White,
-// Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and Color Lookup. The pixels stay linear and unclamped;
-// each kind's function works on the colour encoded through `curve` (the document's, encodedTransfer), continued above 1
-// (encodeExtended), except Exposure, an exact multiply in linear light. Levels and Curves go on above 1 (Levels without
-// its clamp at white, Curves along its end tangent); the colour kinds adjust a colour brighter than white as the same
-// colour at white and scale it back up. docs/bit-depth.md lists the choices.
+// Photoshop's 32-bit set (adjustments_f32.cpp): Levels, Curves, Brightness/Contrast, Exposure, Hue/Saturation, Color
+// Balance, Black & White, Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and Color Lookup. The pixels stay
+// linear; most kinds work on the linear values as stored, as Photoshop's do, Vibrance, Color Lookup, Invert and
+// Gradient Map on the colour encoded through `curve` (the document's, encodedTransfer), continued above 1
+// (encodeExtended). docs/bit-depth.md lists each.
 
 class TransferCurve;
-/// Whether Photoshop offers `kind` in a 32-bit document (not Brightness/Contrast, Posterize, Threshold, Selective Color
-/// or Grain).
+/// Whether `kind` is drawn in a 32-bit document (not Posterize, Threshold, Selective Color or Grain).
 bool adjustmentAt32(AdjustmentKind kind);
 /// Applies `settings` at 32 bits; false for a kind adjustmentAt32 does not offer (the pixels are left alone).
 bool applyAdjustment(const AdjustmentSettings& settings, ImageF& image, const Rect& region, double scale, const TransferCurve& curve);
