@@ -666,35 +666,100 @@ std::optional<AdjustmentSettings> simpleAdjustmentFrom(const std::string& key, c
     return std::nullopt;
 }
 
-std::optional<AdjustmentSettings> gradientMapFrom(const uint8_t* data, size_t size) {
+/// A Photoshop colour record (colour space and four values) as straight sRGB, and in a CMYK or Lab document of `mode` the
+/// document's own values (CMYK ink 0..1; Lab L 0..100, signed a and b) in `native`. Grayscale's one value is the grey a
+/// Grayscale file opens with as R = G = B. False for a space it does not read.
+bool colourRecord(int space, const uint16_t v[4], int mode, const ColorProfile& profile, AdjustmentColor& rgb, std::optional<std::array<double, 4>>& native) {
+    native.reset();
+    switch (space) {
+    case 0: rgb = {v[0] / 65535.0, v[1] / 65535.0, v[2] / 65535.0}; return true;
+    case 1: {   // HSB
+        const double h = v[0] / 65535.0 * 6, sat = v[1] / 65535.0, bright = v[2] / 65535.0;
+        const int sector = int(std::floor(h)) % 6;
+        const double f = h - std::floor(h), p = bright * (1 - sat), q = bright * (1 - sat * f), t = bright * (1 - sat * (1 - f));
+        const double table[6][3] = {{bright, t, p}, {q, bright, p}, {p, bright, t}, {p, q, bright}, {t, p, bright}, {bright, p, q}};
+        rgb = {table[sector][0], table[sector][1], table[sector][2]};
+        return true;
+    }
+    case 2: case 7: {   // CMYK (65535: no ink) and Lab (L in hundredths, a and b signed hundredths)
+        const bool cmyk = space == 2;
+        float in[4];
+        std::array<double, 4> values{};
+        if (cmyk) for (int k = 0; k < 4; k++) { values[size_t(k)] = 1 - v[k] / 65535.0; in[k] = float(values[size_t(k)] * 100); }
+        else {
+            values = {v[0] / 100.0, int16_t(v[1]) / 100.0, int16_t(v[2]) / 100.0, 0};
+            for (int k = 0; k < 3; k++) in[k] = float(values[size_t(k)]);
+            in[3] = 0;
+        }
+        const ColorTransformPtr t = transformBetween(cmyk && mode == CMYK ? profile : ColorProfile(), ColorProfile(), ConvertOptions(),
+                                                     cmyk ? PixelFormat::CMYKFloat : PixelFormat::LabFloat, PixelFormat::RGBFloat);
+        if (!t) return false;
+        float out[3] = {0, 0, 0};
+        t->apply(in, out, 1);
+        rgb = AdjustmentColor{out[0], out[1], out[2]}.clamped();
+        if ((cmyk && mode == CMYK) || (!cmyk && mode == Lab)) native = values;
+        return true;
+    }
+    case 8: rgb = AdjustmentColor{1 - v[0] / 10000.0, 1 - v[0] / 10000.0, 1 - v[0] / 10000.0}.clamped(); return true;   // Grayscale: 10000 is black
+    default: return false;
+    }
+}
+
+std::optional<AdjustmentSettings> gradientMapFrom(const uint8_t* data, size_t size, int mode, const ColorProfile& profile) {
     Reader r(data, size);
     const uint16_t version = r.u16();
     if (version != 1 && version != 3) return std::nullopt;
     AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::GradientMap);
     s.gradientMap.reversed = r.u8() != 0;
-    r.u8();
+    s.gradientMap.dither = r.u8() != 0;
     // Version 3 (Photoshop 2023 and later) adds the Method after Dither: the gradientInterpolationMethodType's
-    // four-character code (a Photoshop-saved Perceptual map in ag-psd's tests holds 'Perc'). A zero first byte is the
-    // name's length instead (as ag-psd reads it: src/additionalInfo.ts at 3870496, MIT; THIRD-PARTY-NOTICES.md).
+    // four-character code (a Photoshop-saved Perceptual map in ag-psd's tests holds 'Perc', Classic 'Gcls'). A zero first
+    // byte is the name's length instead (as ag-psd reads it: src/additionalInfo.ts at 3870496, MIT; THIRD-PARTY-NOTICES.md).
     if (version == 3 && r.remaining() >= 4 && data[r.position()] != 0) {
         std::string code;
         for (int i = 0; i < 4; i++) code += char(r.u8());
         s.gradientMap.method = code == "Perc" ? GradientMethod::Perceptual : code == "Lnr " ? GradientMethod::Linear : GradientMethod::Classic;
     }
     r.unicode();
-    uint16_t stops = r.u16();
-    // The first and last colour stops give the ends of the ramp; the ramp in between is ours.
-    std::optional<AdjustmentColor> first, last;
-    // Each stop is 20 bytes: location, midpoint, the colour (space and four values), two bytes of padding.
-    for (int i = 0; i < stops && r.remaining() >= 20; i++) {
-        r.i32(); r.i32(); r.i16();
-        double cr = r.u16() / 65535.0, cg = r.u16() / 65535.0, cb = r.u16() / 65535.0; r.u16(); r.u16();
-        AdjustmentColor colour{cr, cg, cb};
-        if (!first) first = colour;
-        last = colour;
+    const uint16_t count = r.u16();
+    // Each stop is 20 bytes: location (0..4096), midpoint (percent), the colour (space and four values), two bytes of
+    // padding. The colours are in the document's space (a CMYK file's in CMYK, a Grayscale file's in Grey).
+    std::vector<GradientColorStop> stops;
+    std::vector<std::array<double, 4>> native;
+    bool allNative = true;
+    for (int i = 0; i < count && r.remaining() >= 20; i++) {
+        GradientColorStop stop;
+        stop.location = float(std::clamp(int32_t(r.u32()) / 4096.0, 0.0, 1.0));
+        stop.midpoint = float(std::clamp(int32_t(r.u32()) / 100.0, 0.0, 1.0));
+        const int space = r.i16();
+        uint16_t v[4];
+        for (uint16_t& x : v) x = r.u16();
+        r.u16();
+        AdjustmentColor rgb;
+        std::optional<std::array<double, 4>> values;
+        if (!colourRecord(space, v, mode, profile, rgb, values)) rgb = AdjustmentColor{v[0] / 65535.0, v[1] / 65535.0, v[2] / 65535.0};
+        stop.rgb[0] = float(rgb.red); stop.rgb[1] = float(rgb.green); stop.rgb[2] = float(rgb.blue);
+        if (values) native.push_back(*values);
+        else allNative = false;
+        stops.push_back(stop);
     }
-    if (first) s.gradientMap.shadows = *first;
-    if (last) s.gradientMap.highlights = *last;
+    // The opacity stops (a map's colours are opaque), then the expansion count and the Smoothness (0..4096).
+    const uint16_t opacities = r.remaining() >= 2 ? r.u16() : 0;
+    for (int i = 0; i < opacities && r.remaining() >= 10; i++) { r.u32(); r.u32(); r.u16(); }
+    if (r.remaining() >= 4) { r.u16(); s.gradientMap.smoothness = std::clamp(r.u16() / 4096.0, 0.0, 1.0); }
+    if (stops.empty()) return s;
+    std::stable_sort(stops.begin(), stops.end(), [](const GradientColorStop& a, const GradientColorStop& b) { return a.location < b.location; });
+    s.gradientMap.shadows = AdjustmentColor{stops.front().rgb[0], stops.front().rgb[1], stops.front().rgb[2]}.clamped();
+    s.gradientMap.highlights = AdjustmentColor{stops.back().rgb[0], stops.back().rgb[1], stops.back().rgb[2]}.clamped();
+    // A plain two-stop ramp from end to end in an RGB document needs no stops of its own.
+    const bool plain = stops.size() == 2 && stops.front().location == 0 && stops.back().location == 1 && stops.back().midpoint == 0.5f;
+    if (!plain || !native.empty()) {
+        s.gradientMap.stops = stops;
+        if (allNative && native.size() == stops.size()) {
+            s.gradientMap.native = native;
+            s.gradientMap.nativeMode = mode == CMYK ? ColorMode::CMYK : ColorMode::Lab;
+        }
+    }
     return s;
 }
 
@@ -1253,7 +1318,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             else if (auto b = block("curv")) settings = curvesFrom(b->first, b->second, mode == Grayscale || mode == Duotone);
             else if (auto b = block("hue2")) settings = hueSaturationFrom(b->first, b->second);
             else if (auto b = block("expA")) settings = exposureFrom(b->first, b->second, mode == Grayscale || mode == Duotone);
-            else if (auto b = block("grdm")) settings = gradientMapFrom(b->first, b->second);
+            else if (auto b = block("grdm")) settings = gradientMapFrom(b->first, b->second, mode, document.profile);
             else if (block("CgEd") || block("brit")) settings = brightnessContrastFrom(block("CgEd"), block("brit"));
             if (!settings)
                 for (const char* key : {"nvrt", "post", "thrs", "blnc", "mixr", "selc", "phfl", "blwh", "vibA", "clrL"})

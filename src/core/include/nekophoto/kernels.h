@@ -24,7 +24,7 @@ void addNoise(Image& image, float amount, bool gaussian, bool monochromatic, uin
 /// (r normalised to the half diagonal), bilinear, transparent outside. Row-parallel; identical to the reference.
 void lensDistort(const Image& source, Image& destination, double k, bool bicubic = false);
 
-/// Gradient Map: Rec. 709 luma of the straight colour indexes a 256 x RGB table. One division per pixel
+/// Gradient Map: Photoshop's luminosity (0.30, 0.59, 0.11) of the straight colour indexes a 256 x RGB table. One division per pixel
 /// (luma is linear in the premultiplied channels); the index can differ from the reference by one at partial alpha.
 void gradientMap(Image& image, const uint8_t* table);
 

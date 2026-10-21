@@ -78,7 +78,7 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
 | Levels, Curves | composite and each ink (Cyan, Magenta, Yellow, Black) | Lightness, a, b (no composite; Lightness first) |
 | Brightness/Contrast | every ink | Lightness |
 | Invert, Posterize | every ink | L, a and b |
-| Threshold, Gradient Map | on the colour's lightness | on L |
+| Threshold, Gradient Map | on the colour's lightness (Gradient Map: the inks' luminosity) | on L |
 | Photo Filter | yes | yes |
 | Exposure | greyed (Photoshop lacks) | on L |
 | Hue/Saturation, Color Balance, Selective Color, Channel Mixer | yes | greyed (Photoshop lacks) |
@@ -90,10 +90,12 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
   own setting. Lab has no composite channel: the channel menu starts at Lightness, and a and b take their own curves.
   The Levels histogram shows the layer's channels. Auto and the black, gray and white samplers are RGB only for now.
 - **Invert** (Ctrl+I) inverts every ink, or L, a and b.
-- **Threshold and Gradient Map** decide on lightness: L in Lab, and in CMYK the colour's L* read through the profile
-  (for deciding only; the pixels are not converted). Threshold's black is the profile's black, as the brush paints it;
-  a Gradient Map's colours are converted through the profile once and the map runs between them in the document's
-  mode.
+- **Threshold** decides on lightness: L in Lab, and in CMYK the colour's L* read through the profile (for deciding
+  only; the pixels are not converted). Its black is the profile's black, as the brush paints it.
+- **Gradient Map** runs between its stops in the document's mode: a stop read from the file keeps the CMYK or Lab
+  colour Photoshop stored, one made here is converted through the profile once. It reads L in Lab, and in CMYK
+  Photoshop's luminosity of the inks' plain complement (stored cyan times stored black, and so on), whatever the
+  profile.
 - **Hue/Saturation and Color Balance** in CMYK work on the stored cyan, magenta and yellow as the RGB kernels work on
   red, green and blue; the black plate is kept. **Selective Color** moves each ink by colour range, its Black slider
   the black plate. **Channel Mixer** in CMYK has four ink rows (cyan, magenta, yellow and black from the four inks and

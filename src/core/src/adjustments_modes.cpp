@@ -154,6 +154,86 @@ double lightnessOf(double y) {
 
 double luma(double r, double g, double b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
 
+/// A Gradient Map stop in the document's own straight samples (0..1, as stored).
+struct NativeStop { double location, midpoint; double v[4]; };
+
+/// The map's stops in the mode's samples, Reverse applied: each the file's own CMYK or Lab colour while the stop keeps
+/// the sRGB colour read with it, else its sRGB colour converted through the profile. A Perceptual or Linear map is its
+/// method's ramp sampled at 257 even stops first. Empty when the profile cannot be used.
+template <SampleType S>
+std::vector<NativeStop> nativeStops(const GradientMapSettings& g, ColorMode mode, const ColorProfile& profile) {
+    std::vector<NativeStop> out;
+    const double one = double(SampleTraits<S>::one);
+    if (g.method == GradientMethod::Classic && g.stops.size() >= 2) {
+        const GradientStops ramp = [&] { GradientMapSettings plain = g; plain.reversed = false; plain.smoothness = 0; return plain.ramp(); }();
+        std::vector<size_t> order(g.stops.size());
+        for (size_t i = 0; i < order.size(); i++) order[i] = i;
+        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return g.stops[a].location < g.stops[b].location; });
+        const bool native = g.nativeMode == mode && g.native.size() == g.stops.size();
+        for (size_t j = 0; j < order.size(); j++) {
+            const GradientColorStop& read = g.stops[order[j]];
+            const GradientColorStop& now = ramp.colors[j];
+            NativeStop stop{double(now.location), double(now.midpoint), {0, 0, 0, 0}};
+            const bool kept = native && read.rgb[0] == now.rgb[0] && read.rgb[1] == now.rgb[1] && read.rgb[2] == now.rgb[2];
+            if (kept) {
+                const std::array<double, 4>& n = g.native[order[j]];
+                if (mode == ColorMode::CMYK) for (int k = 0; k < 4; k++) stop.v[k] = 1 - std::clamp(n[size_t(k)], 0.0, 1.0);
+                else {
+                    stop.v[0] = std::clamp(n[0] / 100, 0.0, 1.0);
+                    for (int k = 1; k < 3; k++) stop.v[k] = std::clamp((n[size_t(k)] * labScale<S>() + labOffset<S>()) / one, 0.0, 1.0);
+                }
+            } else if (!nativeColour<S>(now.rgb[0], now.rgb[1], now.rgb[2], mode, profile, stop.v)) return {};
+            out.push_back(stop);
+        }
+    } else {
+        // Two ends, or a Perceptual or Linear ramp sampled at 257 even stops.
+        const GradientStops ramp = [&] { GradientMapSettings plain = g; plain.reversed = false; if (g.method == GradientMethod::Classic) plain.smoothness = 0; return plain.ramp(); }();
+        const int steps = g.method == GradientMethod::Classic ? 1 : 256;
+        for (int j = 0; j <= steps; j++) {
+            float c[4];
+            ramp.sample(float(j) / steps, c);
+            NativeStop stop{double(j) / steps, 0.5, {0, 0, 0, 0}};
+            if (!nativeColour<S>(c[0], c[1], c[2], mode, profile, stop.v)) return {};
+            out.push_back(stop);
+        }
+    }
+    if (g.reversed) {
+        // Mirrored end for end: a stop's midpoint belongs to the run ending at it (GradientStops::reverse).
+        std::reverse(out.begin(), out.end());
+        for (auto& stop : out) stop.location = 1 - stop.location;
+        for (size_t j = out.size(); j-- > 1;) out[j].midpoint = 1 - out[j - 1].midpoint;
+        if (!out.empty()) out.front().midpoint = 0.5;
+    }
+    return out;
+}
+
+/// The stops' samples at `t` (0..1): each run blended after its midpoint, the ends held beyond the outer stops. With
+/// `smoothness` (a Classic map's), the blend eases towards the Catmull-Rom through the neighbours, kept between the run's
+/// two stops (GradientMapSettings::ramp).
+void sampleNative(const std::vector<NativeStop>& stops, double t, double smoothness, double out[4]) {
+    size_t i = 1;
+    while (i < stops.size() && t > stops[i].location) i++;
+    if (t <= stops.front().location || i >= stops.size()) {
+        const NativeStop& end = t <= stops.front().location ? stops.front() : stops.back();
+        for (int k = 0; k < 4; k++) out[k] = end.v[k];
+        return;
+    }
+    const NativeStop &l = stops[i - 1], &r = stops[i];
+    const NativeStop& p = i > 1 ? stops[i - 2] : l;
+    const NativeStop& n = i + 1 < stops.size() ? stops[i + 1] : r;
+    const double span = r.location - l.location;
+    double u = span > 1e-9 ? (t - l.location) / span : 1;
+    const double m = std::clamp(r.midpoint, 0.001, 0.999);
+    if (std::fabs(m - 0.5) > 1e-6) u = u <= m ? 0.5 * u / m : 0.5 + 0.5 * (u - m) / (1 - m);
+    const double u2 = u * u, u3 = u2 * u;
+    for (int k = 0; k < 4; k++) {
+        const double lin = l.v[k] + (r.v[k] - l.v[k]) * u;
+        if (smoothness <= 0) { out[k] = lin; continue; }
+        const double cr = 0.5 * ((2 * l.v[k]) + (-p.v[k] + r.v[k]) * u + (2 * p.v[k] - 5 * l.v[k] + 4 * r.v[k] - n.v[k]) * u2 + (-p.v[k] + 3 * l.v[k] - 3 * r.v[k] + n.v[k]) * u3);
+        out[k] = lin + (std::clamp(cr, std::min(l.v[k], r.v[k]), std::max(l.v[k], r.v[k])) - lin) * smoothness;
+    }
+}
+
 template <SampleType S, ColorMode M, class Img>
 bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& profile) {
     constexpr int N = colorModeChannels(M), C = N - 1;
@@ -175,7 +255,7 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
     std::array<const Table*, 4> use{nullptr, nullptr, nullptr, nullptr};
     auto useTable = [&](int k, const Table& t) { tables[size_t(k)] = t; if (!isIdentity(t)) use[size_t(k)] = &tables[size_t(k)]; };
     ColorTransformPtr lightness;
-    if (cmyk && (s.kind == AdjustmentKind::Threshold || s.kind == AdjustmentKind::GradientMap)) {
+    if (cmyk && s.kind == AdjustmentKind::Threshold) {
         lightness = transformBetween(profile, ColorProfile(), ConvertOptions(), PixelFormat::CMYKFloat, PixelFormat::LabFloat);
         if (!lightness) return false;
     }
@@ -229,30 +309,16 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
     }
     case AdjustmentKind::GradientMap: {
         const GradientMapSettings& g = s.gradientMap;
-        const AdjustmentColor dark = (g.reversed ? g.highlights : g.shadows).clamped(), light = (g.reversed ? g.shadows : g.highlights).clamped();
-        double from[4], to[4];
-        if (!nativeColour<S>(dark.red, dark.green, dark.blue, M, profile, from) || !nativeColour<S>(light.red, light.green, light.blue, M, profile, to)) return false;
-        if (g.method != GradientMethod::Classic) {
-            // Perceptual and Linear: the method's ramp at 257 even steps in the mode's own values, blended between them.
-            constexpr int steps = 256;
-            const GradientStops ramp = g.ramp();
-            std::vector<std::array<double, 4>> native(steps + 1);
-            for (int j = 0; j <= steps; j++) {
-                float c[4];
-                ramp.sample(float(j) / steps, c);
-                if (!nativeColour<S>(c[0], c[1], c[2], M, profile, native[size_t(j)].data())) return false;
-            }
-            eachStraight<S>(image, N, lightness.get(), [&](double* v, double l) {
-                const double at = std::clamp(l / 100, 0.0, 1.0) * steps;
-                const int j = std::min(steps - 1, int(at));
-                const double f = at - j;
-                for (int k = 0; k < C; k++) v[k] = native[size_t(j)][size_t(k)] + (native[size_t(j + 1)][size_t(k)] - native[size_t(j)][size_t(k)]) * f;
-            });
-            return true;
-        }
-        eachStraight<S>(image, N, lightness.get(), [&](double* v, double l) {
-            const double t = std::clamp(l / 100, 0.0, 1.0);
-            for (int k = 0; k < C; k++) v[k] = from[k] + (to[k] - from[k]) * t;
+        const std::vector<NativeStop> stops = nativeStops<S>(g, M, profile);
+        if (stops.empty()) return false;
+        const double smooth = g.method == GradientMethod::Classic ? std::clamp(g.smoothness, 0.0, 1.0) : 0.0;
+        eachStraight<S>(image, N, nullptr, [&](double* v, double l) {
+            // Lab: L. CMYK: the luminosity of the inks' plain complement (stored cyan times stored black, and so on),
+            // whatever the profile (photocraft-corpus cmyk8 and cmyk16 gradient-map.psd: within a level).
+            const double t = cmyk ? GradientMapSettings::luminosity(v[0] * v[3], v[1] * v[3], v[2] * v[3]) : l / 100;
+            double out[4];
+            sampleNative(stops, std::clamp(t, 0.0, 1.0), smooth, out);
+            for (int k = 0; k < C; k++) v[k] = out[k];
         });
         return true;
     }

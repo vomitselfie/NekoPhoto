@@ -93,11 +93,43 @@ struct GradientMapSettings {
     bool reversed = false;
     /// Photoshop's Method (Classic: the straight blend it always had).
     GradientMethod method = GradientMethod::Classic;
+    /// Every colour stop of a gradient with more than its two ends (a Photoshop map's, sorted by location; straight
+    /// sRGB). The first stop takes its colour from `shadows` and the last from `highlights`, so editing the ends edits
+    /// them. Empty: the two-stop ramp from `shadows` to `highlights`.
+    std::vector<GradientColorStop> stops;
+    /// The stops' colours as a CMYK or Lab file holds them (`nativeMode`; CMYK ink 0..1, Lab L 0..100 and signed a, b),
+    /// parallel to `stops`: a document of that mode maps to these, as Photoshop does, while a stop keeps the sRGB colour
+    /// read with it (separating the sRGB colour again would move a CMYK stop's black). Empty otherwise.
+    ColorMode nativeMode = ColorMode::RGB;
+    std::vector<std::array<double, 4>> native;
+    /// Photoshop's Smoothness for a Classic map (0..1; a PSD's gradient holds 1): each run eased towards the Catmull-Rom
+    /// through its neighbours, as the layer styles' Classic gradients are. 0 is the plain blend between the stops (a map
+    /// made here). Perceptual and Linear are always eased in full.
+    double smoothness = 0;
+    /// Photoshop's Dither, read and written back; not drawn (its pattern is not known, and it moves a colour by under a level).
+    bool dither = false;
     bool operator==(const GradientMapSettings&) const = default;
+    /// The luminosity the map reads (0..1), Photoshop's 0.30 R + 0.59 G + 0.11 B (the blend modes' Lum, not Rec. 709), as
+    /// PhotoCraft's Gradient Map has it (crates/compose/src/adjust.rs at 04d0212, MIT OR Apache-2.0, used under MIT).
+    static double luminosity(double r, double g, double b) { return 0.3 * r + 0.59 * g + 0.11 * b; }
     /// 256 x 3 straight sRGB bytes, darkest first.
     std::vector<uint8_t> table() const;
-    /// The ramp from the dark end to the light one (straight sRGB 0..1, Reverse applied) for a Perceptual or Linear
-    /// method: Classic stops sampled from it (GradientStops::baked).
+    /// Every colour (the ends and the stops between) through `convert`; the file's own CMYK or Lab colours are dropped,
+    /// since they belong to the space the document had.
+    template <class F>
+    void convertColours(F&& convert) {
+        convert(shadows);
+        convert(highlights);
+        for (GradientColorStop& stop : stops) {
+            AdjustmentColor c{stop.rgb[0], stop.rgb[1], stop.rgb[2]};
+            convert(c);
+            stop.rgb[0] = float(c.red); stop.rgb[1] = float(c.green); stop.rgb[2] = float(c.blue);
+        }
+        native.clear();
+        nativeMode = ColorMode::RGB;
+    }
+    /// The ramp from the dark end to the light one (straight sRGB 0..1, Reverse applied); a Perceptual or Linear
+    /// method's as Classic stops sampled from it (GradientStops::baked).
     GradientStops ramp() const;
 };
 

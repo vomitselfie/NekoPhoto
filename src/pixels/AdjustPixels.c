@@ -16,7 +16,7 @@ void adjust_gradient_map(uint8_t *rgba, size_t width, size_t height, size_t stri
                 if (g > 255) g = 255;
                 if (b > 255) b = 255;
             }
-            unsigned level = (2126u * r + 7152u * g + 722u * b + 5000u) / 10000u;
+            unsigned level = (30u * r + 59u * g + 11u * b + 50u) / 100u;   /* Photoshop's luminosity weights */
             const uint8_t *color = table + (level > 255 ? 255 : level) * 3;
             p[0] = (uint8_t)((color[0] * a + 127u) / 255u);
             p[1] = (uint8_t)((color[1] * a + 127u) / 255u);

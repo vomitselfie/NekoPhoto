@@ -25,6 +25,17 @@ points), flat beyond the first and last point. Every `curves.psd` in photocraft-
 and 16 bits) renders within a level of Photoshop's merged image (max 0 at 8 bits); a monotone cubic, as before, was up
 to 4 levels off. Camera Raw's point curve is its own and keeps its monotone cubic.
 
+**Gradient Map** (`grdm`) reads every colour stop with its location and midpoint, the Method, Reverse and the
+Smoothness. The stops are stored in the document's colour space (a CMYK file's in CMYK, a Lab file's in Lab, a Grayscale
+file's as grey ink); a CMYK or Lab document maps to those values as the file holds them, so a CMYK stop keeps its own
+black. The map reads Photoshop's luminosity 0.30 R + 0.59 G + 0.11 B (the blend modes' Lum, not Rec. 709), L in Lab, and
+in CMYK the luminosity of the inks' plain complement (stored cyan times stored black, and so on) whatever the profile; a
+Classic map at Smoothness 100% eases each run towards the Catmull-Rom through its neighbours, kept between the run's own
+stops, as the layer styles' Classic gradients do. Every `gradient-map.psd` in photocraft-corpus (RGB, grayscale, CMYK
+and Lab at 8 and 16 bits) is within a level of Photoshop's merged image. The shadows and highlights colours edit the end
+stops; the stops between are kept as read. Dither is read and written back but not drawn (its pattern is not known; it
+moves a colour by under a level). A map made here is the plain two-stop blend.
+
 | Kind | Block | How it is drawn | Checked against Photoshop |
 |---|---|---|---|
 | Invert | `nvrt` | 255 - v per channel | exact (Patchy's photoshop-invert.psd composite) |

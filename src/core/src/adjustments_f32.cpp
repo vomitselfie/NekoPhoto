@@ -166,12 +166,9 @@ void applyHueSaturationF(ImageF& image, const HueSaturationSettings& settings, c
 }
 
 void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const TransferCurve& curve) {
-    const AdjustmentColor dark = (settings.reversed ? settings.highlights : settings.shadows).clamped();
-    const AdjustmentColor light = (settings.reversed ? settings.shadows : settings.highlights).clamped();
-    const double from[3] = {dark.red, dark.green, dark.blue}, span[3] = {light.red - dark.red, light.green - dark.green, light.blue - dark.blue};
     const Encoding encoding(curve);
-    // Perceptual and Linear: the method's ramp (in the encoded values, as Classic's).
-    const std::optional<GradientStops> ramp = settings.method == GradientMethod::Classic ? std::nullopt : std::optional<GradientStops>(settings.ramp());
+    // The ramp in the encoded values, at the encoded colour's luminosity.
+    const GradientStops ramp = settings.ramp();
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             float* p = image.row(y);
@@ -180,14 +177,10 @@ void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const
                 if (!(a > 0)) continue;
                 double e[3];
                 for (int c = 0; c < 3; c++) e[c] = encoding.encode(p[c] / a);
-                const double t = std::min(1.0, 0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2]);
-                if (ramp) {
-                    float col[4];
-                    ramp->sample(float(std::max(0.0, t)), col);
-                    for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(col[c]) * a);
-                    continue;
-                }
-                for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(float(from[c] + span[c] * t)) * a);
+                const double t = std::clamp(GradientMapSettings::luminosity(e[0], e[1], e[2]), 0.0, 1.0);
+                float col[4];
+                ramp.sample(float(t), col);
+                for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(col[c]) * a);
             }
         }
     });

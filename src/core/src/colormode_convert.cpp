@@ -215,7 +215,7 @@ bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& t
             AdjustmentSettings settings;
             if (AdjustmentSettings::parse(layer.adjustment->json, settings)) {
                 if (settings.kind == AdjustmentKind::PhotoFilter) colours(settings.photoFilter.color);
-                if (settings.kind == AdjustmentKind::GradientMap) { colours(settings.gradientMap.shadows); colours(settings.gradientMap.highlights); }
+                if (settings.kind == AdjustmentKind::GradientMap) settings.gradientMap.convertColours(colours);
                 for (size_t c = 1; c < settings.levels.ranges.size(); c++) settings.levels.ranges[c] = LevelsRange();
                 for (size_t c = 1; c < settings.curves.channels.size(); c++) settings.curves.channels[c] = {{0, 0}, {255, 255}};
                 settings.levels.channel = 0;

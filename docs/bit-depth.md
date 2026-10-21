@@ -307,7 +307,7 @@ adjusts as it did, and light above white goes on through the function:
   0 to 1: a colour brighter than white is adjusted as the same colour at white's brightness (its linear channels divided
   by the brightest) and scaled back up, so hue and saturation move and the light level stays.
 - **Invert** is 1 minus the encoded value, so light above white inverts to black. **Gradient Map** maps the encoded
-  luma, cut at white.
+  luminosity (0.30, 0.59, 0.11), cut at white.
 - **Add Noise** adds its noise to the encoded colour, so an amount looks as it does at 8 bits; light above white is not
   cut. The blurs and Lens Correction work on the linear values.
 

@@ -128,7 +128,7 @@ bool convertDocumentProfile(Document& document, const ColorProfile& target, cons
             if (AdjustmentSettings::parse(layer.adjustment->json, settings)) {
                 bool changed = false;
                 if (settings.kind == AdjustmentKind::PhotoFilter) { convert(settings.photoFilter.color); changed = true; }
-                if (settings.kind == AdjustmentKind::GradientMap) { convert(settings.gradientMap.shadows); convert(settings.gradientMap.highlights); changed = true; }
+                if (settings.kind == AdjustmentKind::GradientMap) { settings.gradientMap.convertColours(convert); changed = true; }
                 if (changed) layer.adjustment = settings.toLayerAdjustment();
             }
         }

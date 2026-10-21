@@ -400,16 +400,16 @@ bool adjust(Canvas& canvas, const AdjustmentSettings& settings, const Encoding& 
     }
     case AdjustmentKind::Invert: perChannel(canvas, encoding, [](int, double e) { return std::max(0.0, 1 - e); }); return true;
     case AdjustmentKind::GradientMap: {
-        const GradientMapSettings& g = settings.gradientMap;
-        const AdjustmentColor dark = (g.reversed ? g.highlights : g.shadows).clamped(), light = (g.reversed ? g.shadows : g.highlights).clamped();
-        const double from[3] = {dark.red, dark.green, dark.blue}, to[3] = {light.red, light.green, light.blue};
+        const GradientStops ramp = settings.gradientMap.ramp();
         for (size_t i = 0; i < canvas.pixels.size(); i += 4) {
             const double a = canvas.pixels[i + 3];
             if (!(a > 0)) continue;
             double e[3];
             for (int c = 0; c < 3; c++) e[c] = encode(encoding, canvas.pixels[i + size_t(c)] / a);
-            const double t = std::min(1.0, 0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2]);
-            for (int c = 0; c < 3; c++) canvas.pixels[i + size_t(c)] = decode(encoding, from[c] + (to[c] - from[c]) * t) * a;
+            const double t = std::clamp(GradientMapSettings::luminosity(e[0], e[1], e[2]), 0.0, 1.0);
+            float col[4];
+            ramp.sample(float(t), col);
+            for (int c = 0; c < 3; c++) canvas.pixels[i + size_t(c)] = decode(encoding, col[c]) * a;
         }
         return true;
     }

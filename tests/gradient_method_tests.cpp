@@ -10,6 +10,7 @@
 #include "nekophoto/depth.h"
 #include "nekophoto/document.h"
 #include "nekophoto/layerstyle.h"
+#include "nekophoto/modeedit.h"
 #include "nekophoto/psd.h"
 #include "nekophoto/psd_carry.h"
 #include "nekophoto/psd_writer.h"
@@ -314,6 +315,55 @@ TEST_CASE(gradient_map_draws_each_method) {
     std::string bad = json;
     bad.replace(at, key.size(), "\"interpolation\":\"oklch\"");
     CHECK(!AdjustmentSettings::parse(bad, old));
+}
+
+TEST_CASE(gradient_map_stops_smoothness_and_luminosity) {
+    // photocraft-corpus's map: three stops (navy, red, pale yellow) at Smoothness 100%, as Photoshop saves it.
+    AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::GradientMap);
+    GradientMapSettings& g = s.gradientMap;
+    auto stop = [](float at, float r, float gr, float b) { GradientColorStop c; c.location = at; c.rgb[0] = r / 255; c.rgb[1] = gr / 255; c.rgb[2] = b / 255; return c; };
+    g.stops = {stop(0, 20, 10, 80), stop(0.5f, 220, 60, 60), stop(1, 255, 240, 160)};
+    g.shadows = {20 / 255.0, 10 / 255.0, 80 / 255.0};
+    g.highlights = {1, 240 / 255.0, 160 / 255.0};
+    g.smoothness = 1;
+    AdjustmentSettings back;
+    REQUIRE(AdjustmentSettings::parse(s.toJson(), back));
+    CHECK(back == s);
+    // The middle stop is reached, and the runs ease into it: Photoshop's merged image maps grey 13 to red 33 (the
+    // straight blend gives 40) and grey 141 to 231 (224).
+    std::vector<uint8_t> table = g.table();
+    CHECK_EQ(int(table[128 * 3]), 220);
+    CHECK(std::abs(int(table[13 * 3]) - 33) <= 1);
+    CHECK(std::abs(int(table[141 * 3]) - 231) <= 1);
+    // The map reads 0.30 R + 0.59 G + 0.11 B: pure red is level 77 (Rec. 709 would read 54).
+    Image red(1, 1);
+    red.fill(255, 0, 0, 255);
+    REQUIRE(applyAdjustment(s, red, Rect(0, 0, 1, 1), 1));
+    CHECK_EQ(int(red.row(0)[0]), int(table[77 * 3]));
+    // Editing the shadows colour moves the first stop; the middle stays.
+    g.shadows = {0, 0, 0};
+    table = g.table();
+    CHECK_EQ(int(table[0]), 0);
+    CHECK_EQ(int(table[128 * 3]), 220);
+    // A CMYK stop read from the file is drawn as stored (black and all), and the map reads the inks' plain luminosity.
+    g.shadows = {20 / 255.0, 10 / 255.0, 80 / 255.0};
+    g.smoothness = 0;
+    g.nativeMode = ColorMode::CMYK;
+    g.native = {{1, 1, 0.285, 0.408}, {0.077, 0.916, 0.814, 0.008}, {0.010, 0.019, 0.455, 0}};
+    REQUIRE(AdjustmentSettings::parse(s.toJson(), back));
+    CHECK(back == s);
+    ImageC8 paper(1, 1, 5);
+    uint8_t* p = paper.row(0);
+    for (int k = 0; k < 5; k++) p[k] = 255;   // no ink: luminosity 1, the last stop
+    REQUIRE(applyAdjustmentMode(s, paper, ColorProfile()));
+    CHECK(std::abs(int(paper.row(0)[3]) - 255) <= 1);
+    CHECK(std::abs(int(paper.row(0)[2]) - 139) <= 1);   // 45.5% yellow
+    ImageC8 black(1, 1, 5);
+    p = black.row(0);
+    p[0] = p[1] = p[2] = 255; p[3] = 0; p[4] = 255;   // 100% black alone: luminosity 0, the first stop
+    REQUIRE(applyAdjustmentMode(s, black, ColorProfile()));
+    CHECK_EQ(int(black.row(0)[0]), 0);
+    CHECK(std::abs(int(black.row(0)[3]) - 151) <= 1);   // the stop's own 40.8% black, not a separation's
 }
 
 TEST_CASE(photoshop_gradient_map_method_is_read) {
