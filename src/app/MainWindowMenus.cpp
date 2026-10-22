@@ -15,6 +15,7 @@
 #include "ModelStore.h"
 #include <set>
 #include <algorithm>
+#include <cmath>
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -851,6 +852,25 @@ void MainWindow::buildMenus() {
                    .request("layers.flip", [] { return QJsonObject{}; }, tr("Flip Layer Horizontal")))->setObjectName("command.layers.flip");
     add(layer, Spec("layer.flipVertical", tr("Flip Layer Vertical")).document("layers.transform")
                    .request("layers.flip", [] { return QJsonObject{{"vertical", true}}; }, tr("Flip Layer Vertical")));
+    // Photoshop's Edit > Transform > Rotate 90°: the active layer (or folder) turned about its centre as one step
+    // (layers.setTransform); during Free Transform, the box being edited turns instead, as its context menu does.
+    auto rotate = [this](double by) {
+        auto turned = [](double degrees) { degrees = std::fmod(degrees, 360.0); if (degrees > 180) degrees -= 360; if (degrees <= -180) degrees += 360; return degrees; };
+        if (const auto& edit = session_->transformEdit()) {
+            if (edit->corners) return;   // a distortion has no rotation to turn
+            LayerTransform t = edit->draft;
+            t.rotation = turned(t.rotation + by);
+            session_->previewTransform(t);
+            return;
+        }
+        const Layer* l = session_->activeLayer();
+        if (!l || !session_->canTransform()) return;
+        double rotation = l->transform.rotation;
+        if (l->isGroup) { if (auto box = session_->groupTransformBox()) rotation = box->rotation; else return; }
+        runCommand("layers.setTransform", {{"rotation", turned(rotation + by)}}, by > 0 ? tr("Rotate 90° Clockwise") : tr("Rotate 90° Counter Clockwise"));
+    };
+    add(layer, Spec("layer.rotate90Clockwise", tr("Rotate Layer 90° Clockwise")).document("layers.transform").when(hasLayer).runs([rotate] { rotate(90); }, "layers.setTransform"));
+    add(layer, Spec("layer.rotate90CounterClockwise", tr("Rotate Layer 90° Counter Clockwise")).document("layers.transform").when(hasLayer).runs([rotate] { rotate(-90); }, "layers.setTransform"));
     QMenu* sampling = layer->addMenu(tr("Resampling"));
     auto samplingItem = [&](const char* id, const QString& label, Sampling s) {
         add(sampling, Spec(id, label).document("layers.structure").runs([this, s] { samplingCommand(s); }, "layers.set"));
