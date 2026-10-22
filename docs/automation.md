@@ -271,7 +271,8 @@ preference; `library` (no path) when only libgmic runs it in-process; `null` whe
 method that installs it: downloading is the person's choice, in the interface.
 
 Selection: `selection.all`, `selection.none`, `selection.invert`, `selection.reselect` (the selection last dropped, back),
-`selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand` (`edgeAware`, on by default: see docs/smart-wand.md),
+`selection.rect` (or `ellipse: true`), `selection.polygon` (both take `feather`, 0..250 pixels: the Marquee's and
+Lasso's Feather, softening the shape before it combines), `selection.wand` (`edgeAware`, on by default: see docs/smart-wand.md),
 `selection.scribble` (`foreground` and `background`: lists of strokes, each a list of `[x, y]`
 points; `size`, `refine` 0..40, `clear`), `selection.subject` (click to select with the EfficientSAM
 model once downloaded: `foreground` and `background` points as `[x, y]` lists, an optional `box`

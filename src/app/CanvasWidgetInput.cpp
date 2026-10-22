@@ -104,7 +104,7 @@ SelectionMode CanvasWidget::selectionMode(Qt::KeyboardModifiers modifiers) const
     if (shift && alt) return SelectionMode::Intersect;
     if (alt) return SelectionMode::Subtract;
     if (shift) return SelectionMode::Add;
-    return SelectionMode::Replace;
+    return session_->selectionToolMode;   // the options bar's mode (New Selection unless it was changed)
 }
 
 QRectF CanvasWidget::dragBox(QPointF anchor, QPointF point, bool square, bool fromCenter, double ratio) const {

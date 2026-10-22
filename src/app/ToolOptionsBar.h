@@ -21,6 +21,10 @@ class ToolOptionsBar : public QToolBar {
 public:
     ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWidget* parent = nullptr);
 
+    /// The Type tool's style change, as the bar's own fields make it: the letters being typed (or typed next), else the
+    /// active live text layer (one undo step), and the style new type takes.
+    void applyTextStyle(const std::function<void(nekophoto::LayerText&)>& change);
+
     /// The bar never dictates the window's width: narrow windows clip its right end (see applyCompact).
     QSize minimumSizeHint() const override { return QSize(200, QToolBar::minimumSizeHint().height()); }
 
@@ -60,6 +64,9 @@ private:
     std::vector<std::function<void()>> syncers_;
     /// Size, hardness and opacity; `strength` names the opacity (Exposure, Flow, Strength) for tools that use it so.
     void addBrushTipFields(QHBoxLayout* layout, const QString& strength = QString());
+    /// The selection tools' New, Add, Subtract and Intersect buttons, and the Marquee and Lasso's Feather.
+    void addSelectionModeButtons(QHBoxLayout* layout);
+    void addFeatherField(QHBoxLayout* layout);
 
     EditorSession* session_;
     CanvasWidget* canvas_;

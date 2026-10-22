@@ -1090,6 +1090,12 @@ def thirty_two_bit_editing(rpc):
     rpc.call("selection.none")
     rpc.call("selection.polygon", points=[[5, 5], [60, 8], [30, 50]])
     rpc.call("selection.rect", x=0, y=0, width=20, height=20, mode="add", ellipse=True)
+    # The Marquee's and Lasso's Feather: the shape softened past its edge before it combines.
+    rpc.call("selection.rect", x=20, y=20, width=20, height=20, feather=4)
+    soft = rpc.call("selection.info")["bounds"]
+    assert soft["x"] < 20 and soft["width"] > 20, soft
+    rpc.call("selection.polygon", points=[[5, 5], [60, 8], [30, 50]], feather=2)
+    expect_refused(rpc, "feather", "selection.rect", x=0, y=0, width=5, height=5, feather=300)
     rpc.request("view.exposure", {"exposure": 3})
     wand = rpc.call("selection.wand", x=30, y=25, tolerance=8, contiguous=True, sampleAll=True, edgeAware=False, mode="replace")
     area = rpc.call("selection.info")["bounds"]

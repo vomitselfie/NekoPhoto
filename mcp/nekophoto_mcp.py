@@ -1200,15 +1200,15 @@ def selection_info() -> str:
 
 
 @edit("Select a rectangle")
-def selection_rect(x: float, y: float, width: float, height: float, ellipse: bool = False, mode: str = "replace") -> str:
-    """Select a rectangle or ellipse (document pixels); mode replace, add or subtract."""
-    return text(call("selection.rect", x=x, y=y, width=width, height=height, ellipse=ellipse, mode=mode))
+def selection_rect(x: float, y: float, width: float, height: float, ellipse: bool = False, mode: str = "replace", feather: float = 0) -> str:
+    """Select a rectangle or ellipse (document pixels); mode replace, add, subtract or intersect; feather (0..250 px) softens the shape first, as the Marquee's Feather."""
+    return text(call("selection.rect", x=x, y=y, width=width, height=height, ellipse=ellipse, mode=mode, feather=feather))
 
 
 @edit("Select a polygon")
-def selection_polygon(points: list[list[float]], mode: str = "replace") -> str:
-    """Select a polygon from [x, y] points."""
-    return text(call("selection.polygon", points=points, mode=mode))
+def selection_polygon(points: list[list[float]], mode: str = "replace", feather: float = 0) -> str:
+    """Select a polygon from [x, y] points; feather (0..250 px) softens it first, as the Lasso's Feather."""
+    return text(call("selection.polygon", points=points, mode=mode, feather=feather))
 
 
 @edit("Magic wand")

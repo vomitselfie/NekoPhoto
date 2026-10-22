@@ -5,6 +5,7 @@
 #include <cstring>
 #include "QtGeometry.h"
 #include "ViewOptions.h"
+#include "nekophoto/morphology.h"
 #include <QApplication>
 #include <QMouseEvent>
 #include <QTabletEvent>
@@ -761,10 +762,14 @@ void CanvasWidget::finishMarquee(Qt::KeyboardModifiers modifiers) {
     auto shape = session_->marqueeKind == MarqueeKind::Ellipse
         ? rasterizeEllipse(rect, int(ds.width()), int(ds.height()), session_->selectionAntialiased)
         : rasterizeRect(rect, int(ds.width()), int(ds.height()), session_->selectionAntialiased);
+    const double feather = session_->selectionToolFeather;
+    if (feather > 0) shape = featherSelection(*shape, std::min(250.0, feather));
     session_->applySelectionShape(*shape, mode, session_->marqueeKind == MarqueeKind::Ellipse ? QT_TRANSLATE_NOOP("History", "Elliptical Marquee") : QT_TRANSLATE_NOOP("History", "Rectangular Marquee"));
     static const char* const modes[] = {"replace", "add", "subtract", "intersect"};
-    recordAction("selection.rect", {{"x", box->x()}, {"y", box->y()}, {"width", box->width()}, {"height", box->height()},
-                                    {"ellipse", session_->marqueeKind == MarqueeKind::Ellipse}, {"mode", modes[std::clamp(int(mode), 0, 3)]}});
+    QJsonObject step{{"x", box->x()}, {"y", box->y()}, {"width", box->width()}, {"height", box->height()},
+                     {"ellipse", session_->marqueeKind == MarqueeKind::Ellipse}, {"mode", modes[std::clamp(int(mode), 0, 3)]}};
+    if (feather > 0) step["feather"] = std::min(250.0, feather);
+    recordAction("selection.rect", step);
 }
 
 void CanvasWidget::finishFreehandLasso() {
@@ -777,6 +782,7 @@ void CanvasWidget::finishFreehandLasso() {
     for (auto& p : points) poly.push_back(toPoint(p));
     QSizeF ds = documentSize();
     auto shape = rasterizePolygon(poly, int(ds.width()), int(ds.height()), session_->selectionAntialiased);
+    if (session_->selectionToolFeather > 0) shape = featherSelection(*shape, std::min(250.0, session_->selectionToolFeather));
     session_->applySelectionShape(*shape, mode, QT_TRANSLATE_NOOP("History", "Lasso"));
 }
 
@@ -790,6 +796,7 @@ void CanvasWidget::finishPolygonalLasso() {
     for (auto& p : points) poly.push_back(toPoint(p));
     QSizeF ds = documentSize();
     auto shape = rasterizePolygon(poly, int(ds.width()), int(ds.height()), session_->selectionAntialiased);
+    if (session_->selectionToolFeather > 0) shape = featherSelection(*shape, std::min(250.0, session_->selectionToolFeather));
     session_->applySelectionShape(*shape, selectionMode(QApplication::keyboardModifiers()), QT_TRANSLATE_NOOP("History", "Polygonal Lasso"));
 }
 

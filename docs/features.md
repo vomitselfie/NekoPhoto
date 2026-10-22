@@ -30,7 +30,7 @@ interface language, and runs it; the last eight used come first.
 - Rectangle and ellipse marquee, freehand and polygonal lasso, and an edge-aware magic wand: shading and texture stay in, edges between similar colours hold, and the tolerance can be changed right after a click
 - Quick Select (Shift+W): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges and updates when you release the mouse ([legal-boundaries.md](legal-boundaries.md))
 - Select ▸ Subject, as Photoshop's: selects the main subject in one step with Quick Select's click model (greyed, saying why, until that model is downloaded)
-- Add (Shift), subtract (Alt) and intersect (Shift+Alt)
+- Add (Shift), subtract (Alt) and intersect (Shift+Alt), or the options bar's four mode buttons (New, Add, Subtract, Intersect) for every drag, as Photoshop's; the Marquee and Lasso's Feather softens each new shape before it combines
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
 - Channels (Window ▸ Channels, [details](channels.md)): alpha channels as saved selections (Select ▸ Save Selection and Load Selection in every combine mode, Ctrl-click a thumbnail with Shift, Alt or both), painted like Quick Mask, with Channel Options; one colour channel in gray (Ctrl+3, 4, 5) that the brush, fills, adjustments, filters and paste then change alone; spot channels kept from PSD files; channels in PSD files and projects, at 8 and 16 bits
 - Content-Aware Fill, which continues edges and patterns and can extend an image past its borders; its dialog (Edit > Content-Aware Fill…) chooses the search area (Auto or Wide Area; there is no hand-painted sampling area, see [legal-boundaries.md](legal-boundaries.md)), previews on the canvas and can output to a new layer ([content-aware.md](content-aware.md))
@@ -162,7 +162,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 長方形選択・楕円選択、なげなわ・多角形選択、そして輪郭を読み取る自動選択(陰影やテクスチャは含め、似た色どうしの境界でも止まり、クリック直後に許容値を変えられます)
 - クイック選択(Shift+W):被写体をなぞるか、クリックするだけ(クリック用の 48 MB のモデルはオプションバーからダウンロード)。選択範囲は画像の輪郭に合わせて調整され、マウスを離したときに更新されます([legal-boundaries.md](legal-boundaries.md#日本語))
 - 選択範囲 ▸ 被写体を選択(Photoshop と同じ):クイック選択のクリック用モデルで、主な被写体を 1 回で選択します(モデルをダウンロードするまでは理由を示してグレー表示)
-- 追加(Shift)、削除(Alt)、共通範囲(Shift+Alt)
+- 追加(Shift)、削除(Alt)、共通範囲(Shift+Alt)。Photoshop と同じくオプションバーの 4 つのボタン(新規、追加、一部削除、共通範囲)で普通のドラッグの動作も選べます。選択範囲ツールとなげなわの「ぼかし」は、新しい形を組み合わせる前にぼかします
 - 拡張、縮小、境界をぼかす、滑らかに、境界線、選択範囲を反転。レイヤーやマスクから選択範囲を作成
 - チャンネル(ウィンドウ ▸ チャンネル、[詳細](channels.md)):選択範囲を保存したアルファチャンネル(選択範囲 ▸ 選択範囲を保存・選択範囲を読み込むは追加・一部削除・共通範囲にも対応、サムネールの Ctrl+クリックと Shift・Alt)。クイックマスクと同じように描画でき、チャンネルオプションでマスク範囲・選択範囲、カラー、不透明度を設定。カラーチャンネルを 1 つだけグレーで表示(Ctrl+3、4、5)すると、ブラシ、塗りつぶし、色調補正、フィルター、ペーストがそのチャンネルだけに適用されます。PSD のスポットカラーチャンネルは保持。チャンネルは PSD とプロジェクトに保存され、8 ビットと 16 ビットの両方で使えます
 - コンテンツに応じた塗りつぶし:輪郭や模様をつなげ、画像の外側への拡張にも使えます。ダイアログ(編集 > コンテンツに応じた塗りつぶし...)で探す範囲(「自動」と「広い範囲」。手で塗るサンプリング範囲はありません。[legal-boundaries.md](legal-boundaries.md#日本語))を選び、カンバス上でプレビューし、新しいレイヤーに出力することもできます([content-aware.md](content-aware.md)、英語)

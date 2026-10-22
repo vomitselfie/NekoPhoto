@@ -333,8 +333,9 @@ const MethodDoc methodDocs[] = {
     {"selection.quickMask", "Quick Mask: the selection as a mask to paint (brush.stroke with mask true, white selects; gradients, fills and filters too), then back.",
      "on:bool Enter (true) or leave (false, the mask becoming the selection); left out, it toggles"},
     {"selection.rect", "Select a rectangle or ellipse.",
-     "x:number! Left; y:number! Top; width:number! Width; height:number! Height; ellipse:bool=false An ellipse in that box; mode:<selectionMode>=replace How it combines with the current selection"},
-    {"selection.polygon", "Select a polygon.", "points:array! At least three [x, y] points; mode:<selectionMode>=replace How it combines"},
+     "x:number! Left; y:number! Top; width:number! Width; height:number! Height; ellipse:bool=false An ellipse in that box; mode:<selectionMode>=replace How it combines with the current selection; "
+     "feather:number=0 Soften the shape by this radius in pixels (0..250) before it combines, as the Marquee's Feather"},
+    {"selection.polygon", "Select a polygon.", "points:array! At least three [x, y] points; mode:<selectionMode>=replace How it combines; feather:number=0 Soften the shape by this radius in pixels (0..250) before it combines, as the Lasso's Feather"},
     {"selection.wand", "Magic wand: select similar colours around a point.",
      "x:number! Point; y:number! Point; tolerance:integer Colour tolerance 0..255 (default the tool's); contiguous:bool Only connected pixels (default the tool's); "
      "sampleAll:bool Sample the composite rather than the active layer; sampleRadius:integer Average a square of this radius; "

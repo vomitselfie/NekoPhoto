@@ -3,6 +3,7 @@
 #include "AutomationHandlers.h"
 #include "ImageConvert.h"
 #include "ModelStore.h"
+#include "nekophoto/morphology.h"
 #include "nekophoto/scribble.h"
 #include <algorithm>
 
@@ -10,6 +11,17 @@ using namespace nekophoto;
 using namespace app::rpc;
 
 namespace app {
+
+namespace {
+
+/// A shape's Feather (the Marquee and Lasso's options bar field), in pixels: 0 for none, at most 250.
+double featherOf(const QJsonObject& p) {
+    const double feather = num(p, "feather", 0);
+    if (!(feather >= 0) || feather > 250) fail("feather must be between 0 and 250 pixels", invalidParams);
+    return feather;
+}
+
+} // namespace
 
 void AutomationServer::registerSelectionHandlers() {
     MainWindow* w = window_;
@@ -56,6 +68,7 @@ void AutomationServer::registerSelectionHandlers() {
         const Document& doc = document();
         Rect r(num(p, "x"), num(p, "y"), num(p, "width"), num(p, "height"));
         auto shape = flag(p, "ellipse", false) ? rasterizeEllipse(r, doc.width, doc.height, session()->selectionAntialiased) : rasterizeRect(r, doc.width, doc.height, session()->selectionAntialiased);
+        if (const double feather = featherOf(p); feather > 0) shape = featherSelection(*shape, feather);
         session()->applySelectionShape(*shape, selectionMode(p), flag(p, "ellipse", false) ? "Ellipse" : "Marquee");
         return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
     });
@@ -69,6 +82,7 @@ void AutomationServer::registerSelectionHandlers() {
         }
         if (points.size() < 3) fail("points needs at least three [x, y] pairs", invalidParams);
         auto shape = rasterizePolygon(points, doc.width, doc.height, session()->selectionAntialiased);
+        if (const double feather = featherOf(p); feather > 0) shape = featherSelection(*shape, feather);
         session()->applySelectionShape(*shape, selectionMode(p), "Lasso");
         return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
     });

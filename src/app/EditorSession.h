@@ -695,6 +695,12 @@ public:
     void loadLayerAsSelection(const nekophoto::Uuid& id, bool mask, nekophoto::SelectionMode mode);
     LassoKind lassoKind = LassoKind::Freehand;
     bool selectionAntialiased = true;
+    /// The Marquee, Lasso and Magic Wand's mode, as the four buttons of Photoshop's options bar: what a new shape does
+    /// with the selection there. Shift (add), Alt (subtract) and Shift+Alt (intersect) choose for one use.
+    nekophoto::SelectionMode selectionToolMode = nekophoto::SelectionMode::Replace;
+    /// The Marquee and Lasso's Feather in pixels (0..250, Photoshop's options bar field): each new shape is softened
+    /// by it before it combines with the selection.
+    double selectionToolFeather = 0;
     MarqueeKind marqueeKind = MarqueeKind::Rectangle;
     int wandTolerance = 32;
     bool wandContiguous = true;

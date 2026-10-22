@@ -153,6 +153,7 @@ QWidget* ToolOptionsBar::buildMoveOptions() {
     autoSelect->setToolTip(tr("Click picks the layer under the pointer (or hold Ctrl)"));
     autoSelect->setChecked(session_->transformAutoSelect);
     connect(autoSelect, &QCheckBox::toggled, this, [this](bool on) { session_->transformAutoSelect = on; });
+    syncers_.push_back([this, autoSelect] { QSignalBlocker b(autoSelect); autoSelect->setChecked(session_->transformAutoSelect); });
     h->addWidget(autoSelect);
     auto* controls = new QCheckBox(tr("Transform Controls"));
     controlsCheck_ = controls;
@@ -601,11 +602,13 @@ QWidget* ToolOptionsBar::buildBucketOptions() {
     auto* tolerance = numberField(0, 255, 0, QString(), tr("Tolerance"));
     tolerance->setValue(session_->bucket.tolerance);
     connect(tolerance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->bucket.tolerance = int(v); });
+    syncers_.push_back([this, tolerance] { QSignalBlocker b(tolerance); tolerance->setValue(session_->bucket.tolerance); });
     h->addWidget(tolerance);
     auto check = [&](const QString& label, bool& value) {
         auto* box = new QCheckBox(label);
         box->setChecked(value);
         connect(box, &QCheckBox::toggled, this, [&value](bool on) { value = on; });
+        syncers_.push_back([box, &value] { QSignalBlocker b(box); box->setChecked(value); });
         h->addWidget(box);
     };
     check(tr("Anti-alias"), session_->bucket.antialias);
@@ -651,6 +654,7 @@ QWidget* ToolOptionsBar::buildGradientOptions() {
     h->addWidget(style);
     auto* reverse = new QCheckBox(tr("Reverse"));
     connect(reverse, &QCheckBox::toggled, this, [this](bool on) { session_->gradientSettings.reversed = on; session_->refreshGradient(); });
+    syncers_.push_back([this, reverse] { QSignalBlocker b(reverse); reverse->setChecked(session_->gradientSettings.reversed); });
     h->addWidget(reverse);
     // Photoshop's Method menu, in its order: Perceptual, Linear, Classic.
     h->addWidget(new QLabel(tr("Method")));
@@ -936,26 +940,28 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     return w;
 }
 
+void ToolOptionsBar::applyTextStyle(const std::function<void(LayerText&)>& change) {
+    const LayerText before = session_->textStyle;
+    change(session_->textStyle);
+    if (canvas_->typeEditing()) {
+        // Typing on the canvas: the selected letters (or the ones typed next) take the change.
+        const LayerText& after = session_->textStyle;
+        canvas_->applyTypeStyle(CanvasWidget::typePatch(before, after), after.alignment != before.alignment ? std::optional(after.alignment) : std::nullopt);
+        return;
+    }
+    const Layer* layer = session_->activeLayer();
+    if (layer && layer->isLiveText() && !session_->textEditing()) {
+        LayerText text = *layer->text;
+        change(text);
+        session_->setLayerText(layer->id, text);
+    }
+}
+
 QWidget* ToolOptionsBar::buildTextOptions() {
     // The style new text starts with; a live text layer that is active takes each change straight away.
     QWidget* w = row();
     auto* h = layoutOf(w);
-    auto applyStyle = [this](std::function<void(LayerText&)> change) {
-        const LayerText before = session_->textStyle;
-        change(session_->textStyle);
-        if (canvas_->typeEditing()) {
-            // Typing on the canvas: the selected letters (or the ones typed next) take the change.
-            const LayerText& after = session_->textStyle;
-            canvas_->applyTypeStyle(CanvasWidget::typePatch(before, after), after.alignment != before.alignment ? std::optional(after.alignment) : std::nullopt);
-            return;
-        }
-        const Layer* layer = session_->activeLayer();
-        if (layer && layer->isLiveText() && !session_->textEditing()) {
-            LayerText text = *layer->text;
-            change(text);
-            session_->setLayerText(layer->id, text);
-        }
-    };
+    auto applyStyle = [this](std::function<void(LayerText&)> change) { applyTextStyle(change); };
     auto* family = new FontPicker;
     family->setMinimumWidth(150);
     family->setMaximumWidth(240);
@@ -1051,8 +1057,44 @@ QWidget* ToolOptionsBar::buildMarqueeOptions() {
     aa->setChecked(session_->selectionAntialiased);
     connect(aa, &QCheckBox::toggled, this, [this](bool on) { session_->selectionAntialiased = on; });
     h->addWidget(aa);
+    addFeatherField(h);
+    h->addWidget(separator());
+    addSelectionModeButtons(h);
     h->addStretch();
     return w;
+}
+
+void ToolOptionsBar::addSelectionModeButtons(QHBoxLayout* h) {
+    // Photoshop's four buttons: what a new shape does with the selection (Shift, Alt and Shift+Alt for one use).
+    struct Mode { SelectionMode mode; const char* icon; QString tip; };
+    const Mode modes[] = {{SelectionMode::Replace, "square", tr("New Selection")}, {SelectionMode::Add, "union", tr("Add to Selection (Shift)")},
+                          {SelectionMode::Subtract, "subtract", tr("Subtract from Selection (Alt)")}, {SelectionMode::Intersect, "intersect", tr("Intersect with Selection (Shift+Alt)")}};
+    auto* group = new QButtonGroup(h->parentWidget());
+    group->setExclusive(true);
+    for (const Mode& m : modes) {
+        auto* b = new QToolButton;
+        b->setIcon(toolIcon(QString::fromLatin1(m.icon), 16));
+        b->setToolTip(m.tip);
+        b->setCheckable(true);
+        b->setAutoRaise(true);
+        b->setProperty("role", QStringLiteral("selectionMode%1").arg(int(m.mode)));
+        group->addButton(b);
+        const SelectionMode mode = m.mode;
+        b->setChecked(session_->selectionToolMode == mode);
+        connect(b, &QToolButton::toggled, this, [this, mode](bool on) { if (on && session_->selectionToolMode != mode) { session_->selectionToolMode = mode; emit session_->toolChanged(); } });
+        syncers_.push_back([this, b, mode] { QSignalBlocker blocker(b); b->setChecked(session_->selectionToolMode == mode); });
+        h->addWidget(b);
+    }
+}
+
+void ToolOptionsBar::addFeatherField(QHBoxLayout* h) {
+    h->addWidget(new QLabel(tr("Feather")));
+    auto* feather = numberField(0, 250, 0, " px", tr("Softens the edge of each new selection by this radius"));
+    feather->setProperty("role", "feather");
+    feather->setValue(session_->selectionToolFeather);
+    connect(feather, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->selectionToolFeather = v; emit session_->toolChanged(); });
+    syncers_.push_back([this, feather] { QSignalBlocker b(feather); feather->setValue(session_->selectionToolFeather); });
+    h->addWidget(feather);
 }
 
 QWidget* ToolOptionsBar::buildLassoOptions() {
@@ -1064,6 +1106,9 @@ QWidget* ToolOptionsBar::buildLassoOptions() {
     kind->setProperty("role", "lassoKind");
     syncers_.push_back([this, kind] { QSignalBlocker b(kind); kind->setCurrentIndex(session_->lassoKind == LassoKind::Polygonal ? 1 : 0); });
     h->addWidget(kind);
+    addFeatherField(h);
+    h->addWidget(separator());
+    addSelectionModeButtons(h);
     h->addStretch();
     return w;
 }
@@ -1099,6 +1144,7 @@ QWidget* ToolOptionsBar::buildScribbleOptions() {
     mode->setToolTip(tr("What a stroke marks; Alt flips it for one stroke"));
     mode->setCurrentIndex(session_->scribbleBackground ? 1 : 0);
     connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->scribbleBackground = i == 1; });
+    syncers_.push_back([this, mode] { QSignalBlocker b(mode); mode->setCurrentIndex(session_->scribbleBackground ? 1 : 0); });
     h->addWidget(mode);
     h->addWidget(new QLabel(tr("Size")));
     auto* size = new QSpinBox;
@@ -1108,6 +1154,7 @@ QWidget* ToolOptionsBar::buildScribbleOptions() {
     size->setFixedWidth(48);
     size->setValue(session_->scribbleSize);
     connect(size, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->scribbleSize = v; });
+    syncers_.push_back([this, size] { QSignalBlocker b(size); size->setValue(session_->scribbleSize); });
     h->addWidget(size);
     h->addWidget(new QLabel(tr("Refine")));
     auto* refine = new QSpinBox;
@@ -1139,10 +1186,12 @@ QWidget* ToolOptionsBar::buildWandOptions() {
     tol->setValue(session_->wandTolerance);
     // Right after a click, a new tolerance redoes that click's selection at once (the field is kept).
     connect(tol, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->wandTolerance = v; if (session_->wandEdgeAware) session_->retolerateWand(v); });
+    syncers_.push_back([this, tol] { QSignalBlocker b(tol); tol->setValue(session_->wandTolerance); });
     h->addWidget(tol);
     auto* contiguous = new QCheckBox(tr("Contiguous"));
     contiguous->setChecked(session_->wandContiguous);
     connect(contiguous, &QCheckBox::toggled, this, [this](bool on) { session_->wandContiguous = on; });
+    syncers_.push_back([this, contiguous] { QSignalBlocker b(contiguous); contiguous->setChecked(session_->wandContiguous); });
     h->addWidget(contiguous);
     auto* edgeAware = new QCheckBox(tr("Edge Aware"));
     edgeAware->setToolTip(tr("Follow the image: shading and texture stay in, edges between similar colours hold. "
@@ -1165,6 +1214,8 @@ QWidget* ToolOptionsBar::buildWandOptions() {
     sample->setCurrentIndex(session_->wandSampleRadius);
     connect(sample, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->wandSampleRadius = i; });
     h->addWidget(sample);
+    h->addWidget(separator());
+    addSelectionModeButtons(h);
     h->addStretch();
     return w;
 }
