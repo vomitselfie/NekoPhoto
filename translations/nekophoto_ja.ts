@@ -8558,6 +8558,14 @@ File &gt; New creates a blank canvas.</source>
         <translation>選択範囲をマスク</translation>
     </message>
     <message>
+        <source>Rotate Layer 90° Clockwise</source>
+        <translation>レイヤーを 90° 回転(時計回り)</translation>
+    </message>
+    <message>
+        <source>Rotate Layer 90° Counter Clockwise</source>
+        <translation>レイヤーを 90° 回転(反時計回り)</translation>
+    </message>
+    <message>
         <source>Reselect</source>
         <translation>再選択</translation>
     </message>
@@ -9932,6 +9940,66 @@ File &gt; New creates a blank canvas.</source>
         <translation>ダウンロードに失敗しました</translation>
     </message>
     <message>
+        <source>Tool Ring</source>
+        <translation>ツールリング</translation>
+    </message>
+    <message>
+        <source>Alt+D opens the Tool Ring</source>
+        <translation>Alt+D でツールリングを開く</translation>
+    </message>
+    <message>
+        <source>Closes after</source>
+        <translation>閉じるまで</translation>
+    </message>
+    <message>
+        <source> s</source>
+        <translation> 秒</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>閉じない</translation>
+    </message>
+    <message>
+        <source>Shows</source>
+        <translation>表示位置</translation>
+    </message>
+    <message>
+        <source>Up and right of the pointer</source>
+        <translation>ポインターの右上</translation>
+    </message>
+    <message>
+        <source>Up and left of the pointer</source>
+        <translation>ポインターの左上</translation>
+    </message>
+    <message>
+        <source>Down and right of the pointer</source>
+        <translation>ポインターの右下</translation>
+    </message>
+    <message>
+        <source>Down and left of the pointer</source>
+        <translation>ポインターの左下</translation>
+    </message>
+    <message>
+        <source>Pen button</source>
+        <translation>ペンのボタン</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>なし</translation>
+    </message>
+    <message>
+        <source>Lower side button (instead of panning)</source>
+        <translation>下のサイドスイッチ(スクロールの代わりに)</translation>
+    </message>
+    <message>
+        <source>Upper side button</source>
+        <translation>上のサイドスイッチ</translation>
+    </message>
+    <message>
+        <source>The keys around D act on the current tool while the ring is open; it never takes the mouse, and moves aside when the pointer comes at it. It moves away from where the pointer is heading, so the side chosen here is where it starts. A tablet&apos;s ExpressKeys are set in the tablet driver: map one to Alt+D and others to the ring&apos;s letters.</source>
+        <translation>リングを開いている間、D の周りのキーが現在のツールに働きます。マウスの操作は奪わず、ポインターが近づくと脇へよけます。ポインターの進む方向の反対側へ移るので、ここで選ぶのは最初に出る位置です。タブレットのファンクションキー(ExpressKey)はタブレットのドライバーで設定します。1 つを Alt+D に、ほかをリングの文字キーに割り当ててください。</translation>
+    </message>
+    <message>
         <source>Download cancelled.</source>
         <translation>ダウンロードをキャンセルしました。</translation>
     </message>
@@ -11219,6 +11287,30 @@ File &gt; New creates a blank canvas.</source>
         <translation>アクティブなテキストレイヤーのエディターを開きます。</translation>
     </message>
     <message>
+        <source>New Selection</source>
+        <translation>新しい選択範囲</translation>
+    </message>
+    <message>
+        <source>Add to Selection (Shift)</source>
+        <translation>選択範囲に追加(Shift)</translation>
+    </message>
+    <message>
+        <source>Subtract from Selection (Alt)</source>
+        <translation>選択範囲から一部削除(Alt)</translation>
+    </message>
+    <message>
+        <source>Intersect with Selection (Shift+Alt)</source>
+        <translation>選択範囲との共通範囲(Shift+Alt)</translation>
+    </message>
+    <message>
+        <source>Feather</source>
+        <translation>ぼかし</translation>
+    </message>
+    <message>
+        <source>Softens the edge of each new selection by this radius</source>
+        <translation>新しい選択範囲の境界をこの半径でぼかします</translation>
+    </message>
+    <message>
         <source>Freehand</source>
         <translation>フリーハンド</translation>
     </message>
@@ -11333,6 +11425,221 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>100%</source>
         <translation>100%</translation>
+    </message>
+</context>
+<context>
+    <name>app::ToolRing</name>
+    <message>
+        <source>Not while a stroke is being painted</source>
+        <translation>ストロークの描画中はできません</translation>
+    </message>
+    <message>
+        <source>&amp;Tool Ring</source>
+        <translation>ツールリング(&amp;T)</translation>
+    </message>
+    <message>
+        <source>The Tool Ring is turned off in Edit &gt; Preferences</source>
+        <translation>ツールリングは 編集 &gt; 環境設定 でオフになっています</translation>
+    </message>
+    <message>
+        <source>This tool has no brush size</source>
+        <translation>このツールにはブラシの直径がありません</translation>
+    </message>
+    <message>
+        <source>Decrease Brush Size</source>
+        <translation>ブラシの直径を小さく</translation>
+    </message>
+    <message>
+        <source>Increase Brush Size</source>
+        <translation>ブラシの直径を大きく</translation>
+    </message>
+    <message>
+        <source>This tool has no brush hardness</source>
+        <translation>このツールにはブラシの硬さがありません</translation>
+    </message>
+    <message>
+        <source>This brush preset brings its own hardness</source>
+        <translation>このブラシプリセットは硬さを自分で決めます</translation>
+    </message>
+    <message>
+        <source>Decrease Brush Hardness</source>
+        <translation>ブラシの硬さを下げる</translation>
+    </message>
+    <message>
+        <source>Increase Brush Hardness</source>
+        <translation>ブラシの硬さを上げる</translation>
+    </message>
+    <message>
+        <source>This tool has no opacity</source>
+        <translation>このツールには不透明度がありません</translation>
+    </message>
+    <message>
+        <source>Decrease Tool Opacity</source>
+        <translation>ツールの不透明度を下げる</translation>
+    </message>
+    <message>
+        <source>Increase Tool Opacity</source>
+        <translation>ツールの不透明度を上げる</translation>
+    </message>
+    <message>
+        <source>Switch between Brush and Eraser</source>
+        <translation>ブラシと消しゴムを切り替え</translation>
+    </message>
+    <message>
+        <source>Only the Brush and the Eraser</source>
+        <translation>ブラシと消しゴムだけです</translation>
+    </message>
+    <message>
+        <source>Previous Brush Preset</source>
+        <translation>前のブラシプリセット</translation>
+    </message>
+    <message>
+        <source>No other brush preset has been used yet</source>
+        <translation>ほかのブラシプリセットはまだ使われていません</translation>
+    </message>
+    <message>
+        <source>Only the Marquee, Lasso and Magic Wand have a selection mode</source>
+        <translation>選択範囲の作成方法があるのは選択範囲ツール、なげなわツール、自動選択ツールだけです</translation>
+    </message>
+    <message>
+        <source>New Selection</source>
+        <translation>新しい選択範囲</translation>
+    </message>
+    <message>
+        <source>Add to Selection</source>
+        <translation>選択範囲に追加</translation>
+    </message>
+    <message>
+        <source>Subtract from Selection</source>
+        <translation>選択範囲から一部削除</translation>
+    </message>
+    <message>
+        <source>Intersect with Selection</source>
+        <translation>選択範囲との共通範囲</translation>
+    </message>
+    <message>
+        <source>Only the Marquee and the Lasso have a Feather (Select &gt; Modify &gt; Feather softens a selection)</source>
+        <translation>ぼかしがあるのは選択範囲ツールとなげなわツールだけです(選択範囲の境界は 選択範囲 &gt; 選択範囲を変更 &gt; 境界をぼかす でぼかせます)</translation>
+    </message>
+    <message>
+        <source>Decrease Feather</source>
+        <translation>ぼかしを小さく</translation>
+    </message>
+    <message>
+        <source>Increase Feather</source>
+        <translation>ぼかしを大きく</translation>
+    </message>
+    <message>
+        <source>Only the Magic Wand and the Paint Bucket have a Tolerance</source>
+        <translation>許容値があるのは自動選択ツールと塗りつぶしツールだけです</translation>
+    </message>
+    <message>
+        <source>Decrease Tolerance</source>
+        <translation>許容値を下げる</translation>
+    </message>
+    <message>
+        <source>Increase Tolerance</source>
+        <translation>許容値を上げる</translation>
+    </message>
+    <message>
+        <source>Only Quick Select</source>
+        <translation>クイック選択だけです</translation>
+    </message>
+    <message>
+        <source>Quick Select: Mark the Subject</source>
+        <translation>クイック選択:被写体を描く</translation>
+    </message>
+    <message>
+        <source>Quick Select: Mark the Background</source>
+        <translation>クイック選択:背景を描く</translation>
+    </message>
+    <message>
+        <source>Quick Select: Clear the Strokes</source>
+        <translation>クイック選択:ストロークを消去</translation>
+    </message>
+    <message>
+        <source>Quick Select: Remove the Last Stroke</source>
+        <translation>クイック選択:最後のストロークを取り消す</translation>
+    </message>
+    <message>
+        <source>Auto-Select Layer</source>
+        <translation>レイヤーを自動選択</translation>
+    </message>
+    <message>
+        <source>Only the Move tool</source>
+        <translation>移動ツールだけです</translation>
+    </message>
+    <message>
+        <source>Only the Type tool</source>
+        <translation>文字ツールだけです</translation>
+    </message>
+    <message>
+        <source>Decrease Type Size</source>
+        <translation>文字サイズを小さく</translation>
+    </message>
+    <message>
+        <source>Increase Type Size</source>
+        <translation>文字サイズを大きく</translation>
+    </message>
+    <message>
+        <source>No recent fonts yet: choose one in the options bar&apos;s font list</source>
+        <translation>最近使ったフォントはまだありません。オプションバーのフォント一覧から選んでください</translation>
+    </message>
+    <message>
+        <source>Previous Recent Font</source>
+        <translation>前の最近使ったフォント</translation>
+    </message>
+    <message>
+        <source>Next Recent Font</source>
+        <translation>次の最近使ったフォント</translation>
+    </message>
+    <message>
+        <source>Bold</source>
+        <translation>太字</translation>
+    </message>
+    <message>
+        <source>Italic</source>
+        <translation>斜体</translation>
+    </message>
+    <message>
+        <source>Next Text Alignment</source>
+        <translation>次のテキストの揃え</translation>
+    </message>
+    <message>
+        <source>Only the Paint Bucket</source>
+        <translation>塗りつぶしツールだけです</translation>
+    </message>
+    <message>
+        <source>Paint Bucket: Contiguous</source>
+        <translation>塗りつぶしツール:隣接</translation>
+    </message>
+    <message>
+        <source>Paint Bucket: All Layers</source>
+        <translation>塗りつぶしツール:全レイヤー</translation>
+    </message>
+    <message>
+        <source>Gradient: Reverse</source>
+        <translation>グラデーション:逆順</translation>
+    </message>
+    <message>
+        <source>Only the Gradient tool</source>
+        <translation>グラデーションツールだけです</translation>
+    </message>
+    <message>
+        <source>%1 px</source>
+        <translation>%1 px</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation>左揃え</translation>
+    </message>
+    <message>
+        <source>Centre</source>
+        <translation>中央揃え</translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation>右揃え</translation>
     </message>
 </context>
 <context>

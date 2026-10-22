@@ -22,6 +22,7 @@
 #include "WelcomeDialog.h"
 #include "FullScreen.h"
 #include "HidePanels.h"
+#include "ToolRing.h"
 #include <QKeyEvent>
 #include <QApplication>
 #include <QCloseEvent>
@@ -254,6 +255,7 @@ MainWindow::MainWindow() {
     fullScreen_ = new FullScreenMode(this);   // after the docks, whose panels it moves into its edges
     hidePanels_ = new HidePanels(this);
     connect(fullScreen_, &FullScreenMode::normalLayoutRestored, hidePanels_, &HidePanels::afterFullScreen);
+    toolRing_ = new ToolRing(this);   // its commands go in with the View menu's
     buildToolRail();
     buildMenus();
     applyShortcuts();   // the person's keys over the defaults (Edit > Keyboard Shortcuts)
@@ -317,6 +319,7 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     tab.session->commandReady = [this, session = tab.session] { return session == session_; };
     tab.canvas = new CanvasWidget(tab.session);
     connect(tab.canvas, &CanvasWidget::contextMenuRequested, this, [this, canvas = tab.canvas](QPointF at) { if (canvas == canvas_) showCanvasMenu(at); });
+    connect(tab.canvas, &CanvasWidget::toolRingRequested, this, [this, canvas = tab.canvas] { if (canvas == canvas_) toolRing_->toggle(); });
     // The forbidden cursor's reason in the status bar while the pointer is over the canvas, else the tool's hint.
     connect(tab.canvas, &CanvasWidget::refusalChanged, this, [this, canvas = tab.canvas] { if (canvas == canvas_) refreshHint(); });
     tab.frame = new CanvasFrame(tab.session, tab.canvas);
@@ -462,6 +465,7 @@ void MainWindow::switchTo(int index) {
     if (importBanner_) importBanner_->setVisible(bannerSession_ && bannerSession_ == session_ && !importBanner_->notes().isEmpty());
     { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
     connectSession();
+    toolRing_->sessionChanged();   // it closes, and follows this tab
     refreshTitle();
     refreshActions();
     updateColorSwatches();

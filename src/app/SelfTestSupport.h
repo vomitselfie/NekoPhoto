@@ -54,5 +54,6 @@ int workCounters(MainWindow& window);    // SelfTestWork.cpp
 int fullScreen(MainWindow& window);      // SelfTestFullScreen.cpp
 int hidePanels(MainWindow& window);      // SelfTestHidePanels.cpp
 int forbiddenCursor(MainWindow& window); // SelfTestForbidden.cpp
+int toolRing(MainWindow& window);        // SelfTestToolRing.cpp
 
 } // namespace app

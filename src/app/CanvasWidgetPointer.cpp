@@ -4,6 +4,7 @@
 #include "VectorPathQt.h"
 #include <cstring>
 #include "QtGeometry.h"
+#include "ToolRing.h"
 #include "ViewOptions.h"
 #include "nekophoto/morphology.h"
 #include <QApplication>
@@ -54,6 +55,14 @@ void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
 
 void CanvasWidget::tabletEvent(QTabletEvent* e) {
     e->accept();
+    // The pen's side button chosen in Preferences (none by default) toggles the Tool Ring instead of doing its usual
+    // job (the lower one pans), tip down or not; its release is the ring's too. A stroke under way carries on.
+    if (e->type() == QEvent::TabletPress && e->button() != Qt::LeftButton && e->button() == toolring::penMouseButton()) {
+        ringButtonDown_ = e->button();
+        emit toolRingRequested();
+        return;
+    }
+    if (e->type() == QEvent::TabletRelease && ringButtonDown_ != Qt::NoButton && e->button() == ringButtonDown_) { ringButtonDown_ = Qt::NoButton; return; }
     // The pen as the tablet reports it: tilt in degrees (about ±60 at most), the barrel's rotation in degrees and
     // the airbrush wheel's tangential pressure. Kept raw; each brush reads what it uses.
     BrushSample pen;

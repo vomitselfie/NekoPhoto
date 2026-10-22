@@ -512,6 +512,12 @@ if(TARGET nekophoto)
     add_test(NAME forbidden_cursor_selftest COMMAND nekophoto --lang en --self-test forbidden-cursor)
     set_tests_properties(forbidden_cursor_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/forbidden-cursor-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/forbidden-cursor-home/data")
+    # View > Tool Ring (Alt+D): no held Eyedropper or menu bar left behind, placed clear of the pointer inside the canvas
+    # and moved only when run into, F/S the brush size, a stroke under way left whole, its letters its own while open,
+    # Esc, Alt+D, another tool and the idle timeout closing it, the mouse going through it, the wheel, full screen.
+    add_test(NAME tool_ring_selftest COMMAND nekophoto --lang en --self-test tool-ring)
+    set_tests_properties(tool_ring_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/tool-ring-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/tool-ring-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)

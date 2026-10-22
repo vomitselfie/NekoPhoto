@@ -8,6 +8,9 @@
 #include "Language.h"
 #include "Gmic.h"
 #include "GmicStore.h"
+#include "ToolRing.h"
+#include <QDoubleSpinBox>
+#include <cmath>
 #include <QSettings>
 #include <QSpinBox>
 #include "Autosave.h"
@@ -74,6 +77,54 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     languageHint->setStyleSheet(hintStyle());
     languageRow->addWidget(languageHint, 2);
     layout->addWidget(languageBox);
+
+    // View > Tool Ring (Alt+D): on or off, how long it stays after the last ring key, its side of the pointer, the pen.
+    auto* ringBox = new QGroupBox(tr("Tool Ring"));
+    ringBox->setObjectName("toolRingPreferences");
+    auto* ringGrid = new QGridLayout(ringBox);
+    auto* ringOn = new QCheckBox(tr("Alt+D opens the Tool Ring"));
+    ringOn->setObjectName("toolRingEnabled");
+    ringOn->setChecked(toolring::enabled());
+    connect(ringOn, &QCheckBox::toggled, this, [](bool on) { toolring::setEnabled(on); });
+    ringGrid->addWidget(ringOn, 0, 0, 1, 4);
+    ringGrid->addWidget(new QLabel(tr("Closes after")), 1, 0);
+    auto* ringIdle = new QDoubleSpinBox;
+    ringIdle->setObjectName("toolRingIdle");
+    ringIdle->setRange(0, 60);
+    ringIdle->setDecimals(1);
+    ringIdle->setSingleStep(0.5);
+    ringIdle->setSuffix(tr(" s"));
+    ringIdle->setSpecialValueText(tr("Never"));
+    ringIdle->setValue(toolring::idleMs() / 1000.0);
+    connect(ringIdle, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [](double s) { toolring::setIdleMs(int(std::lround(s * 1000))); });
+    ringGrid->addWidget(ringIdle, 1, 1);
+    ringGrid->addWidget(new QLabel(tr("Shows")), 1, 2);
+    auto* ringCorner = new QComboBox;
+    ringCorner->setObjectName("toolRingCorner");
+    ringCorner->addItem(tr("Up and right of the pointer"), int(toolring::Corner::UpRight));
+    ringCorner->addItem(tr("Up and left of the pointer"), int(toolring::Corner::UpLeft));
+    ringCorner->addItem(tr("Down and right of the pointer"), int(toolring::Corner::DownRight));
+    ringCorner->addItem(tr("Down and left of the pointer"), int(toolring::Corner::DownLeft));
+    ringCorner->setCurrentIndex(std::max(0, ringCorner->findData(int(toolring::corner()))));
+    connect(ringCorner, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [ringCorner](int) { toolring::setCorner(toolring::Corner(ringCorner->currentData().toInt())); });
+    ringGrid->addWidget(ringCorner, 1, 3);
+    ringGrid->addWidget(new QLabel(tr("Pen button")), 2, 0);
+    auto* ringPen = new QComboBox;
+    ringPen->setObjectName("toolRingPen");
+    ringPen->addItem(tr("None"), 0);
+    ringPen->addItem(tr("Lower side button (instead of panning)"), 1);
+    ringPen->addItem(tr("Upper side button"), 2);
+    ringPen->setCurrentIndex(std::max(0, ringPen->findData(toolring::penButton())));
+    connect(ringPen, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [ringPen](int) { toolring::setPenButton(ringPen->currentData().toInt()); });
+    ringGrid->addWidget(ringPen, 2, 1, 1, 3);
+    auto* ringHint = new QLabel(tr("The keys around D act on the current tool while the ring is open; it never takes the mouse, and moves aside when the pointer comes at it. "
+                                   "It moves away from where the pointer is heading, so the side chosen here is where it starts. "
+                                   "A tablet's ExpressKeys are set in the tablet driver: map one to Alt+D and others to the ring's letters."));
+    ringHint->setWordWrap(true);
+    ringHint->setStyleSheet(hintStyle());
+    ringGrid->addWidget(ringHint, 3, 0, 1, 4);
+    ringGrid->setColumnStretch(3, 1);
+    layout->addWidget(ringBox);
 
     // CPU power: how much of the machine NekoPhoto takes, for when something else (a render) should come first.
     auto* performanceBox = new QGroupBox(tr("Performance"));

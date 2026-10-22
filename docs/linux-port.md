@@ -472,6 +472,7 @@ command registry's (`CONTRIBUTING.md`, "Commands"); the tools are `tool.<name>` 
 | Shift + 1…9, 0 | With the Move tool, the selected layers' Fill, likewise |
 | [ ], Shift [ ] | Brush size, hardness |
 | X, D | Swap / reset colours (with the Crop tool, X swaps the crop's height and width) |
+| Alt D | View ▸ Tool Ring: the current tool's quick actions on the keys around D (W E R, S F, X C V; towards F and R is more), next to the pointer and never in the mouse's way; Esc, Alt D again, another tool or a few seconds close it ([tool-ring.md](tool-ring.md)) |
 | Space + drag, middle drag, wheel | Pan |
 | Hold a tool's letter (or Shift + letter) | Spring-loaded tools: hold the key and use the tool (or hold it a moment); letting go returns to the tool before, and with Shift to its kind before. A tap switches for good |
 | Hold Ctrl | The Move tool while held (it picks the layer under the pointer), with the selection, painting, retouching, Eyedropper and Type tools; not with the Shape, Crop, Slice, Hand and Zoom tools, nor while typing |

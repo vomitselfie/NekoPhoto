@@ -61,6 +61,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
     friend class FullScreenMode;
     friend class HidePanels;
+    friend class ToolRing;
 public:
     MainWindow();
     void openPath(const QString& path);
@@ -169,6 +170,8 @@ public:
     FullScreenMode* fullScreenMode() const { return fullScreen_; }
     /// Tab and Shift+Tab in the Standard Screen Mode (HidePanels.h).
     HidePanels* hidePanels() const { return hidePanels_; }
+    /// View > Tool Ring (Alt+D, ToolRing.h).
+    class ToolRing* toolRing() const { return toolRing_; }
 
 signals:
     /// Something an agent may want to know about changed: document, layers, selection, history, tool, view, tabs.
@@ -369,6 +372,7 @@ private:
     QToolBar* toolRail_ = nullptr;
     FullScreenMode* fullScreen_ = nullptr;
     HidePanels* hidePanels_ = nullptr;
+    class ToolRing* toolRing_ = nullptr;
     /// The tool rail's tooltips with the tools' keys as they are now.
     void refreshToolTips();
 };

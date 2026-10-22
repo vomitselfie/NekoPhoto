@@ -86,6 +86,7 @@ qt_add_executable(nekophoto
     SelfTestFullScreen.cpp
     SelfTestHidePanels.cpp
     SelfTestForbidden.cpp
+    SelfTestToolRing.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     DocumentSource.h
@@ -199,6 +200,9 @@ qt_add_executable(nekophoto
     ImportBanner.cpp
     FullScreen.h
     FullScreen.cpp
+    ToolRing.h
+    ToolRing.cpp
+    ToolRingCommands.cpp
     HidePanels.h
     HidePanels.cpp
     WelcomeDialog.h

@@ -49,6 +49,7 @@
 #include "ViewOptions.h"
 #include "FullScreen.h"
 #include "HidePanels.h"
+#include "ToolRing.h"
 #include <QSignalBlocker>
 #include <QJsonObject>
 #include <QShortcutEvent>
@@ -1165,6 +1166,8 @@ void MainWindow::buildMenus() {
                         }));
     // F10 opens the menus (in full screen over the canvas, the menu bar showing while one is open).
     add(nullptr, Spec("view.showMenus", tr("Show Menus"), {QKeySequence(Qt::Key_F10)}).runs([this] { fullScreen_->showMenus(); }));
+    // View > Tool Ring (Alt+D) and the tool option steps its rings run (ToolRing.h).
+    toolRing_->registerCommands(reg, view);
     view->addSeparator();
     layersDock_->toggleViewAction()->setText(tr("&Layers Panel"));
     layersDock_->toggleViewAction()->setShortcut(QKeySequence("F7"));   // Photoshop's Window > Layers

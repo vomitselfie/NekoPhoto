@@ -87,6 +87,13 @@ public:
     /// go of it runs `back` (Photoshop's spring-loaded tool keys). A quick tap keeps the new tool.
     void armToolSpring(int key, std::function<void()> back);
     static constexpr int springHoldMs = 400;
+    /// Photoshop's Ctrl+Shift+< and > with the Move or Type tool and nothing being typed (and the Tool Ring's type size):
+    /// every run of the selected type layers (else the active one) by `delta`, through text.styleRange's sizeBy; false
+    /// when no type layer is selected. Presses less than typeSizeMergeMs apart, with nothing between them in the
+    /// history, make one undo step.
+    bool stepLayerTypeSize(double delta);
+    /// Where the pointer was last seen over the canvas (view coordinates), or nothing once it left.
+    std::optional<QPointF> hoverPoint() const { return hover_; }
 
 signals:
     void cursorMoved(QPointF documentPoint);
@@ -98,6 +105,8 @@ signals:
     void cropRatioChanged();
     /// Typing started or ended, or the caret or selection moved.
     void typeEditChanged();
+    /// The pen's side button chosen in Preferences was pressed over the canvas: the Tool Ring opens or closes.
+    void toolRingRequested();
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -212,6 +221,7 @@ private:
     struct ToolSpring { int key = 0; QElapsedTimer held; bool used = false; std::function<void()> back; };
     std::optional<ToolSpring> toolSpring_;
     std::optional<QPointF> hover_;
+    Qt::MouseButton ringButtonDown_ = Qt::NoButton;   // the pen's side button that toggled the Tool Ring, until let go
     QString refusal_;   // the forbidden cursor's reason
     /// Direct Selection: what a view point is over on the target path, the knot chosen, and a drag in progress.
     struct PathHit { int sub = -1, knot = -1; enum Part { None, Anchor, In, Out, Subpath } part = None; };
@@ -311,10 +321,6 @@ private:
     /// by `delta` document pixels, kept within the options bar's 1..2000.
     void stepTypeSize(double delta);
     static int typeSizeStep(const QKeyEvent* e);
-    /// The same keys with the Move or Type tool and nothing being typed: every run of the selected type layers (else the
-    /// active one) by `delta`, through text.styleRange's sizeBy; false when no type layer is selected. Presses less than
-    /// typeSizeMergeMs apart, with nothing between them in the history, make one undo step.
-    bool stepLayerTypeSize(double delta);
     static constexpr int typeSizeMergeMs = 1000;
     struct TypeSizeRun { uint64_t since = 0, after = 0; QElapsedTimer clock; };
     std::optional<TypeSizeRun> typeSizeRun_;
