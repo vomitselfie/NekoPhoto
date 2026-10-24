@@ -523,6 +523,12 @@ if(TARGET nekophoto)
     add_test(NAME color_ring_selftest COMMAND nekophoto --lang en --self-test color-ring)
     set_tests_properties(color_ring_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/color-ring-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/color-ring-home/data")
+    # View > Layer Picker (Alt+A): exactly the layers showing under the pointer, top first; F/R and S/V stepping and
+    # choosing live, Esc putting the layer back, Alt+A, Enter and a click keeping it, no document change, "No layer
+    # here", the Layers panel hidden, full screen.
+    add_test(NAME layer_picker_selftest COMMAND nekophoto --lang en --self-test layer-picker)
+    set_tests_properties(layer_picker_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/layer-picker-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/layer-picker-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)

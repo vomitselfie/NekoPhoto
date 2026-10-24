@@ -6388,6 +6388,53 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::LayerPicker</name>
+    <message>
+        <source>La&amp;yer Picker</source>
+        <translation>レイヤーピッカー(&amp;Y)</translation>
+    </message>
+    <message>
+        <source>No document is open</source>
+        <translation>ドキュメントが開かれていません</translation>
+    </message>
+    <message>
+        <source>Not while a stroke is being painted</source>
+        <translation>ストロークの描画中はできません</translation>
+    </message>
+    <message>
+        <source>Apply or cancel the transform first</source>
+        <translation>先に変形を確定するかキャンセルしてください</translation>
+    </message>
+    <message>
+        <source>Apply the gradient first</source>
+        <translation>先にグラデーションを確定してください</translation>
+    </message>
+    <message>
+        <source>Apply or cancel the warp first</source>
+        <translation>先にワープを確定するかキャンセルしてください</translation>
+    </message>
+    <message>
+        <source>%1 · %2% · in “%3”</source>
+        <translation>%1 · %2% · 「%3」内</translation>
+    </message>
+    <message>
+        <source>%1 · %2%</source>
+        <translation>%1 · %2%</translation>
+    </message>
+    <message>
+        <source>No layer here</source>
+        <translation>ここにレイヤーはありません</translation>
+    </message>
+    <message>
+        <source>The top of the list</source>
+        <translation>リストの一番上です</translation>
+    </message>
+    <message>
+        <source>The bottom of the list</source>
+        <translation>リストの一番下です</translation>
+    </message>
+</context>
+<context>
     <name>app::LayerStyleDialog</name>
     <message>
         <source>Bevel &amp; Emboss</source>

@@ -88,6 +88,7 @@ qt_add_executable(nekophoto
     SelfTestForbidden.cpp
     SelfTestToolRing.cpp
     SelfTestColorRing.cpp
+    SelfTestLayerPicker.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     DocumentSource.h
@@ -208,6 +209,8 @@ qt_add_executable(nekophoto
     ToolRingCommands.cpp
     ColorRing.h
     ColorRing.cpp
+    LayerPicker.h
+    LayerPicker.cpp
     HidePanels.h
     HidePanels.cpp
     WelcomeDialog.h

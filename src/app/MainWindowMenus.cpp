@@ -50,6 +50,7 @@
 #include "FullScreen.h"
 #include "HidePanels.h"
 #include "ColorRing.h"
+#include "LayerPicker.h"
 #include "ToolRing.h"
 #include <QSignalBlocker>
 #include <QJsonObject>
@@ -1171,6 +1172,8 @@ void MainWindow::buildMenus() {
     toolRing_->registerCommands(reg, view);
     // View > Colour Ring (Alt+C): the foreground colour on the same compass (ColorRing.h).
     colorRing_->registerCommands(reg, view);
+    // View > Layer Picker (Alt+A): the layers under the pointer, stepped through from the keyboard (LayerPicker.h).
+    layerPicker_->registerCommands(reg, view);
     view->addSeparator();
     layersDock_->toggleViewAction()->setText(tr("&Layers Panel"));
     layersDock_->toggleViewAction()->setShortcut(QKeySequence("F7"));   // Photoshop's Window > Layers

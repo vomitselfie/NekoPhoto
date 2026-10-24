@@ -56,5 +56,6 @@ int hidePanels(MainWindow& window);      // SelfTestHidePanels.cpp
 int forbiddenCursor(MainWindow& window); // SelfTestForbidden.cpp
 int toolRing(MainWindow& window);        // SelfTestToolRing.cpp
 int colorRing(MainWindow& window);       // SelfTestColorRing.cpp
+int layerPicker(MainWindow& window);     // SelfTestLayerPicker.cpp
 
 } // namespace app

@@ -23,6 +23,7 @@
 #include "FullScreen.h"
 #include "HidePanels.h"
 #include "ColorRing.h"
+#include "LayerPicker.h"
 #include "ToolRing.h"
 #include <QKeyEvent>
 #include <QApplication>
@@ -258,6 +259,7 @@ MainWindow::MainWindow() {
     connect(fullScreen_, &FullScreenMode::normalLayoutRestored, hidePanels_, &HidePanels::afterFullScreen);
     toolRing_ = new ToolRing(this);   // its commands go in with the View menu's
     colorRing_ = new ColorRing(this);
+    layerPicker_ = new LayerPicker(this);
     buildToolRail();
     buildMenus();
     applyShortcuts();   // the person's keys over the defaults (Edit > Keyboard Shortcuts)
@@ -469,6 +471,7 @@ void MainWindow::switchTo(int index) {
     connectSession();
     toolRing_->sessionChanged();   // it closes, and follows this tab
     colorRing_->sessionChanged();
+    layerPicker_->sessionChanged();
     refreshTitle();
     refreshActions();
     updateColorSwatches();

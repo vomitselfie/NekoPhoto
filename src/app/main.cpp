@@ -27,6 +27,7 @@
 #include "GmicDialog.h"
 #include "ImportBanner.h"
 #include "ColorRing.h"
+#include "LayerPicker.h"
 #include "ToolRing.h"
 #include <QMouseEvent>
 #include "MoshDialog.h"
@@ -336,7 +337,7 @@ int run(int argc, char** argv) {
     parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, export-as (or export-as:<format>: png, jpg, gif, webp, tif, tga), export-layer-as, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, levels-clip and curves-clip (the clipping display), histogram and histogram-compact (the panel), text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), search or search:<query> (Edit > Search with the query typed), keyboard-shortcuts or keyboard-shortcuts:<query> (Edit > Keyboard Shortcuts, searched), keyboard-shortcuts-conflict (a key another command has), guides (two ruler guides, and a smart guide as a snap shows it), fullscreen or fullscreen:<left, top, right, bottom, panels, menus> (Full Screen Mode, with that edge slid out, every edge pinned, or the menus open), tool-ring or tool-ring:<x,y> (the Tool Ring for the tool, as if the pointer were at canvas point x,y), color-ring or color-ring:<x,y> (the Colour Ring likewise).", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, export-as (or export-as:<format>: png, jpg, gif, webp, tif, tga), export-layer-as, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, levels-clip and curves-clip (the clipping display), histogram and histogram-compact (the panel), text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), search or search:<query> (Edit > Search with the query typed), keyboard-shortcuts or keyboard-shortcuts:<query> (Edit > Keyboard Shortcuts, searched), keyboard-shortcuts-conflict (a key another command has), guides (two ruler guides, and a smart guide as a snap shows it), fullscreen or fullscreen:<left, top, right, bottom, panels, menus> (Full Screen Mode, with that edge slid out, every edge pinned, or the menus open), tool-ring or tool-ring:<x,y> (the Tool Ring for the tool, as if the pointer were at canvas point x,y), color-ring or color-ring:<x,y[,#rrggbb]> (the Colour Ring likewise, the foreground set first), layer-picker or layer-picker:<x,y[,n]> (the Layer Picker over the layers at that point, n rows stepped down, or up when negative).", "name");
     parser.addOption(dialogOption);
     QCommandLineOption contextMenuOption("context-menu", "Open the canvas's context menu at document point <x,y> after opening (with --tool, for screenshots); x,y,transform or x,y,type first starts a free transform or typing there.", "x,y");
     parser.addOption(contextMenuOption);
@@ -656,17 +657,25 @@ int run(int argc, char** argv) {
                     else if (name == "channel-options" && second) (new app::ChannelOptionsDialog(s, *second, &window))->show();
                 }
             }
-            else if (name == "tool-ring" || name.startsWith("tool-ring:") || name == "color-ring" || name.startsWith("color-ring:")) {
-                // The Tool Ring (Alt+D) or the Colour Ring (Alt+C), as if the pointer were at canvas point x,y
-                // (tool-ring:x,y; else the middle).
+            else if (name == "tool-ring" || name.startsWith("tool-ring:") || name == "color-ring" || name.startsWith("color-ring:")
+                     || name == "layer-picker" || name.startsWith("layer-picker:")) {
+                // The Tool Ring (Alt+D), the Colour Ring (Alt+C) or the Layer Picker (Alt+A), as if the pointer were at
+                // canvas point x,y (tool-ring:x,y; else the middle).
                 auto* canvas = window.canvasAt(window.currentTabIndex());
-                app::RingController* ring = name.startsWith("color") ? static_cast<app::RingController*>(window.colorRing()) : window.toolRing();
+                app::RingController* ring = name.startsWith("color") ? static_cast<app::RingController*>(window.colorRing())
+                                          : name.startsWith("layer") ? static_cast<app::RingController*>(window.layerPicker())
+                                                                     : window.toolRing();
                 if (canvas && ring) {
+                    // A third value: the foreground colour first (color-ring:x,y,#rrggbb), or rows to step once open
+                    // (layer-picker:x,y,n; negative is up).
                     const QStringList at = given.section(':', 1).split(',');
-                    const QPointF point = at.size() == 2 ? QPointF(at[0].toDouble(), at[1].toDouble()) : QPointF(canvas->width() / 2.0, canvas->height() / 2.0);
+                    const QPointF point = at.size() >= 2 ? QPointF(at[0].toDouble(), at[1].toDouble()) : QPointF(canvas->width() / 2.0, canvas->height() / 2.0);
+                    if (at.size() >= 3 && name.startsWith("color") && QColor(at[2]).isValid()) { s->foregroundColor = QColor(at[2]); emit s->toolChanged(); }
                     QMouseEvent hover(QEvent::MouseMove, point, canvas->mapToGlobal(point), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
                     QApplication::sendEvent(canvas, &hover);
                     ring->open();
+                    if (at.size() >= 3 && name.startsWith("layer"))
+                        for (int i = 0, n = at[2].toInt(); i < std::abs(n); ++i) window.layerPicker()->stepBy(n < 0 ? -1 : 1);
                 }
             }
             else if (name == "guides") {

@@ -176,6 +176,8 @@ public:
     class ToolRing* toolRing() const { return toolRing_; }
     /// View > Colour Ring (Alt+C, ColorRing.h).
     class ColorRing* colorRing() const { return colorRing_; }
+    /// View > Layer Picker (Alt+A, LayerPicker.h).
+    class LayerPicker* layerPicker() const { return layerPicker_; }
 
 signals:
     /// Something an agent may want to know about changed: document, layers, selection, history, tool, view, tabs.
@@ -378,6 +380,7 @@ private:
     HidePanels* hidePanels_ = nullptr;
     class ToolRing* toolRing_ = nullptr;
     class ColorRing* colorRing_ = nullptr;
+    class LayerPicker* layerPicker_ = nullptr;
     /// The tool rail's tooltips with the tools' keys as they are now.
     void refreshToolTips();
 };
