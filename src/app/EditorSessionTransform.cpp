@@ -6,6 +6,7 @@
 #include "nekophoto/modetransform.h"
 #include <algorithm>
 #include <cstring>
+#include <functional>
 
 using namespace nekophoto;
 
@@ -536,22 +537,69 @@ std::optional<Uuid> EditorSession::layerAt(QPointF documentPoint) const {
     return under.empty() ? std::nullopt : std::optional<Uuid>(under.front());
 }
 
+namespace {
+
+/// Whether a gray (a mask) is above 0 at pixel x, y, whatever its depth.
+bool grayAbove(const AnyGray& gray, int x, int y) {
+    return gray.visit([x, y](const auto& g) { return g && x >= 0 && y >= 0 && x < g->width() && y < g->height() && g->at(x, y) > 0; });
+}
+
+/// Whether `layer`'s mask lets anything through at document point `at`: no mask, a disabled one, or coverage above 0
+/// there. A mask that follows the layer's pixel grid is read through `pixel` (the layer's pixel at `at`); a placed one
+/// (a folder's always) through its own placement, its edge's tone beyond it.
+bool maskReveals(const Layer& layer, Point at, std::optional<Point> pixel, int pixelWidth, int pixelHeight) {
+    if (!layer.mask || !layer.mask->enabled || !layer.mask->asset.image) return true;
+    const AnyGray& gray = layer.mask->asset.image;
+    const int mw = gray.width(), mh = gray.height();
+    if (!layer.mask->placement && pixel && pixelWidth > 0 && pixelHeight > 0) {
+        const int x = int(std::floor(pixel->x * mw / pixelWidth)), y = int(std::floor(pixel->y * mh / pixelHeight));
+        return grayAbove(gray, std::clamp(x, 0, mw - 1), std::clamp(y, 0, mh - 1));
+    }
+    const LayerTransform placed = layer.maskTransform();
+    const Point p = placed.pixelToDocument(mw, mh).inverted().apply(at);
+    const int x = int(std::floor(p.x)), y = int(std::floor(p.y));
+    if (x < 0 || y < 0 || x >= mw || y >= mh) return !layer.mask->asset.thumbnail || LayerMask::background(*layer.mask->asset.thumbnail) > 0;
+    return grayAbove(gray, x, y);
+}
+
+} // namespace
+
 std::vector<Uuid> EditorSession::layersAt(QPointF documentPoint, size_t limit) const {
     std::vector<Uuid> found;
     if (!document_) return found;
+    const Point at = toPoint(documentPoint);
+    // A layer shows at a point when its own pixel there has some alpha (the last sample: CMYK's fifth), its mask and
+    // its folders' masks let it through, and, clipped, its base shows there too: what Photoshop's Move tool lists.
+    std::function<bool(const Layer&, int)> shows = [&](const Layer& layer, int depth) {
+        if (!layer.asset || !layer.asset->image) return false;
+        const AnyImage& image = layer.asset->image;
+        const LayerTransform t = displayedTransform(layer);
+        if (!t.contains(at)) return false;
+        const Point p = t.pixelToDocument(image.width(), image.height()).inverted().apply(at);
+        const int x = int(std::floor(p.x)), y = int(std::floor(p.y));
+        if (x < 0 || y < 0 || x >= image.width() || y >= image.height()) return false;
+        const bool opaque = image.visit([x, y](const auto& pixels) {
+            if (!pixels) return false;
+            int alpha = 3;
+            if constexpr (requires { pixels->channels(); }) alpha = pixels->channels() - 1;
+            return pixels->pixel(x, y)[alpha] > 0;
+        });
+        if (!opaque || !maskReveals(layer, at, p, image.width(), image.height())) return false;
+        for (std::optional<Uuid> parent = layer.parentId; parent;) {
+            const Layer* folder = document_->find(*parent);
+            if (!folder) break;
+            if (!maskReveals(*folder, at, std::nullopt, 0, 0)) return false;
+            parent = folder->parentId;
+        }
+        if (layer.maskSourceId && depth < 256) {
+            const Layer* base = document_->find(*layer.maskSourceId);
+            if (base && !shows(*base, depth + 1)) return false;
+        }
+        return true;
+    };
     auto layers = renderLayers(document_->layers);
-    for (auto it = layers.rbegin(); it != layers.rend() && found.size() < limit; ++it) {
-        const Layer* layer = *it;
-        if (!layer->asset || !layer->asset->image) continue;
-        const AnyImage& image = layer->asset->image;
-        LayerTransform t = displayedTransform(*layer);
-        if (!t.contains(toPoint(documentPoint))) continue;
-        Point p = t.pixelToDocument(image.width(), image.height()).inverted().apply(toPoint(documentPoint));
-        int x = int(std::floor(p.x)), y = int(std::floor(p.y));
-        if (x < 0 || y < 0 || x >= image.width() || y >= image.height()) continue;
-        // Any alpha at all, at whatever depth the pixels are.
-        if (image.u8() ? image.u8()->pixel(x, y)[3] > 0 : image.u16() ? image.u16()->pixel(x, y)[3] > 0 : image.f32() && image.f32()->pixel(x, y)[3] > 0) found.push_back(layer->id);
-    }
+    for (auto it = layers.rbegin(); it != layers.rend() && found.size() < limit; ++it)
+        if (shows(**it, 0)) found.push_back((*it)->id);
     return found;
 }
 
