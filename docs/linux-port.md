@@ -507,11 +507,13 @@ command registry's (`CONTRIBUTING.md`, "Commands"); the tools are `tool.<name>` 
 | Shift Ctrl A, Ctrl Shift G | Camera Raw Filter, G'MIC |
 | Ctrl H | Show or hide the transform controls |
 | Ctrl Z, Ctrl Shift Z, Ctrl Alt Z | Undo (again for earlier steps), redo, toggle last state (Photoshop CC's defaults) |
-| F7, Alt F9 | Show or hide the Layers panel, the Actions panel (in full screen, the edge holding it slides out on its tab) |
-| F | View ▸ Screen Mode: Full Screen Mode, and back to Standard. Only the canvas is on screen; the pointer at an edge slides out its part over the canvas (left: the tools, top: the options bar, right: the panels, bottom: the Timeline when it is open) |
-| Esc (full screen) | Slide the edges back; with none out, leave full screen (the window and its panels come back as they were) |
-| Tab, Shift Tab | Standard Screen Mode: hide the panels, the tools and the options bar (the menus, document tabs and status bar stay); Shift Tab only the panels on the right. Again brings back what was showing (a closed panel stays closed). A field being typed in keeps Tab for itself |
-| Tab, Shift Tab (full screen) | Keep every edge out, or hide them again; the same without the tools. A field being typed in keeps Tab for itself |
+| F7, Alt F9 | Show or hide the Layers panel, the Actions panel (in full screen or with the right edge autohiding, the edge holding it slides out on its page) |
+| F | View ▸ Screen Mode: Full Screen Mode, and back to Standard. Only the canvas is on screen; the pointer at an edge slides out its part over the canvas (left: the tools, top: the options bar, right: the panels, bottom: the Info and Histogram, or the Timeline) |
+| Esc (full screen, or an edge out) | Slide the edges back; in full screen with none out, leave it (the window and its panels come back as they were) |
+| Tab, Shift Tab | Standard Screen Mode: hide the panels, the tools and the options bar (the menus, document tabs and status bar stay); Shift Tab only the panels on the right. Again brings back what was showing (a closed panel stays closed). With an edge autohiding (Edit ▸ Preferences ▸ Edges) it acts when let go. A field being typed in keeps Tab for itself |
+| Tab, Shift Tab (full screen) | With no edge out, a tap keeps every edge out, or hides them again; the same without the tools. A field being typed in keeps Tab for itself |
+| Hold Tab (Shift Tab) | In full screen or with an edge autohiding: every hidden edge out while held (all but the tools); let go and they slide back |
+| Tab, Shift Tab (an edge out) | Next and previous page of the edge that is out (Next Edge Page, Previous Edge Page: their keys work only then, and can be changed); the wheel over its page names does the same |
 | F10, Alt (full screen) | The menus: the menu bar shows over the canvas while one is open (F10 opens the menu bar in the standard window too) |
 | F12 | File ▸ Revert: the file as opened or last saved, any format, as one undo step (no question; Undo brings the edits back) |
 | Ctrl Alt Shift W (also Ctrl Alt Shift S) | File ▸ Export ▸ Export As |
