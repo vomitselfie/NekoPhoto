@@ -4798,6 +4798,45 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::ColorRing</name>
+    <message>
+        <source>Colo&amp;ur Ring</source>
+        <translation>カラーリング(&amp;U)</translation>
+    </message>
+    <message>
+        <source>H %1°  S %2%  B %3%</source>
+        <translation>H %1°  S %2%  B %3%</translation>
+    </message>
+    <message>
+        <source>H %1°</source>
+        <translation>H %1°</translation>
+    </message>
+    <message>
+        <source>S %1%</source>
+        <translation>S %1%</translation>
+    </message>
+    <message>
+        <source>B %1%</source>
+        <translation>B %1%</translation>
+    </message>
+    <message>
+        <source>Default colours</source>
+        <translation>初期設定の描画色と背景色</translation>
+    </message>
+    <message>
+        <source>Swap colours</source>
+        <translation>描画色と背景色を入れ替え</translation>
+    </message>
+    <message>
+        <source>No recent colours yet: they are kept as you paint with them</source>
+        <translation>最近使用したカラーはまだありません: 描画に使ったカラーが記録されます</translation>
+    </message>
+    <message>
+        <source>Recent colour %1 of %2</source>
+        <translation>最近使用したカラー %1 / %2</translation>
+    </message>
+</context>
+<context>
     <name>app::ColorSwatches</name>
     <message>
         <source>Foreground and background colours. Click one to change it; X swaps them, D resets them.</source>

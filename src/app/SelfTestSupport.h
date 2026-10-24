@@ -55,5 +55,6 @@ int fullScreen(MainWindow& window);      // SelfTestFullScreen.cpp
 int hidePanels(MainWindow& window);      // SelfTestHidePanels.cpp
 int forbiddenCursor(MainWindow& window); // SelfTestForbidden.cpp
 int toolRing(MainWindow& window);        // SelfTestToolRing.cpp
+int colorRing(MainWindow& window);       // SelfTestColorRing.cpp
 
 } // namespace app

@@ -518,6 +518,11 @@ if(TARGET nekophoto)
     add_test(NAME tool_ring_selftest COMMAND nekophoto --lang en --self-test tool-ring)
     set_tests_properties(tool_ring_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/tool-ring-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/tool-ring-home/data")
+    # View > Colour Ring (Alt+C): S/F hue, X/E saturation, V/R brightness, C swap, D defaults, W recent colours, the
+    # wheel, no undo steps, the mouse going through it, a stroke under way carrying on, taking turns with the Tool Ring.
+    add_test(NAME color_ring_selftest COMMAND nekophoto --lang en --self-test color-ring)
+    set_tests_properties(color_ring_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/color-ring-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/color-ring-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)

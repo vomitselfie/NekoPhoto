@@ -22,6 +22,7 @@
 #include "WelcomeDialog.h"
 #include "FullScreen.h"
 #include "HidePanels.h"
+#include "ColorRing.h"
 #include "ToolRing.h"
 #include <QKeyEvent>
 #include <QApplication>
@@ -256,6 +257,7 @@ MainWindow::MainWindow() {
     hidePanels_ = new HidePanels(this);
     connect(fullScreen_, &FullScreenMode::normalLayoutRestored, hidePanels_, &HidePanels::afterFullScreen);
     toolRing_ = new ToolRing(this);   // its commands go in with the View menu's
+    colorRing_ = new ColorRing(this);
     buildToolRail();
     buildMenus();
     applyShortcuts();   // the person's keys over the defaults (Edit > Keyboard Shortcuts)
@@ -466,6 +468,7 @@ void MainWindow::switchTo(int index) {
     { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
     connectSession();
     toolRing_->sessionChanged();   // it closes, and follows this tab
+    colorRing_->sessionChanged();
     refreshTitle();
     refreshActions();
     updateColorSwatches();

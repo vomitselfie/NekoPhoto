@@ -26,6 +26,7 @@
 #include "HistogramPanel.h"
 #include "GmicDialog.h"
 #include "ImportBanner.h"
+#include "ColorRing.h"
 #include "ToolRing.h"
 #include <QMouseEvent>
 #include "MoshDialog.h"
@@ -335,7 +336,7 @@ int run(int argc, char** argv) {
     parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, export-as (or export-as:<format>: png, jpg, gif, webp, tif, tga), export-layer-as, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, levels-clip and curves-clip (the clipping display), histogram and histogram-compact (the panel), text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), search or search:<query> (Edit > Search with the query typed), keyboard-shortcuts or keyboard-shortcuts:<query> (Edit > Keyboard Shortcuts, searched), keyboard-shortcuts-conflict (a key another command has), guides (two ruler guides, and a smart guide as a snap shows it), fullscreen or fullscreen:<left, top, right, bottom, panels, menus> (Full Screen Mode, with that edge slid out, every edge pinned, or the menus open), tool-ring or tool-ring:<x,y> (the Tool Ring for the tool, as if the pointer were at canvas point x,y).", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, export-as (or export-as:<format>: png, jpg, gif, webp, tif, tga), export-layer-as, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, levels-clip and curves-clip (the clipping display), histogram and histogram-compact (the panel), text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), search or search:<query> (Edit > Search with the query typed), keyboard-shortcuts or keyboard-shortcuts:<query> (Edit > Keyboard Shortcuts, searched), keyboard-shortcuts-conflict (a key another command has), guides (two ruler guides, and a smart guide as a snap shows it), fullscreen or fullscreen:<left, top, right, bottom, panels, menus> (Full Screen Mode, with that edge slid out, every edge pinned, or the menus open), tool-ring or tool-ring:<x,y> (the Tool Ring for the tool, as if the pointer were at canvas point x,y), color-ring or color-ring:<x,y> (the Colour Ring likewise).", "name");
     parser.addOption(dialogOption);
     QCommandLineOption contextMenuOption("context-menu", "Open the canvas's context menu at document point <x,y> after opening (with --tool, for screenshots); x,y,transform or x,y,type first starts a free transform or typing there.", "x,y");
     parser.addOption(contextMenuOption);
@@ -655,15 +656,17 @@ int run(int argc, char** argv) {
                     else if (name == "channel-options" && second) (new app::ChannelOptionsDialog(s, *second, &window))->show();
                 }
             }
-            else if (name == "tool-ring" || name.startsWith("tool-ring:")) {
-                // The Tool Ring (Alt+D), as if the pointer were at canvas point x,y (tool-ring:x,y; else the middle).
+            else if (name == "tool-ring" || name.startsWith("tool-ring:") || name == "color-ring" || name.startsWith("color-ring:")) {
+                // The Tool Ring (Alt+D) or the Colour Ring (Alt+C), as if the pointer were at canvas point x,y
+                // (tool-ring:x,y; else the middle).
                 auto* canvas = window.canvasAt(window.currentTabIndex());
-                if (canvas && window.toolRing()) {
+                app::RingController* ring = name.startsWith("color") ? static_cast<app::RingController*>(window.colorRing()) : window.toolRing();
+                if (canvas && ring) {
                     const QStringList at = given.section(':', 1).split(',');
                     const QPointF point = at.size() == 2 ? QPointF(at[0].toDouble(), at[1].toDouble()) : QPointF(canvas->width() / 2.0, canvas->height() / 2.0);
                     QMouseEvent hover(QEvent::MouseMove, point, canvas->mapToGlobal(point), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
                     QApplication::sendEvent(canvas, &hover);
-                    window.toolRing()->open();
+                    ring->open();
                 }
             }
             else if (name == "guides") {

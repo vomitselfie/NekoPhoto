@@ -63,6 +63,7 @@ class MainWindow : public QMainWindow {
     friend class HidePanels;
     friend class RingController;
     friend class ToolRing;
+    friend class ColorRing;
 public:
     MainWindow();
     void openPath(const QString& path);
@@ -173,6 +174,8 @@ public:
     HidePanels* hidePanels() const { return hidePanels_; }
     /// View > Tool Ring (Alt+D, ToolRing.h).
     class ToolRing* toolRing() const { return toolRing_; }
+    /// View > Colour Ring (Alt+C, ColorRing.h).
+    class ColorRing* colorRing() const { return colorRing_; }
 
 signals:
     /// Something an agent may want to know about changed: document, layers, selection, history, tool, view, tabs.
@@ -374,6 +377,7 @@ private:
     FullScreenMode* fullScreen_ = nullptr;
     HidePanels* hidePanels_ = nullptr;
     class ToolRing* toolRing_ = nullptr;
+    class ColorRing* colorRing_ = nullptr;
     /// The tool rail's tooltips with the tools' keys as they are now.
     void refreshToolTips();
 };

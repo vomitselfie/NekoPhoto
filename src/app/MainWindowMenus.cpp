@@ -49,6 +49,7 @@
 #include "ViewOptions.h"
 #include "FullScreen.h"
 #include "HidePanels.h"
+#include "ColorRing.h"
 #include "ToolRing.h"
 #include <QSignalBlocker>
 #include <QJsonObject>
@@ -1168,6 +1169,8 @@ void MainWindow::buildMenus() {
     add(nullptr, Spec("view.showMenus", tr("Show Menus"), {QKeySequence(Qt::Key_F10)}).runs([this] { fullScreen_->showMenus(); }));
     // View > Tool Ring (Alt+D) and the tool option steps its rings run (ToolRing.h).
     toolRing_->registerCommands(reg, view);
+    // View > Colour Ring (Alt+C): the foreground colour on the same compass (ColorRing.h).
+    colorRing_->registerCommands(reg, view);
     view->addSeparator();
     layersDock_->toggleViewAction()->setText(tr("&Layers Panel"));
     layersDock_->toggleViewAction()->setShortcut(QKeySequence("F7"));   // Photoshop's Window > Layers
