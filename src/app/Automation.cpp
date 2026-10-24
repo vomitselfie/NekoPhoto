@@ -643,7 +643,13 @@ void AutomationServer::registerAppHandlers() {
         const char* names[] = {"left", "top", "right", "bottom"};
         for (int i = 0; i < FullScreenMode::edgeCount; i++) if (fs->isOut(FullScreenMode::Edge(i))) out.append(QString::fromLatin1(names[i]));
         const char* hiddenNames[] = {"none", "all", "right"};
-        return QJsonObject{{"mode", fs->active() ? "full" : "standard"}, {"out", out}, {"hidden", QString::fromLatin1(hiddenNames[hide->hidden()])}};
+        // Each edge: whether it autohides in the standard window (Edit > Preferences > Edges), its pages and the one on it.
+        QJsonObject edges;
+        for (int i = 0; i < FullScreenMode::edgeCount; i++) {
+            const auto edge = FullScreenMode::Edge(i);
+            edges[QString::fromLatin1(names[i])] = QJsonObject{{"autohide", fs->autohides(edge)}, {"page", fs->page(edge)}, {"pages", QJsonArray::fromStringList(fs->allPages(edge))}};
+        }
+        return QJsonObject{{"mode", fs->active() ? "full" : "standard"}, {"out", out}, {"hidden", QString::fromLatin1(hiddenNames[hide->hidden()])}, {"edges", edges}};
     });
 }
 

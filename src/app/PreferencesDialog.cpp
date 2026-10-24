@@ -9,6 +9,7 @@
 #include "Gmic.h"
 #include "GmicStore.h"
 #include "ToolRing.h"
+#include "EdgePages.h"
 #include <QDoubleSpinBox>
 #include <cmath>
 #include <QSettings>
@@ -125,6 +126,36 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     ringGrid->addWidget(ringHint, 3, 0, 1, 4);
     ringGrid->setColumnStretch(3, 1);
     layout->addWidget(ringBox);
+
+    // The window's edges (FullScreen.h): each one shown, or autohiding until the pointer reaches it; and Reduce motion.
+    auto* edgesBox = new QGroupBox(tr("Edges"));
+    edgesBox->setObjectName("edgesPreferences");
+    auto* edgesGrid = new QGridLayout(edgesBox);
+    const QString edgeNames[] = {tr("Left (tools)"), tr("Top (options bar)"), tr("Right (panels)"), tr("Bottom (Timeline and status bar)")};
+    for (int i = 0; i < edges::count; i++) {
+        auto* mode = new QComboBox;
+        mode->setObjectName(QStringLiteral("edgeMode_") + QLatin1String(edges::key(i)));
+        mode->addItem(tr("Always shown"), false);
+        mode->addItem(tr("Autohide"), true);
+        mode->setCurrentIndex(edges::autohide(i) ? 1 : 0);
+        connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [mode, i](int) { edges::setAutohide(i, mode->currentData().toBool()); });
+        edgesGrid->addWidget(new QLabel(edgeNames[i]), i / 2, (i % 2) * 2);
+        edgesGrid->addWidget(mode, i / 2, (i % 2) * 2 + 1);
+    }
+    auto* reduceMotion = new QCheckBox(tr("Reduce motion"));
+    reduceMotion->setObjectName("edgesReduceMotion");
+    reduceMotion->setChecked(edges::reduceMotion());
+    connect(reduceMotion, &QCheckBox::toggled, this, [](bool on) { edges::setReduceMotion(on); });
+    edgesGrid->addWidget(reduceMotion, 2, 0, 1, 4);
+    auto* edgesHint = new QLabel(tr("An autohiding edge leaves the window to the canvas: rest the pointer at it to slide it out. Hold Tab to see every hidden "
+                                    "edge. While an edge is out, Tab and Shift+Tab (or the wheel over its page names) turn its pages. Reduce motion turns "
+                                    "the page turn into a quick fade and shortens the slides."));
+    edgesHint->setWordWrap(true);
+    edgesHint->setStyleSheet(hintStyle());
+    edgesGrid->addWidget(edgesHint, 3, 0, 1, 4);
+    edgesGrid->setColumnStretch(1, 1);
+    edgesGrid->setColumnStretch(3, 1);
+    layout->addWidget(edgesBox);
 
     // CPU power: how much of the machine NekoPhoto takes, for when something else (a render) should come first.
     auto* performanceBox = new QGroupBox(tr("Performance"));

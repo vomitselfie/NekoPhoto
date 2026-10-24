@@ -43,6 +43,11 @@ struct Command {
     /// mode then gate it. A document command without a feature is 8-bit RGB only.
     bool needsDocument = false;
     QString feature;
+    /// For keys that work only in a situation ("while an edge is out"), translated: they are not the window's
+    /// shortcuts (the action is given to no widget, so Qt never runs it from a key), they clash only with keys of the
+    /// same situation, and Tab may be one; the part of the interface that owns the situation reads them. Empty for
+    /// ordinary commands.
+    QString keyContext;
     /// Why it cannot run now (empty when it can), asked after the document and its mode.
     std::function<QString()> unavailable;
     /// Filled in by the registry: the action, and the menus' titles above it (translated, without accelerators).
@@ -59,7 +64,7 @@ public:
     CommandRegistry(QWidget* window, Runner runner, Gate gate);
 
     /// Adds `command` and makes its action: at the end of `menu`, or with no menu on the window alone (a key with no
-    /// menu item, such as Ctrl+3). The id must be new.
+    /// menu item, such as Ctrl+3; a command with a keyContext on no widget at all). The id must be new.
     QAction* add(QMenu* menu, Command command);
     /// Registers an action made elsewhere (a panel's show/hide, a view switch, a submenu, a tool) as `command`, adding
     /// it to `menu` when given. Its own signals do the work; `run` and `params` are not used. The command's keys are

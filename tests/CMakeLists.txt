@@ -501,6 +501,13 @@ if(TARGET nekophoto)
     add_test(NAME full_screen_selftest COMMAND nekophoto --lang en --self-test full-screen)
     set_tests_properties(full_screen_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/full-screen-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/full-screen-home/data")
+    # Edit > Preferences > Edges: an edge autohiding in the standard window leaves it to the canvas, its flyout slides out
+    # from its hot zone, not during a stroke begun on the canvas; Tab and Shift+Tab and the wheel over the strip flip its
+    # pages; a tap of Tab with none out still hides the panels, a hold peeks; fields keep Tab; the page remembered, the
+    # tool's own; full screen on the same pages.
+    add_test(NAME edges_selftest COMMAND nekophoto --lang en --self-test edges)
+    set_tests_properties(edges_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/edges-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/edges-home/data")
     # Tab and Shift+Tab in the Standard Screen Mode: the panels, tools and options bar hidden and given back byte for
     # byte, a closed panel staying closed; Shift+Tab the right panels only; fields and typing keep Tab; full screen
     # and F7 while they are hidden.

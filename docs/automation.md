@@ -385,7 +385,8 @@ highlight-compression; with no keys it reads it), `view.screenMode` (View > Scre
 the canvas is on screen and the screen's edges slide out the tools, options bar, panels and Timeline; `panels` in full screen:
 all, exceptTools or hidden, as Tab and Shift+Tab; in the standard mode: hidden (the panels, tools and options bar, as Tab),
 hiddenRight (the panels docked on the right, as Shift+Tab) or all (everything back as it was); answers `mode`, the edges
-`out` and what Tab hid, `hidden` none, all or right; with no keys it reads them), `color.settings` (Edit > Color
+`out`, what Tab hid, `hidden` none, all or right, and `edges`: for each of left, top, right and bottom whether it
+`autohide`s in the standard window (Edit > Preferences > Edges), its `pages` and the `page` on it; with no keys it reads them), `color.settings` (Edit > Color
 Settings: `workingSpace`, `workingCmyk` (default, the bundled ISO Coated v2 300%, or a CMYK ICC file), the Conversion Options
 `intent` (perceptual, relative, saturation, absolute) and `blackPointCompensation` Image > Mode uses, `policy` preserve,
 convert or off, `askMissing`, `askMismatch`; the monitor profile: `monitorProfile` (an ICC file, "" for the system's),

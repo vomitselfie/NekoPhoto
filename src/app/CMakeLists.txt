@@ -85,6 +85,7 @@ qt_add_executable(nekophoto
     SelfTestWork.cpp
     SelfTestFullScreen.cpp
     SelfTestHidePanels.cpp
+    SelfTestEdges.cpp
     SelfTestForbidden.cpp
     SelfTestToolRing.cpp
     SelfTestColorRing.cpp
@@ -204,6 +205,12 @@ qt_add_executable(nekophoto
     FullScreen.cpp
     RingController.h
     RingController.cpp
+    EdgePages.h
+    EdgePages.cpp
+    EdgePageWidgets.h
+    EdgePageWidgets.cpp
+    HistoryPanel.h
+    HistoryPanel.cpp
     ToolRing.h
     ToolRing.cpp
     ToolRingCommands.cpp

@@ -292,6 +292,8 @@ private:
     class TimelinePanel* timeline_ = nullptr;
     QDockWidget* histogramDock_ = nullptr;
     class HistogramPanel* histogram_ = nullptr;
+    QDockWidget* historyDock_ = nullptr;
+    class HistoryPanel* history_ = nullptr;
     Autosave* autosave_ = nullptr;
     void offerRecovery();
     void watchForRecovery(EditorSession* session);

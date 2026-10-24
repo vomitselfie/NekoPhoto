@@ -457,7 +457,8 @@ int registry(MainWindow& w) {
     for (const Command* c : reg.all())
         for (const QKeySequence& key : c->shortcuts) {
             if (key.isEmpty()) continue;   // a standard key the platform leaves unset (Save As, Quit on a bare Qt)
-            auto [at, added] = defaults.emplace(key.toString(QKeySequence::PortableText), c->id);
+            // (A key that works only in a situation, Tab while an edge is out, clashes only within it.)
+            auto [at, added] = defaults.emplace(shortcuts::clashKey(*c, key), c->id);
             if (!added && at->second != c->id) { std::fprintf(stderr, "registry: %s is the default key of %s and %s\n", qPrintable(at->first), qPrintable(at->second), qPrintable(c->id)); failures++; }
         }
     std::printf("command registry: %d commands, %d menu items, %d keys, %s\n", int(ids.size()), items, int(keys.size()), failures ? "FAILED" : "ok");

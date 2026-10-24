@@ -60,7 +60,11 @@ QString portable(const QKeySequence& key) { return key.toString(QKeySequence::Po
 
 QList<QKeySequence> defaults(const Command& command) { return withoutEmpty(command.shortcuts); }
 
-QString refusal(const QKeySequence& key) {
+QString clashKey(const Command& command, const QKeySequence& key) {
+    return command.keyContext.isEmpty() ? portable(key) : command.keyContext + QStringLiteral("\x1f") + portable(key);
+}
+
+QString refusal(const QKeySequence& key, const Command* command) {
     if (key.isEmpty()) return KeyboardShortcutsDialog::tr("Press a key with its modifiers.");
     if (key.count() != 1) return KeyboardShortcutsDialog::tr("A shortcut is one key with its modifiers, not a sequence of keys.");
     const QKeyCombination combination = key[0];
@@ -70,7 +74,8 @@ QString refusal(const QKeySequence& key) {
     if (k == 0 || k == Qt::Key_unknown || isModifier(k)) return KeyboardShortcutsDialog::tr("A modifier alone cannot be a shortcut: hold it with another key.");
     if (k == Qt::Key_Escape) return KeyboardShortcutsDialog::tr("Esc cancels what is in progress (a transform, a crop, typing) and closes dialogs, so it cannot be a shortcut.");
     if (k == Qt::Key_Return || k == Qt::Key_Enter) return KeyboardShortcutsDialog::tr("Enter commits what is in progress (a transform, a crop, a path, typing), so it cannot be a shortcut.");
-    if ((k == Qt::Key_Tab || k == Qt::Key_Backtab) && !ctrl) return KeyboardShortcutsDialog::tr("Tab moves between fields; use it with Ctrl.");
+    const bool situational = command && !command->keyContext.isEmpty();
+    if ((k == Qt::Key_Tab || k == Qt::Key_Backtab) && !ctrl && !situational) return KeyboardShortcutsDialog::tr("Tab moves between fields; use it with Ctrl.");
     if (k == Qt::Key_Space) return KeyboardShortcutsDialog::tr("Space held pans the view (with Ctrl or Alt, zooms), so it cannot be a shortcut.");
     if ((k == Qt::Key_Left || k == Qt::Key_Right || k == Qt::Key_Up || k == Qt::Key_Down) && !alt)
         return KeyboardShortcutsDialog::tr("The arrow keys nudge the selection, the layer or the selected pixels (with Shift, Ctrl or both); use them with Alt.");
@@ -93,13 +98,13 @@ KeyMap resolve(const CommandRegistry& registry, const KeyMap& overrides) {
         if (it == overrides.end()) continue;
         QList<QKeySequence>& keys = out[c->id];
         for (const QKeySequence& key : it->second)
-            if (!key.isEmpty() && refusal(key).isEmpty() && taken.insert(portable(key)).second) keys << key;
+            if (!key.isEmpty() && refusal(key, c).isEmpty() && taken.insert(clashKey(*c, key)).second) keys << key;
     }
     for (const Command* c : commands) {
         if (!keyable(*c) || overrides.count(c->id)) continue;
         QList<QKeySequence>& keys = out[c->id];
         for (const QKeySequence& key : defaults(*c))
-            if (taken.insert(portable(key)).second) keys << key;
+            if (taken.insert(clashKey(*c, key)).second) keys << key;
     }
     return out;
 }
@@ -248,9 +253,11 @@ void KeyCaptureEdit::focusOutEvent(QFocusEvent* e) {
 
 namespace {
 
-QString keysText(const QList<QKeySequence>& keys) {
+QString keysText(const QList<QKeySequence>& keys, const QString& context = {}) {
     QStringList texts;
     for (const QKeySequence& k : keys) texts << k.toString(QKeySequence::NativeText);
+    // Keys that work only in a situation say which.
+    if (!context.isEmpty() && !texts.isEmpty()) return KeyboardShortcutsDialog::tr("%1 (%2)").arg(texts.join(QStringLiteral(", ")), context);
     return texts.join(QStringLiteral(", "));
 }
 
@@ -422,7 +429,7 @@ void KeyboardShortcutsDialog::refreshTree() {
     for (const auto* list : {&menus, &rest})
         for (const Command* c : *list) {
             const QStringList path = !c->menuPath.isEmpty() ? c->menuPath : QStringList{c->id.startsWith(QStringLiteral("tool.")) ? tools : others};
-            auto* item = new QTreeWidgetItem(groupFor(path), {plainText(c->label), keysText(keys_.at(c->id))});
+            auto* item = new QTreeWidgetItem(groupFor(path), {plainText(c->label), keysText(keys_.at(c->id), c->keyContext)});
             item->setData(0, Qt::UserRole, c->id);
             items_[c->id] = item;
         }
@@ -493,7 +500,10 @@ void KeyboardShortcutsDialog::refreshEditor() {
         delete row;
     }
     const bool has = !selected_.isEmpty() && keys_.count(selected_);
-    heading_->setText(has ? commandName(selected_) : tr("Choose a command to change its shortcuts."));
+    const Command* command = has ? registry_.find(selected_) : nullptr;
+    heading_->setText(!has ? tr("Choose a command to change its shortcuts.")
+                      : command && !command->keyContext.isEmpty() ? tr("%1 (its keys work only %2)").arg(commandName(selected_), command->keyContext)
+                                                                  : commandName(selected_));
     addKey_->setEnabled(has);
     useDefault_->setEnabled(has);
     if (!has) return;
@@ -526,10 +536,14 @@ void KeyboardShortcutsDialog::showMessage(const QString& text, bool warning) {
 QString KeyboardShortcutsDialog::message() const { return message_->text(); }
 
 QString KeyboardShortcutsDialog::ownerOf(const QKeySequence& key, const QString& except) const {
-    const QString text = shortcuts::portable(key);
+    // Only keys of the same situation clash (Tab while an edge is out is not the window's Tab).
+    const Command* asking = registry_.find(except);
+    const QString text = asking ? shortcuts::clashKey(*asking, key) : shortcuts::portable(key);
     for (const auto& [id, keys] : keys_) {
         if (id == except) continue;
-        for (const QKeySequence& k : keys) if (shortcuts::portable(k) == text) return id;
+        const Command* other = registry_.find(id);
+        for (const QKeySequence& k : keys)
+            if ((other ? shortcuts::clashKey(*other, k) : shortcuts::portable(k)) == text) return id;
     }
     return {};
 }
@@ -541,7 +555,7 @@ void KeyboardShortcutsDialog::setKeys(const QString& id, QList<QKeySequence> key
 bool KeyboardShortcutsDialog::assign(const QString& id, int slot, const QKeySequence& key) {
     cancelConflict();
     if (!keys_.count(id)) return false;
-    if (const QString why = shortcuts::refusal(key); !why.isEmpty()) {
+    if (const QString why = shortcuts::refusal(key, registry_.find(id)); !why.isEmpty()) {
         showMessage(why, true);
         refreshEditor();
         tree_->setFocus();   // a second Esc closes the dialog

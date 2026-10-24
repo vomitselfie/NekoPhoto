@@ -33,8 +33,10 @@ QString portable(const QKeySequence& key);
 /// The keys a command has by default, without the ones the platform leaves empty (Save As on some Qt versions).
 QList<QKeySequence> defaults(const Command& command);
 /// Why `key` cannot be a shortcut (a modifier alone, Esc, Enter, Tab, Space, the keys the canvas uses itself), or
-/// empty when it can.
-QString refusal(const QKeySequence& key);
+/// empty when it can. A command whose keys work only in a situation (Command::keyContext) may have Tab.
+QString refusal(const QKeySequence& key, const Command* command = nullptr);
+/// What a key clashes on: the key, and the situation it works in (Command::keyContext) when it has one.
+QString clashKey(const Command& command, const QKeySequence& key);
 /// Every command's keys: `overrides` where they say, else the defaults, with no key twice (a changed key wins over a
 /// default one, an earlier command over a later one) and none that `refusal` refuses.
 KeyMap resolve(const CommandRegistry& registry, const KeyMap& overrides);
