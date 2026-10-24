@@ -1,6 +1,12 @@
-# The Tool Ring
+# The Tool Ring, the Colour Ring and the Layer Picker
 
 **English** · [日本語](#日本語)
+
+Three keyboard rings open next to the pointer and never take the mouse: the Tool Ring (**Alt+D**, below), the
+[Colour Ring](#the-colour-ring) (**Alt+C**) for the foreground colour, and the [Layer Picker](#the-layer-picker)
+(**Alt+A**) for the layers under the pointer.
+
+## The Tool Ring
 
 View ▸ Tool Ring (**Alt+D**) shows a compass of quick actions for the current tool next to the pointer. Its nine
 circles sit as the keys do around D on the keyboard:
@@ -32,7 +38,7 @@ preset that sets its own hardness, a stroke being painted). Changing a tool opti
 undo step, as in Photoshop; a circle that edits the document (Flip, Rotate, Bring Forward, Inverse, Deselect) is one
 undo step, as its menu command is.
 
-## The rings
+### The rings
 
 | Tool | W | E | R | S | D | F | X | C | V |
 |---|---|---|---|---|---|---|---|---|---|
@@ -61,6 +67,66 @@ Every circle runs a command of Edit ▸ Keyboard Shortcuts (the ring's own steps
 Increase Brush Size, Decrease Feather and so on, with no keys until you give them some), and the rings are defined as
 data in one place (`src/app/ToolRingCommands.cpp`), ready for a later version to let you choose your own.
 
+## The Colour Ring
+
+View ▸ Colour Ring (**Alt+C**) puts the foreground colour on the same compass, with the same rules: it opens by the
+pointer, never takes the mouse (painting carries on while it is open), owns the nine letters while it is open, and
+closes on Esc, Alt+C again, another tool or the idle timeout. Opening it closes the Tool Ring, and the other way round.
+
+```
+  W  a recent colour     E  saturation +        R  brightness +
+  S  hue −              (D) default colours     F  hue +
+  X  saturation −        C  swap colours        V  brightness −
+```
+
+The centre shows the foreground swatch over the background, as the toolbar does. Each value circle shows the colour
+its key would give and the value now (H 210°, S 80%, B 65%); W shows the recent colour it would bring back. The hue
+turns round the colour wheel in 10° steps, saturation and brightness move in 5% steps (onto the next multiple of the
+step first); held keys repeat, and the wheel steps the value used last (the hue at first).
+
+The values are the colour picker's HSB of the foreground's RGB colour, rounded to whole 8-bit levels. In CMYK and Lab
+documents the foreground stays an sRGB colour, as the colour picker keeps it, and is converted through the document's
+profile when it paints. A grey keeps the hue the ring had, so raising the saturation brings the colour back. While a
+mask is the target the swatches and circles show the greys the colours paint.
+
+D sets black and white (white over black while a mask is the target, as Photoshop's D does), C swaps the foreground
+and background colours, and W steps back through the recent colours: the colours the document was edited with, and
+the ones the Colour Ring opened with and closed on (the last twelve, kept between sessions). None of these is an undo
+step; Photoshop keeps colour changes out of the history too.
+
+## The Layer Picker
+
+View ▸ Layer Picker (**Alt+A**) lists the layers under the pointer beside it, top of the stack first, as the Move
+tool's right-click menu does in Photoshop, and lets the keyboard choose among them. A layer is listed when its own
+pixel there is not transparent and it actually shows there: a hidden layer, a layer mask (or a group's mask) hiding
+the pixel, or a clipping base that does not show there leaves it out. Adjustment layers and groups have no pixels of
+their own and are not listed, as in Photoshop; a layer in a group names the group in its row. Each row shows the
+layer's thumbnail, name, blend mode and opacity, and the active layer is lit.
+
+```
+  ▲  R  F  ▲
+  [ ] Ellipse 1     Normal · 100%
+  [#] Paint         Normal · 100%      (active)
+  [ ] Red           Multiply · 85%
+  [ ] Background    Normal · 100%
+  ▼  S  V  ▼
+```
+
+By the compass rule, **F and R go up the stack and S and V down it**, and each layer stepped to becomes the active
+layer at once: the Layers panel, the options bar and the canvas follow. When the active layer is not in the list, the
+first key goes to the listed layer next to it in the stack that way. The wheel steps too (up goes up the stack).
+**Esc** closes it and puts back the layer (or layers) active when it opened; **Alt+A** again, **Enter** (or D), a click
+on the canvas, another tool or the idle timeout close it and keep the choice. With one layer under the pointer it
+opens showing that one; with none, it says "No layer here".
+
+Choosing a layer is not an undo step and leaves the document as it is. While a stroke is painted, or a transform, a
+gradient or a warp waits to be applied (choosing another layer would apply it), the picker says so and keeps the layer.
+It works in Full Screen Mode and with the Layers panel hidden, and the mouse stays where it is throughout.
+
+The timeout and the side in Edit ▸ Preferences ▸ Tool Ring apply to all three; "Alt+D opens the Tool Ring" is the
+Tool Ring's alone. Alt+C and Alt+A are commands of Edit ▸ Keyboard Shortcuts (View) like Alt+D, and can be given
+other keys.
+
 ## Tablets
 
 **Pen buttons.** Edit ▸ Preferences ▸ Tool Ring ▸ Pen button can make one of the pen's side buttons open and close
@@ -82,6 +148,11 @@ nekophoto.exe: Keystroke… Alt+D), XP-Pen's or Huion's driver panel likewise.
 ---
 
 ## 日本語
+
+ポインターのそばに開き、マウスの操作を奪わない 3 つのキーボードのリングがあります:ツールリング(**Alt+D**、以下)、
+描画色の[カラーリング](#カラーリング)(**Alt+C**)、ポインターの下のレイヤーの[レイヤーピッカー](#レイヤーピッカー)(**Alt+A**)です。
+
+### ツールリング
 
 表示 ▸ ツールリング(**Alt+D**)は、現在のツールのよく使う操作をポインターのそばにコンパスの形で表示します。9 つの円は、
 キーボード上で D の周りに並ぶキーと同じ配置です:
@@ -112,7 +183,7 @@ nekophoto.exe: Keystroke… Alt+D), XP-Pen's or Huion's driver panel likewise.
 同じく取り消しの単位になりません。ドキュメントを編集する円(反転、回転、前面へ、選択範囲を反転、選択を解除)はメニューの
 コマンドと同じく 1 つの取り消し単位です。
 
-### リング
+#### リング
 
 | ツール | W | E | R | S | D | F | X | C | V |
 |---|---|---|---|---|---|---|---|---|---|
@@ -139,6 +210,64 @@ Ctrl+Shift+> と同じく 1 つにまとまります)。選んでいなければ
 どの円も 編集 ▸ キーボードショートカット のコマンドを実行します(リング専用の操作は「ツール」と「その他のキー」にあり、
 ブラシの直径を大きく、ぼかしを小さく などはキーを割り当てるまでキーがありません)。リングの中身は 1 か所
 (`src/app/ToolRingCommands.cpp`)にデータとしてまとめてあり、のちのバージョンで自分で選べるようにする準備ができています。
+
+### カラーリング
+
+表示 ▸ カラーリング(**Alt+C**)は、描画色を同じコンパスに載せます。規則もツールリングと同じです:ポインターのそばに
+開き、マウスの操作は奪わず(開いている間も描画を続けられます)、開いている間は 9 つの文字キーがリングのものになり、Esc、
+もう一度 Alt+C、別のツール、一定時間の無操作で閉じます。開くとツールリングは閉じ、その逆も同様です。
+
+```
+  W  最近使ったカラー     E  彩度 +             R  明るさ +
+  S  色相 −             (D) 初期設定の色          F  色相 +
+  X  彩度 −              C  描画色と背景色の入れ替え   V  明るさ −
+```
+
+中央にはツールバーと同じく、背景色の上に描画色が表示されます。値の円には、そのキーで得られる色と現在の値(H 210°、
+S 80%、B 65%)が表示され、W の円には呼び戻す最近のカラーが表示されます。色相はカラーホイールを 10° ずつ、彩度と明るさは
+5% ずつ(まず次の刻みの値へ)動きます。キーを押し続けると繰り返し、ホイールで最後に使った値(最初は色相)を変えられます。
+
+値は描画色の RGB に対するカラーピッカーの HSB で、8 ビットの整数値に丸めます。CMYK と Lab のドキュメントでは、
+カラーピッカーと同じく描画色は sRGB のまま保たれ、描画するときにドキュメントのプロファイルで変換されます。グレーにしても
+リングは色相を覚えているので、彩度を上げると元の色に戻ります。マスクが対象のときは、スウォッチと円はその色で描かれる
+グレーを表示します。
+
+D で黒と白に戻し(マスクが対象のときは Photoshop の D と同じく白と黒)、C で描画色と背景色を入れ替え、W で最近使った
+カラーを順にさかのぼります:ドキュメントの編集に使ったカラーと、カラーリングを開いたとき・閉じたときのカラー(最新の
+12 色、次回の起動にも引き継がれます)。どれも取り消しの単位にはなりません。Photoshop でも色の変更はヒストリーに残りません。
+
+### レイヤーピッカー
+
+表示 ▸ レイヤーピッカー(**Alt+A**)は、Photoshop の移動ツールの右クリックメニューのように、ポインターの下にあるレイヤーを
+重なりの上から順にポインターの横に並べ、キーボードで選べるようにします。そのピクセルで自分のピクセルが透明でなく、実際に
+表示されているレイヤーが並びます:非表示のレイヤー、レイヤーマスク(またはグループのマスク)でそのピクセルが隠れている
+レイヤー、クリッピングの下のレイヤーがそこに表示されていないレイヤーは除かれます。調整レイヤーとグループは自分のピクセルを
+持たないので、Photoshop と同じく並びません。グループ内のレイヤーは行にグループ名が表示されます。各行にはレイヤーの
+サムネール、名前、描画モード、不透明度が表示され、アクティブなレイヤーが強調されます。
+
+```
+  ▲  R  F  ▲
+  [ ] 楕円 1        通常 · 100%
+  [#] ペイント      通常 · 100%      (アクティブ)
+  [ ] 赤            乗算 · 85%
+  [ ] 背景          通常 · 100%
+  ▼  S  V  ▼
+```
+
+コンパスの規則どおり、**F と R で重なりの上へ、S と V で下へ** 移り、移った先のレイヤーがすぐにアクティブになります
+(レイヤーパネル、オプションバー、カンバスも追従します)。アクティブなレイヤーがリストにないときは、最初のキーで重なり順で
+その方向の隣にあるレイヤーに移ります。ホイールでも移れます(上で重なりの上へ)。**Esc** で閉じて、開いたときにアクティブ
+だったレイヤー(複数選択も)に戻します。もう一度 **Alt+A**、**Enter**(または D)、カンバスのクリック、別のツール、一定時間の
+無操作では選んだまま閉じます。ポインターの下のレイヤーが 1 つだけならそのレイヤーを表示して開き、ひとつもなければ
+「ここにレイヤーはありません」と表示します。
+
+レイヤーを選んでも取り消しの単位にはならず、ドキュメントも変わりません。ストロークの描画中や、変形・グラデーション・
+ワープが確定待ちのとき(別のレイヤーを選ぶと確定されてしまいます)は、その旨を表示してレイヤーを変えません。
+フルスクリーンモードでも、レイヤーパネルを隠していても使え、その間マウスはずっとそのままです。
+
+編集 ▸ 環境設定 ▸ ツールリング の「閉じるまで」と「表示位置」は 3 つすべてに使われます(「Alt+D でツールリングを開く」は
+ツールリングだけの設定です)。Alt+C と Alt+A は Alt+D と同じく 編集 ▸ キーボードショートカット(表示)のコマンドで、
+別のキーを割り当てられます。
 
 ### タブレット
 
