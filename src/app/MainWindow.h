@@ -61,6 +61,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
     friend class FullScreenMode;
     friend class HidePanels;
+    friend class RingController;
     friend class ToolRing;
 public:
     MainWindow();

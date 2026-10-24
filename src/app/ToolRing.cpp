@@ -1,26 +1,15 @@
 // The Tool Ring: settings, the overlay that paints it and the controller that drives it (ToolRing.h). The rings and
 // their commands are in ToolRingCommands.cpp.
 #include "ToolRing.h"
-#include "CanvasWidget.h"
 #include "CommandPalette.h"
 #include "CommandRegistry.h"
 #include "Icons.h"
 #include "MainWindow.h"
-#include <QAbstractSpinBox>
 #include <QAction>
-#include <QApplication>
-#include <QKeyEvent>
-#include <QLineEdit>
-#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <QPlainTextEdit>
 #include <QSettings>
-#include <QTabletEvent>
-#include <QTextEdit>
 #include <QVariantAnimation>
-#include <QWheelEvent>
-#include <QWindow>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -53,39 +42,6 @@ Qt::MouseButton penMouseButton() {
 namespace {
 
 constexpr char ringKeys[] = {'W', 'E', 'R', 'S', 'F', 'X', 'C', 'V'};
-
-/// The direction of each satellite from the centre, as the keys sit around D.
-QPointF directionOf(char key) {
-    constexpr double d = 0.70710678118654752;
-    switch (key) {
-    case 'W': return {-d, -d};
-    case 'E': return {0, -1};
-    case 'R': return {d, -d};
-    case 'S': return {-1, 0};
-    case 'F': return {1, 0};
-    case 'X': return {-d, d};
-    case 'C': return {0, 1};
-    case 'V': return {d, d};
-    default: return {0, 0};
-    }
-}
-
-/// The ring's key for a key event: one of the nine letters with no modifier (the keypad's aside), else 0.
-char ringKey(const QKeyEvent* e) {
-    if (e->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) return 0;
-    switch (e->key()) {
-    case Qt::Key_W: return 'W';
-    case Qt::Key_E: return 'E';
-    case Qt::Key_R: return 'R';
-    case Qt::Key_S: return 'S';
-    case Qt::Key_D: return 'D';
-    case Qt::Key_F: return 'F';
-    case Qt::Key_X: return 'X';
-    case Qt::Key_C: return 'C';
-    case Qt::Key_V: return 'V';
-    default: return 0;
-    }
-}
 
 /// The values a ring steps (the rest of a slot's `value` names a state that is on or off).
 bool isNumericValue(const QString& value) {
@@ -165,12 +121,17 @@ QRect ToolRingOverlay::compassRect() const {
 QPoint ToolRingOverlay::centreOf(char key) const {
     const QRect c = compassRect();
     const QPointF centre = QRectF(c).center();
-    return (centre + directionOf(key) * orbit).toPoint();
+    return (centre + compassDirection(key) * orbit).toPoint();
 }
 
 void ToolRingOverlay::setViews(const std::vector<View>& views, const QString& centreIcon) {
     views_ = views;
     centreIcon_ = centreIcon;
+    update();
+}
+
+void ToolRingOverlay::setCentreSwatches(std::optional<std::pair<QColor, QColor>> colors) {
+    centreSwatches_ = colors;
     update();
 }
 
@@ -227,7 +188,7 @@ void ToolRingOverlay::paintEvent(QPaintEvent*) {
     };
 
     for (const View& v : views_) {
-        const QPointF dir = directionOf(v.key);
+        const QPointF dir = compassDirection(v.key);
         const QPointF at = centre + dir * orbit;
         const double alpha = v.empty ? 0.28 : v.enabled ? 1.0 : 0.45;
         // The circle: plum glass, pink when its state is on.
@@ -244,7 +205,15 @@ void ToolRingOverlay::paintEvent(QPaintEvent*) {
             const QColor tint = withAlpha(v.checked ? text : iconColor, alpha);
             const double iconY = v.value.isEmpty() ? at.y() - iconSize / 2.0 : at.y() - iconSize / 2.0 - 6;
             p.setOpacity(alpha);
-            p.drawPixmap(QPointF(at.x() - iconSize / 2.0, iconY), icon(v.icon, QColor(tint.rgb()), iconSize));
+            if (v.chip) {
+                // A colour: a chip, ringed so that black and white show on the plum.
+                const QPointF chipAt(at.x(), iconY + iconSize / 2.0);
+                p.setPen(QPen(withAlpha(text, 0.75), 1.2));
+                p.setBrush(QColor(v.chip->rgb()));
+                p.drawEllipse(chipAt, 8.5, 8.5);
+            } else {
+                p.drawPixmap(QPointF(at.x() - iconSize / 2.0, iconY), icon(v.icon, QColor(tint.rgb()), iconSize));
+            }
             p.setOpacity(1);
             if (!v.value.isEmpty()) {
                 p.setFont(small);
@@ -273,7 +242,16 @@ void ToolRingOverlay::paintEvent(QPaintEvent*) {
     p.setPen(QPen(withAlpha(line, 0.9), 1.5));
     p.setBrush(withAlpha(base, 0.78));
     p.drawEllipse(centre, hub, hub);
-    if (!centreIcon_.isEmpty()) p.drawPixmap(QPointF(centre.x() - 11, centre.y() - 11), icon(centreIcon_, QColor(iconColor.rgb()), 22));
+    if (centreSwatches_) {
+        // The toolbar's swatches: the background behind, down and right, the foreground over it.
+        p.setPen(QPen(withAlpha(text, 0.8), 1.2));
+        p.setBrush(QColor(centreSwatches_->second.rgb()));
+        p.drawRoundedRect(QRectF(centre.x() - 4, centre.y() - 4, 17, 17), 3, 3);
+        p.setBrush(QColor(centreSwatches_->first.rgb()));
+        p.drawRoundedRect(QRectF(centre.x() - 13, centre.y() - 13, 17, 17), 3, 3);
+    } else if (!centreIcon_.isEmpty()) {
+        p.drawPixmap(QPointF(centre.x() - 11, centre.y() - 11), icon(centreIcon_, QColor(iconColor.rgb()), 22));
+    }
     drawBadge(centre + QPointF(-hub * 0.72, -hub * 0.72), 'D', 1);
     if (pulseKey_ == 'D') {
         p.setPen(QPen(withAlpha(accent, (1 - pulse_) * 0.95), 3));
@@ -301,99 +279,41 @@ void ToolRingOverlay::paintEvent(QPaintEvent*) {
 
 // ---- The controller ----------------------------------------------------------------------------
 
-ToolRing::ToolRing(MainWindow* window) : QObject(window), window_(window) {
-    overlay_ = new ToolRingOverlay(window);
-    idle_.setSingleShot(true);
-    connect(&idle_, &QTimer::timeout, this, &ToolRing::close);
+ToolRing::ToolRing(MainWindow* window) : RingController(window, new ToolRingOverlay(window)) {
+    ringOverlay_ = static_cast<ToolRingOverlay*>(RingController::overlay_);
 }
 
-std::pair<Tool, bool> ToolRing::toolKey() const {
-    const EditorSession* s = window_->session_;
-    if (!s) return {Tool::Move, false};
-    return {s->tool(), s->tool() == Tool::Brush && s->brushErase};
-}
-
-bool ToolRing::typing() const {
-    if (window_->canvas_ && window_->canvas_->typeEditing()) return true;
-    // A text field has the keyboard (a layer's name, a filter box); a number field does not count, letters mean nothing there.
-    QWidget* focus = QApplication::focusWidget();
-    if (!focus) return false;
-    if (focus->inherits("QTextEdit") || focus->inherits("QPlainTextEdit")) return true;
-    return focus->inherits("QLineEdit") && !qobject_cast<QAbstractSpinBox*>(focus->parentWidget());
-}
-
-void ToolRing::sessionChanged() {
-    close();
-    for (const auto& c : sessionConnections_) disconnect(c);
-    sessionConnections_.clear();
-    session_ = window_->session_;
-    if (!session_) return;
-    presetNow_ = session_->brushPreset;
+void ToolRing::connectSession(EditorSession& session) {
+    presetNow_ = session.brushPreset;
     presetBefore_.reset();
-    sessionConnections_.push_back(connect(session_, &EditorSession::toolChanged, this, [this] {
+    follow(connect(&session, &EditorSession::toolChanged, this, [this] {
         // The brush preset before this one, for Previous Brush Preset.
         if (session_->brushPreset != presetNow_) { presetBefore_ = presetNow_; presetNow_ = session_->brushPreset; }
         // The ring's own commands follow the tool (greyed where it has no such option).
         if (registry_)
             for (QAction* a : ownCommands_)
                 if (const Command* c = registry_->forAction(a)) a->setEnabled(registry_->disabledReason(*c).isEmpty());
-        if (!open_) return;
-        if (toolKey() != openedFor_) {
-            // Another tool closes the ring, unless the ring switched it (C: Brush and Eraser), which keeps it open.
-            if (!ringChanging_) { close(); return; }
-            openedFor_ = toolKey();
-            ring_ = &toolring::ringFor(openedFor_.first);
-        }
-        refresh();
     }));
-    for (auto signal : {&EditorSession::layersChanged, &EditorSession::selectionChanged, &EditorSession::historyChanged, &EditorSession::viewportChanged})
-        sessionConnections_.push_back(connect(session_, signal, this, [this] { if (open_) refresh(); }));
-    if (CanvasWidget* canvas = window_->canvas_)
-        sessionConnections_.push_back(connect(canvas, &CanvasWidget::typeEditChanged, this, [this] { if (open_ && typing()) close(); }));
 }
 
-void ToolRing::toggle() {
-    if (open_) close();
-    else open();
-}
-
-void ToolRing::open() {
-    if (open_ || !toolring::enabled() || !window_->canvas_ || !window_->session_ || typing()) return;
-    CanvasWidget* canvas = window_->canvas_;
-    if (!canvas->isVisible()) return;
-    if (session_ != window_->session_) sessionChanged();
+void ToolRing::toolSwitched() {
+    // Another tool closes the ring, unless the ring switched it (C: Brush and Eraser), which keeps it open.
+    if (!ringChanging_) { close(); return; }
     openedFor_ = toolKey();
+    ring_ = &toolring::ringFor(openedFor_.first);
+}
+
+bool ToolRing::mayOpen() const { return toolring::enabled() && registry_; }
+
+void ToolRing::opening() {
     ring_ = &toolring::ringFor(openedFor_.first);
     // The wheel steps the ring's first value (its S/F pair, else the first it has) until another is used.
     wheelKey_ = 0;
     for (char key : {'F', 'R', 'E'})
         for (const toolring::Slot& s : ring_->satellites)
             if (!wheelKey_ && s.key == key && isNumericValue(s.value)) wheelKey_ = key;
-    wheelRemainder_ = 0;
-    heldKeys_.clear();
-    open_ = true;
-    refresh();
-    // By the pointer when it is over the canvas, else in the middle of it.
-    const std::optional<QPointF> hover = canvas->hoverPoint();
-    const QPoint pointer = hover ? canvas->mapTo(window_, hover->toPoint()) : canvasArea().center();
-    lastPointer_ = pointer;
-    heading_ = {};
-    place(pointer, {});
-    overlay_->show();
-    overlay_->raise();
     if (const Command* c = window_->toolActions_.contains(openedFor_.first) ? registry_->forAction(openedFor_.second ? window_->eraserAction_ : window_->toolActions_.value(openedFor_.first)) : nullptr)
-        overlay_->showCaption(plainText(c->label));
-    qApp->installEventFilter(this);
-    if (toolring::idleMs() > 0) idle_.start(toolring::idleMs());
-}
-
-void ToolRing::close() {
-    if (!open_) return;
-    open_ = false;
-    qApp->removeEventFilter(this);
-    idle_.stop();
-    heldKeys_.clear();
-    overlay_->hide();
+        ringOverlay_->showCaption(plainText(c->label));
 }
 
 void ToolRing::refresh() {
@@ -416,12 +336,12 @@ void ToolRing::refresh() {
         }
         views.push_back(v);
     }
-    overlay_->setViews(views, toolIconName(openedFor_.first, openedFor_.second));
+    ringOverlay_->setViews(views, toolIconName(openedFor_.first, openedFor_.second));
 }
 
 void ToolRing::press(char key, bool autoRepeat) {
     if (!ring_ || !registry_) return;
-    if (toolring::idleMs() > 0) idle_.start(toolring::idleMs());
+    restartIdle();
     const bool centre = key == 'D';
     const auto slot = std::find_if(ring_->satellites.begin(), ring_->satellites.end(), [key](const toolring::Slot& s) { return s.key == key; });
     const QString id = centre ? ring_->centre : slot == ring_->satellites.end() ? QString() : slot->command;
@@ -431,173 +351,30 @@ void ToolRing::press(char key, bool autoRepeat) {
     if (!c) {
         if (centre) {
             // D with nothing of its own: the tool's name.
-            overlay_->pulse('D', true);
+            ringOverlay_->pulse('D', true);
             QAction* toolAction = openedFor_.second ? window_->eraserAction_ : window_->toolActions_.value(openedFor_.first);
-            if (const Command* t = toolAction ? registry_->forAction(toolAction) : nullptr) overlay_->showCaption(plainText(t->label));
+            if (const Command* t = toolAction ? registry_->forAction(toolAction) : nullptr) ringOverlay_->showCaption(plainText(t->label));
         }
         return;
     }
     if (const QString why = registry_->disabledReason(*c); !why.isEmpty()) {
-        overlay_->pulse(key, false);
-        overlay_->showCaption(why);
+        ringOverlay_->pulse(key, false);
+        ringOverlay_->showCaption(why);
         return;
     }
     ringChanging_ = true;
     registry_->execute(*c);
     ringChanging_ = false;
-    if (!open_) return;   // the command closed it (a dialog took the keyboard)
-    overlay_->pulse(key, true);
+    if (!isOpen()) return;   // the command closed it (a dialog took the keyboard)
+    ringOverlay_->pulse(key, true);
     if (numeric) wheelKey_ = key;
-    else overlay_->showCaption(plainText(c->label));
+    else ringOverlay_->showCaption(plainText(c->label));
     refresh();
 }
 
-QRect ToolRing::canvasArea() const {
-    CanvasWidget* canvas = window_->canvas_;
-    if (!canvas) return window_->rect();
-    const QRect area(canvas->mapTo(window_, QPoint(0, 0)), canvas->size());
-    return area.intersected(window_->rect()).adjusted(8, 8, -8, -8);
-}
-
-int ToolRing::clearance() const {
-    const EditorSession* s = window_->session_;
-    if (!s) return 0;
-    double radius = 0;
-    const Tool t = s->tool();
-    if (t == Tool::Brush || t == Tool::SpotHealing || t == Tool::CloneStamp || t == Tool::Smudge || t == Tool::Dodge) radius = s->brushSettings.diameter / 2;
-    else if (t == Tool::Scribble) radius = s->scribbleSize / 2.0;
-    return int(std::clamp(radius * s->viewport.pointsPerPixel(), 0.0, 160.0));
-}
-
-void ToolRing::place(QPoint pointer, QPointF heading) {
-    using toolring::Corner;
-    const QRect area = canvasArea();
-    const QSize size = overlay_->size();
-    const QRect compass = overlay_->compassRect();
-    // The compass's nearest edge this far from the pointer, beyond the brush's outline.
-    const int gap = clearance() + 18;
-    auto rectFor = [&](Corner c) {
-        const bool right = c == Corner::UpRight || c == Corner::DownRight, up = c == Corner::UpRight || c == Corner::UpLeft;
-        const int left = right ? pointer.x() + gap - compass.left() : pointer.x() - gap - compass.right() - 1;
-        const int top = up ? pointer.y() - gap - size.height() : pointer.y() + gap - compass.top();
-        return QRect(QPoint(left, top), size);
-    };
-    // Away from where the pointer is heading: moving right puts the ring on the left, moving down puts it above.
-    std::vector<Corner> order;
-    const Corner preferred = toolring::corner();
-    bool right = preferred == Corner::UpRight || preferred == Corner::DownRight, up = preferred == Corner::UpRight || preferred == Corner::UpLeft;
-    if (!heading.isNull() && overlay_->isVisible()) {
-        // Along an axis the pointer is not moving on, the ring keeps its side.
-        const QPoint at = overlay_->geometry().center();
-        right = std::abs(heading.x()) > 1.5 ? heading.x() < 0 : at.x() > pointer.x();
-        up = std::abs(heading.y()) > 1.5 ? heading.y() > 0 : at.y() < pointer.y();
-    }
-    auto cornerOf = [](bool r, bool u) { return u ? (r ? Corner::UpRight : Corner::UpLeft) : (r ? Corner::DownRight : Corner::DownLeft); };
-    order = {cornerOf(right, up), cornerOf(right, !up), cornerOf(!right, up), cornerOf(!right, !up)};
-    QRect chosen;
-    for (Corner c : order) {
-        if (area.contains(rectFor(c))) { chosen = rectFor(c); placed_ = c; break; }
-    }
-    if (chosen.isNull()) {
-        // Nowhere it fits whole (a small canvas): the corner that keeps most of it inside, pushed in.
-        int best = -1;
-        for (Corner c : order) {
-            const QRect r = rectFor(c).intersected(area);
-            const int shown = r.isValid() ? r.width() * r.height() : 0;
-            if (shown > best) { best = shown; chosen = rectFor(c); placed_ = c; }
-        }
-        chosen.moveLeft(std::clamp(chosen.left(), area.left(), std::max(area.left(), area.right() - size.width() + 1)));
-        chosen.moveTop(std::clamp(chosen.top(), area.top(), std::max(area.top(), area.bottom() - size.height() + 1)));
-    }
-    overlay_->move(chosen.topLeft());
-    overlay_->raise();
-}
-
-void ToolRing::pointerMoved(QPoint pointer) {
-    heading_ = heading_ * 0.6 + QPointF(pointer - lastPointer_) * 0.4;
-    lastPointer_ = pointer;
-    // Hysteresis: the ring stays put until the pointer (with the brush's outline) would reach it.
-    const int margin = clearance() + 6;
-    QRect compass = overlay_->compassRect().translated(overlay_->pos());
-    compass.setBottom(overlay_->geometry().bottom());   // the caption under it too
-    const bool collides = compass.adjusted(-margin, -margin, margin, margin).contains(pointer);
-    const bool outside = !canvasArea().contains(overlay_->geometry());
-    if (collides || outside) place(pointer, heading_);
-}
-
-bool ToolRing::eventFilter(QObject* watched, QEvent* event) {
-    if (!open_) return false;
-    // Only what reaches this window; another window's keys are its own.
-    auto ours = [this, watched] {
-        if (auto* w = qobject_cast<QWidget*>(watched)) return w->window() == window_;
-        return watched == static_cast<QObject*>(window_->windowHandle());
-    };
-    switch (event->type()) {
-    case QEvent::ShortcutOverride: {
-        // The ring's letters and Esc are not shortcuts while it is open (no tool switch, no colours, no screen mode).
-        auto* ke = static_cast<QKeyEvent*>(event);
-        if (!ours() || typing()) break;
-        if (ringKey(ke) || (ke->key() == Qt::Key_Escape && ke->modifiers() == Qt::NoModifier)) { ke->accept(); return true; }
-        break;
-    }
-    case QEvent::KeyPress: {
-        auto* ke = static_cast<QKeyEvent*>(event);
-        if (!ours() || typing()) break;
-        if (ke->key() == Qt::Key_Escape && ke->modifiers() == Qt::NoModifier) { close(); return true; }
-        if (const char key = ringKey(ke)) {
-            heldKeys_.insert(ke->key());
-            press(key, ke->isAutoRepeat());
-            return true;
-        }
-        break;
-    }
-    case QEvent::KeyRelease: {
-        auto* ke = static_cast<QKeyEvent*>(event);
-        if (heldKeys_.contains(ke->key())) {
-            if (!ke->isAutoRepeat()) heldKeys_.remove(ke->key());
-            return true;
-        }
-        break;
-    }
-    case QEvent::Wheel: {
-        // Over the canvas, with no key held: the value used last, a notch a step (the pointer stays where it is).
-        auto* we = static_cast<QWheelEvent*>(event);
-        auto* w = qobject_cast<QWidget*>(watched);
-        CanvasWidget* canvas = window_->canvas_;
-        if (!wheelKey_ || !w || !canvas || (w != canvas && !canvas->isAncestorOf(w)) || we->modifiers() != Qt::NoModifier || we->buttons() != Qt::NoButton) break;
-        const QPoint delta = we->angleDelta();
-        wheelRemainder_ += delta.y() ? delta.y() / 120.0 : delta.x() / 120.0;
-        if (we->angleDelta().isNull()) wheelRemainder_ += we->pixelDelta().y() / 40.0;
-        while (std::abs(wheelRemainder_) >= 1) {
-            const bool more = wheelRemainder_ > 0;
-            wheelRemainder_ -= more ? 1 : -1;
-            const char key = more == toolring::isMoreKey(wheelKey_) ? wheelKey_ : toolring::oppositeKey(wheelKey_);
-            press(key, false);
-            if (!open_) break;
-        }
-        return true;
-    }
-    case QEvent::MouseMove: {
-        if (!ours()) break;
-        pointerMoved(window_->mapFromGlobal(static_cast<QMouseEvent*>(event)->globalPosition().toPoint()));
-        break;
-    }
-    case QEvent::TabletMove: {
-        if (!ours()) break;
-        pointerMoved(window_->mapFromGlobal(static_cast<QTabletEvent*>(event)->globalPosition().toPoint()));
-        break;
-    }
-    case QEvent::WindowDeactivate:
-        // A dialog, another window: the keyboard went elsewhere, and so does the ring.
-        if (watched == window_) close();
-        break;
-    case QEvent::Resize:
-        if (watched == window_->canvas_) place(lastPointer_, {});
-        break;
-    default:
-        break;
-    }
-    return false;
+void ToolRing::wheelStep(bool more) {
+    // The value used last, a notch a step.
+    press(more == toolring::isMoreKey(wheelKey_) ? wheelKey_ : toolring::oppositeKey(wheelKey_), false);
 }
 
 } // namespace app

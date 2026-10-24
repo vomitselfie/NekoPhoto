@@ -200,6 +200,8 @@ qt_add_executable(nekophoto
     ImportBanner.cpp
     FullScreen.h
     FullScreen.cpp
+    RingController.h
+    RingController.cpp
     ToolRing.h
     ToolRing.cpp
     ToolRingCommands.cpp
