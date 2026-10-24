@@ -6214,6 +6214,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>このキーボードショートカットのファイルは新しいバージョンの NekoPhoto で作成されています。</translation>
     </message>
     <message>
+        <source>%1 (%2)</source>
+        <translation>%1(%2)</translation>
+    </message>
+    <message>
         <source>Keyboard Shortcuts</source>
         <translation>キーボードショートカット</translation>
     </message>
@@ -6296,6 +6300,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Choose a command to change its shortcuts.</source>
         <translation>ショートカットを変更するコマンドを選んでください。</translation>
+    </message>
+    <message>
+        <source>%1 (its keys work only %2)</source>
+        <translation>%1(キーは%2だけ働きます)</translation>
     </message>
     <message>
         <source>Remove</source>

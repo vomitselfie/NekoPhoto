@@ -41,7 +41,7 @@ QAction* CommandRegistry::adopt(QMenu* menu, QAction* action, Command command) {
 QAction* CommandRegistry::add(QMenu* menu, Command command) {
     auto* action = new QAction(command.label, menu ? static_cast<QObject*>(menu) : static_cast<QObject*>(window_));
     if (!command.shortcuts.isEmpty()) action->setShortcuts(command.shortcuts);
-    if (!menu) window_->addAction(action);
+    if (!menu && command.keyContext.isEmpty()) window_->addAction(action);
     QAction* added = adopt(menu, action, std::move(command));
     const Command* entry = byAction_.at(added);
     QObject::connect(added, &QAction::triggered, window_, [this, entry] { execute(*entry); });
