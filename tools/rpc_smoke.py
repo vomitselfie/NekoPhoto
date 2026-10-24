@@ -632,7 +632,10 @@ def remaining_methods(rpc):
     assert rpc.call("view.screenMode", panels="hidden")["out"] == []
     expect_refused(rpc, "Standard Screen Mode", "view.screenMode", panels="hiddenRight")
     back = rpc.call("view.screenMode", mode="standard")
-    assert back == {"mode": "standard", "out": [], "hidden": "none"}, back
+    assert {k: back[k] for k in ("mode", "out", "hidden")} == {"mode": "standard", "out": [], "hidden": "none"}, back
+    # Each edge's pages (Edit > Preferences > Edges autohides none here).
+    assert back["edges"]["right"]["pages"] == ["layers", "properties", "channels", "history"], back
+    assert back["edges"]["left"]["page"] in back["edges"]["left"]["pages"] and not back["edges"]["left"]["autohide"], back
     # In the standard mode Tab hides the panels, tools and options bar, Shift+Tab the panels on the right.
     assert rpc.call("view.screenMode", panels="hidden")["hidden"] == "all"
     assert rpc.call("view.screenMode", panels="all")["hidden"] == "none"

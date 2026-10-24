@@ -4805,6 +4805,33 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::ColourPage</name>
+    <message>
+        <source>Color Picker…</source>
+        <translation>カラーピッカー…</translation>
+    </message>
+    <message>
+        <source>Choose the foreground colour in the Color Picker</source>
+        <translation>カラーピッカーで描画色を選びます</translation>
+    </message>
+    <message>
+        <source>Swatches</source>
+        <translation>スウォッチ</translation>
+    </message>
+    <message>
+        <source>Click for the foreground colour, Ctrl+click for the background</source>
+        <translation>クリックで描画色、Ctrl+クリックで背景色にします</translation>
+    </message>
+    <message>
+        <source>Recent colours</source>
+        <translation>最近使った色</translation>
+    </message>
+    <message>
+        <source>The foreground colours used last</source>
+        <translation>最近使った描画色</translation>
+    </message>
+</context>
+<context>
     <name>app::CommandPalette</name>
     <message>
         <source>Search commands, tools and filters</source>
@@ -4903,6 +4930,17 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Show the fill on the canvas</source>
         <translation>カンバス上に塗りつぶしを表示します</translation>
+    </message>
+</context>
+<context>
+    <name>app::DocumentsPage</name>
+    <message>
+        <source>Zoom of the current document</source>
+        <translation>現在のドキュメントのズーム</translation>
+    </message>
+    <message>
+        <source>Fit</source>
+        <translation>全体</translation>
     </message>
 </context>
 <context>
@@ -5826,6 +5864,77 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::FullScreenMode</name>
+    <message>
+        <source>RGB Color</source>
+        <translation>RGB カラー</translation>
+    </message>
+    <message>
+        <source>CMYK Color</source>
+        <translation>CMYK カラー</translation>
+    </message>
+    <message>
+        <source>Lab Color</source>
+        <translation>Lab カラー</translation>
+    </message>
+    <message>
+        <source>Tools</source>
+        <translation>ツール</translation>
+    </message>
+    <message>
+        <source>Brushes</source>
+        <translation>ブラシ</translation>
+    </message>
+    <message>
+        <source>Colour</source>
+        <translation>カラー</translation>
+    </message>
+    <message>
+        <source>Options</source>
+        <translation>オプション</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>ドキュメント</translation>
+    </message>
+    <message>
+        <source>Layers</source>
+        <translation>レイヤー</translation>
+    </message>
+    <message>
+        <source>Properties</source>
+        <translation>プロパティ</translation>
+    </message>
+    <message>
+        <source>Channels</source>
+        <translation>チャンネル</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation>ヒストリー</translation>
+    </message>
+    <message>
+        <source>Timeline</source>
+        <translation>タイムライン</translation>
+    </message>
+    <message>
+        <source>Info</source>
+        <translation>情報</translation>
+    </message>
+    <message>
+        <source>%1 × %2 px · %3 · %4 bits</source>
+        <translation>%1 × %2 px · %3 · %4 bit</translation>
+    </message>
+    <message>
+        <source>%1 × %2 px</source>
+        <translation>%1 × %2 px</translation>
+    </message>
+    <message>
+        <source>%1, %2 bits/channel</source>
+        <translation>%1、%2 bit/チャンネル</translation>
+    </message>
+</context>
+<context>
     <name>app::GmicDialog</name>
     <message>
         <source>Testing (experimental)</source>
@@ -6118,6 +6227,20 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::HistoryPanel</name>
+    <message>
+        <source>Opened</source>
+        <translation>開いた状態</translation>
+    </message>
+</context>
+<context>
+    <name>app::HsvPicker</name>
+    <message>
+        <source>Pick the foreground colour: saturation across, brightness up, the hue on the right</source>
+        <translation>描画色を選びます:横が彩度、縦が明るさ、右が色相です</translation>
+    </message>
+</context>
+<context>
     <name>app::ImportBanner</name>
     <message>
         <source>Import notes</source>
@@ -6150,6 +6273,29 @@ File &gt; New creates a blank canvas.</source>
             <numerusform>
 … ほか %n 件(詳細を参照)。</numerusform>
         </translation>
+    </message>
+</context>
+<context>
+    <name>app::InfoPanel</name>
+    <message>
+        <source>Pointer</source>
+        <translation>ポインター</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>サイズ</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>モード</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>ズーム</translation>
+    </message>
+    <message>
+        <source>X %1   Y %2</source>
+        <translation>X %1   Y %2</translation>
     </message>
 </context>
 <context>
@@ -7174,6 +7320,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Actions</source>
         <translation>アクション</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation>ヒストリー</translation>
     </message>
     <message>
         <source>Timeline</source>
@@ -9476,6 +9626,22 @@ File &gt; New creates a blank canvas.</source>
         <translation>ツール以外のパネルの表示・非表示(&amp;E)</translation>
     </message>
     <message>
+        <source>Next Edge Page</source>
+        <translation>次の端のページ</translation>
+    </message>
+    <message>
+        <source>Previous Edge Page</source>
+        <translation>前の端のページ</translation>
+    </message>
+    <message>
+        <source>while an edge is out</source>
+        <translation>端が出ている間</translation>
+    </message>
+    <message>
+        <source>No edge is out</source>
+        <translation>出ている端がありません</translation>
+    </message>
+    <message>
         <source>Show Menus</source>
         <translation>メニューを表示</translation>
     </message>
@@ -9542,6 +9708,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Histogram</source>
         <translation>ヒストグラム(&amp;H)</translation>
+    </message>
+    <message>
+        <source>Histo&amp;ry</source>
+        <translation>ヒストリー(&amp;R)</translation>
     </message>
     <message>
         <source>&amp;Timeline</source>
@@ -9814,6 +9984,42 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Takes effect the next time NekoPhoto starts.</source>
         <translation>NekoPhoto の次回起動時に反映されます。</translation>
+    </message>
+    <message>
+        <source>Edges</source>
+        <translation>画面の端</translation>
+    </message>
+    <message>
+        <source>Left (tools)</source>
+        <translation>左(ツール)</translation>
+    </message>
+    <message>
+        <source>Top (options bar)</source>
+        <translation>上(オプションバー)</translation>
+    </message>
+    <message>
+        <source>Right (panels)</source>
+        <translation>右(パネル)</translation>
+    </message>
+    <message>
+        <source>Bottom (Timeline and status bar)</source>
+        <translation>下(タイムラインとステータスバー)</translation>
+    </message>
+    <message>
+        <source>Always shown</source>
+        <translation>常に表示</translation>
+    </message>
+    <message>
+        <source>Autohide</source>
+        <translation>自動で隠す</translation>
+    </message>
+    <message>
+        <source>Reduce motion</source>
+        <translation>動きを減らす</translation>
+    </message>
+    <message>
+        <source>An autohiding edge leaves the window to the canvas: rest the pointer at it to slide it out. Hold Tab to see every hidden edge. While an edge is out, Tab and Shift+Tab (or the wheel over its page names) turn its pages. Reduce motion turns the page turn into a quick fade and shortens the slides.</source>
+        <translation>自動で隠す端はその側をカンバスに譲ります。ポインターを端に置くとスライドして現れます。Tab を押し続けると隠れている端がすべて現れます。端が出ている間は Tab と Shift+Tab(またはページ名の上でのホイール)でページをめくれます。「動きを減らす」ではページめくりが短いフェードになり、スライドも短くなります。</translation>
     </message>
     <message>
         <source>Performance</source>

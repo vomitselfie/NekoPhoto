@@ -53,6 +53,7 @@ int preferences(MainWindow& w);          // SelfTestInterface.cpp
 int workCounters(MainWindow& window);    // SelfTestWork.cpp
 int fullScreen(MainWindow& window);      // SelfTestFullScreen.cpp
 int hidePanels(MainWindow& window);      // SelfTestHidePanels.cpp
+int edgePages(MainWindow& window);       // SelfTestEdges.cpp
 int forbiddenCursor(MainWindow& window); // SelfTestForbidden.cpp
 int toolRing(MainWindow& window);        // SelfTestToolRing.cpp
 

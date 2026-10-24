@@ -129,9 +129,10 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("shortcuts")) return keyboardShortcuts(window);
     if (name == QLatin1String("full-screen")) return fullScreen(window);
     if (name == QLatin1String("hide-panels")) return hidePanels(window);
+    if (name == QLatin1String("edges")) return edgePages(window);
     if (name == QLatin1String("forbidden-cursor")) return forbiddenCursor(window);
     if (name == QLatin1String("tool-ring")) return toolRing(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen, hide-panels, forbidden-cursor, tool-ring)\n", qPrintable(name));
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen, hide-panels, edges, forbidden-cursor, tool-ring)\n", qPrintable(name));
     return 2;
 }
 

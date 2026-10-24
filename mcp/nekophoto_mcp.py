@@ -1424,7 +1424,8 @@ def view_screen_mode(mode: Optional[str] = None, panels: Optional[str] = None) -
     options bar and panels at the screen's edges). panels, in full screen: all (every edge kept out, as Tab),
     exceptTools (as Shift+Tab) or hidden; in the standard mode: hidden (the panels, tools and options bar, as Tab),
     hiddenRight (the panels on the right, as Shift+Tab) or all (everything back). The window, not the document, and
-    not an undo step; with no arguments it reads the mode, which edges are out and what Tab hid."""
+    not an undo step; with no arguments it reads the mode, which edges are out, what Tab hid, and each edge's
+    autohide setting, pages and current page."""
     return text(call("view.screenMode", mode=mode, panels=panels))
 
 

@@ -2,7 +2,8 @@
 // panel, the tool rail and the options bar, and leaves the menus, the document tabs and the status bar; Tab again gives
 // back saveState() byte for byte, a panel that was closed staying closed. Shift+Tab hides the panels on the right only.
 // Tab stays with a field and with typing on the canvas. Full screen while they are hidden shows every panel at its
-// edges, and leaving it hides them again; F7 while they are hidden brings the layout back with the Layers panel.
+// edges (on the edges' pages, the closed ones too: SelfTestEdges.cpp), and leaving it hides them again, the closed
+// ones closed; F7 while they are hidden brings the layout back with the Layers panel.
 #include "SelfTest.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
@@ -17,6 +18,7 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMenuBar>
+#include <QSettings>
 #include <QStatusBar>
 #include <QThread>
 #include <QToolBar>
@@ -47,6 +49,8 @@ void pumpEvents(int ms) {
 
 int hidePanels(MainWindow& w) {
     EditorSession& s = *w.session();
+    QSettings().remove(QStringLiteral("edges"));   // no edge autohiding, each on its first page
+    w.fullScreenMode()->applyPreferences();
     buildDemoDocument(s);
     w.resize(1400, 900);
     w.show();
@@ -159,8 +163,15 @@ int hidePanels(MainWindow& w) {
     pumpEvents(100);
     expect(fs->edgeHolding(layersDock) == FullScreenMode::Right && fs->hasContent(FullScreenMode::Left) && fs->hasContent(FullScreenMode::Top),
            "full screen's edges did not get the panels, the tools and the options bar");
-    expect(fs->edgeHolding(histogramDock) < 0 && fs->edgeHolding(actionsDock) < 0, "a closed panel came out in full screen");
-    expect(press(canvas, Qt::Key_Tab, Qt::NoModifier) && fs->isPinned(FullScreenMode::Left), "Tab in full screen did not pin the edges");
+    // The edges' pages hold their panels whether or not they were closed in the window.
+    expect(fs->pageHolding(histogramDock) == QLatin1String("info") && fs->pageHolding(actionsDock) == QLatin1String("history"), "a closed panel is not on its edge's page in full screen");
+    // A tap of Tab pins them (it acts when let go: held, it peeks).
+    press(canvas, Qt::Key_Tab, Qt::NoModifier);
+    {
+        QKeyEvent up(QEvent::KeyRelease, Qt::Key_Tab, Qt::NoModifier);
+        QApplication::sendEvent(canvas, &up);
+    }
+    expect(fs->isPinned(FullScreenMode::Left), "Tab in full screen did not pin the edges");
     press(canvas, Qt::Key_Tab, Qt::NoModifier);
     pumpEvents(50);
     expect(hide->hidden() == HidePanels::All, "Tab in full screen changed what the standard mode hides");

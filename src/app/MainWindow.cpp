@@ -21,6 +21,7 @@
 #include "ToolOptionsBar.h"
 #include "WelcomeDialog.h"
 #include "FullScreen.h"
+#include "HistoryPanel.h"
 #include "HidePanels.h"
 #include "ToolRing.h"
 #include <QKeyEvent>
@@ -181,6 +182,19 @@ MainWindow::MainWindow() {
     actionsDock_->setWidget(actions);
     addDockWidget(Qt::RightDockWidgetArea, actionsDock_);
     actionsDock_->hide();
+    // History (Window menu), a tab beside Actions as in Photoshop, hidden until asked for; a click on a state steps
+    // there through history.undo and history.redo.
+    historyDock_ = new QDockWidget(tr("History"), this);
+    historyDock_->setObjectName("historyDock");
+    historyDock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+    history_ = new HistoryPanel([this](int steps) {
+        if (steps < 0) runCommand("history.undo", {{"steps", -steps}}, tr("Undo"));
+        else if (steps > 0) runCommand("history.redo", {{"steps", steps}}, tr("Redo"));
+    });
+    historyDock_->setWidget(history_);
+    addDockWidget(Qt::RightDockWidgetArea, historyDock_);
+    tabifyDockWidget(actionsDock_, historyDock_);
+    historyDock_->hide();
     timelineDock_ = new QDockWidget(tr("Timeline"), this);
     timelineDock_->setObjectName("timelineDock");
     timelineDock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
@@ -306,6 +320,8 @@ MainWindow::MainWindow() {
     // The saved state remembers each tab's options bar by name, and only the current tab's is visible when the
     // window closes; restoring it could hide the bar of the tab this launch shows. The current tab owns the bar.
     for (size_t i = 0; i < tabs_.size(); i++) tabs_[i].options->setVisible(int(i) == current_);
+    // Edit > Preferences > Edges: the edges that autohide take their parts from the layout just restored.
+    fullScreen_->applyPreferences();
 }
 
 MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
@@ -378,7 +394,10 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     tabs_.push_back(tab);
     int index = int(tabs_.size()) - 1;
     { QSignalBlocker b(tabBar_); tabBar_->addTab(tab.defaultName); }
-    connect(tab.canvas, &CanvasWidget::cursorMoved, this, [this](QPointF p) { positionLabel_->setText(QStringLiteral("%1, %2").arg(int(std::floor(p.x()))).arg(int(std::floor(p.y())))); });
+    connect(tab.canvas, &CanvasWidget::cursorMoved, this, [this](QPointF p) {
+        positionLabel_->setText(QStringLiteral("%1, %2").arg(int(std::floor(p.x()))).arg(int(std::floor(p.y()))));
+        fullScreen_->pointerMoved(p);   // the bottom edge's Info
+    });
     connect(tab.session, &EditorSession::projectPathChanged, this, &MainWindow::refreshTabTitles);
     connect(tab.session, &EditorSession::titleChanged, this, &MainWindow::refreshTabTitles);
     if (autosave_) watchForRecovery(tab.session);
@@ -459,6 +478,7 @@ void MainWindow::switchTo(int index) {
     adjustStack_->setCurrentWidget(tab.adjustments);
     if (timeline_) timeline_->setSession(session_);
     if (histogram_) histogram_->setSession(session_);
+    if (history_) history_->setSession(session_);
     tab.options->setVisible(!hidePanels_ || !hidePanels_->hidesOptions());   // Tab hid the options bar
     if (fullScreen_) fullScreen_->currentTabChanged();   // in full screen, the options bar goes in the top edge
     // The import bar shows over its own document only.
@@ -797,10 +817,13 @@ void MainWindow::closeEvent(QCloseEvent* e) {
     for (int i = 0; i < int(tabs_.size()); i++) if (i != current_) order.push_back(i);
     for (int i : order) if (!confirmDiscard(i)) { e->ignore(); return; }
     QSettings settings;
-    // In full screen, the layout from before it: the next launch opens the standard window as it was.
+    // In full screen, the layout from before it: the next launch opens the standard window as it was. The autohiding
+    // edges give their parts back to the layout first, so it is the window's own.
     const bool full = fullScreen_ && fullScreen_->active();
+    fullScreen_->suspend();
     settings.setValue("window/geometry", full ? fullScreen_->normalGeometry() : saveGeometry());
     settings.setValue("window/state", full ? fullScreen_->normalState() : hidePanels_->normalState());
+    fullScreen_->resume();
     if (autosave_) autosave_->finish();   // a clean quit leaves nothing to recover
     e->accept();
 }
@@ -816,6 +839,11 @@ void MainWindow::setScreenMode(bool fullScreen) {
 void MainWindow::keyPressEvent(QKeyEvent* e) {
     if (e->key() == Qt::Key_Escape && e->modifiers() == Qt::NoModifier && fullScreen_ && fullScreen_->active()) {
         if (!fullScreen_->closeFlyouts()) setScreenMode(false);
+        e->accept();
+        return;
+    }
+    // The standard window's autohiding edges: Esc slides back the ones out.
+    if (e->key() == Qt::Key_Escape && e->modifiers() == Qt::NoModifier && fullScreen_ && fullScreen_->closeFlyouts()) {
         e->accept();
         return;
     }
@@ -862,18 +890,31 @@ void MainWindow::showPanel(const QString& name) {
     else if (name == "timeline") {
         timelineDock_->show();
         if (session_->hasDocument() && session_->document()->animation.empty()) session_->timelineFramesFromLayers();
-    } else if (name == "fullscreen" || name.startsWith("fullscreen:")) {
-        // Full Screen Mode, for screenshots: no pointer to follow, the slides immediate.
+    } else if (name == "fullscreen" || name.startsWith("fullscreen:") || name.startsWith("edges:")) {
+        // Full Screen Mode, or the standard window with an edge autohiding (for this run), for screenshots: no
+        // pointer to follow, the slides immediate. fullscreen:<edge>[:<page>] and edges:<edge>[:<page>] slide that
+        // edge out on that page (its id, or its number from 1).
         fullScreen_->setPolling(false);
         fullScreen_->setTimings(0, 500);
-        const QString part = name.section(':', 1);
-        if (part == "bottom") showPanel("timeline");   // the bottom edge holds the Timeline when it is open
-        setScreenMode(true);
-        if (part == "left") fullScreen_->showEdge(FullScreenMode::Left);
-        else if (part == "top") fullScreen_->showEdge(FullScreenMode::Top);
-        else if (part == "right") fullScreen_->showEdge(FullScreenMode::Right);
-        else if (part == "bottom") fullScreen_->showEdge(FullScreenMode::Bottom);
-        else if (part == "panels") fullScreen_->togglePinned(true);
+        const bool full = name.startsWith("fullscreen");
+        const QString part = name.section(':', 1, 1), page = name.section(':', 2, 2);
+        const int edge = int(QStringList{"left", "top", "right", "bottom"}.indexOf(part));
+        // The bottom edge's Timeline is there when the document has frames.
+        if (edge == FullScreenMode::Bottom && (page.isEmpty() || page == "timeline" || page == "1") && session_->hasDocument() && session_->document()->animation.empty())
+            session_->timelineFramesFromLayers();
+        if (full) setScreenMode(true);
+        else if (edge >= 0) fullScreen_->setAutohide(FullScreenMode::Edge(edge), true);
+        if (edge >= 0) {
+            const auto e = FullScreenMode::Edge(edge);
+            if (!page.isEmpty()) {
+                bool number = false;
+                const int n = page.toInt(&number);
+                fullScreen_->showPage(e, number ? fullScreen_->pages(e).value(n - 1) : page, false);
+            }
+            fullScreen_->showEdge(e);
+            // Held mid-flip (NEKOPHOTO_EDGE_FLIP_FREEZE): one more page with the edge out.
+            if (qEnvironmentVariableIsSet("NEKOPHOTO_EDGE_FLIP_FREEZE")) fullScreen_->flip(e, 1);
+        } else if (part == "panels") fullScreen_->togglePinned(true);
         else if (part == "menus") fullScreen_->showMenus();
     } else if (name == "batch") {
         if (ActionLibrary::instance().actions().empty()) {

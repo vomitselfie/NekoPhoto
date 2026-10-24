@@ -21,7 +21,7 @@ HidePanels::HidePanels(MainWindow* window) : QObject(window), window_(window) {
     // F7 and the Window menu's panels while they are hidden: the layout comes back, with that panel showing.
     for (QDockWidget* dock : window->findChildren<QDockWidget*>(Qt::FindDirectChildrenOnly))
         connect(dock->toggleViewAction(), &QAction::triggered, this, [this, dock = QPointer<QDockWidget>(dock)](bool checked) {
-            if (!dock || !checked || hidden_ == None || (window_->fullScreen_ && window_->fullScreen_->active())) return;
+            if (!dock || !checked || hidden_ == None || (window_->fullScreen_ && (window_->fullScreen_->active() || window_->fullScreen_->edgeHolding(dock) >= 0))) return;
             set(None);
             dock->show();
             dock->raise();
@@ -35,12 +35,16 @@ HidePanels::~HidePanels() { qApp->removeEventFilter(this); }
 
 void HidePanels::set(Hidden h) {
     if (h == hidden_) return;
+    // The edges that autohide give their parts back meanwhile: the layout kept and restored is the window's own.
+    FullScreenMode* edges = window_->fullScreen_;
+    if (edges) edges->suspend();
     if (hidden_ != None) restore();
     hidden_ = h;
     if (h != None) {
         saved_ = window_->saveState();
         hideNow();
     }
+    if (edges) edges->resume();
 }
 
 bool HidePanels::hidesOptions() const {
@@ -50,13 +54,18 @@ bool HidePanels::hidesOptions() const {
 QByteArray HidePanels::normalState() const { return hidden_ != None ? saved_ : window_->saveState(); }
 
 void HidePanels::beforeFullScreen() {
-    if (hidden_ != None) restore();
+    if (hidden_ == None) return;
+    window_->fullScreen_->suspend();
+    restore();
+    window_->fullScreen_->resume();
 }
 
 void HidePanels::afterFullScreen() {
     if (hidden_ == None) return;
+    window_->fullScreen_->suspend();
     saved_ = window_->saveState();
     hideNow();
+    window_->fullScreen_->resume();
 }
 
 void HidePanels::restore() {

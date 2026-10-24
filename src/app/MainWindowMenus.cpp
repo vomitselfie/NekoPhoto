@@ -320,9 +320,11 @@ void MainWindow::updateColorSwatches() {
     if (session_->paintsMask()) {
         auto grey = [](const QColor& c) { const double g = EditorSession::maskGrey(c); return QColor::fromRgbF(float(g), float(g), float(g)); };
         swatches_->setColors(grey(session_->foregroundColor), grey(session_->backgroundColor));
+        if (fullScreen_) fullScreen_->coloursChanged();
         return;
     }
     swatches_->setColors(color::displayColor(session_->foregroundColor, profile), color::displayColor(session_->backgroundColor, profile));
+    if (fullScreen_) fullScreen_->coloursChanged();   // the left edge's Colour page, the recent colours
 }
 
 void MainWindow::chooseColor(bool background) {
@@ -1164,6 +1166,18 @@ void MainWindow::buildMenus() {
                             if (!fullScreen_->active()) return QJsonObject{{"panels", hidePanels_->hidden() != HidePanels::None ? "all" : "hiddenRight"}};
                             return QJsonObject{{"panels", fullScreen_->pinnedAll(false) ? "hidden" : "exceptTools"}};
                         }));
+    // The edges' pages (FullScreen.h, EdgePages.h): while an edge is out, Tab and Shift+Tab flip it. Their keys work
+    // only then (keyContext), so Tab keeps Show or Hide Panels otherwise; Edit > Keyboard Shortcuts can change them.
+    for (int step : {1, -1}) {
+        Command c;
+        c.id = step > 0 ? QStringLiteral("view.edgePage.next") : QStringLiteral("view.edgePage.previous");
+        c.label = step > 0 ? tr("Next Edge Page") : tr("Previous Edge Page");
+        c.shortcuts = {step > 0 ? QKeySequence(Qt::Key_Tab) : QKeySequence(Qt::SHIFT | Qt::Key_Tab)};
+        c.keyContext = tr("while an edge is out");
+        c.run = [this, step] { if (const int edge = fullScreen_->flipTarget(); edge >= 0) fullScreen_->flip(FullScreenMode::Edge(edge), step); };
+        c.unavailable = [this] { return fullScreen_->flipTarget() >= 0 ? QString() : tr("No edge is out"); };
+        reg.add(nullptr, std::move(c));
+    }
     // F10 opens the menus (in full screen over the canvas, the menu bar showing while one is open).
     add(nullptr, Spec("view.showMenus", tr("Show Menus"), {QKeySequence(Qt::Key_F10)}).runs([this] { fullScreen_->showMenus(); }));
     // View > Tool Ring (Alt+D) and the tool option steps its rings run (ToolRing.h).
@@ -1233,6 +1247,8 @@ void MainWindow::buildMenus() {
     histogramDock_->toggleViewAction()->setText(tr("&Histogram"));
     reg.adopt(window, histogramDock_->toggleViewAction(), Spec("window.histogram", histogramDock_->toggleViewAction()->text()).command);
     window->addAction(pathsDock_->toggleViewAction());
+    historyDock_->toggleViewAction()->setText(tr("Histo&ry"));
+    reg.adopt(window, historyDock_->toggleViewAction(), Spec("window.history", historyDock_->toggleViewAction()->text()).command);
     timelineDock_->toggleViewAction()->setText(tr("&Timeline"));
     reg.adopt(window, timelineDock_->toggleViewAction(), Spec("window.timeline", timelineDock_->toggleViewAction()->text()).command);
 
