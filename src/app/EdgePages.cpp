@@ -1,5 +1,6 @@
 // The edges' pages: see EdgePages.h.
 #include "EdgePages.h"
+#include "Motion.h"
 #include <QApplication>
 #include <QEasingCurve>
 #include <QLinearGradient>
@@ -90,6 +91,8 @@ PageStrip::PageStrip(QWidget* parent) : QWidget(parent) {
     flash_->setDuration(700);
     flash_->setEasingCurve(QEasingCurve::OutQuad);
     connect(flash_, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) { glow_ = v.toDouble(); update(); });
+    slide_ = new motion::Tween(this, [this] { update(); });
+    slide_->jump(1);
 }
 
 QColor PageStrip::accent() const { return accent_.isValid() ? accent_ : palette().color(QPalette::Highlight); }
@@ -103,16 +106,35 @@ QColor PageStrip::idle() const {
 
 void PageStrip::setPages(const QStringList& labels, int current) {
     const bool changed = labels != labels_;
+    const int now = std::clamp(current, 0, std::max(0, int(labels.size()) - 1));
+    // Another page of the same ones: the pill slides over to it from where it is drawn.
+    if (!changed && now != current_ && isVisible() && !motion::instant() && !edges::reduceMotion()) {
+        slideFrom_ = pillRect();
+        current_ = now;
+        slide_->run(0, 1, motion::stripMs);
+    } else {
+        current_ = now;
+        slide_->jump(1);
+    }
     labels_ = labels;
-    current_ = std::clamp(current, 0, std::max(0, int(labels.size()) - 1));
     if (changed) updateGeometry();
     update();
+}
+
+bool PageStrip::sliding() const { return slide_->running(); }
+
+QRectF PageStrip::pillRect() const {
+    const QRectF to = QRectF(itemRect(current_)).adjusted(0.5, 0.5, -0.5, -0.5);
+    if (!slide_->running() || slideFrom_.isNull()) return to;
+    const double e = motion::easeOut(slide_->value());
+    return {motion::lerp(slideFrom_.left(), to.left(), e), motion::lerp(slideFrom_.top(), to.top(), e),
+            motion::lerp(slideFrom_.width(), to.width(), e), motion::lerp(slideFrom_.height(), to.height(), e)};
 }
 
 void PageStrip::flash() {
     flash_->stop();
     glow_ = 1;
-    flash_->start();
+    motion::start(flash_);
 }
 
 QSize PageStrip::sizeHint() const {
@@ -171,8 +193,10 @@ void PageStrip::paintEvent(QPaintEvent*) {
         // The dots in a row, the current page's label under them.
         for (int i = 0; i < labels_.size(); i++) {
             const QRect r = itemRect(i);
-            fillDot(QPointF(r.center().x() + 0.5, 3 + dot / 2.0), i == current_);
+            fillDot(QPointF(r.center().x() + 0.5, 3 + dot / 2.0), false);
         }
+        // The lit dot, sliding over to the new page.
+        fillDot(QPointF(pillRect().center().x() + 0.5, 3 + dot / 2.0), true);
         QColor text = lit;
         if (glow_ > 0) text = QColor::fromRgbF(float(lit.redF() + (1 - lit.redF()) * glow_ * 0.6), float(lit.greenF() + (1 - lit.greenF()) * glow_ * 0.6), float(lit.blueF() + (1 - lit.blueF()) * glow_ * 0.6));
         p.setFont(bold);
@@ -181,48 +205,59 @@ void PageStrip::paintEvent(QPaintEvent*) {
         p.drawText(line, Qt::AlignHCenter | Qt::AlignTop, QFontMetrics(bold).elidedText(labels_[current_], Qt::ElideRight, width() - 2));
         return;
     }
-    for (int i = 0; i < labels_.size(); i++) {
-        const QRect r = itemRect(i);
-        const bool current = i == current_;
-        if (current) {
-            // The current page: a pill, glowing for a moment after a flip.
-            const QRectF pill = QRectF(r).adjusted(0.5, 0.5, -0.5, -0.5);
-            if (glow_ > 0) {
-                QColor halo = lit;
-                for (int ring = 3; ring >= 1; ring--) {
-                    halo.setAlphaF(float(0.18 * glow_ / ring));
-                    QPainterPath path;
-                    path.addRoundedRect(pill.adjusted(-ring * 1.5, -ring, ring * 1.5, ring), pill.height() / 2 + ring, pill.height() / 2 + ring);
-                    p.fillPath(path, halo);
-                }
-            }
+    // The current page: a pill (sliding over to it after a flip), glowing for a moment after one. The labels under it
+    // are drawn again in the pill's text colour, clipped to it, so a label changes colour as the pill passes.
+    const QRectF pill = pillRect();
+    QPainterPath pillPath;
+    pillPath.addRoundedRect(pill, pill.height() / 2, pill.height() / 2);
+    if (glow_ > 0) {
+        QColor halo = lit;
+        for (int ring = 3; ring >= 1; ring--) {
+            halo.setAlphaF(float(0.18 * glow_ / ring));
             QPainterPath path;
-            path.addRoundedRect(pill, pill.height() / 2, pill.height() / 2);
-            if (candy_) {
-                QLinearGradient g(pill.topLeft(), pill.topRight());
-                g.setColorAt(0, dim.isValid() ? QColor(dim.red(), dim.green(), dim.blue()) : lit);
-                g.setColorAt(1, lit);
-                p.fillPath(path, g);
-            } else {
-                p.fillPath(path, lit);
-            }
-            if (glow_ > 0) {
-                QColor shine(255, 255, 255);
-                shine.setAlphaF(float(0.35 * glow_));
-                p.fillPath(path, shine);
-            }
+            path.addRoundedRect(pill.adjusted(-ring * 1.5, -ring, ring * 1.5, ring), pill.height() / 2 + ring, pill.height() / 2 + ring);
+            p.fillPath(path, halo);
         }
-        const int x = r.left() + 4;
-        fillDot(QPointF(x + dot / 2.0, height() / 2.0), false);
-        if (current) {
-            p.setPen(Qt::NoPen);
-            p.setBrush(onLit);
-            p.drawEllipse(QPointF(x + dot / 2.0, height() / 2.0), dot / 2.0, dot / 2.0);
-        }
-        p.setFont(current ? bold : small);
-        p.setPen(current ? onLit : dim);
-        p.drawText(QRect(x + dot + gap, 0, r.right() - x - dot - gap + 1, height()), Qt::AlignVCenter | Qt::AlignLeft, labels_[i]);
     }
+    if (candy_) {
+        QLinearGradient g(pill.topLeft(), pill.topRight());
+        g.setColorAt(0, dim.isValid() ? QColor(dim.red(), dim.green(), dim.blue()) : lit);
+        g.setColorAt(1, lit);
+        p.fillPath(pillPath, g);
+    } else {
+        p.fillPath(pillPath, lit);
+    }
+    if (glow_ > 0) {
+        QColor shine(255, 255, 255);
+        shine.setAlphaF(float(0.35 * glow_));
+        p.fillPath(pillPath, shine);
+    }
+    auto labels = [&](bool onPill) {
+        for (int i = 0; i < labels_.size(); i++) {
+            const QRect r = itemRect(i);
+            const int x = r.left() + 4;
+            if (onPill) {
+                p.setPen(Qt::NoPen);
+                p.setBrush(onLit);
+                p.drawEllipse(QPointF(x + dot / 2.0, height() / 2.0), dot / 2.0, dot / 2.0);
+            } else {
+                fillDot(QPointF(x + dot / 2.0, height() / 2.0), false);
+            }
+            p.setFont(i == current_ ? bold : small);
+            p.setPen(onPill ? onLit : dim);
+            p.drawText(QRect(x + dot + gap, 0, r.right() - x - dot - gap + 1, height()), Qt::AlignVCenter | Qt::AlignLeft, labels_[i]);
+        }
+    };
+    QPainterPath all;
+    all.addRect(QRectF(rect()));
+    p.save();
+    p.setClipPath(all - pillPath);
+    labels(false);
+    p.restore();
+    p.save();
+    p.setClipPath(pillPath);
+    labels(true);
+    p.restore();
 }
 
 void PageStrip::wheelEvent(QWheelEvent* e) {
@@ -245,7 +280,7 @@ void PageStrip::mousePressEvent(QMouseEvent* e) {
 // ---- PageDeck -------------------------------------------------------------------------------------------------
 
 namespace {
-int flipMs = -1;          // -1: 180 ms, or 90 with Reduce motion
+int flipMs = -1;          // -1: Motion.h's (a crossfade with Reduce motion)
 double flipFreeze = -2;   // -2: not read from the environment yet; < 0 off
 
 double freezeAt() {
@@ -254,7 +289,7 @@ double freezeAt() {
         const double v = qEnvironmentVariable("NEKOPHOTO_EDGE_FLIP_FREEZE").toDouble(&ok);
         flipFreeze = ok && v >= 0 && v <= 1 ? v : -1;
     }
-    return flipFreeze;
+    return flipFreeze >= 0 ? flipFreeze : motion::freeze();
 }
 } // namespace
 
@@ -284,7 +319,7 @@ public:
         fade_ = edges::reduceMotion();
         setGeometry(deck_->rect());
         raise();
-        const int ms = flipMs >= 0 ? flipMs : fade_ ? 90 : 180;
+        const int ms = flipMs >= 0 ? flipMs : motion::instant() ? 0 : fade_ ? motion::flipFadeMs : motion::flipMs;
         if (const double frozen = freezeAt(); frozen >= 0) {
             // Held part-way, for a screenshot of the motion.
             t_ = frozen;
@@ -296,7 +331,7 @@ public:
         t_ = 0;
         show();
         anim_->setDuration(ms);
-        anim_->start();
+        motion::start(anim_);
     }
     void finish() {
         anim_->stop();
@@ -340,19 +375,31 @@ protected:
         }
         const double rise = forwards_ ? t : 1 - t;   // 1: the card underneath is up, in place
         const double out = forwards_ ? t : 1 - t;    // 1: the card on top is all the way into the edge
-        drawCard(p, under, 0.94 + 0.06 * rise, QPointF(0, 0), 0.55 * (1 - rise), false, toward);
-        if (out < 1) drawCard(p, over, 1.0, toward * (out * length), 0, true, toward);
+        // Forwards the new page underneath lifts into place on a soft shadow that settles as it arrives, while the old
+        // one on top dims and settles back a little as it goes; backwards the old page underneath sinks and the new
+        // one comes out over it, growing the last little way to its size.
+        const double lift = forwards_ ? std::sin(M_PI * rise) : 0;
+        drawCard(p, under, 0.94 + 0.06 * rise, QPointF(0, 0), 0.55 * (1 - rise), false, toward, lift);
+        if (out < 1) drawCard(p, over, 1.0 - 0.035 * out, toward * (out * length), forwards_ ? 0.3 * out : 0, true, toward);
     }
 
 private:
     /// A page's picture as a card: scaled about its centre, moved by `offset`, darkened by `shade`, with a soft shadow
     /// on the side away from the edge when it is the one in motion on top.
-    void drawCard(QPainter& p, const QPixmap& pix, double scale, QPointF offset, double shade, bool shadow, QPointF toward) {
+    void drawCard(QPainter& p, const QPixmap& pix, double scale, QPointF offset, double shade, bool shadow, QPointF toward, double lift = 0) {
         if (pix.isNull()) return;
         const QSizeF size = pix.deviceIndependentSize();
         QRectF card(QPointF(0, 0), size * scale);
         card.moveCenter(QPointF(size.width() / 2, size.height() / 2) + offset);
         const double radius = 10;
+        if (lift > 0.01) {
+            // Lifting: a soft shadow all round, a little lower than the card.
+            for (int i = 8; i >= 1; i--) {
+                QPainterPath ring;
+                ring.addRoundedRect(card.adjusted(-i, -i + 3, i, i + 3), (radius + i) * scale, (radius + i) * scale);
+                p.fillPath(ring, QColor(0, 0, 0, int(std::lround(9 * lift))));
+            }
+        }
         if (shadow) {
             // The trailing side, away from the edge it slides into.
             const double depth = 14;

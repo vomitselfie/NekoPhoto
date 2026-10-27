@@ -10,6 +10,8 @@
 #include "EdgePages.h"
 #include "HidePanels.h"
 #include "MainWindow.h"
+#include "Motion.h"
+#include "Theme.h"
 #include "ToolOptionsBar.h"
 #include <QApplication>
 #include <QBoxLayout>
@@ -84,8 +86,17 @@ Flyout::Flyout(Qt::Edge edge, QWidget* parent) : QWidget(parent), edge_(edge) {
     setObjectName(QString::fromLatin1(names[index]));
     body_ = new QBoxLayout(QBoxLayout::TopToBottom, this);
     body_->setSpacing(0);
+    // Away from Goth Kitty (whose stylesheet sets its own), a faint shadow and barely rounded corners.
+    if (themeSetting() != QLatin1String("gothkitty")) { shadow_ = 6; radius_ = 4; }
     updateMargins();
     hide();
+}
+
+void Flyout::setReveal(double reveal) {
+    reveal = std::clamp(reveal, 0.0, 1.0);
+    if (reveal == reveal_ || (std::abs(reveal - reveal_) < 1e-3 && reveal > 0 && reveal < 1)) return;
+    reveal_ = reveal;
+    if (shadow_ > 0) update();
 }
 
 void Flyout::setShadow(int s) {
@@ -129,11 +140,13 @@ void Flyout::paintEvent(QPaintEvent*) {
     case Qt::TopEdge: card.setTop(card.top() - r - 2); break;
     case Qt::BottomEdge: card.setBottom(card.bottom() + r + 2); break;
     }
-    // A soft shadow: rings fading outwards, darkest at the card.
-    for (int i = shadow_; i >= 1; i--) {
+    // A soft shadow: rings fading outwards, darkest at the card, deepening as the card comes out (a faint one at
+    // first, as if it lifted off the canvas).
+    const int step = int(std::lround(7 * (0.35 + 0.65 * motion::easeOut(reveal_))));
+    for (int i = shadow_; i >= 1 && step > 0; i--) {
         QPainterPath ring;
         ring.addRoundedRect(card.adjusted(-i, -i + 1, i, i + 1), r + i, r + i);
-        p.fillPath(ring, QColor(0, 0, 0, 7));
+        p.fillPath(ring, QColor(0, 0, 0, step));
     }
     QPainterPath shape;
     shape.addRoundedRect(card, r, r);
@@ -166,9 +179,13 @@ FullScreenMode::FullScreenMode(MainWindow* window) : QObject(window), window_(wi
             if (shown >= 0 && shown < ids.size()) showPage(edge, ids[shown]);
         });
         s.slide = new QVariantAnimation(this);
-        s.slide->setEasingCurve(QEasingCurve::OutCubic);
+        s.slide->setStartValue(0.0);
+        s.slide->setEndValue(1.0);
         connect(s.slide, &QVariantAnimation::valueChanged, this, [this, i](const QVariant& v) {
-            edges_[size_t(i)].progress = v.toDouble();
+            // Linear over the delay and the slide: the delay holds it where it was, the slide eases out.
+            EdgeState& e = edges_[size_t(i)];
+            const double at = v.toDouble() * (e.slideDelay + e.slideLength);
+            e.progress = motion::lerp(e.slideFrom, e.slideTo, motion::easeOut(motion::window(at, e.slideDelay, e.slideLength)));
             relayout();
         });
         connect(s.slide, &QVariantAnimation::finished, this, [this, i] {
@@ -939,6 +956,7 @@ void FullScreenMode::relayout() {
         case Bottom: r.moveTop(a.bottom() + 1 - int(std::lround(s.progress * r.height()))); break;
         }
         if (s.flyout->geometry() != r) s.flyout->setGeometry(r);
+        s.flyout->setReveal(s.progress);
         // In the standard window the part past the canvas's area (over the document tabs, a dock) is not drawn; the top
         // row may lie over the panels' column, not over the tabs.
         const QRect allowed = !active_ && edge == Top ? QRect(0, a.top(), window_->width(), a.height()) : a;
@@ -949,11 +967,11 @@ void FullScreenMode::relayout() {
     if (menuStrip_ && menuStrip_->isVisible()) menuStrip_->setGeometry(0, 0, window_->width(), menuStrip_->sizeHint().height());
 }
 
-void FullScreenMode::slide(Edge edge, bool out) {
+void FullScreenMode::slide(Edge edge, bool out, int delayMs) {
     EdgeState& s = edges_[size_t(edge)];
     if (out && !hasContent(edge)) return;
     if (!out) s.peeked = false;
-    if (s.target == out && (s.slide->state() == QAbstractAnimation::Running || s.progress == (out ? 1.0 : 0.0))) return;
+    if (s.target == out && (motion::running(s.slide) || s.progress == (out ? 1.0 : 0.0))) return;
     s.target = out;
     s.closeTimer->stop();
     s.dwell->stop();
@@ -972,17 +990,21 @@ void FullScreenMode::slide(Edge edge, bool out) {
     }
     s.slide->stop();
     const double to = out ? 1.0 : 0.0;
-    const int ms = reduceMotion_ ? std::min(slideMs_, 60) : slideMs_;
+    // Reduce motion (and the instant hook): there at once.
+    const int ms = slideMs_ >= 0 ? slideMs_ : reduceMotion_ || motion::instant() ? 0 : motion::slideMs;
     if (ms == 0 || std::abs(to - s.progress) < 1e-6) {
         s.progress = to;
         if (!out) s.flyout->hide();
         relayout();
         return;
     }
-    s.slide->setStartValue(s.progress);
-    s.slide->setEndValue(to);
-    s.slide->setDuration(std::max(1, int(std::lround(ms * std::abs(to - s.progress)))));
-    s.slide->start();
+    // From where it is (turning round mid-slide), the time scaled by how far it has to go.
+    s.slideFrom = s.progress;
+    s.slideTo = to;
+    s.slideDelay = reduceMotion_ ? 0 : std::max(0, delayMs);
+    s.slideLength = std::max(1, int(std::lround(ms * std::abs(to - s.progress))));
+    s.slide->setDuration(s.slideDelay + s.slideLength);
+    motion::start(s.slide);
 }
 
 void FullScreenMode::moveFocusOut(Edge edge) {
@@ -1017,12 +1039,15 @@ void FullScreenMode::pin(bool on, bool withTools) {
 
 void FullScreenMode::peek(bool on, bool withTools) {
     peeking_ = on;
+    // Out one after another, left, top, right, bottom (a little apart); back all together.
+    int stagger = 0;
     for (int i = 0; i < edgeCount; i++) {
         EdgeState& s = edges_[size_t(i)];
         if (!s.claimed) continue;
         if (on) {
             if ((!withTools && i == Left) || s.target || !hasContent(Edge(i))) continue;
-            slide(Edge(i), true);
+            slide(Edge(i), true, stagger);
+            stagger += motion::peekStaggerMs;
             s.peeked = true;
         } else if (s.peeked) {
             // Let go: they slide back at once, but the one the pointer is in.

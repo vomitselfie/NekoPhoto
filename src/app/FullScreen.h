@@ -44,7 +44,8 @@ class InfoPanel;
 class EditorSession;
 
 /// One edge's slide-out panel: a card flush with the edge, its inner corners rounded and a soft shadow on its inner
-/// sides when the theme asks (Goth Kitty's stylesheet sets cornerRadius and shadow; other themes leave them 0).
+/// sides (Goth Kitty's stylesheet sets a deep one, rounder; the other themes have a faint one), the shadow growing as
+/// the flyout comes out.
 class Flyout : public QWidget {
     Q_OBJECT
     Q_PROPERTY(int cornerRadius READ cornerRadius WRITE setCornerRadius)
@@ -65,6 +66,9 @@ public:
     void setBorder(const QColor& c) { border_ = c; update(); }
     /// The card without its shadow, in the flyout's own coordinates.
     QRect cardRect() const;
+    /// How far it is out (0..1): the shadow deepens with it.
+    void setReveal(double reveal);
+    double reveal() const { return reveal_; }
 protected:
     void paintEvent(QPaintEvent*) override;
 private:
@@ -72,6 +76,7 @@ private:
     Qt::Edge edge_;
     QBoxLayout* body_;
     int radius_ = 0, shadow_ = 0;
+    double reveal_ = 1;
     QColor fill_, border_;
 };
 
@@ -171,10 +176,10 @@ public:
     void coloursChanged();
     void pointerMoved(QPointF documentPoint);
 
-    // For tests: how long a slide takes, how long a flyout waits once the pointer has left it, and how long the
+    // For tests: how long a slide takes (-1: Motion.h's, none with Reduce motion), how long a flyout waits once the pointer has left it, and how long the
     // pointer must rest in a hot zone of the standard window (ms); how long Tab is held before it peeks; whether the
     // pointer's position is polled (besides the pointer's events); how wide the hot zones are (logical px).
-    void setTimings(int slideMs, int closeDelayMs, int dwellMs = 0) { slideMs_ = std::max(0, slideMs); closeDelayMs_ = std::max(0, closeDelayMs); dwellMs_ = std::max(0, dwellMs); }
+    void setTimings(int slideMs, int closeDelayMs, int dwellMs = 0) { slideMs_ = std::max(-1, slideMs); closeDelayMs_ = std::max(0, closeDelayMs); dwellMs_ = std::max(0, dwellMs); }
     void setHoldDelay(int ms) { holdMs_ = std::max(1, ms); }
     void setPolling(bool on) { polling_ = on; }
     int hotZone() const { return zone_; }
@@ -207,7 +212,9 @@ private:
         PageDeck* deck = nullptr;
         std::vector<Page> pages;
         int current = 0;
-        QVariantAnimation* slide = nullptr;
+        QVariantAnimation* slide = nullptr;   // 0..1 over the delay and the slide; `progress` follows it eased
+        double slideFrom = 0, slideTo = 0;
+        int slideDelay = 0, slideLength = 0;
         QTimer* closeTimer = nullptr;
         QTimer* dwell = nullptr;
         double progress = 0;   // 0 hidden, 1 out
@@ -242,7 +249,8 @@ private:
     void refreshPagesLater();
     void followWindow(const QString& kind);
     int pageLength(Edge edge) const;
-    void slide(Edge edge, bool out);
+    /// Slides `edge` out or back, from where it is; `delayMs` first (hold Tab's stagger).
+    void slide(Edge edge, bool out, int delayMs = 0);
     void relayout();
     void pointerAt(QPoint windowPosition);
     void evaluate();
@@ -286,7 +294,7 @@ private:
     Qt::MouseButtons buttons_;    // the buttons held, from the pointer's events
     bool tabletDown_ = false;
     bool altArmed_ = false;
-    int slideMs_ = 150, closeDelayMs_ = 500, dwellMs_ = 140, holdMs_ = 250, zone_ = 4;
+    int slideMs_ = -1, closeDelayMs_ = 500, dwellMs_ = 140, holdMs_ = 250, zone_ = 4;
     bool polling_ = true;
     bool reduceMotion_ = false;
     quint64 openCount_ = 0;

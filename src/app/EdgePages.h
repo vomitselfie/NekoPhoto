@@ -20,6 +20,8 @@ class QVariantAnimation;
 
 namespace app {
 
+namespace motion { class Tween; }
+
 namespace edges {
 
 /// The edges, as FullScreenMode numbers them.
@@ -32,7 +34,8 @@ const char* key(int edge);
 /// hides it, the canvas taking the window, until the pointer reaches the edge (`edges/<edge>/autohide`).
 bool autohide(int edge);
 void setAutohide(int edge, bool on);
-/// Reduce motion (`edges/reduceMotion`): a flip crossfades, and the edges slide out and back faster.
+/// Reduce motion (`edges/reduceMotion`): a flip crossfades, the edges come out and go back at once, and the rings and
+/// the Layer Picker fade instead of moving (Motion.h).
 bool reduceMotion();
 void setReduceMotion(bool on);
 /// The page an edge was on when it was last used (`edges/<edge>/page`), by its id; empty for the first.
@@ -52,9 +55,9 @@ Notifier* notifier();
 
 } // namespace edges
 
-/// The row of page names along a flyout's inner side: a dot and a short label for each page, the current one lit. Too
-/// narrow for the labels (the tool rail), only the dots, with the current page's label under them. The wheel over it,
-/// or a click on a page, flips the edge.
+/// The row of page names along a flyout's inner side: a dot and a short label for each page, the current one lit (its
+/// pill sliding over to the new page at a flip). Too narrow for the labels (the tool rail), only the dots, with the
+/// current page's label under them. The wheel over it, or a click on a page, flips the edge.
 class PageStrip : public QWidget {
     Q_OBJECT
     Q_PROPERTY(QColor accent READ accent WRITE setAccent)
@@ -67,6 +70,9 @@ public:
     QStringList labels() const { return labels_; }
     /// The label of the page just flipped to glows for a moment.
     void flash();
+    /// Whether the pill is sliding to the current page (for tests), and where it is drawn now.
+    bool sliding() const;
+    QRectF pillRect() const;
     /// Whether the labels fit beside each other (otherwise only the dots, and the current label under them).
     bool compact() const;
     QColor accent() const;
@@ -93,6 +99,8 @@ private:
     QRect itemRect(int index) const;
     QStringList labels_;
     int current_ = 0;
+    QRectF slideFrom_;
+    motion::Tween* slide_ = nullptr;
     int wheel_ = 0;
     double glow_ = 0;
     QVariantAnimation* flash_ = nullptr;
@@ -113,8 +121,9 @@ public:
     int current() const { return current_; }
     /// Shows page `index` at once.
     void setCurrent(int index);
-    /// Shows page `index` with the flip (forwards: the old page slides into the edge and the new one rises from under
-    /// it; backwards: the new one comes out of the edge over the old one, which sinks). `relayout` runs between
+    /// Shows page `index` with the flip (forwards: the old page slides into the edge, dimming and settling back, as the
+    /// new one rises from under it, lifting on a soft shadow; backwards: the new one comes out of the edge over the old
+    /// one, which sinks). `relayout` runs between
     /// taking the old picture and the new one, for the flyout to take the new page's size.
     void flip(int index, bool forwards, const std::function<void()>& relayout);
     /// Whether a flip's animation is running, and how far along (0..1, eased).
