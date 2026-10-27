@@ -4,6 +4,7 @@
 #include "CommandRegistry.h"
 #include "ImageConvert.h"
 #include "MainWindow.h"
+#include "Motion.h"
 #include "Names.h"
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -46,29 +47,82 @@ QPixmap thumbnailFor(const Layer& layer, double dpr) {
 
 // ---- The overlay --------------------------------------------------------------------------------
 
-LayerPickerOverlay::LayerPickerOverlay(QWidget* parent) : QWidget(parent) {
-    // Never in the way: the mouse goes through it to the canvas, and it never takes the keyboard.
-    setAttribute(Qt::WA_TransparentForMouseEvents);
-    setAttribute(Qt::WA_ShowWithoutActivating);
-    setAttribute(Qt::WA_NoMousePropagation);
-    setFocusPolicy(Qt::NoFocus);
+LayerPickerOverlay::LayerPickerOverlay(QWidget* parent) : RingOverlay(parent) {
     setObjectName(QStringLiteral("layerPicker"));
     resize(preferredSize());
-    hide();
-    captionTimer_.setSingleShot(true);
-    connect(&captionTimer_, &QTimer::timeout, this, [this] { caption_.clear(); update(); });
+    bar_ = new motion::Tween(this, [this] { update(); });
+    bar_->jump(1);
+    scroll_ = new motion::Tween(this, [this] { update(); });
+    scroll_->jump(1);
 }
+
+int LayerPickerOverlay::activeIndex() const {
+    const auto active = std::find_if(entries_.begin(), entries_.end(), [](const Entry& e) { return e.active; });
+    return active == entries_.end() ? -1 : int(active - entries_.begin());
+}
+
+double LayerPickerOverlay::shownBar() const {
+    if (!bar_->running() || barFrom_ < 0 || barTo_ < 0) return barTo_ >= 0 ? barTo_ : barFrom_;
+    return motion::lerp(barFrom_, barTo_, motion::easeOut(bar_->value()));
+}
+
+double LayerPickerOverlay::shownFirst() const {
+    if (!scroll_->running()) return firstTo_;
+    return motion::lerp(firstFrom_, firstTo_, motion::easeOut(scroll_->value()));
+}
+
+double LayerPickerOverlay::highlightRow() const { return shownBar(); }
+bool LayerPickerOverlay::scrolling() const { return scroll_->running(); }
 
 void LayerPickerOverlay::setEntries(std::vector<Entry> entries, const QString& empty) {
+    // The same rows with another lit (a step): the bar glides there and the column scrolls after it. Other rows (an
+    // undo took one away, it opened again): in place at once.
+    bool sameRows = entries.size() == entries_.size();
+    for (size_t i = 0; sameRows && i < entries.size(); ++i) sameRows = entries[i].name == entries_[i].name;
+    const double barNow = shownBar(), firstNow = shownFirst();
     entries_ = std::move(entries);
     empty_ = empty;
+    const int active = activeIndex(), first = firstShown();
+    if (sameRows && animates()) {
+        if (active != barTo_) {
+            barFrom_ = barNow;
+            barTo_ = active;
+            bar_->run(0, 1, motion::glideMs);
+        }
+        if (first != firstTo_) {
+            firstFrom_ = firstNow;
+            firstTo_ = first;
+            scroll_->run(0, 1, motion::glideMs);
+        }
+    } else {
+        barFrom_ = barTo_ = active;
+        firstFrom_ = firstTo_ = first;
+        bar_->jump(1);
+        scroll_->jump(1);
+    }
     update();
 }
 
-void LayerPickerOverlay::showCaption(const QString& text) {
-    caption_ = text;
-    captionTimer_.start(text.size() > 40 ? 3200 : 1800);
-    update();
+void LayerPickerOverlay::settleOn(int index) {
+    if (activeIndex() == index) { dismiss(false); return; }
+    std::vector<Entry> entries = entries_;
+    for (size_t i = 0; i < entries.size(); ++i) entries[i].active = int(i) == index;
+    setEntries(std::move(entries), empty_);
+    // The bar back in place first, then the fade.
+    dismiss(false, bar_->running() || scroll_->running() ? motion::glideMs : 0);
+}
+
+void LayerPickerOverlay::finishMotion() {
+    RingOverlay::finishMotion();
+    bar_->finish();
+    scroll_->finish();
+}
+
+void LayerPickerOverlay::hidden() {
+    bar_->jump(1);
+    scroll_->jump(1);
+    barFrom_ = barTo_;
+    firstFrom_ = firstTo_;
 }
 
 int LayerPickerOverlay::shownCount() const { return std::max(1, std::min(int(entries_.size()), maxRows)); }
@@ -76,8 +130,7 @@ int LayerPickerOverlay::shownCount() const { return std::max(1, std::min(int(ent
 int LayerPickerOverlay::firstShown() const {
     const int count = int(entries_.size());
     if (count <= maxRows) return 0;
-    const auto active = std::find_if(entries_.begin(), entries_.end(), [](const Entry& e) { return e.active; });
-    const int at = active == entries_.end() ? 0 : int(active - entries_.begin());
+    const int at = std::max(0, activeIndex());
     return std::clamp(at - maxRows / 2, 0, count - maxRows);
 }
 
@@ -97,6 +150,8 @@ void LayerPickerOverlay::paintEvent(QPaintEvent*) {
     const QColor fill = pal.color(QPalette::Window), text = pal.color(QPalette::WindowText);
     const QColor accent = pal.color(QPalette::Highlight), onAccent = pal.color(QPalette::HighlightedText), line = pal.color(QPalette::Link);
     const QRectF panel(0.5, 0.5, width() - 1, hintHeight * 2 + shownCount() * rowHeight + 8 - 1);
+    // Popping open as the rings do, about the panel's middle (no overshoot: the panel fills the widget).
+    applyPop(p, panel.center(), false);
     p.setPen(QPen(withAlpha(line, 0.7), 1.2));
     p.setBrush(withAlpha(fill, 0.86));
     p.drawRoundedRect(panel, 9, 9);
@@ -135,15 +190,29 @@ void LayerPickerOverlay::paintEvent(QPaintEvent*) {
         p.setPen(withAlpha(text, 0.8));
         p.drawText(QRectF(4, 4 + hintHeight, width() - 8, rowHeight), Qt::AlignCenter, empty_);
     }
-    const int first = firstShown();
-    for (int i = first; i < first + shownCount() && i < int(entries_.size()); ++i) {
+    // The column, scrolled to `top` (a fraction of a row while it scrolls), clipped to its rows.
+    const double top = shownFirst();
+    const QRectF column(4, 4 + hintHeight, width() - 8, shownCount() * rowHeight);
+    auto rowRect = [&](double index) { return QRectF(column.left(), column.top() + (index - top) * rowHeight, column.width(), rowHeight).adjusted(2, 2, -2, -2); };
+    p.save();
+    p.setClipRect(column.adjusted(0, -1, 0, 1));
+    // The lit bar, gliding from row to row (fading in or out when it comes from or goes to no row).
+    const double bar = shownBar();
+    if (bar >= 0) {
+        double opacity = 1;
+        if (bar_->running() && barFrom_ < 0) opacity = motion::easeOut(bar_->value());
+        else if (bar_->running() && barTo_ < 0) opacity = 1 - motion::easeOut(bar_->value());
+        p.save();
+        p.setOpacity(p.opacity() * opacity);
+        p.setPen(QPen(withAlpha(accent, 0.95), 1.6));
+        p.setBrush(withAlpha(accent, 0.38));
+        p.drawRoundedRect(rowRect(bar), 6, 6);
+        p.restore();
+    }
+    const int from = std::max(0, int(std::floor(top))), to = std::min(int(entries_.size()), int(std::ceil(top)) + shownCount());
+    for (int i = from; i < to; ++i) {
         const Entry& e = entries_[size_t(i)];
-        const QRectF row = QRectF(entryRect(i)).adjusted(2, 2, -2, -2);
-        if (e.active) {
-            p.setPen(QPen(withAlpha(accent, 0.95), 1.6));
-            p.setBrush(withAlpha(accent, 0.38));
-            p.drawRoundedRect(row, 6, 6);
-        }
+        const QRectF row = rowRect(i);
         const QPointF thumbAt(row.left() + 5, row.center().y() - thumbHeight / 2.0);
         p.drawPixmap(thumbAt, e.thumbnail);
         const QRectF words(thumbAt.x() + thumbWidth + 8, row.top() + 2, row.right() - thumbAt.x() - thumbWidth - 12, row.height() - 4);
@@ -157,7 +226,9 @@ void LayerPickerOverlay::paintEvent(QPaintEvent*) {
         p.drawText(QRectF(words.left(), words.top() + words.height() * 0.6, words.width(), words.height() * 0.4), Qt::AlignLeft | Qt::AlignTop,
                    hintMetrics.elidedText(e.hint, Qt::ElideRight, int(words.width())));
     }
+    p.restore();
     // More rows than the column shows: a mark at the end that has more.
+    const int first = firstShown();
     if (first > 0 || first + shownCount() < int(entries_.size())) {
         p.setFont(small);
         p.setPen(withAlpha(text, 0.6));
@@ -166,20 +237,7 @@ void LayerPickerOverlay::paintEvent(QPaintEvent*) {
     }
 
     // The caption under the panel.
-    if (!caption_.isEmpty()) {
-        QFont captionFont = font();
-        captionFont.setPixelSize(11);
-        p.setFont(captionFont);
-        const QFontMetrics fm(captionFont);
-        QRect box = fm.boundingRect(QRect(0, 0, width() - 20, captionHeight * 2), Qt::TextWordWrap | Qt::AlignHCenter, caption_);
-        box.setHeight(std::min(box.height(), captionHeight - 4));
-        const QRectF pill((width() - box.width()) / 2.0 - 6, panel.bottom() + 3, box.width() + 12, box.height() + 4);
-        p.setPen(QPen(withAlpha(line, 0.6), 1));
-        p.setBrush(withAlpha(fill, 0.88));
-        p.drawRoundedRect(pill, 7, 7);
-        p.setPen(text);
-        p.drawText(pill.adjusted(6, 2, -6, -2), Qt::TextWordWrap | Qt::AlignCenter, caption_);
-    }
+    paintCaption(p, panel.bottom() + 3, width() - 8, captionHeight);
 }
 
 // ---- The controller ----------------------------------------------------------------------------
@@ -237,6 +295,9 @@ void LayerPicker::closed(bool cancelled) {
     if (s->activeLayerId() == activeBefore_ && s->selectedLayerIds() == selectedBefore_ && s->isMaskSelected() == maskBefore_) return;
     if (selectedBefore_.size() > 1) s->selectLayers(selectedBefore_, activeBefore_);
     else s->selectLayer(activeBefore_, maskBefore_);
+    // The bar glides back to that layer's row before the picker fades.
+    const auto row = activeBefore_ ? std::find(layers_.begin(), layers_.end(), *activeBefore_) : layers_.end();
+    pickerOverlay_->settleOn(row == layers_.end() ? -1 : int(row - layers_.begin()));
 }
 
 void LayerPicker::refresh() {

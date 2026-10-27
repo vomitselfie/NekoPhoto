@@ -203,6 +203,10 @@ qt_add_executable(nekophoto
     ImportBanner.cpp
     FullScreen.h
     FullScreen.cpp
+    Motion.h
+    Motion.cpp
+    RingOverlay.h
+    RingOverlay.cpp
     RingController.h
     RingController.cpp
     EdgePages.h

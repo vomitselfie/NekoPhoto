@@ -8,10 +8,10 @@
 // on the canvas, another tool or the idle timeout keep the choice. Choosing a layer is not an undo step.
 #pragma once
 #include "RingController.h"
+#include "RingOverlay.h"
 #include "nekophoto/uuid.h"
 #include <QPixmap>
 #include <QString>
-#include <QTimer>
 #include <QWidget>
 #include <set>
 #include <vector>
@@ -20,11 +20,14 @@ class QMenu;
 
 namespace app {
 
+namespace motion { class Tween; }
 class CommandRegistry;
 
 /// What the picker paints: a column of the layers, the active one lit, the keys' hints above and below. Transparent
-/// for the mouse, never focused.
-class LayerPickerOverlay : public QWidget {
+/// for the mouse, never focused. It pops open as the rings do (RingOverlay.h); the lit bar glides from row to row as
+/// the keys step, the column scrolls smoothly to keep it in view, and on Esc the bar glides back to the layer put back
+/// before the picker fades.
+class LayerPickerOverlay : public RingOverlay {
     Q_OBJECT
 public:
     struct Entry {
@@ -36,28 +39,37 @@ public:
     explicit LayerPickerOverlay(QWidget* parent);
     /// The rows (top of the stack first), or none with `empty` saying why.
     void setEntries(std::vector<Entry> entries, const QString& empty);
-    /// A line under the list for a moment (the top or bottom reached, why a layer cannot be chosen now).
-    void showCaption(const QString& text);
-    QString caption() const { return caption_; }
     const std::vector<Entry>& entries() const { return entries_; }
-    /// Where entry `index` is drawn (widget coordinates; empty when it is scrolled out of the column).
+    /// Esc: the bar goes back to row `index` (-1: no listed row; it fades) and then the picker fades.
+    void settleOn(int index);
+    /// Where entry `index` is drawn once the column is still (widget coordinates; empty when it is scrolled out).
     QRect entryRect(int index) const;
     /// The size the rows ask for.
     QSize preferredSize() const;
     static constexpr int thumbWidth = 40, thumbHeight = 30;
+    void finishMotion() override;
+    // For tests: the row the bar is at now (between two while it glides; -1 none), and whether the column scrolls.
+    double highlightRow() const;
+    bool scrolling() const;
 
 protected:
     void paintEvent(QPaintEvent*) override;
+    void hidden() override;
 
 private:
     /// The first row shown: the column shows at most `maxRows`, keeping the active row in view.
     int firstShown() const;
     int shownCount() const;
+    int activeIndex() const;
+    /// The bar and the column's top row as painted now (rows, fractional while they move).
+    double shownBar() const;
+    double shownFirst() const;
     static constexpr int maxRows = 9, rowHeight = 40, hintHeight = 22, width_ = 248, captionHeight = 34;
     std::vector<Entry> entries_;
     QString empty_;
-    QString caption_;
-    QTimer captionTimer_;
+    motion::Tween* bar_;
+    motion::Tween* scroll_;
+    double barFrom_ = -1, barTo_ = -1, firstFrom_ = 0, firstTo_ = 0;
 };
 
 class LayerPicker : public RingController {

@@ -57,6 +57,8 @@ app--Flyout { qproperty-cornerRadius: 14; qproperty-shadow: 14; qproperty-fill: 
 app--Flyout QToolBar { background: transparent; }
 /* The page names along each flyout: lavender dots, the current page a lavender-to-pink candy pill. */
 app--PageStrip { qproperty-accent: #ff7eb6; qproperty-idle: #b9a3ff; qproperty-candy: true; }
+/* The rings and the Layer Picker: a key just pressed ripples candy pink inside a lavender glow. */
+app--RingOverlay { qproperty-glow: #b9a3ff; }
 app--Flyout QSplitter::handle { background: #2a1f33; }
 app--Flyout #documentTile:checked { background: #3a2645; color: #ffd6ea; }
 QMenuBar#menuStrip { border-bottom: 1px solid #4a3556; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }

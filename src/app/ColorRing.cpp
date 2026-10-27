@@ -193,6 +193,8 @@ void ColorRing::press(char key, bool autoRepeat) {
         break;
     }
     case 'C':
+        // The centre's swatches trade places rather than turning to each other's colour.
+        ringOverlay_->swapSwatches();
         changing_ = true;
         window_->setColors(session_->backgroundColor, session_->foregroundColor);
         changing_ = false;
@@ -202,7 +204,7 @@ void ColorRing::press(char key, bool autoRepeat) {
         const auto recent = nextRecent();
         if (!recent) {
             ringOverlay_->pulse(key, false);
-            ringOverlay_->showCaption(tr("No recent colours yet: they are kept as you paint with them"));
+            ringOverlay_->showCaption(tr("No recent colours yet: they are kept as you paint with them"), true);
             return;
         }
         recall_ = int(recent_.indexOf(*recent));

@@ -4,6 +4,7 @@
 #include "SelfTestSupport.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
+#include "Motion.h"
 #include "nekophoto/vectorlayer.h"
 #include <QApplication>
 #include <QDialog>
@@ -113,6 +114,8 @@ void answerModal(std::function<void(QDialog*)> fill) {
 } // namespace selftest
 
 int runSelfTest(MainWindow& window, const QString& name) {
+    // The interface's animations end at once (the checks look at the state they leave), but in the motion check's own.
+    motion::setInstant(name != QLatin1String("motion"));
     if (name == QLatin1String("command-path")) {
         const int first = commandPath(window);
         const int menus = menuCommands(window);

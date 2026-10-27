@@ -2,6 +2,7 @@
 #include "RingController.h"
 #include "CanvasWidget.h"
 #include "MainWindow.h"
+#include "RingOverlay.h"
 #include "ToolRing.h"
 #include <QAbstractSpinBox>
 #include <QApplication>
@@ -56,10 +57,14 @@ std::vector<RingController*>& allRings() {
 
 } // namespace
 
-RingController::RingController(MainWindow* window, QWidget* overlay) : QObject(window), window_(window), overlay_(overlay) {
+RingController::RingController(MainWindow* window, RingOverlay* overlay) : QObject(window), window_(window), overlay_(overlay) {
     allRings().push_back(this);
     idle_.setSingleShot(true);
-    connect(&idle_, &QTimer::timeout, this, [this] { close(); });
+    connect(&idle_, &QTimer::timeout, this, [this] {
+        idleClose_ = true;
+        close();
+        idleClose_ = false;
+    });
 }
 
 RingController::~RingController() {
@@ -132,8 +137,7 @@ void RingController::open() {
     lastPointer_ = pointer;
     heading_ = {};
     place(pointer, {});
-    overlay_->show();
-    overlay_->raise();
+    overlay_->present();
     qApp->installEventFilter(this);
     restartIdle();
 }
@@ -146,8 +150,9 @@ void RingController::close(bool cancelled) {
     qApp->removeEventFilter(this);
     idle_.stop();
     heldKeys_.clear();
-    overlay_->hide();
     closed(cancelled);
+    // The keys are free already; the overlay fades (unless closed() started its own fade, the picker's going back).
+    if (!overlay_->dismissing()) overlay_->dismiss(idleClose_);
 }
 
 void RingController::restartIdle() {
@@ -195,7 +200,7 @@ void RingController::place(QPoint pointer, QPointF heading) {
     bool right = preferred == Corner::UpRight || preferred == Corner::DownRight, up = preferred == Corner::UpRight || preferred == Corner::UpLeft;
     if (!heading.isNull() && overlay_->isVisible()) {
         // Along an axis the pointer is not moving on, it keeps its side.
-        const QPoint at = overlay_->geometry().center();
+        const QPoint at = overlay_->targetGeometry().center();
         right = std::abs(heading.x()) > 1.5 ? heading.x() < 0 : at.x() > pointer.x();
         up = std::abs(heading.y()) > 1.5 ? heading.y() > 0 : at.y() < pointer.y();
     }
@@ -216,7 +221,8 @@ void RingController::place(QPoint pointer, QPointF heading) {
         chosen.moveLeft(std::clamp(chosen.left(), area.left(), std::max(area.left(), area.right() - size.width() + 1)));
         chosen.moveTop(std::clamp(chosen.top(), area.top(), std::max(area.top(), area.bottom() - size.height() + 1)));
     }
-    overlay_->move(chosen.topLeft());
+    // A glide out of the pointer's way (a hop when the way would cross it), at once while it is not on screen.
+    overlay_->moveTo(chosen.topLeft(), pointer);
     overlay_->raise();
 }
 
@@ -225,10 +231,12 @@ void RingController::pointerMoved(QPoint pointer) {
     lastPointer_ = pointer;
     // Hysteresis: it stays put until the pointer (with the brush's outline) would reach it.
     const int margin = clearance() + 6;
-    QRect clear = keepClear().translated(overlay_->pos());
-    clear.setBottom(overlay_->geometry().bottom());   // the caption under it too
+    // Where it is going, when it is gliding there.
+    const QRect at = overlay_->targetGeometry();
+    QRect clear = keepClear().translated(at.topLeft());
+    clear.setBottom(at.bottom());   // the caption under it too
     const bool collides = clear.adjusted(-margin, -margin, margin, margin).contains(pointer);
-    const bool outside = !canvasArea().contains(overlay_->geometry());
+    const bool outside = !canvasArea().contains(at);
     if (collides || outside) place(pointer, heading_);
 }
 

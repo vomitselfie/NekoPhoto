@@ -4,6 +4,7 @@
 // the side away from where it is heading, inside the canvas and clear of the brush outline, moves it only when the
 // pointer would run into it, and closes it on Esc, another tool, another tab, the window losing the keyboard, typing
 // starting, or the idle timeout (Edit > Preferences > Tool Ring's, shared by all of them). One ring is open at a time.
+// A close lets go of the keys at once; the overlay's fade (RingOverlay.h) is only paint.
 #pragma once
 #include "EditorSession.h"
 #include <QObject>
@@ -23,6 +24,7 @@ namespace app {
 
 class CanvasWidget;
 class MainWindow;
+class RingOverlay;
 
 /// The keys around D (W E R / S D F / X C V) with no modifier, as the rings read them; 0 for any other key.
 char compassKey(const QKeyEvent* e);
@@ -32,7 +34,7 @@ QPointF compassDirection(char key);
 class RingController : public QObject {
     Q_OBJECT
 public:
-    RingController(MainWindow* window, QWidget* overlay);
+    RingController(MainWindow* window, RingOverlay* overlay);
     ~RingController() override;
 
     bool isOpen() const { return open_; }
@@ -87,7 +89,7 @@ protected:
     std::optional<QPointF> openedAt() const { return openedAt_; }
 
     MainWindow* window_;
-    QWidget* overlay_;
+    RingOverlay* overlay_;
     QPointer<EditorSession> session_;
     std::pair<Tool, bool> openedFor_{Tool::Move, false};
 
@@ -101,6 +103,7 @@ private:
     int clearance() const;
 
     bool open_ = false;
+    bool idleClose_ = false;   // the close under way is the idle timeout's (a slower fade)
     std::optional<QPointF> openedAt_;
     double wheelRemainder_ = 0;
     QSet<int> heldKeys_;          // keys whose press the ring took (their releases are its too)

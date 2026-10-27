@@ -19,6 +19,7 @@
 #pragma once
 #include "EditorSession.h"
 #include "RingController.h"
+#include "RingOverlay.h"
 #include <QColor>
 #include <QHash>
 #include <QPixmap>
@@ -27,15 +28,16 @@
 #include <QString>
 #include <QTimer>
 #include <QWidget>
+#include <array>
 #include <optional>
 #include <vector>
 
 class QAction;
 class QMenu;
-class QVariantAnimation;
 
 namespace app {
 
+namespace motion { class Tween; }
 class CommandRegistry;
 class MainWindow;
 class CanvasWidget;
@@ -86,8 +88,11 @@ bool isMoreKey(char key);
 } // namespace toolring
 
 /// What the ring paints: the satellites as the controller fills them in. Transparent for the mouse, never focused. The
-/// Colour Ring paints with it too.
-class ToolRingOverlay : public QWidget {
+/// Colour Ring paints with it too. Its motion (RingOverlay.h, Motion.h): the satellites fan out from the centre as it
+/// pops open, a key's circle dips and bounces back with a ripple in the accent, a greyed key shakes as its reason
+/// fades in, a value rolls to the new number, and the Colour Ring's centre turns to the new colour, its swatches
+/// trading places on an arc for a swap and pulsing for the default colours.
+class ToolRingOverlay : public RingOverlay {
     Q_OBJECT
 public:
     struct View {
@@ -103,32 +108,48 @@ public:
     explicit ToolRingOverlay(QWidget* parent);
     void setViews(const std::vector<View>& views, const QString& centreIcon);
     /// The centre as the toolbar's swatches instead of an icon: the foreground over the background (the Colour Ring).
+    /// A new colour turns the swatch to it; after swapSwatches(), the two trade places instead.
     void setCentreSwatches(std::optional<std::pair<QColor, QColor>> colors);
-    /// A brief highlight on the circle of `key`; muted for a greyed one.
+    void swapSwatches() { swapNext_ = true; }
+    /// The key just pressed: its circle bounces with a ripple; muted, and shaking, for a greyed one.
     void pulse(char key, bool enabled);
-    /// A line under the compass for a moment: the tool's name, a command's name, or why a greyed one cannot run.
-    void showCaption(const QString& text);
-    QString caption() const { return caption_; }
     /// The compass's own circle area within the widget (what the pointer must keep clear of).
     QRect compassRect() const;
     /// Where a key's circle is drawn, in widget coordinates (for tests).
     QPoint centreOf(char key) const;
     static QSize preferredSize();
+    void finishMotion() override;
+
+    // For tests: whether a key's press, shake or value roll is running; the centre swatches as painted now.
+    bool pressing(char key) const;
+    bool shaking(char key) const;
+    bool ticking(char key) const;
+    bool swatchMoving() const;
+    std::optional<std::pair<QColor, QColor>> shownSwatches() const;
 
 protected:
     void paintEvent(QPaintEvent*) override;
+    void hidden() override;
 
 private:
+    /// A key's motion: its press (bounce and ripple), its shake, its value rolling from `before`.
+    struct KeyMotion {
+        motion::Tween* press = nullptr;
+        motion::Tween* shake = nullptr;
+        motion::Tween* tick = nullptr;
+        bool pressEnabled = true;
+        QString before;
+        int roll = 1;   // +1: the number rolls up (it grew), -1 down
+    };
+    KeyMotion& motionOf(char key);
     QPixmap icon(const QString& name, const QColor& color, int size);
     std::vector<View> views_;
     QString centreIcon_;
-    std::optional<std::pair<QColor, QColor>> centreSwatches_;
-    QString caption_;
-    QTimer captionTimer_;
-    char pulseKey_ = 0;
-    bool pulseEnabled_ = true;
-    double pulse_ = 0;
-    QVariantAnimation* pulseAnimation_ = nullptr;
+    std::optional<std::pair<QColor, QColor>> centreSwatches_, swatchesFrom_;
+    motion::Tween* swatch_ = nullptr;
+    motion::Tween* swap_ = nullptr;
+    bool swapNext_ = false;
+    std::array<KeyMotion, 9> keys_{};
     QHash<QString, QPixmap> icons_;
 };
 
