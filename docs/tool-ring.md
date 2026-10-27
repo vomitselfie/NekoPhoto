@@ -127,6 +127,22 @@ The timeout and the side in Edit ▸ Preferences ▸ Tool Ring apply to all thre
 Tool Ring's alone. Alt+C and Alt+A are commands of Edit ▸ Keyboard Shortcuts (View) like Alt+D, and can be given
 other keys.
 
+## Motion
+
+The rings and the picker pop open next to the pointer (growing from a little smaller as they fade in, the satellites
+fanning out from the centre one after another) and fade as they close, more slowly when the idle timeout closes them.
+A key's circle dips and springs back with a ripple in the theme's accent (Goth Kitty: candy pink in a lavender glow), a
+value rolls to its new number, and a greyed key shakes while its reason fades in. A ring that has to make way for the
+pointer glides there, or hops when gliding would carry it across the pointer. The Layer Picker's lit bar glides from
+row to row and its list scrolls smoothly; on Esc the bar glides back to the layer put back before the picker fades. The
+Colour Ring's swatch turns to a new colour, its two swatches trade places on a little arc for a swap and pulse for the
+default colours.
+
+None of it waits for anything: the key has done its work when the animation starts, the ring lets go of its keys the
+moment it closes (V picks the Move tool even while the ring is still fading), and an animation under way turns towards
+the newest state from where it is. Edit ▸ Preferences ▸ Edges ▸ Reduce motion makes the pops and closes quick fades
+and everything else happen at once.
+
 ## Tablets
 
 **Pen buttons.** Edit ▸ Preferences ▸ Tool Ring ▸ Pen button can make one of the pen's side buttons open and close
@@ -268,6 +284,21 @@ D で黒と白に戻し(マスクが対象のときは Photoshop の D と同じ
 編集 ▸ 環境設定 ▸ ツールリング の「閉じるまで」と「表示位置」は 3 つすべてに使われます(「Alt+D でツールリングを開く」は
 ツールリングだけの設定です)。Alt+C と Alt+A は Alt+D と同じく 編集 ▸ キーボードショートカット(表示)のコマンドで、
 別のキーを割り当てられます。
+
+### 動き
+
+リングとピッカーはポインターのそばにポンと開き(少し小さい状態からフェードインしながら大きくなり、周りの円が中央から
+順に広がります)、閉じるときはフェードアウトします。一定時間の無操作で閉じるときはゆっくり消えます。キーを押すとその円が
+小さく沈んで弾み、テーマのアクセント色の波紋が広がります(Goth Kitty ではラベンダーの光の中にキャンディピンク)。値は新しい
+数字へ転がるように切り替わり、使えないキーは首を振るように揺れて、理由がフェードインします。ポインターをよけるときは
+滑るように移動し、滑るとポインターを横切ってしまう場合は跳ぶように移ります。レイヤーピッカーでは選択中の帯が行から行へ
+滑り、リストもなめらかにスクロールします。Esc では元のレイヤーへ帯が滑って戻ってからピッカーが消えます。カラーリングでは
+中央の色見本が新しい色へ変わり、入れ替え(C)では 2 つの見本が小さな弧を描いて位置を交換し、初期設定の色(D)では弾みます。
+
+どの動きも何かを待たせることはありません。アニメーションが始まる時点でキーの操作はもう終わっており、リングは閉じた
+瞬間にキーを手放します(リングがまだフェードアウト中でも V で移動ツールになります)。動きの途中で次の操作をすると、
+その位置から新しい状態へ向きを変えます。編集 ▸ 環境設定 ▸ エッジ ▸ 動きを減らす では、開閉は短いフェードになり、ほかの
+動きはすべて即座に切り替わります。
 
 ### タブレット
 

@@ -127,7 +127,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     ringGrid->setColumnStretch(3, 1);
     layout->addWidget(ringBox);
 
-    // The window's edges (FullScreen.h): each one shown, or autohiding until the pointer reaches it; and Reduce motion.
+    // The window's edges (FullScreen.h): each one shown, or autohiding until the pointer reaches it; and Reduce motion
+    // (for the rings' and the picker's motion too, Motion.h).
     auto* edgesBox = new QGroupBox(tr("Edges"));
     edgesBox->setObjectName("edgesPreferences");
     auto* edgesGrid = new QGridLayout(edgesBox);
@@ -149,7 +150,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     edgesGrid->addWidget(reduceMotion, 2, 0, 1, 4);
     auto* edgesHint = new QLabel(tr("An autohiding edge leaves the window to the canvas: rest the pointer at it to slide it out. Hold Tab to see every hidden "
                                     "edge. While an edge is out, Tab and Shift+Tab (or the wheel over its page names) turn its pages. Reduce motion turns "
-                                    "the page turn into a quick fade and shortens the slides."));
+                                    "the page turn into a quick fade, brings the edges out at once, and makes the rings and the Layer Picker fade in "
+                                    "and out instead of moving."));
     edgesHint->setWordWrap(true);
     edgesHint->setStyleSheet(hintStyle());
     edgesGrid->addWidget(edgesHint, 3, 0, 1, 4);

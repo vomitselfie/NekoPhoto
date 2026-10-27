@@ -10104,8 +10104,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>動きを減らす</translation>
     </message>
     <message>
-        <source>An autohiding edge leaves the window to the canvas: rest the pointer at it to slide it out. Hold Tab to see every hidden edge. While an edge is out, Tab and Shift+Tab (or the wheel over its page names) turn its pages. Reduce motion turns the page turn into a quick fade and shortens the slides.</source>
-        <translation>自動で隠す端はその側をカンバスに譲ります。ポインターを端に置くとスライドして現れます。Tab を押し続けると隠れている端がすべて現れます。端が出ている間は Tab と Shift+Tab(またはページ名の上でのホイール)でページをめくれます。「動きを減らす」ではページめくりが短いフェードになり、スライドも短くなります。</translation>
+        <source>An autohiding edge leaves the window to the canvas: rest the pointer at it to slide it out. Hold Tab to see every hidden edge. While an edge is out, Tab and Shift+Tab (or the wheel over its page names) turn its pages. Reduce motion turns the page turn into a quick fade, brings the edges out at once, and makes the rings and the Layer Picker fade in and out instead of moving.</source>
+        <translation>自動で隠す端はその側をカンバスに譲ります。ポインターを端に置くとスライドして現れます。Tab を押し続けると隠れている端がすべて現れます。端が出ている間は Tab と Shift+Tab(またはページ名の上でのホイール)でページをめくれます。「動きを減らす」ではページめくりが短いフェードになり、端はすぐに現れ、リングとレイヤーピッカーは動かずにフェードで出入りします。</translation>
     </message>
     <message>
         <source>Performance</source>
