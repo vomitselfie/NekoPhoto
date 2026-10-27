@@ -133,6 +133,7 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("full-screen")) return fullScreen(window);
     if (name == QLatin1String("hide-panels")) return hidePanels(window);
     if (name == QLatin1String("edges")) return edgePages(window);
+    if (name == QLatin1String("motion")) return interfaceMotion(window);
     if (name == QLatin1String("forbidden-cursor")) return forbiddenCursor(window);
     if (name == QLatin1String("tool-ring")) return toolRing(window);
     if (name == QLatin1String("color-ring")) return colorRing(window);

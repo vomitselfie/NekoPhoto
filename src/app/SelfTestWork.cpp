@@ -1,8 +1,9 @@
 // work-counters: the work the whole window does (the canvas, its panels, the session) for a scripted brush stroke,
-// an adjustment slider drag and a pan and zoom, bounded with the counters in nekophoto/workcounters.h instead of a
-// clock (docs/work-counters.md). The core's own cases are tests/work_counter_tests.cpp; these cover what only the
-// window does: the canvas's dirty rectangles and scrolled cache, the panels that follow an edit, the release and the
-// undo that render only what changed.
+// an adjustment slider drag, a pan and zoom and the Tool Ring animating over the canvas, bounded with the counters in
+// nekophoto/workcounters.h instead of a clock (docs/work-counters.md). The core's own cases are
+// tests/work_counter_tests.cpp; these cover what only the window does: the canvas's dirty rectangles and scrolled cache,
+// the panels that follow an edit, the release and the undo that render only what changed, the overlays that render
+// nothing.
 //
 // The canvas's size depends on the platform's fonts and docks, so view-sized bounds are fractions of the canvas's
 // device pixels; dab-sized ones are absolute, at zoom 1 on a 1x display (ctest sets QT_SCALE_FACTOR=1).
@@ -10,9 +11,13 @@
 #include "CanvasWidget.h"
 #include "EditorSession.h"
 #include "MainWindow.h"
+#include "Motion.h"
+#include "ToolRing.h"
 #include "nekophoto/workcounters.h"
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QThread>
 #include <cmath>
 #include <cstdio>
@@ -249,6 +254,41 @@ int workCounters(MainWindow& window) {
     d = step([&] { s.zoomTo(0.4, QPointF(canvas->width() / 2.0, canvas->height() / 2.0)); });
     b.at("back to 40%", d, Counter::MipMisses, 0);
     b.at("back to 40%", d, Counter::RenderPixels, view);
+    settle();
+
+    // ---- The rings over the canvas ---------------------------------------------------------------------------------
+    // The Tool Ring's pop, a key's bounce and value roll, the glide out of the pointer's way and the close, a frame at a
+    // time on the manual clock (Motion.h), each followed by the canvas's repaint under it: they only paint the overlay,
+    // so the document is never rendered (measured 0; bound 0). The motion self-test covers the rest of the animations.
+    {
+        motion::setInstant(false);
+        motion::setManualClock(true);
+        s.selectTool(Tool::Brush);
+        emit s.toolChanged();
+        settle();
+        work::Snapshot frames;
+        auto frame = [&](auto&& action) {
+            d = step([&] { action(); motion::advance(33); });
+            for (size_t k = 0; k < work::counterCount; k++) frames.values[k] += d.values[k];
+        };
+        ToolRing* ring = window.toolRing();
+        const QPointF at(canvas->width() * 0.6, canvas->height() * 0.4);
+        frame([&] { QMouseEvent e(QEvent::MouseMove, at, canvas->mapToGlobal(at), Qt::NoButton, Qt::NoButton, Qt::NoModifier); QApplication::sendEvent(canvas, &e); });
+        frame([&] { ring->open(); });
+        for (int i = 0; i < 6; i++) frame([] {});
+        frame([&] { QKeyEvent e(QEvent::KeyPress, Qt::Key_F, Qt::NoModifier, QStringLiteral("f")); QApplication::sendEvent(canvas, &e); });
+        for (int i = 0; i < 9; i++) frame([] {});
+        const QPointF onIt = canvas->mapFrom(&window, ring->overlay()->mapTo(&window, ring->overlay()->centreOf('D')));
+        frame([&] { QMouseEvent e(QEvent::MouseMove, onIt, canvas->mapToGlobal(onIt), Qt::NoButton, Qt::NoButton, Qt::NoModifier); QApplication::sendEvent(canvas, &e); });
+        for (int i = 0; i < 6; i++) frame([] {});
+        frame([&] { ring->close(); });
+        for (int i = 0; i < 5; i++) frame([] {});
+        b.expect(!ring->isOpen() && ring->overlay()->isHidden(), "the Tool Ring did not open and close on the manual clock");
+        b.at("the Tool Ring's frames", frames, Counter::Renders, 0);
+        b.at("the Tool Ring's frames", frames, Counter::LayerDraws, 0);
+        motion::setManualClock(false);
+        motion::setInstant(true);
+    }
 
     std::printf("work-counters: %s\n", b.failures ? "FAILED" : "ok");
     return b.failures ? 1 : 0;

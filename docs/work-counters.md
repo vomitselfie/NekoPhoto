@@ -63,7 +63,12 @@ their pixels while the document holds them):
   kept frame too); the ticks leave the document revision as it was, and an eye swiped off and on during the drag moves
   it on and draws the layers below again;
 - zoom to 40 %, ten 16-pixel pans down and ten right, zoom to 20 % and back: one render per zoom, a pan renders exactly
-  the strip that came into view, no reduction built by a pan or by returning to a zoom.
+  the strip that came into view, no reduction built by a pan or by returning to a zoom;
+- the Tool Ring opening, a key's bounce and value roll, its glide out of the pointer's way and its close, a frame at a
+  time on the animations' manual clock, each frame repainting the canvas under it: no render and no layer drawn.
+
+`motion_selftest` (`nekophoto --self-test motion`, src/app/SelfTestMotion.cpp) steps every animation of the rings,
+the Layer Picker and the edges the same way, about 400 frames, and allows no render and no layer drawn in any of them.
 
 The canvas's size depends on the platform's fonts and docks, so view-sized bounds are taken from the canvas's own
 size; dab-sized bounds are absolute.

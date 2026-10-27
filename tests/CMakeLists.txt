@@ -536,6 +536,13 @@ if(TARGET nekophoto)
     add_test(NAME layer_picker_selftest COMMAND nekophoto --lang en --self-test layer-picker)
     set_tests_properties(layer_picker_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/layer-picker-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/layer-picker-home/data")
+    # The interface's motion on a stepped clock: the rings' pop and close (slower on the idle timeout), keys acting at
+    # once during either, a value's roll, a greyed key's shake, the glide out of the pointer's way, the Layer Picker's
+    # bar gliding and going back on Esc, the Colour Ring's swap, an edge's slide, a page turn, hold Tab's stagger,
+    # Reduce motion turning it all into quick fades or nothing, and no document render from any of it.
+    add_test(NAME motion_selftest COMMAND nekophoto --lang en --self-test motion)
+    set_tests_properties(motion_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/motion-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/motion-home/data")
 endif()
 
 add_executable(blendif_tests blendif_tests.cpp)
