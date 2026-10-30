@@ -238,7 +238,15 @@ qt_add_executable(nekophoto
     MainWindow.h
     MainWindow.cpp
     MainWindowFiles.cpp
+    MainWindowMenus.h
     MainWindowMenus.cpp
+    MenuFile.cpp
+    MenuEdit.cpp
+    MenuImage.cpp
+    MenuLayer.cpp
+    MenuSelect.cpp
+    MenuFilter.cpp
+    MenuView.cpp
     MainWindowSearch.cpp
     CommandPalette.cpp
     CommandRegistry.cpp

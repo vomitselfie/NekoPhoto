@@ -227,6 +227,18 @@ private:
     void connectSession();
     void refreshTabTitles();
     void buildMenus();
+    /// One builder per menu of the menu bar (Menu<Name>.cpp), sharing a MenuContext (MainWindowMenus.h).
+    struct MenuContext;
+    void buildFileMenu(MenuContext& m);
+    void buildEditMenu(MenuContext& m);
+    void buildImageMenu(MenuContext& m);
+    void buildLayerMenu(MenuContext& m);
+    void buildTypeMenu(MenuContext& m);
+    void buildSelectMenu(MenuContext& m);
+    void buildFilterMenu(MenuContext& m);
+    void buildViewMenu(MenuContext& m);
+    void buildWindowMenu(MenuContext& m);
+    void buildHelpMenu(MenuContext& m);
     void buildToolRail();
     void newDocument();
     void openProject();
