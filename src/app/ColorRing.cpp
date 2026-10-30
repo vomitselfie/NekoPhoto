@@ -119,7 +119,7 @@ QColor ColorRing::shown(const QColor& color) const {
         const double g = EditorSession::maskGrey(color);
         return QColor::fromRgbF(float(g), float(g), float(g));
     }
-    return color::displayColor(color, session_->hasDocument() ? session_->document()->profile : nekophoto::ColorProfile{});
+    return color::displayColor(color, color::storedColorProfile(session_->hasDocument() ? &*session_->document() : nullptr));
 }
 
 void ColorRing::setForeground(const QColor& color) {

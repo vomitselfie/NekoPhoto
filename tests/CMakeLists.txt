@@ -521,6 +521,11 @@ if(TARGET nekophoto)
     add_test(NAME move_options_selftest COMMAND nekophoto --lang en --self-test move-options)
     set_tests_properties(move_options_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/move-options-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/move-options-home/data")
+    # The tool rail's swatches through an Adobe RGB monitor profile: the colours from the document's profile in
+    # RGB, as sRGB in CMYK and Lab.
+    add_test(NAME swatches_selftest COMMAND nekophoto --lang en --self-test swatches)
+    set_tests_properties(swatches_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/swatches-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/swatches-home/data")
     add_test(NAME hide_panels_selftest COMMAND nekophoto --lang en --self-test hide-panels)
     set_tests_properties(hide_panels_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/data")

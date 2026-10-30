@@ -96,6 +96,10 @@ nekophoto::ColorTransformPtr displayTransform(const nekophoto::Document& documen
 QString proofUnavailable(const nekophoto::Document& document);
 /// A colour of the document (its values) as the screen should show it (swatches, previews).
 QColor displayColor(const QColor& color, const nekophoto::ColorProfile& document);
+/// The space the foreground and background colours are values in, as the core keeps a document's stored colours
+/// (nekophoto::convertModeColor): the document's profile in RGB; sRGB in CMYK and Lab, whose profiles are not RGB.
+/// What displayColor takes for them; none with no document.
+nekophoto::ColorProfile storedColorProfile(const nekophoto::Document* document);
 
 /// What to do with a file's profile as it opens: the profile the document carries, and whether its pixels are
 /// converted to it first (from `from`). Asks when Color Settings says so and `parent` is on screen.

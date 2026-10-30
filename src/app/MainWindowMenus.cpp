@@ -190,8 +190,9 @@ void MainWindow::buildToolRail() {
 }
 
 void MainWindow::updateColorSwatches() {
-    // Document values, shown through the monitor profile (the identity when none is known).
-    const nekophoto::ColorProfile profile = session_->hasDocument() ? session_->document()->profile : nekophoto::ColorProfile{};
+    // Document values (in a CMYK or Lab document, sRGB), shown through the monitor profile (the identity when none is
+    // known).
+    const nekophoto::ColorProfile profile = color::storedColorProfile(session_->hasDocument() ? &*session_->document() : nullptr);
     // On a mask they paint their greys, which Photoshop's swatches show there (the colours themselves are kept).
     if (session_->paintsMask()) {
         auto grey = [](const QColor& c) { const double g = EditorSession::maskGrey(c); return QColor::fromRgbF(float(g), float(g), float(g)); };
