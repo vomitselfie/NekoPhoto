@@ -401,7 +401,15 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     int index = int(tabs_.size()) - 1;
     { QSignalBlocker b(tabBar_); tabBar_->addTab(tab.defaultName); }
     connect(tab.canvas, &CanvasWidget::cursorMoved, this, [this](QPointF p) {
-        positionLabel_->setText(QStringLiteral("%1, %2").arg(int(std::floor(p.x()))).arg(int(std::floor(p.y()))));
+        const QString text = QStringLiteral("%1, %2").arg(int(std::floor(p.x()))).arg(int(std::floor(p.y())));
+        // The label keeps a fixed size, widened when a longer text needs it: a label that may change size asks the
+        // whole window to lay out again on every new text, and the pointer gives it one on every move.
+        const QMargins m = positionLabel_->contentsMargins();
+        const int width = positionLabel_->fontMetrics().horizontalAdvance(text) + m.left() + m.right() + 2 * positionLabel_->margin() + 2;
+        if (width > positionLabel_->maximumWidth() || positionLabel_->minimumWidth() != positionLabel_->maximumWidth())
+            positionLabel_->setFixedWidth(std::max(width, positionLabel_->minimumWidth()));
+        positionLabel_->setText(text);
+        if (positionLabel_->minimumHeight() != positionLabel_->maximumHeight()) positionLabel_->setFixedHeight(positionLabel_->sizeHint().height());
         windowEdges_->pointerMoved(p);   // the bottom edge's Info
     });
     connect(tab.session, &EditorSession::projectPathChanged, this, &MainWindow::refreshTabTitles);
