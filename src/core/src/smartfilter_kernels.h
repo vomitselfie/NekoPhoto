@@ -28,6 +28,13 @@ bool parametersValid(const SmartFilterParameters& parameters);
 /// Patchy's filter_noise_hash.
 uint32_t addNoiseHash(int32_t x, int32_t y, uint32_t seed);
 
+/// A level rounded half up to a byte, clamped.
+inline uint8_t roundedByte(double value) {
+    if (!(value > 0.0)) return 0;
+    if (value >= 255.0) return 255;
+    return uint8_t(std::floor(value + 0.5));
+}
+
 // The limits the kernels use, as smartfilter_render.cpp has them.
 inline constexpr double gaussianMarginScale = 3.0;
 inline constexpr int32_t surfaceBlurDirectMaximumRadius = 8;

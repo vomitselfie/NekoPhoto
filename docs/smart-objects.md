@@ -158,7 +158,8 @@ High Pass, Median, Dust & Scratches, Surface Blur, Unsharp Mask, Motion Blur, Pl
 Radial Blur, Spin or Zoom, Add Noise), each within Photoshop's own dialog ranges, in a blend mode NekoPhoto has, the filter
 mask not linked, and the instance has exactly one readable record in the document's `FEid` / `FXid` cache. The
 record gives the filter canvas (the rect the blurs may grow into) and the shared filter mask (document space).
-`src/core/src/smartfilter.cpp` reads and writes these; `smartfilter_render.cpp` is the port of Patchy's kernels.
+`src/core/src/smartfilter.cpp` reads and writes these; the port of Patchy's kernels is written once for both depths
+(`smartfilter_engine.h`) and instantiated at 8 bits in `smartfilter_render.cpp`, at 16 in `smartfilter_render16.cpp`.
 
 Drawing: the contents placed on the quad (through the warp, if any) on the document's pixel grid, then each enabled
 filter over the result so far with its opacity and blend (Normal at 100% replaces), then the mask between the
@@ -266,7 +267,8 @@ Smart objects and Smart Filters work in 16-bit documents (docs/bit-depth.md).
   at 16 bits when its plugin keeps them), Replace, Rasterize, moving and scaling, Edit ▸ Warp and the Warp Cage (the
   cage previews from an 8-bit copy of 16-bit contents, and Apply draws at 16 bits). `drawSmartObjectRaster` is the one
   entry point that draws an instance (filtered, warped or plain) at a depth.
-- **Smart Filters** run on the 16-bit instance through `smartfilter_render16.cpp`: the thirteen kernels with their
+- **Smart Filters** run on the 16-bit instance through `smartfilter_render16.cpp`: the thirteen kernels (the 8-bit code,
+  `smartfilter_engine.h`) with their
   byte arithmetic carried to 15 bits (the same Gaussian line plans and Photoshop captures, the same edge rules; every
   rounding to a byte becomes a rounding to the 15-bit grid; level-valued constants such as middle grey, thresholds and
   Surface Blur's weight triangle scaled by one level, 32768 / 255). Plastic Wrap finds its relief and highlight at 8-bit
