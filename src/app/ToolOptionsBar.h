@@ -1,4 +1,5 @@
-// The context bar under the menu: the options of the current tool.
+// The context bar under the menu: the options of the current tool, a page per tool; each group of tools' pages is built
+// in a file of its own (ToolOptionsMove, Brush, Retouch, Selection, Fill, Shape, Type and Crop.cpp).
 #pragma once
 #include "nekophoto/document.h"
 #include <QDoubleSpinBox>

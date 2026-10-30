@@ -203,6 +203,15 @@ qt_add_executable(nekophoto
     KeyboardShortcuts.cpp
     ToolOptionsBar.h
     ToolOptionsBar.cpp
+    ToolOptionsParts.h
+    ToolOptionsMove.cpp
+    ToolOptionsBrush.cpp
+    ToolOptionsRetouch.cpp
+    ToolOptionsSelection.cpp
+    ToolOptionsFill.cpp
+    ToolOptionsShape.cpp
+    ToolOptionsType.cpp
+    ToolOptionsCrop.cpp
     Scrub.h
     Scrub.cpp
     ImportBanner.h
