@@ -1,6 +1,7 @@
 // The Tool Ring: settings, the overlay that paints it and the controller that drives it (ToolRing.h). The rings and
 // their commands are in ToolRingCommands.cpp.
 #include "ToolRing.h"
+#include "EditorSession.h"
 #include "CommandPalette.h"
 #include "CommandRegistry.h"
 #include "Icons.h"

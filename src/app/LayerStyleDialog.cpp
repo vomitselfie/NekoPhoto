@@ -1,4 +1,5 @@
 #include "LayerStyleDialog.h"
+#include "EditorSession.h"
 #include "Automation.h"
 #include "Names.h"
 #include "PresetLibrary.h"

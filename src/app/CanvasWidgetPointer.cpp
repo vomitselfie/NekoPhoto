@@ -1,4 +1,5 @@
 // Canvas pointer gestures: press, drag and release for every tool, with snapping.
+#include "EditorSession.h"
 #include "CanvasWidget.h"
 #include "ActionLibrary.h"
 #include "VectorPathQt.h"

@@ -17,7 +17,7 @@
 // the value used last. Tool option values are not undo steps (as in Photoshop); commands that edit the document go
 // through the command path, one step each.
 #pragma once
-#include "EditorSession.h"
+#include "EditorTool.h"
 #include "RingController.h"
 #include "RingOverlay.h"
 #include <QColor>
@@ -36,6 +36,8 @@ class QAction;
 class QMenu;
 
 namespace app {
+
+class EditorSession;
 
 namespace motion { class Tween; }
 class CommandRegistry;

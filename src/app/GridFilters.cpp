@@ -1,4 +1,5 @@
 #include "GridFilters.h"
+#include "EditorSession.h"
 #include <QJsonValue>
 #include <cmath>
 

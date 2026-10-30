@@ -1,6 +1,7 @@
 // The Colour Ring (ColorRing.h): the foreground colour's hue, saturation and brightness on the compass keys, the
 // default and swapped colours, and the recent ones.
 #include "ColorRing.h"
+#include "EditorSession.h"
 #include "ColorManagement.h"
 #include "CommandRegistry.h"
 #include "MainWindow.h"

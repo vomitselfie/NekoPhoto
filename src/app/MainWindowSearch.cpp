@@ -1,4 +1,5 @@
 // Edit > Search… (CommandPalette): what it searches, and Filter > G'MIC opened on a chosen filter.
+#include "EditorSession.h"
 #include "CommandPalette.h"
 #include "GmicDialog.h"
 #include "MainWindow.h"

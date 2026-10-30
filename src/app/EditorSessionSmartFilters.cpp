@@ -6,6 +6,7 @@
 // The filter mask is painted the way Quick Mask is: a temporary layer at the top holds it as its layer mask, active
 // with the mask selected, so every mask tool (brushes, fills, gradients, filters, Invert) works on it; endEdit writes
 // the mask into the stack inside the same step. Selecting another layer, saving or exporting takes the layer away.
+#include "nekophoto/smartfilter.h"
 #include "EditorSession.h"
 #include "nekophoto/depth.h"
 #include "nekophoto/render.h"

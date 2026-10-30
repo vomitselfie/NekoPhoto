@@ -1,5 +1,6 @@
 // Smart objects in the editor: the menu commands over the core's operations (smartobject_edit.h), each one undo
 // step, and a contents tab sending its document back to the smart object it came from.
+#include "nekophoto/smartfilter.h"
 #include "nekophoto/vectorlayer.h"
 #include "ColorManagement.h"
 #include "EditorSession.h"

@@ -1,6 +1,7 @@
 // The Artboard and Slice tools on the canvas: drag out a rectangle, drag inside one to move it, drag an edge or a
 // corner to resize it; each gesture is one undo step on release. Artboards' outlines and names are always drawn,
 // slices' while the Slice tool is chosen.
+#include "EditorSession.h"
 #include "CanvasWidget.h"
 #include <QPainter>
 #include <algorithm>

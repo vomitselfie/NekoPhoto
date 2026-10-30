@@ -1,4 +1,5 @@
 #include "MoshDialog.h"
+#include "EditorSession.h"
 #include "ActionLibrary.h"
 #include "Names.h"
 #include "nekophoto/depth.h"

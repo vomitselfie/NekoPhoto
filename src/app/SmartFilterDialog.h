@@ -1,12 +1,14 @@
 // A Smart Filter entry's dialogs, opened from the Layers panel: its settings (double-click on the entry) and its
 // Blending Options (opacity and blend mode). The canvas previews the change; OK applies it as one undo step.
 #pragma once
-#include "EditorSession.h"
+#include "nekophoto/smartfilter.h"
 #include <QDialog>
 #include <QPointer>
 #include <QTimer>
 
 namespace app {
+
+class EditorSession;
 
 class SmartFilterDialog : public QDialog {
     Q_OBJECT

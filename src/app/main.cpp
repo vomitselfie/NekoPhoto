@@ -1,3 +1,4 @@
+#include "EditorSession.h"
 #include "ContentFillDialog.h"
 #include <QButtonGroup>
 #include <QAbstractButton>

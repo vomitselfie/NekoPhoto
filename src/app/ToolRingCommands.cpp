@@ -1,6 +1,7 @@
 // The Tool Ring's data and commands (ToolRing.h): the rings per tool group, each key a command of the registry and the
 // value it shows, and the tool option steps the rings run, registered as commands (no default keys; Edit > Keyboard
 // Shortcuts can give them some). A later pass can make the rings the person's own: everything they say is here.
+#include "EditorSession.h"
 #include "ToolRing.h"
 #include "BrushLibrary.h"
 #include "CanvasWidget.h"

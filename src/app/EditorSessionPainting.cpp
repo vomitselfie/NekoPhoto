@@ -1,4 +1,7 @@
 // EditorSession: Painting: brushes, opacity keys, blur/smudge/liquify, gradients, shapes and text.
+#include "nekophoto/tipbrush.h"
+#include "nekophoto/warpstroke.h"
+#include "nekophoto/mypaint.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>

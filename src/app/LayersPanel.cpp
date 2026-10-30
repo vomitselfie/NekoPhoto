@@ -1,3 +1,4 @@
+#include "EditorSession.h"
 #include "Style.h"
 #include "Names.h"
 #include "LayersPanel.h"

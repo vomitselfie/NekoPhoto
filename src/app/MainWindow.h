@@ -3,7 +3,8 @@
 // with its own session, canvas and panels; the menus act on the current one.
 #pragma once
 #include "CommandRegistry.h"
-#include "EditorSession.h"
+#include "EditorTool.h"
+#include "nekophoto/cameraraw.h"
 #include "nekophoto/psd.h"
 #include <QJsonObject>
 #include <QJsonValue>
@@ -25,6 +26,11 @@ class QToolButton;
 class QStackedWidget;
 
 namespace app {
+
+class EditorSession;
+struct DocumentSource;
+struct LoadedProject;
+namespace color { struct OpenDecision; }
 
 /// A file that opens in its own tab with its layers: .psd, .psb, .clip, .ico, .cur, .ase, .aseprite, or a GIF of
 /// more than one frame.
@@ -198,7 +204,7 @@ private:
     /// records (and records the ones made now: the profile decision, a PDF's page). A layered file's import notes
     /// land in `notes`. Empty with `error` (empty when a choice was cancelled).
     std::optional<nekophoto::PsdImport> readLayeredSource(DocumentSource& source, QString* error);
-    std::optional<EditorSession::LoadedProject> readSource(DocumentSource& source, QString* error);
+    std::optional<LoadedProject> readSource(DocumentSource& source, QString* error);
     /// The profile decision for a file as it opens: the one `source` recorded while the file embeds the same profile,
     /// else asked (or by Color Settings' policy) and recorded.
     color::OpenDecision openDecision(DocumentSource& source, const std::optional<nekophoto::ColorProfile>& embedded);

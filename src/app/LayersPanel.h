@@ -2,7 +2,8 @@
 // tree with eye toggles, thumbnails, mask thumbnails and drag reordering, and
 // the footer buttons.
 #pragma once
-#include "EditorSession.h"
+#include "nekophoto/smartfilter.h"
+#include "nekophoto/uuid.h"
 #include <QComboBox>
 #include <QSlider>
 #include <QSpinBox>
@@ -14,6 +15,8 @@
 class QToolButton;
 
 namespace app {
+
+class EditorSession;
 
 class LayerTree : public QTreeWidget {
     Q_OBJECT

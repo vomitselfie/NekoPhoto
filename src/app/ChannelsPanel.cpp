@@ -1,4 +1,5 @@
 #include "ChannelsPanel.h"
+#include "EditorSession.h"
 #include "ChannelDialogs.h"
 #include "Icons.h"
 #include "ImageConvert.h"

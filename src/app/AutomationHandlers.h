@@ -4,6 +4,7 @@
 #pragma once
 #include "EditorSession.h"
 #include "MainWindow.h"
+#include "nekophoto/smartfilter.h"
 #include "nekophoto/document.h"
 #include "nekophoto/filters.h"
 #include "nekophoto/selection.h"

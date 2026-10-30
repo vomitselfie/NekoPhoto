@@ -4,41 +4,36 @@
 // Views observe it through signals and never mutate the document themselves.
 // The implementation is split by area, like the Swift extensions: EditorSession.cpp (document, history,
 // canvas, view) and EditorSession{Layers,Transform,Painting,Pixels,Selection,QuickSelect,Adjustments}.cpp.
+// Its plain types are in headers of their own (EditorTool.h, EditorToolSettings.h, EditorTransform.h, EditorProject.h), and
+// what its declarations only name is forward-declared: a header that only names the session forward-declares it too,
+// so that only the files that use it include this one.
 #pragma once
+#include "EditorProject.h"
+#include "EditorTool.h"
+#include "EditorToolSettings.h"
+#include "EditorTransform.h"
 #include "Viewport.h"
-#include "DocumentSource.h"
-#include "nekophoto/adjustments.h"
-#include "nekophoto/cameraraw.h"
 #include "nekophoto/brush.h"
 #include "nekophoto/brushsmoothing.h"
-#include "nekophoto/mypaint.h"
-#include "nekophoto/tipbrush.h"
-#include "nekophoto/filters.h"
 #include "nekophoto/colormgmt.h"
 #include "nekophoto/document.h"
 #include "nekophoto/layerstyle.h"
-#include "nekophoto/presets.h"
 #include "nekophoto/toning.h"
 #include "nekophoto/vectorlayer.h"
-#include "nekophoto/smartfilter.h"
-#include "nekophoto/trim.h"
 #include "nekophoto/history.h"
-#include "nekophoto/smartobject_edit.h"
-#include <QCoreApplication>
-#include <QPointer>
+#include "nekophoto/modetransform.h"
 #include "nekophoto/render.h"
 #include "nekophoto/selection.h"
 #include "nekophoto/channels.h"
 #include "nekophoto/smartwand.h"
 #include "nekophoto/shape.h"
 #include "nekophoto/warp.h"
-#include "nekophoto/warpstroke.h"
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QImage>
 #include <QJsonObject>
 #include <QJsonValue>
-class QFileSystemWatcher;
-class QTimer;
+#include <QPointer>
 #include <functional>
 #include <map>
 #include <QColor>
@@ -52,94 +47,24 @@ class QTimer;
 #include <set>
 #include <thread>
 
+class QFileSystemWatcher;
+
+// What the declarations below only name (their headers come with the files that use them).
+namespace nekophoto {
+struct AdjustmentSettings;
+struct CameraRawSettings;
+struct PatternPreset;
+struct SmartFilterEntry;
+struct SmartFilterStack;
+struct TrimOptions;
+class MyPaintStroke;
+class TipStroke;
+class WarpStroke;
+} // namespace nekophoto
+
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket, Pen, DirectSelect, Artboard, Slice };
-enum class MarqueeKind { Rectangle, Ellipse };
-
-/// Why a tool cannot work on the active layer (Photoshop's forbidden cursor), and what a press does about it: says
-/// why, offers the smart object's Edit Contents or Rasterize, or offers to rasterize a type, shape or fill layer.
-struct ToolRefusal {
-    enum Kind { Refused, SmartObject, Rasterize };
-    Kind kind = Refused;
-    QString reason;
-};
-
-/// What rasterizing would take from a layer: its type, its shape (a solid, gradient or pattern fill cut by a path), or
-/// its fill (a solid colour, gradient or pattern fill layer).
-enum class Rasterizable { No, Type, Shape, Fill };
-enum class LassoKind { Freehand, Polygonal };
-enum class BlurToolMode { Liquify, Blur, Smudge, Sharpen };
-enum class GradientStyle { ForegroundToBackground, ForegroundToTransparent };
-
-/// Several layers transformed together: the upright box around them when the edit began, and each one's transform then.
-struct TransformGroup {
-    nekophoto::LayerTransform box;
-    std::map<nekophoto::Uuid, nekophoto::LayerTransform> originals;
-};
-
-/// Ctrl+T with a selection: the selected pixels float on a temporary layer and merge back on Apply.
-struct FloatingTransform {
-    nekophoto::Uuid sourceId;
-    nekophoto::Document before;
-    std::optional<nekophoto::Uuid> beforeActive;
-    nekophoto::LayerTransform original;
-    int pixelWidth = 0, pixelHeight = 0;
-};
-
-struct TransformEdit {
-    nekophoto::Uuid layerId;
-    nekophoto::LayerTransform draft;
-    bool persistent = false;
-    bool mask = false;
-    /// Set once a handle is Ctrl-dragged: the four corners move freely and Apply resamples the pixels.
-    std::optional<nekophoto::Corners> corners;
-    std::optional<TransformGroup> group;
-    std::optional<FloatingTransform> floating;
-};
-
-/// Content-Aware Fill's settings (its dialog, or the automation method).
-struct ContentFillRequest {
-    /// Auto: the window the fill scans around each patch; All: a wider window (nekophoto/inpaint.h). There is no
-    /// user-drawn sampling area (docs/legal-boundaries.md, "Content-Aware Fill").
-    enum class Sampling { Auto, All } sampling = Sampling::Auto;
-    bool newLayer = false;
-};
-
-struct GradientSettings {
-    nekophoto::GradientShape shape = nekophoto::GradientShape::Linear;
-    GradientStyle style = GradientStyle::ForegroundToTransparent;
-    /// An imported gradient preset by name (PresetLibrary); empty for `style`.
-    QString preset;
-    bool reversed = false;
-    double opacity = 1;
-    /// Photoshop's Method menu: the space the colours blend in (Classic: as before).
-    nekophoto::GradientMethod method = nekophoto::GradientMethod::Classic;
-};
-
-/// A shape being dragged out with the Shape tool, in whole document pixels.
-struct ShapeDraft {
-    nekophoto::ShapeKind kind;
-    QPointF anchor;
-    QRectF rect;
-    double cornerRadius = 0;
-    QPointF end;                           // where the drag is (a Line runs from the anchor to here)
-};
-
-/// The Shape tool's kinds (Photoshop's U group) and settings. New shapes are vector shape layers (vectorlayer.h)
-/// filled with the foreground colour.
-enum class VectorShapeKind { Rectangle, Ellipse, Polygon, Line, Custom };
-struct ShapeToolSettings {
-    VectorShapeKind kind = VectorShapeKind::Rectangle;
-    double cornerRadius = 0;
-    int sides = 5;
-    double starInset = 0;                  // 0: a polygon; above: a star, its inner points this far in (0..0.99)
-    double lineWeight = 4;
-    std::string custom = "Heart";
-    bool fill = true;
-    nekophoto::VectorPaint fillPaint;     // Solid: the foreground colour
-    nekophoto::VectorStroke stroke;       // enabled false: none
-};
+struct DocumentSource;
 
 class EditorSession : public QObject {
     Q_OBJECT
@@ -161,7 +86,7 @@ public:
     void markOpened(const QString& name = {}) { if (!name.isEmpty()) importedName_ = name; history_.reset(); history_.markSaved(); emit titleChanged(); emit historyChanged(); }
     void createDocument(int width, int height, double resolution = 72, bool emptyLayer = true);
     /// A project read from disk with its saved active layer, before any session takes it.
-    struct LoadedProject { nekophoto::Document document; std::optional<nekophoto::Uuid> activeLayer; QString path; };
+    using LoadedProject = app::LoadedProject;   // EditorProject.h
     /// Reads a project without touching a session, so a failed open never disturbs a tab.
     static std::optional<LoadedProject> readProject(const QString& path, QString* error);
     void installProject(LoadedProject project);
@@ -565,7 +490,7 @@ public:
     std::optional<QColor> compositeColorAt(QPointF documentPoint) const { return compositeColorAt(documentPoint, nullptr); }
     /// The same for many points over an unchanged document (the Eyedropper dragged): the composite is rendered into
     /// `snapshot` at the first sample and read from it after (32-bit, CMYK and Lab render the one pixel each time).
-    struct CompositeSnapshot { std::shared_ptr<const nekophoto::Image> flat; std::shared_ptr<const nekophoto::Image16> deep; };
+    using CompositeSnapshot = app::CompositeSnapshot;   // EditorToolSettings.h
     std::optional<QColor> compositeColorAt(QPointF documentPoint, CompositeSnapshot* snapshot) const;
     /// Hooks a panel can install to take the next canvas press (returns true to claim it), the drag and the release.
     std::function<bool(QPointF)> canvasPressHook;
@@ -892,10 +817,10 @@ public:
     void toggleLastState();
     /// The file the document was opened from or last saved to, and how it was opened (DocumentSource.h): what
     /// File > Revert reads again. Opening and saving set it; Export leaves it.
-    const DocumentSource& source() const { return source_; }
+    const DocumentSource& source() const { return *source_; }
     void setSource(DocumentSource source);
     /// File > Revert is available: the document came from a file and has changed since it was opened or saved.
-    bool canRevert() const { return document_ && source_.valid() && isModified(); }
+    bool canRevert() const;
     /// File > Revert: the document as `loaded` (the source read again), in place, as one undo step named "Revert"
     /// (the steps before it stay; Undo brings back the document as it was). Unmodified afterwards, as just opened.
     /// False, saying why, when an edit in progress cannot be let go.
@@ -1180,7 +1105,7 @@ private:
     std::set<nekophoto::Uuid> selectedLayerIds_;
     bool isMaskSelected_ = false;
     QString projectPath_;
-    DocumentSource source_;
+    std::unique_ptr<DocumentSource> source_;   // never null (a pointer so that this header needs no DocumentSource.h)
     // ---- following the package on disk (EditorSessionWatch.cpp)
     void watchProject();
     void stopWatchingProject();

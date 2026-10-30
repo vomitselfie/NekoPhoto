@@ -1,4 +1,5 @@
 // The canvas overlays: transform box, selection ants, scribbles, crop, guides and the tool previews.
+#include "EditorSession.h"
 #include "CanvasWidget.h"
 #include "VectorPathQt.h"
 #include "nekophoto/warpmesh.h"

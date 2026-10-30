@@ -3,6 +3,7 @@
 #pragma once
 #include "AdjustmentEditor.h"
 #include "PixelDialog.h"
+#include "nekophoto/filters.h"
 #include "nekophoto/matte.h"
 #include <thread>
 

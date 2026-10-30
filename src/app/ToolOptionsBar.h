@@ -1,6 +1,6 @@
 // The context bar under the menu: the options of the current tool.
 #pragma once
-#include "EditorSession.h"
+#include "nekophoto/document.h"
 #include <QDoubleSpinBox>
 #include <QStackedWidget>
 #include <QToolBar>
@@ -14,6 +14,7 @@ class QResizeEvent;
 
 namespace app {
 
+class EditorSession;
 class CanvasWidget;
 
 class ToolOptionsBar : public QToolBar {

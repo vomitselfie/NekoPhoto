@@ -1,4 +1,5 @@
 #include "PixelDialog.h"
+#include "EditorSession.h"
 #include "nekophoto/filters.h"
 #include "nekophoto/modeedit.h"
 #include "nekophoto/render.h"
@@ -59,6 +60,8 @@ std::shared_ptr<GrayF> coverageCopy(const std::shared_ptr<GrayF>& coverage, int 
 }
 
 } // namespace
+
+EditorSession* PixelDialog::session() const { return session_; }
 
 PixelDialog::PixelDialog(EditorSession* session, QWidget* parent)
     : QDialog(parent), session_(session), layerId_(session->activeLayerId()) {

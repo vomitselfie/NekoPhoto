@@ -4,7 +4,6 @@
 // both intersect), and the buttons load a channel, save the selection as a channel, make a new one and delete one.
 // See docs/channels.md.
 #pragma once
-#include "EditorSession.h"
 #include <QPointer>
 #include <QPixmap>
 #include <QWidget>
@@ -15,6 +14,8 @@ class QListWidgetItem;
 class QTimer;
 
 namespace app {
+
+class EditorSession;
 
 class ChannelsPanel : public QWidget {
     Q_OBJECT

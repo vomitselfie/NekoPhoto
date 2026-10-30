@@ -1,5 +1,6 @@
 // The window's edges, in full screen and autohiding in the standard window: see FullScreen.h.
 #include "FullScreen.h"
+#include "EditorSession.h"
 #include "BrushImporter.h"
 #include "BrushLibrary.h"
 #include "BrushPicker.h"

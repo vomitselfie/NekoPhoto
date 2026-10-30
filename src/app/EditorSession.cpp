@@ -1,6 +1,11 @@
 // EditorSession: The session: construction, the document, history, crop and canvas, tools and the view.
+#include "nekophoto/tipbrush.h"
+#include "nekophoto/trim.h"
+#include "nekophoto/warpstroke.h"
+#include "nekophoto/mypaint.h"
 #include "nekophoto/vectorlayer.h"
 #include "EditorSession.h"
+#include "DocumentSource.h"
 #include "ColorManagement.h"
 #include "nekophoto/depth.h"
 #include "nekophoto/supports.h"
@@ -19,7 +24,7 @@ EditorSession::~EditorSession() {
     if (quickSelectThread_.joinable()) quickSelectThread_.join();
 }
 
-EditorSession::EditorSession(QObject* parent) : QObject(parent) {
+EditorSession::EditorSession(QObject* parent) : QObject(parent), source_(std::make_unique<DocumentSource>()) {
     // While an adjustment layer's settings are dragged, the canvas keeps the frame below it against documentRevision:
     // any other change to the document in that time (a layer shown or hidden, another layer's opacity previewed) moves
     // the revision on, as its own notifyDocument would, so the kept frame is drawn again.
@@ -99,7 +104,7 @@ void EditorSession::createDocument(int width, int height, double resolution, boo
     document_ = doc;
     setActiveLayer(active);
     projectPath_.clear();
-    source_ = {};
+    *source_ = {};
     history_.reset();
     endEdit();
     history_.reset();
@@ -132,7 +137,7 @@ void EditorSession::installProject(LoadedProject project) {
     document_ = std::move(project.document);
     setActiveLayer(project.activeLayer);
     projectPath_ = project.path;
-    source_ = DocumentSource::project(project.path);
+    *source_ = DocumentSource::project(project.path);
     history_.reset();
     watchProject();
     viewport.fit({double(document_->width), double(document_->height)});
@@ -148,7 +153,7 @@ void EditorSession::adoptDocument(const Document& document, const QString& name)
     document_ = document;
     setActiveLayer(defaultActiveLayer(*document_));
     projectPath_.clear();
-    source_ = {};   // the opener says where it came from (setSource)
+    *source_ = {};   // the opener says where it came from (setSource)
     stopWatchingProject();
     importedName_ = name;
     history_.reset();
@@ -176,15 +181,17 @@ void EditorSession::adoptRecovered(const Document& document, const QString& name
         emit projectPathChanged();
     }
     // File > Revert goes back to the file it came from: the one it was opened from (a PSD, say), else its project.
-    source_ = DocumentSource::fromJson(source);
-    if (!source_.valid() && !originalPath.isEmpty()) source_ = DocumentSource::project(originalPath);
+    *source_ = DocumentSource::fromJson(source);
+    if (!source_->valid() && !originalPath.isEmpty()) *source_ = DocumentSource::project(originalPath);
     markUnsaved();   // it exists nowhere else now
 }
 
 void EditorSession::setSource(DocumentSource source) {
-    source_ = std::move(source);
+    *source_ = std::move(source);
     emit historyChanged();   // File > Revert's state
 }
+
+bool EditorSession::canRevert() const { return document_ && source_->valid() && isModified(); }
 
 bool EditorSession::saveProject(const QString& path, QString* error) {
     endTemporaryLayers();   // the Quick Mask and filter-mask layers are never saved
@@ -200,7 +207,7 @@ bool EditorSession::saveProject(const QString& path, QString* error) {
         return false;
     }
     projectPath_ = path;
-    source_ = DocumentSource::project(path);   // Save As: the new file is what File > Revert reads
+    *source_ = DocumentSource::project(path);   // Save As: the new file is what File > Revert reads
     history_.markSaved();
     watchProject();   // our own save is the package as we know it
     emit projectPathChanged();
@@ -216,7 +223,7 @@ void EditorSession::closeDocument() {
     document_.reset();
     setActiveLayer(std::nullopt);
     projectPath_.clear();
-    source_ = {};
+    *source_ = {};
     stopWatchingProject();
     history_.reset();
     emit projectPathChanged();

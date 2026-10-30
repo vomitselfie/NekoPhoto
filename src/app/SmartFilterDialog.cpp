@@ -1,4 +1,5 @@
 #include "SmartFilterDialog.h"
+#include "EditorSession.h"
 #include "Names.h"
 #include <QCheckBox>
 #include <QComboBox>

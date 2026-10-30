@@ -1,3 +1,4 @@
+#include "DocumentSource.h"
 #include <QSet>
 #include "Autosave.h"
 #include "EditorSession.h"

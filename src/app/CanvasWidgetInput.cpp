@@ -1,4 +1,5 @@
 // Canvas input: hit testing and cursors, the wheel and keyboard.
+#include "EditorSession.h"
 #include "CanvasWidget.h"
 #include <cstring>
 #include "QtGeometry.h"

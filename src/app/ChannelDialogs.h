@@ -1,7 +1,7 @@
 // Photoshop's Select ▸ Save Selection and Load Selection, and the Channels panel's Channel Options. Each applies
 // itself to the session when accepted (one undo step) and deletes itself when closed; see docs/channels.md.
 #pragma once
-#include "EditorSession.h"
+#include "nekophoto/uuid.h"
 #include <QDialog>
 #include <QPointer>
 
@@ -14,6 +14,8 @@ class QPushButton;
 class QRadioButton;
 
 namespace app {
+
+class EditorSession;
 
 /// Save Selection: into a new channel (with a name) or into an alpha channel: replace, add, subtract or intersect.
 class SaveSelectionDialog : public QDialog {

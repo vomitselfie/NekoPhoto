@@ -2,13 +2,14 @@
 // Direct Selection's target and shows it on the canvas; the buttons fill it, stroke it with the brush, load it as a
 // selection, make a work path from the selection, or make a shape layer from it.
 #pragma once
-#include "EditorSession.h"
 #include <QPointer>
 #include <QWidget>
 
 class QListWidget;
 
 namespace app {
+
+class EditorSession;
 
 class PathsPanel : public QWidget {
     Q_OBJECT

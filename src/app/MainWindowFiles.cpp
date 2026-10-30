@@ -1,4 +1,6 @@
 // The main window's file handling: new, open, import, save, export, and files dropped on the window.
+#include "DocumentSource.h"
+#include "EditorSession.h"
 #include <QLocale>
 #include "Theme.h"
 #include "Platform.h"

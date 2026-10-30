@@ -2,8 +2,12 @@
 // (transform box, selection ants, brush cursor, guides, pixel grid) and turns
 // pointer input into tool actions on the session.
 #pragma once
-#include "EditorSession.h"
+#include "EditorTool.h"
+#include "EditorToolSettings.h"
 #include "TextLayer.h"
+#include "nekophoto/render.h"
+#include "nekophoto/selection.h"
+#include "nekophoto/warp.h"
 #include <QImage>
 #include <QPointF>
 #include <QRect>
@@ -17,6 +21,8 @@
 class QMenu;
 
 namespace app {
+
+class EditorSession;
 
 class CanvasWidget : public QWidget {
     Q_OBJECT
@@ -78,7 +84,7 @@ public:
     /// tool and the options bar stay as they are; letting go of the keys goes back to it.
     std::optional<Tool> heldTool() const { return heldTool_; }
     /// The tool a press on the canvas uses: the held one, else the session's.
-    Tool canvasTool() const { return heldTool_.value_or(session_->tool()); }
+    Tool canvasTool() const;
     /// What the forbidden cursor says now (empty: the tool can work here).
     const QString& refusal() const { return refusal_; }
     /// The cursor again for where the pointer is, after the layer, its visibility or the tool changed.
@@ -167,7 +173,7 @@ private:
     /// rendered once at the press (`sampleSnapshot_`), into the foreground or, with `sampleBackground_`, the background.
     void sampleColor(QPointF documentPoint, bool background);
     bool sampleBackground_ = false;
-    std::optional<EditorSession::CompositeSnapshot> sampleSnapshot_;
+    std::optional<CompositeSnapshot> sampleSnapshot_;
     nekophoto::SelectionMode selectionMode(Qt::KeyboardModifiers modifiers) const;
     void drawOverlays(QPainter& painter);
     void drawTransformBox(QPainter& painter, const nekophoto::Corners& corners, bool active, bool distorting);

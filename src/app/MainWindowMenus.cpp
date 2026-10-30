@@ -1,4 +1,5 @@
 // The main window's menus, tool rail and colour swatches.
+#include "nekophoto/trim.h"
 #include "Theme.h"
 #include "ExportAs.h"
 #include "Automation.h"

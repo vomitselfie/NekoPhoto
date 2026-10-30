@@ -1,3 +1,4 @@
+#include "EditorSession.h"
 #include "Theme.h"
 #include "ContentFillDialog.h"
 #include "ActionLibrary.h"

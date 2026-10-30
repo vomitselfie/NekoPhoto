@@ -45,6 +45,10 @@ qt_add_executable(nekophoto
     icons.qrc
     Viewport.h
     EditorSession.h
+    EditorTool.h
+    EditorToolSettings.h
+    EditorTransform.h
+    EditorProject.h
     EditorSession.cpp
     EditorSessionAdjustments.cpp
     EditorSessionLayers.cpp
