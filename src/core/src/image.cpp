@@ -473,6 +473,7 @@ void MipCache::refreshWithGaps(Entry<Img>& e, const Img* image, int channels, in
 template <typename Img>
 void MipCache::refreshOf(std::vector<Entry<Img>>& entries, const Img* image, int x0, int y0, int x1, int y1) {
     constexpr int channels = std::is_same_v<Img, Image> ? 4 : 1;
+    writes_.fetch_add(1, std::memory_order_acq_rel);
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& e : entries) {
         auto source = e.source.lock();
@@ -515,6 +516,7 @@ void MipCache::refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, i
     int channels = 1;
     if constexpr (requires { image->channels(); }) channels = image->channels();
     using Sample = std::remove_cv_t<std::remove_pointer_t<decltype(image->row(0))>>;
+    writes_.fetch_add(1, std::memory_order_acq_rel);
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& e : entries) {
         auto source = e.source.lock();
