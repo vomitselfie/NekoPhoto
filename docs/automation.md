@@ -246,7 +246,8 @@ layer's colours call for),
 `pixels.copy`, `pixels.copyMerged`, `pixels.cut` and `pixels.paste` (Edit > Copy, Copy Merged, Cut and Paste of pixels: the active
 layer's, or every visible layer's, inside the selection or all of them; other apps get them at 8 bits, sRGB; the paste is a new layer
 where they were copied from, or centred when another app copied them, converted to the document's mode, profile and depth, and drops
-the selection),
+the selection; it needs a document: Edit > Paste with none open, or onto an untouched blank one, opens the clipboard's image as a
+document of its own instead, which no method does yet),
 `pixels.contentAwareFill` (`sampling`: `auto`, a window around the selection, or `all`, a wider window; there is
 no custom sampling area, see [legal-boundaries.md](legal-boundaries.md); `output`: `current` or `new`, only
 the filled pixels on a new layer, whose id comes back as `layer`), `pixels.contentAwareMove` (Content-Aware Move:

@@ -143,7 +143,8 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("swatches")) return swatches(window);
     if (name == QLatin1String("menu-dump")) return menuDump(window);
     if (name == QLatin1String("options-dump")) return optionsDump(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen, hide-panels, edges, edge-flip, forbidden-cursor, tool-ring, color-ring, layer-picker, move-options, menu-dump, options-dump)\n", qPrintable(name));
+    if (name == QLatin1String("incoming")) return incomingImages(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen, hide-panels, edges, edge-flip, forbidden-cursor, tool-ring, color-ring, layer-picker, move-options, menu-dump, options-dump, incoming)\n", qPrintable(name));
     return 2;
 }
 

@@ -43,6 +43,8 @@ struct Command {
     /// mode then gate it. A document command without a feature is 8-bit RGB only.
     bool needsDocument = false;
     QString feature;
+    /// A document command that also runs with none open (Edit > Paste opens the clipboard's image as a document).
+    bool runsWithoutDocument = false;
     /// For keys that work only in a situation ("while an edge is out"), translated: they are not the window's
     /// shortcuts (the action is given to no widget, so Qt never runs it from a key), they clash only with keys of the
     /// same situation, and Tab may be one; the part of the interface that owns the situation reads them. Empty for

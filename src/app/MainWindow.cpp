@@ -265,7 +265,7 @@ MainWindow::MainWindow() {
     // is greyed without one, or in a depth or colour mode its feature does not support, saying which.
     commands_ = std::make_unique<CommandRegistry>(this, [this](const QString& method, const QJsonObject& params, const QString& title) { runCommand(method, params, title); },
                                                   [this](const Command& command) -> QString {
-        if (!session_ || !session_->hasDocument()) return tr("No document is open");
+        if (!session_ || !session_->hasDocument()) return command.runsWithoutDocument ? QString() : tr("No document is open");
         const std::string feature = command.feature.toStdString();
         if (session_->featuresGated() && (feature.empty() || !session_->supportsFeature(feature))) return session_->unavailableTip(feature);
         return {};
@@ -808,6 +808,7 @@ void MainWindow::refreshRecent() {
 }
 
 void MainWindow::addRecent(const QString& path) {
+    if (suppressRecent_) return;   // a file written for a drop or a paste, gone once it has opened
     QSettings settings;
     QStringList recent = settings.value("recent").toStringList();
     recent.removeAll(path);

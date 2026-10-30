@@ -4,6 +4,7 @@
 #pragma once
 #include "CommandRegistry.h"
 #include "EditorTool.h"
+#include "IncomingImage.h"
 #include "nekophoto/cameraraw.h"
 #include "nekophoto/psd.h"
 #include <QJsonObject>
@@ -13,7 +14,10 @@
 #include <QHash>
 #include <QStringList>
 #include <QTabBar>
+#include <QTemporaryDir>
 #include <map>
+#include <utility>
+#include <memory>
 #include <vector>
 
 class QComboBox;
@@ -132,6 +136,13 @@ public:
     /// Whether a window position lies on the tab strip, where a dropped file opens as a new document.
     bool overTabStrip(const QPointF& windowPosition) const;
     void noteRecent(const QString& path) { addRecent(path); }
+    /// Edit > Paste with no document open, or onto a blank one untouched since File > New: what the clipboard holds (an
+    /// image, a file, a web address) opens as a document of its own (MainWindowIncoming.cpp).
+    void pasteAsDocument();
+    /// Downloads under way for drops and pastes, and why the last one that failed could not open, cleared as it is
+    /// taken (for tests).
+    int incomingPending() const { return incomingPending_; }
+    QString takeIncomingError() { return std::exchange(lastIncomingError_, QString()); }
     /// While set, errors the window would show in a dialog are appended here instead.
     void setErrorSink(QString* sink) { errorSink_ = sink; }
     /// Starts listening on `socketPath` (empty: the default); returns false with a warning on failure.
@@ -268,6 +279,22 @@ private:
     QString askExportPath(const QString& title, const QString& filter, const QStringList& suffixes, const QString& baseName = {});
     bool confirmDiscard();
     void importFile(const QString& path, std::optional<QPointF> at = std::nullopt);
+    /// A file dropped on the window as a drop from a file manager opens it (MainWindowFiles.cpp): a project, layered
+    /// file or camera RAW file in a tab of its own, an image as a document of its own with `asDocument` (dropped on
+    /// the tab strip), else as a layer at `at`.
+    void dropFile(const QString& path, std::optional<QPointF> at, bool asDocument);
+    // Drops and pastes from elsewhere (MainWindowIncoming.cpp). With no document, or a blank one untouched since
+    // File > New (EditorSession::isUntouchedBlank), what arrives opens as a document of its own (in the blank one's
+    // place); into a document already worked on a drop adds a layer at `at` and a paste one in the middle.
+    enum class Incoming { Drop, Paste, NewDocument };
+    void receiveOffer(const incoming::Offer& offer, Incoming how, std::optional<QPointF> at);
+    /// `transient`: a file written for the drop (an image's bytes), not one to keep as the document's source or in
+    /// Open Recent.
+    void openIncomingFile(const QString& path, Incoming how, std::optional<QPointF> at, bool transient);
+    /// An image's bytes (`what` names where they came from in an error), written to a file named `name` of the type the
+    /// bytes are and opened as `openIncomingFile` opens one.
+    void openIncomingBytes(const QByteArray& bytes, const QString& name, Incoming how, std::optional<QPointF> at, const QString& what);
+    void incomingFailed(const QString& message);
     void addRecent(const QString& path);
     void refreshRecent();
     void refreshTitle();
@@ -303,6 +330,12 @@ private:
     QAction* removeBackgroundAction_ = nullptr;
     QString* errorSink_ = nullptr;
     bool skipConfirm_ = false;
+    bool suppressRecent_ = false;      // while a file written for a drop or a paste opens
+    bool dragOpens_ = false;           // the drag over the window would open a document (none, or a blank one)
+    int incomingPending_ = 0;
+    QString lastIncomingError_;
+    std::unique_ptr<QTemporaryDir> incomingDir_;
+    int incomingCount_ = 0;
     AutomationServer* automation_ = nullptr;
     AutomationServer* engine_ = nullptr;   // plays actions when automation_ is off
     QDockWidget* actionsDock_ = nullptr;

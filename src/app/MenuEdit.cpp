@@ -49,7 +49,10 @@ void MainWindow::buildEditMenu(MenuContext& m) {
     m.add(edit, Spec("edit.copyMerged", tr("Copy &Merged"), {QKeySequence("Ctrl+Shift+C")}).document("edit.clipboard").runs([this] {
         if (session_->canEditLayers() && !(session_->document()->selection && session_->document()->selection->isEmpty())) runCommand("pixels.copyMerged", {}, tr("Copy Merged"));
     }, "pixels.copyMerged"))->setObjectName("command.pixels.copyMerged");
-    m.nameAction("edit.paste", m.add(edit, Spec("edit.paste", tr("&Paste"), {QKeySequence::Paste}).document("edit.clipboard").runs([this] {
+    m.nameAction("edit.paste", m.add(edit, Spec("edit.paste", tr("&Paste"), {QKeySequence::Paste}).document("edit.clipboard").orNoDocument().runs([this] {
+        // With no document, or onto a blank one untouched since File > New, the clipboard's image opens as a document
+        // of its own (MainWindowIncoming.cpp; Photoshop greys Paste with no document). Copied layers still paste in.
+        if (!session_->hasDocument() || (session_->isUntouchedBlank() && !EditorSession::hasLayerClipboard())) { pasteAsDocument(); return; }
         if (EditorSession::hasLayerClipboard()) { if (session_->canPaste()) runCommand("layers.paste", {}, tr("Paste")); return; }
         if (session_->hasPixelsToPaste()) runCommand("pixels.paste", {}, tr("Paste"));
     }, "pixels.paste")))->setObjectName("command.pixels.paste");

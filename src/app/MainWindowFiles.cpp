@@ -942,13 +942,17 @@ void MainWindow::showBatchDialog(const QString& action) {
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
-    if (e->mimeData()->hasUrls() || e->mimeData()->hasImage()) e->acceptProposedAction();
+    // Files, an image's bytes, or a web address (IncomingImage.h lists what the browsers offer).
+    if (!incoming::mayOffer(e->mimeData())) return;
+    dragOpens_ = !session_->hasDocument() || session_->isUntouchedBlank();
+    e->acceptProposedAction();
 }
 
 void MainWindow::dragMoveEvent(QDragMoveEvent* e) {
-    // A file over the tab strip will open as its own document; over the canvas it joins this one.
-    if (e->mimeData()->hasUrls() && session_->hasDocument())
-        statusBar()->showMessage(overTabStrip(e->position()) ? tr("Drop to open as a new document") : tr("Drop to add as a layer (drop on the tab strip to open as a new document)"));
+    // What comes in opens as a document of its own with none open, in a blank one's place, and over the tab strip;
+    // over the canvas of a document worked on it joins it as a layer.
+    if (dragOpens_ || overTabStrip(e->position())) statusBar()->showMessage(tr("Drop to open as a new document"));
+    else statusBar()->showMessage(tr("Drop to add as a layer (drop on the tab strip to open as a new document)"));
     e->acceptProposedAction();
 }
 
@@ -960,26 +964,24 @@ void MainWindow::dropEvent(QDropEvent* e) {
     std::optional<QPointF> at;
     if (session_->hasDocument() && canvas_->rect().contains(canvasPoint.toPoint())) at = canvas_->documentPoint(canvasPoint);
     const bool asDocument = session_->hasDocument() && overTabStrip(e->position());
-    if (e->mimeData()->hasUrls()) {
-        for (auto& url : e->mimeData()->urls()) {
-            if (!url.isLocalFile()) continue;
-            QString path = url.toLocalFile();
-            // Projects and layered files open in their own tab; an image dropped on the tab strip does too,
-            // while one dropped on the canvas lands as a layer where it was dropped.
-            if (isProjectPath(path) || isLayeredPath(path) || nekophoto::isRawPath(path.toStdString())) openPath(path);
-            else if (asDocument) { QString error; if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error); }
-            else importFile(path, at);
-        }
-        e->acceptProposedAction();
+    // Read now: the drop's data is gone once the event returns (a download goes on after it).
+    const incoming::Offer offer = incoming::readOffer(e->mimeData());
+    if (offer.kind == incoming::Offer::Kind::None) {
+        incomingFailed(offer.error.isEmpty() ? tr("Nothing in the drop is an image NekoPhoto opens.") : offer.error);
+        e->ignore();
         return;
     }
-    if (e->mimeData()->hasImage()) {
-        QImage image = qvariant_cast<QImage>(e->mimeData()->imageData());
-        if (!image.isNull()) session_->insertImage(fromQImage(image), tr("Dropped Image"), at);
-        e->acceptProposedAction();
-    }
+    e->acceptProposedAction();
+    receiveOffer(offer, asDocument ? Incoming::NewDocument : Incoming::Drop, at);
 }
 
+void MainWindow::dropFile(const QString& path, std::optional<QPointF> at, bool asDocument) {
+    // Projects and layered files open in their own tab; an image dropped on the tab strip does too, while one dropped
+    // on the canvas lands as a layer where it was dropped.
+    if (isProjectPath(path) || isLayeredPath(path) || nekophoto::isRawPath(path.toStdString())) openPath(path);
+    else if (asDocument) { QString error; if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error); }
+    else importFile(path, at);
+}
 
 void MainWindow::exportBoxes(bool slices) {
     session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written

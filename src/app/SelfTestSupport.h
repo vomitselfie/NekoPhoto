@@ -64,5 +64,6 @@ int swatches(MainWindow& window);        // SelfTestSwatches.cpp
 int menuDump(MainWindow& window);        // SelfTestDump.cpp
 int optionsDump(MainWindow& window);     // SelfTestDump.cpp
 int interfaceMotion(MainWindow& window); // SelfTestMotion.cpp
+int incomingImages(MainWindow& window);  // SelfTestIncoming.cpp
 
 } // namespace app

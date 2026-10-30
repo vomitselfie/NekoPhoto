@@ -98,6 +98,7 @@ qt_add_executable(nekophoto
     SelfTestOptions.cpp
     SelfTestSwatches.cpp
     SelfTestDump.cpp
+    SelfTestIncoming.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     DocumentSource.h
@@ -253,6 +254,9 @@ qt_add_executable(nekophoto
     MainWindow.h
     MainWindow.cpp
     MainWindowFiles.cpp
+    MainWindowIncoming.cpp
+    IncomingImage.h
+    IncomingImage.cpp
     MainWindowMenus.h
     MainWindowMenus.cpp
     MenuFile.cpp

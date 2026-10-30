@@ -314,7 +314,7 @@ void MainWindow::refreshDepthGating() {
         const std::string feature = c->feature.toStdString();
         const bool allowed = !deep || (!feature.empty() && session_->supportsFeature(feature));
         const QString why = has && allowed && c->unavailable ? c->unavailable() : QString();
-        gate(a, allowed, has && why.isEmpty(), feature);
+        gate(a, allowed, (has || c->runsWithoutDocument) && why.isEmpty(), feature);
         // Greyed for its own reason (no model, nothing to undo): the tooltip says it, and its menu shows tooltips.
         if (!why.isEmpty()) {
             if (!a->property("reasonTip").isValid()) a->setProperty("reasonTip", a->toolTip());

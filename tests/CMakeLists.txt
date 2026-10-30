@@ -526,6 +526,11 @@ if(TARGET nekophoto)
     add_test(NAME swatches_selftest COMMAND nekophoto --lang en --self-test swatches)
     set_tests_properties(swatches_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/swatches-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/swatches-home/data")
+    # Drops and pastes from elsewhere (SelfTestIncoming.cpp): with no document, onto a blank one, onto one worked on;
+    # browser drops shaped as Firefox and Chromium make them, an http address served by the test itself.
+    add_test(NAME incoming_selftest COMMAND nekophoto --lang en --self-test incoming)
+    set_tests_properties(incoming_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/incoming-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/incoming-home/data")
     add_test(NAME hide_panels_selftest COMMAND nekophoto --lang en --self-test hide-panels)
     set_tests_properties(hide_panels_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/data")

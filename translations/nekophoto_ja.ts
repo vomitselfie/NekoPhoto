@@ -831,6 +831,29 @@
     </message>
 </context>
 <context>
+    <name>IncomingImage</name>
+    <message>
+        <source>The address is not a data: URL.</source>
+        <translation>このアドレスは data: URL ではありません。</translation>
+    </message>
+    <message>
+        <source>The data: URL’s base64 is damaged.</source>
+        <translation>data: URL の base64 が壊れています。</translation>
+    </message>
+    <message>
+        <source>The data: URL does not hold an image NekoPhoto opens.</source>
+        <translation>data: URL の中身は NekoPhoto で開ける画像ではありません。</translation>
+    </message>
+    <message>
+        <source>The image is larger than %1 MB, the most a drop or a paste downloads.</source>
+        <translation>画像が %1 MB を超えています。ドロップやペーストでダウンロードできるのはここまでです。</translation>
+    </message>
+    <message>
+        <source>The server sent nothing for 30 seconds.</source>
+        <translation>サーバーから 30 秒間データが届きませんでした。</translation>
+    </message>
+</context>
+<context>
     <name>Names</name>
     <message>
         <source>Layer 1</source>
@@ -4513,12 +4536,6 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
 <context>
     <name>app::CanvasWidget</name>
     <message>
-        <source>Open an image or project, or drop one here.
-File &gt; New creates a blank canvas.</source>
-        <translation>画像またはプロジェクトを開くか、ここにドロップしてください。
-ファイル &gt; 新規 で空白のカンバスを作成できます。</translation>
-    </message>
-    <message>
         <source>Close Path</source>
         <translation>パスを閉じる</translation>
     </message>
@@ -4605,6 +4622,12 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Edit Path</source>
         <translation>パスを編集</translation>
+    </message>
+    <message>
+        <source>Open an image or project, or drop or paste one here.
+File &gt; New creates a blank canvas.</source>
+        <translation>画像またはプロジェクトを開くか、ここにドロップまたはペーストしてください。
+ファイル &gt; 新規 で空白のカンバスを作成できます。</translation>
     </message>
 </context>
 <context>
@@ -8135,8 +8158,52 @@ File &gt; New creates a blank canvas.</source>
         <translation>ドロップしてレイヤーとして追加 (タブバーにドロップすると新規ドキュメントとして開く)</translation>
     </message>
     <message>
+        <source>Nothing in the drop is an image NekoPhoto opens.</source>
+        <translation>ドロップされたものに、NekoPhoto で開ける画像はありません。</translation>
+    </message>
+    <message>
+        <source>The clipboard holds no image.</source>
+        <translation>クリップボードに画像がありません。</translation>
+    </message>
+    <message>
+        <source>The clipboard’s contents</source>
+        <translation>クリップボードの内容</translation>
+    </message>
+    <message>
+        <source>The dropped image</source>
+        <translation>ドロップされた画像</translation>
+    </message>
+    <message>
+        <source>Downloading the image from %1…</source>
+        <translation>%1 から画像をダウンロード中…</translation>
+    </message>
+    <message>
+        <source>Downloading the image from %1… %2%</source>
+        <translation>%1 から画像をダウンロード中… %2%</translation>
+    </message>
+    <message>
+        <source>Downloading the image from %1… %2 KB</source>
+        <translation>%1 から画像をダウンロード中… %2 KB</translation>
+    </message>
+    <message>
+        <source>Couldn’t download %1: %2</source>
+        <translation>%1 をダウンロードできませんでした: %2</translation>
+    </message>
+    <message>
+        <source>%1 is not an image NekoPhoto opens.</source>
+        <translation>%1 は NekoPhoto で開ける画像ではありません。</translation>
+    </message>
+    <message>
         <source>Dropped Image</source>
         <translation>ドロップした画像</translation>
+    </message>
+    <message>
+        <source>Pasted</source>
+        <translation>ペースト</translation>
+    </message>
+    <message>
+        <source>Couldn’t write the image to %1.</source>
+        <translation>画像を %1 に書き込めませんでした。</translation>
     </message>
     <message>
         <source>Export Slices</source>

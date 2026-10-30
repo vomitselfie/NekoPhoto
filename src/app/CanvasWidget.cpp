@@ -290,7 +290,7 @@ void CanvasWidget::paintEvent(QPaintEvent*) {
     painter.fillRect(rect(), canvasBackdrop());   // Photoshop's pasteboard grey, or the theme's own
     if (!session_->hasDocument()) {
         painter.setPen(QColor(150, 150, 150));
-        painter.drawText(rect(), Qt::AlignCenter, tr("Open an image or project, or drop one here.\nFile > New creates a blank canvas."));
+        painter.drawText(rect(), Qt::AlignCenter, tr("Open an image or project, or drop or paste one here.\nFile > New creates a blank canvas."));
         return;
     }
     double dpr = devicePixelRatioF();

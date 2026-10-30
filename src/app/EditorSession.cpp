@@ -14,6 +14,7 @@
 #include "nekophoto/project.h"
 #include <QFileInfo>
 #include <algorithm>
+#include <cstring>
 #include <set>
 
 using namespace nekophoto;
@@ -113,6 +114,35 @@ void EditorSession::createDocument(int width, int height, double resolution, boo
     emit projectPathChanged();
     notifyDocument();
     emit selectionChanged();
+}
+
+namespace {
+/// Whether every pixel of `image` is the same, whatever its depth and channels.
+bool uniformPixels(const AnyImage& image) {
+    return image.visit([](const auto& p) {
+        if (!p || p->isEmpty()) return true;
+        size_t pixel = 4;
+        if constexpr (requires { p->channels(); }) pixel = size_t(p->channels());
+        pixel *= p->byteCount() / (size_t(p->width()) * size_t(p->height()) * pixel);   // the sample's bytes
+        const auto* first = reinterpret_cast<const uint8_t*>(p->row(0));
+        for (int y = 0; y < p->height(); y++) {
+            const auto* row = reinterpret_cast<const uint8_t*>(p->row(y));
+            for (int x = 0; x < p->width(); x++)
+                if (std::memcmp(row + size_t(x) * pixel, first, pixel) != 0) return false;
+        }
+        return true;
+    });
+}
+} // namespace
+
+bool EditorSession::isUntouchedBlank() const {
+    if (!document_ || canUndo() || canRedo() || isModified() || !projectPath_.isEmpty() || source_->kind != DocumentSource::Kind::None || !importedName_.isEmpty()) return false;
+    const Document& d = *document_;
+    if (d.selection || !d.guides.empty() || !d.channels.empty() || !d.slices.empty() || d.layers.size() > 1) return false;
+    if (d.layers.empty()) return true;
+    const Layer& layer = d.layers.front();
+    if (layer.isGroup || layer.mask || layer.adjustment || layer.shape || layer.text || layer.smartObject || layer.artboard) return false;
+    return !layer.asset || uniformPixels(layer.asset->image);
 }
 
 std::optional<EditorSession::LoadedProject> EditorSession::readProject(const QString& path, QString* error) {

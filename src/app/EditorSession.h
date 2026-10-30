@@ -85,6 +85,11 @@ public:
     /// PNG or a RAW file unmodified), so closing it asks nothing and Revert has nothing to go back to yet.
     void markOpened(const QString& name = {}) { if (!name.isEmpty()) importedName_ = name; history_.reset(); history_.markSaved(); emit titleChanged(); emit historyChanged(); }
     void createDocument(int width, int height, double resolution = 72, bool emptyLayer = true);
+    /// A document made here and not touched since (File > New, document.new): nothing to undo or redo, never saved,
+    /// opened, pasted or changed, no selection, guides, channels or slices, and no layer or one plain pixel layer whose
+    /// pixels are all alike (none painted yet, or one colour). A drop or a paste then opens in its place rather than as a
+    /// layer of it (MainWindowIncoming.cpp).
+    bool isUntouchedBlank() const;
     /// A project read from disk with its saved active layer, before any session takes it.
     using LoadedProject = app::LoadedProject;   // EditorProject.h
     /// Reads a project without touching a session, so a failed open never disturbs a tab.

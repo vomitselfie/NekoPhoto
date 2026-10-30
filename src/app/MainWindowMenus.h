@@ -60,6 +60,11 @@ struct Spec {
         if (feature) command.feature = QString::fromUtf8(feature);
         return *this;
     }
+    /// It needs no document when none is open (it makes one), but is gated as a document command in one.
+    Spec& orNoDocument() {
+        command.runsWithoutDocument = true;
+        return *this;
+    }
     /// It runs `run` (a dialog, or a choice made first), which ends in automation method `method` when given.
     Spec& runs(std::function<void()> run, const char* method = nullptr) {
         command.run = std::move(run);
