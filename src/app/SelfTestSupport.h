@@ -58,6 +58,8 @@ int forbiddenCursor(MainWindow& window); // SelfTestForbidden.cpp
 int toolRing(MainWindow& window);        // SelfTestToolRing.cpp
 int colorRing(MainWindow& window);       // SelfTestColorRing.cpp
 int layerPicker(MainWindow& window);     // SelfTestLayerPicker.cpp
+int menuDump(MainWindow& window);        // SelfTestDump.cpp
+int optionsDump(MainWindow& window);     // SelfTestDump.cpp
 int interfaceMotion(MainWindow& window); // SelfTestMotion.cpp
 
 } // namespace app
