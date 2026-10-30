@@ -6,6 +6,8 @@
 // - RenderExec<S>, the pixels at one sample type, which draws the plan into an ImageOf<S>. U8 is the renderer's
 //   former body, moved, not rewritten (render_exec_u8.cpp); the deep depths follow it once, in
 //   render_exec_deep.inc over a DeepOps<S> policy (render_deep_ops.h), and U16 instantiates it (render_exec_u16.cpp).
+//   What the two share that touches no sample (the plan's parts, the folders and stacks in progress, the run) is
+//   RenderExecCommon (render_exec_common.h).
 //
 // render() builds the plan and switches on the document's sample type once.
 #pragma once
