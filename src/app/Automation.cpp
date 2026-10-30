@@ -13,6 +13,7 @@
 #include "Gmic.h"
 #include "nekophoto/scribble.h"
 #include "nekophoto/supports.h"
+#include "nekophoto/workcounters.h"
 #include <QApplication>
 #include <QDir>
 #include "Platform.h"
@@ -244,7 +245,7 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
     static const QSet<QString> always = {
         "app.info", "tabs.list", "tabs.new", "tabs.select", "tabs.close", "history.undo", "history.redo", "history.list", "history.info",
         "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
-        "view.zoom", "view.exposure", "view.screenMode", "screenshot", "render", "colors.set", "color.settings", "presets.list", "brush.presets", "gmic.filters", "tool.select",
+        "view.zoom", "view.exposure", "view.screenMode", "debug.counters", "screenshot", "render", "colors.set", "color.settings", "presets.list", "brush.presets", "gmic.filters", "tool.select",
         "actions.list", "actions.record", "actions.save", "actions.delete", "actions.export", "actions.import", "actions.play", "actions.batch",
         "document.new", "document.open", "document.revert", "document.close", "document.info", "document.overview", "document.histogram",
         "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
@@ -480,6 +481,15 @@ void AutomationServer::registerAppHandlers() {
         if (position != "above" && position != "below") fail("position must be above or below", invalidParams);
         const bool dropped = panel->dropSmartFilterForTest(id, integer(p, "index"), onto, integer(p, "onto"), position == "above");
         return QJsonObject{{"dropped", dropped}};
+    });
+
+    // ---- test hook: the work counters (docs/work-counters.md), for tools/perf_suite.py; the difference of two reads
+    // is the work done between them
+    add("debug.counters", [](const QJsonObject&) {
+        const work::Snapshot now = work::snapshot();
+        QJsonObject counters;
+        for (size_t i = 0; i < work::counterCount; i++) counters[QString::fromUtf8(work::name(work::Counter(i)))] = double(now.values[i]);
+        return counters;
     });
 
     // ---- tools and view (what the person sees)

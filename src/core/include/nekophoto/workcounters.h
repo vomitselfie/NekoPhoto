@@ -40,7 +40,7 @@ inline void add(Counter counter, uint64_t amount = 1) {
 }
 inline uint64_t get(Counter counter) { return counters[size_t(counter)].load(std::memory_order_relaxed); }
 
-/// The counter's name as tests and `app.counters` print it ("render.pixels").
+/// The counter's name as tests and the `debug.counters` automation hook print it ("render.pixels").
 const char* name(Counter counter);
 
 /// Every counter at one moment; the difference of two is the work done between them.

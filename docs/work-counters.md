@@ -6,6 +6,9 @@ by counting it instead. `nekophoto/workcounters.h` keeps a handful of counters t
 bounds on them. The benchmarks in [benchmarks.md](benchmarks.md) and [brush-latency.md](brush-latency.md) still say
 how *fast* the work is; these tests say how much of it there is, and they run in every ctest.
 
+`tools/perf_suite.py` reads the same counters around each of its scenarios (the `debug.counters` automation hook), next
+to their instruction counts and peak memory: [performance-suite.md](performance-suite.md).
+
 ## The counters
 
 | Counter | Bumped by | Amount |

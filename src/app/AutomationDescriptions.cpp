@@ -70,6 +70,7 @@ const MethodDoc methodDocs[] = {
      "id:layer! The layer whose eye is pressed; to:layer The eye the pointer is over; action:(press|move|release)! The event"},
     {"debug.dragSmartFilter", "Test hook: drag a Smart Filter row in the Layers panel and release it above or below another entry row (refused unless in the same stack).",
      "id:layer! The smart object; index:integer! The dragged entry (running order); onto:integer! The entry row it is released on; ontoId:layer That row's smart object (default id); position:(above|below)=above Which half of the row"},
+    {"debug.counters", "Test hook: the work counters (docs/work-counters.md) since the process started, by name; the difference of two reads is the work done between them.", ""},
     // actions
     {"actions.list", "The recorded actions (Window > Actions): each one's steps (method, params, enabled, label), whether one is recording, and the library file.",
      "name:string Only this action"},

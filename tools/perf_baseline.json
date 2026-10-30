@@ -1,0 +1,545 @@
+{
+ "full": {
+  "meta": {
+   "commit": "43a8029",
+   "compiler": "c++ (GCC) 16.2.1 20260810",
+   "counter": "perf",
+   "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "date": "2026-10-29",
+   "kernel": "7.3.0-1-MANJARO",
+   "mode": "full",
+   "note": "",
+   "runs": 3,
+   "threads": 24
+  },
+  "scenarios": {
+   "adjust-drag": {
+    "description": "--bench-adjust: 30 ticks of a Levels slider over 5 layers, 4096x4096",
+    "instructions": 7780061176,
+    "instructions_runs": [
+     7780061176,
+     7780090489,
+     7779944713
+    ],
+    "peak_rss_kb": 605712,
+    "spread_pct": 0.0,
+    "wall_s_informational": 2.12,
+    "work": {
+     "adjustment.passes": 31,
+     "adjustment.pixels": 17498776,
+     "layer.drawPixels": 7984580,
+     "layer.draws": 10,
+     "mip.hits": 10,
+     "render.calls": 31,
+     "render.pixels": 17498776
+    },
+    "work_stable": true
+   },
+   "brush-mypaint": {
+    "description": "--bench-brush classic/dry_brush, 5 strokes, 1086x1448",
+    "instructions": 3859708095,
+    "instructions_runs": [
+     3861256537,
+     3859663172,
+     3859708095
+    ],
+    "peak_rss_kb": 141244,
+    "spread_pct": 0.04,
+    "wall_s_informational": 1.17,
+    "work": {
+     "layer.drawPixels": 2271810,
+     "layer.draws": 822,
+     "mip.builtPixels": 2332203,
+     "mip.hits": 812,
+     "mip.misses": 10,
+     "mip.refreshPixels": 675051,
+     "render.calls": 411,
+     "render.pixels": 1296351
+    },
+    "work_spread_pct": {
+     "layer.drawPixels": 0.11
+    },
+    "work_stable": false
+   },
+   "brush-round": {
+    "description": "--bench-brush round, 5 strokes of 80 moves, 4000x3000",
+    "instructions": 3751904077,
+    "instructions_runs": [
+     3752258761,
+     3751904077,
+     3750633451
+    ],
+    "peak_rss_kb": 265968,
+    "spread_pct": 0.04,
+    "wall_s_informational": 1.12,
+    "work": {
+     "brush.dabs": 11585,
+     "brush.recomposePixels": 5853253,
+     "layer.drawPixels": 1630200,
+     "layer.draws": 812,
+     "mip.builtPixels": 19302420,
+     "mip.hits": 806,
+     "mip.misses": 6,
+     "mip.refreshPixels": 1866069,
+     "render.calls": 406,
+     "render.pixels": 1134003
+    },
+    "work_spread_pct": {
+     "layer.drawPixels": 0.23,
+     "mip.builtPixels": 0.1
+    },
+    "work_stable": false
+   },
+   "content-aware-fill": {
+    "description": "Content-Aware Fill of a 1/13 x 1/10 region of the base layer",
+    "instructions": 542063615582,
+    "instructions_runs": [
+     542104283729,
+     542063615582,
+     542050369040
+    ],
+    "op_peak_rss_kb": 1896488,
+    "peak_rss_kb": 1896488,
+    "spread_pct": 0.01,
+    "wall_s_informational": 11.54,
+    "work": {
+     "adjustment.passes": 9,
+     "adjustment.pixels": 3877740,
+     "layer.drawPixels": 4780019,
+     "layer.draws": 99,
+     "mip.builtPixels": 15999211,
+     "mip.hits": 106,
+     "mip.misses": 2,
+     "render.calls": 3,
+     "render.pixels": 1292580
+    },
+    "work_stable": true
+   },
+   "filter-gaussian": {
+    "description": "Gaussian Blur radius 50 on the base layer",
+    "instructions": 33342869304,
+    "instructions_runs": [
+     33342869304,
+     33343037684,
+     33342513135
+    ],
+    "op_peak_rss_kb": 2823464,
+    "peak_rss_kb": 2823464,
+    "spread_pct": 0.0,
+    "wall_s_informational": 4.35,
+    "work": {
+     "adjustment.passes": 9,
+     "adjustment.pixels": 3877740,
+     "layer.drawPixels": 4780019,
+     "layer.draws": 99,
+     "mip.builtPixels": 17370933,
+     "mip.hits": 106,
+     "mip.misses": 2,
+     "render.calls": 3,
+     "render.pixels": 1292580
+    },
+    "work_stable": true
+   },
+   "open-psd": {
+    "description": "open the synthetic 8000 x 6000 PSD (42 layers: folders, masks, adjustments, a smart object, type)",
+    "instructions": 31947926892,
+    "instructions_runs": [
+     31947926892,
+     31949595242,
+     31947528986
+    ],
+    "op_peak_rss_kb": 1900148,
+    "peak_rss_kb": 1900148,
+    "spread_pct": 0.01,
+    "wall_s_informational": 3.71,
+    "work": {
+     "adjustment.passes": 12,
+     "adjustment.pixels": 3889404,
+     "layer.drawPixels": 4797067,
+     "layer.draws": 132,
+     "mip.builtPixels": 106353509,
+     "mip.hits": 108,
+     "mip.misses": 36,
+     "render.calls": 4,
+     "render.pixels": 1296468
+    },
+    "work_stable": true
+   },
+   "open-real-psd": {
+    "description": "open K.psd (local file)",
+    "instructions": 12469295974,
+    "instructions_runs": [
+     12469295974,
+     12470811834,
+     12469110275
+    ],
+    "op_peak_rss_kb": 464732,
+    "peak_rss_kb": 464732,
+    "spread_pct": 0.01,
+    "wall_s_informational": 1.86,
+    "work": {
+     "adjustment.passes": 8,
+     "adjustment.pixels": 2121540,
+     "layer.drawPixels": 16403821,
+     "layer.draws": 97,
+     "mip.builtPixels": 10161287,
+     "mip.hits": 63,
+     "mip.misses": 21,
+     "render.calls": 7,
+     "render.pixels": 1420894
+    },
+    "work_stable": true
+   },
+   "save-nekophoto": {
+    "description": "save the opened PSD as .nekophoto",
+    "instructions": 219052198261,
+    "instructions_runs": [
+     219052198261,
+     219052501426,
+     219051721666
+    ],
+    "op_peak_rss_kb": 1899392,
+    "peak_rss_kb": 1899392,
+    "spread_pct": 0.0,
+    "wall_s_informational": 7.71,
+    "work": {
+     "adjustment.passes": 6,
+     "adjustment.pixels": 2370960,
+     "layer.drawPixels": 2920751,
+     "layer.draws": 66,
+     "mip.hits": 72,
+     "render.calls": 2,
+     "render.pixels": 790320
+    },
+    "work_stable": true
+   },
+   "save-psd": {
+    "description": "export the opened PSD as .psd",
+    "instructions": 137464035164,
+    "instructions_runs": [
+     137464504762,
+     137464035164,
+     137460219672
+    ],
+    "op_peak_rss_kb": 2920968,
+    "peak_rss_kb": 2920968,
+    "spread_pct": 0.0,
+    "wall_s_informational": 11.97,
+    "work": {
+     "adjustment.passes": 3,
+     "adjustment.pixels": 144000000,
+     "layer.drawPixels": 175168992,
+     "layer.draws": 33,
+     "render.calls": 1,
+     "render.pixels": 48000000
+    },
+    "work_stable": true
+   },
+   "startup-headless": {
+    "description": "cold start, headless, to the first reply",
+    "instructions": 1721637632,
+    "instructions_runs": [
+     1721605727,
+     1725139484,
+     1721637632
+    ],
+    "peak_rss_kb": 93332,
+    "spread_pct": 0.21,
+    "wall_s_informational": 0.67,
+    "work": {},
+    "work_stable": true
+   },
+   "startup-window": {
+    "description": "cold start to an idle window (offscreen, 1400 x 1000), to the first reply",
+    "instructions": 1722127827,
+    "instructions_runs": [
+     1725614442,
+     1721809861,
+     1722127827
+    ],
+    "peak_rss_kb": 93480,
+    "spread_pct": 0.22,
+    "wall_s_informational": 0.69,
+    "work": {},
+    "work_stable": true
+   },
+   "undo-redo": {
+    "description": "undo and redo an Invert of the whole base layer",
+    "instructions": 5236601671,
+    "instructions_runs": [
+     5235045906,
+     5236601671,
+     5236729704
+    ],
+    "op_peak_rss_kb": 1888232,
+    "peak_rss_kb": 1888232,
+    "spread_pct": 0.03,
+    "wall_s_informational": 3.91,
+    "work": {
+     "adjustment.passes": 12,
+     "adjustment.pixels": 5493816,
+     "layer.drawPixels": 6773690,
+     "layer.draws": 132,
+     "mip.hits": 144,
+     "render.calls": 4,
+     "render.pixels": 1831272
+    },
+    "work_stable": true
+   }
+  }
+ },
+ "quick": {
+  "meta": {
+   "commit": "43a8029",
+   "compiler": "c++ (GCC) 16.2.1 20260810",
+   "counter": "perf",
+   "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "date": "2026-10-29",
+   "kernel": "7.3.0-1-MANJARO",
+   "mode": "quick",
+   "note": "",
+   "runs": 3,
+   "threads": 24
+  },
+  "scenarios": {
+   "adjust-drag": {
+    "description": "--bench-adjust: 30 ticks of a Levels slider over 5 layers, 1024x1024",
+    "instructions": 6465951414,
+    "instructions_runs": [
+     6441206150,
+     6465951414,
+     6467079280
+    ],
+    "peak_rss_kb": 148012,
+    "spread_pct": 0.4,
+    "wall_s_informational": 0.77,
+    "work": {
+     "adjustment.passes": 31,
+     "adjustment.pixels": 17498776,
+     "layer.drawPixels": 7984580,
+     "layer.draws": 10,
+     "render.calls": 31,
+     "render.pixels": 17498776
+    },
+    "work_stable": true
+   },
+   "brush-mypaint": {
+    "description": "--bench-brush classic/dry_brush, 5 strokes, 543x724",
+    "instructions": 4721171102,
+    "instructions_runs": [
+     4721171102,
+     4720562109,
+     4722470697
+    ],
+    "peak_rss_kb": 120132,
+    "spread_pct": 0.04,
+    "wall_s_informational": 1.12,
+    "work": {
+     "layer.drawPixels": 5561083,
+     "layer.draws": 822,
+     "render.calls": 411,
+     "render.pixels": 2928195
+    },
+    "work_spread_pct": {
+     "layer.drawPixels": 0.05
+    },
+    "work_stable": false
+   },
+   "brush-round": {
+    "description": "--bench-brush round, 5 strokes of 80 moves, 1000x750",
+    "instructions": 4377746524,
+    "instructions_runs": [
+     4377601702,
+     4377746524,
+     4378137311
+    ],
+    "peak_rss_kb": 125564,
+    "spread_pct": 0.01,
+    "wall_s_informational": 1.07,
+    "work": {
+     "brush.dabs": 2895,
+     "brush.recomposePixels": 2390131,
+     "layer.drawPixels": 5019672,
+     "layer.draws": 812,
+     "render.calls": 406,
+     "render.pixels": 2810874
+    },
+    "work_spread_pct": {
+     "layer.drawPixels": 0.08
+    },
+    "work_stable": false
+   },
+   "content-aware-fill": {
+    "description": "Content-Aware Fill of a 1/13 x 1/10 region of the base layer",
+    "instructions": 20876357374,
+    "instructions_runs": [
+     20895312342,
+     20875429630,
+     20876357374
+    ],
+    "op_peak_rss_kb": 238944,
+    "peak_rss_kb": 236300,
+    "spread_pct": 0.1,
+    "wall_s_informational": 2.09,
+    "work": {
+     "adjustment.passes": 9,
+     "adjustment.pixels": 3877740,
+     "layer.drawPixels": 4778513,
+     "layer.draws": 99,
+     "mip.builtPixels": 999211,
+     "mip.hits": 106,
+     "mip.misses": 2,
+     "render.calls": 3,
+     "render.pixels": 1292580
+    },
+    "work_stable": true
+   },
+   "filter-gaussian": {
+    "description": "Gaussian Blur radius 50 on the base layer",
+    "instructions": 6057601272,
+    "instructions_runs": [
+     6057481104,
+     6057665590,
+     6057601272
+    ],
+    "op_peak_rss_kb": 380960,
+    "peak_rss_kb": 380960,
+    "spread_pct": 0.0,
+    "wall_s_informational": 1.64,
+    "work": {
+     "adjustment.passes": 9,
+     "adjustment.pixels": 3877740,
+     "layer.drawPixels": 4778513,
+     "layer.draws": 99,
+     "mip.builtPixels": 1362532,
+     "mip.hits": 106,
+     "mip.misses": 2,
+     "render.calls": 3,
+     "render.pixels": 1292580
+    },
+    "work_stable": true
+   },
+   "open-psd": {
+    "description": "open the synthetic 2000 x 1500 PSD (42 layers: folders, masks, adjustments, a smart object, type)",
+    "instructions": 6385044526,
+    "instructions_runs": [
+     6385044526,
+     6385807366,
+     6384294051
+    ],
+    "op_peak_rss_kb": 220440,
+    "peak_rss_kb": 220440,
+    "spread_pct": 0.02,
+    "wall_s_informational": 1.34,
+    "work": {
+     "adjustment.passes": 12,
+     "adjustment.pixels": 3889404,
+     "layer.drawPixels": 4795601,
+     "layer.draws": 132,
+     "mip.builtPixels": 6649163,
+     "mip.hits": 108,
+     "mip.misses": 36,
+     "render.calls": 4,
+     "render.pixels": 1296468
+    },
+    "work_stable": true
+   },
+   "save-nekophoto": {
+    "description": "save the opened PSD as .nekophoto",
+    "instructions": 17330950557,
+    "instructions_runs": [
+     17330950557,
+     17330810236,
+     17331192084
+    ],
+    "op_peak_rss_kb": 275576,
+    "peak_rss_kb": 273128,
+    "spread_pct": 0.0,
+    "wall_s_informational": 2.23,
+    "work": {
+     "adjustment.passes": 6,
+     "adjustment.pixels": 2370960,
+     "layer.drawPixels": 2921968,
+     "layer.draws": 66,
+     "mip.hits": 72,
+     "render.calls": 2,
+     "render.pixels": 790320
+    },
+    "work_stable": true
+   },
+   "save-psd": {
+    "description": "export the opened PSD as .psd",
+    "instructions": 8804505498,
+    "instructions_runs": [
+     8804819972,
+     8804505498,
+     8804157111
+    ],
+    "op_peak_rss_kb": 336572,
+    "peak_rss_kb": 336572,
+    "spread_pct": 0.01,
+    "wall_s_informational": 1.36,
+    "work": {
+     "adjustment.passes": 3,
+     "adjustment.pixels": 9000000,
+     "layer.drawPixels": 10986503,
+     "layer.draws": 33,
+     "render.calls": 1,
+     "render.pixels": 3000000
+    },
+    "work_stable": true
+   },
+   "startup-headless": {
+    "description": "cold start, headless, to the first reply",
+    "instructions": 1724783449,
+    "instructions_runs": [
+     1721906254,
+     1725404923,
+     1724783449
+    ],
+    "peak_rss_kb": 93820,
+    "spread_pct": 0.2,
+    "wall_s_informational": 0.61,
+    "work": {},
+    "work_stable": true
+   },
+   "startup-window": {
+    "description": "cold start to an idle window (offscreen, 1400 x 1000), to the first reply",
+    "instructions": 1724796816,
+    "instructions_runs": [
+     1724981396,
+     1724510378,
+     1724796816
+    ],
+    "peak_rss_kb": 93172,
+    "spread_pct": 0.03,
+    "wall_s_informational": 0.64,
+    "work": {},
+    "work_stable": true
+   },
+   "undo-redo": {
+    "description": "undo and redo an Invert of the whole base layer",
+    "instructions": 5136649605,
+    "instructions_runs": [
+     5136649605,
+     5135563433,
+     5136998083
+    ],
+    "op_peak_rss_kb": 238836,
+    "peak_rss_kb": 236372,
+    "spread_pct": 0.03,
+    "wall_s_informational": 1.74,
+    "work": {
+     "adjustment.passes": 12,
+     "adjustment.pixels": 5493816,
+     "layer.drawPixels": 6774000,
+     "layer.draws": 132,
+     "mip.hits": 144,
+     "render.calls": 4,
+     "render.pixels": 1831272
+    },
+    "work_stable": true
+   }
+  }
+ }
+}

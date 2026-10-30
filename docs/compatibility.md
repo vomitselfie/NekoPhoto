@@ -22,7 +22,7 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
 | Test suites | **110 CTest tests** registered (790 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
-| Automation | **184 methods**, 183 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
+| Automation | **185 methods**, 184 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
 | Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DNEKOPHOTO_WARNINGS_AS_ERRORS=ON` |
 
@@ -224,7 +224,7 @@ NekoPhoto 1.8.10 でツールを実行して集計したものです。
 - **Photoshop の表示との比較(photocraft-corpus)**: 258 個のうち **208 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 12/15 cmyk16, 12/15 cmyk8, 18/20 f32, 10/12 lab16, 10/12 lab8, 27/29 rgb16, 119/155 rgb8。各ファイルの状態は `tests/psd_oracle_photocraft.txt`)。
 - **Photoshop の表示との比較(psd-tools)**: 285 個のうち **232 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 2/2 cmyk16, 12/13 cmyk8, 8/17 f32, 0/1 lab16, 4/4 lab8, 8/8 rgb16, 198/240 rgb8。各ファイルの状態は `tests/psd_oracle_psdtools.txt`)。
 - **描画のハッシュ**: 713 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 110 個(790 `TEST_CASE`)。
-- **自動操作**: メソッド 184 個、うち 183 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
+- **自動操作**: メソッド 185 個、うち 184 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
   クリッピング、調整レイヤー、レイヤースタイル、ブレンド条件(このレイヤー・下になっているレイヤー、チャンネルごと、分割した

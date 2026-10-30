@@ -88,6 +88,18 @@ jobs:
       - name: Crash recovery
         timeout-minutes: 5
         run: python3 tools/recovery_check.py ./build/src/app/nekophoto
+      - name: Performance suite (informational)
+        # tools/perf_suite.py --quick against the committed baseline's quick section (docs/performance-suite.md): the
+        # work counters and peak RSS always, instructions:u where perf can count them. GitHub's runners are virtual
+        # machines that usually expose no hardware counters; the suite then says so and compares the rest. Never fails
+        # the build: the numbers are for reading, and the baseline was taken on another CPU with another compiler.
+        if: ${{ !cancelled() && matrix.compiler == 'gcc' }}
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          sudo apt-get install -y time linux-tools-common "linux-tools-$(uname -r)" >/dev/null 2>&1 || echo "perf is not available for kernel $(uname -r)"
+          sudo sysctl -w kernel.perf_event_paranoid=1 >/dev/null 2>&1 || true
+          python3 tools/perf_suite.py --quick --compare tools/perf_baseline.json || echo "the performance suite did not finish (informational only)"
       - name: Compiler cache statistics
         if: ${{ !cancelled() }}
         run: ccache --show-stats

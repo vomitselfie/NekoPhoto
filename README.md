@@ -24,7 +24,7 @@
   <a href="docs/compatibility.md#at-a-glance"><img alt="PSD round trip: 117 of 117 files" src="https://img.shields.io/badge/PSD%20round%20trip-117%2F117-2ea44f?style=flat-square"></a>
   <a href="docs/compatibility.md#at-a-glance"><img alt="Matches Photoshop's render: 61 of 72 files" src="https://img.shields.io/badge/Photoshop%20match-61%2F72-97ca00?style=flat-square"></a>
   <a href="docs/compatibility.md#at-a-glance"><img alt="Tests: 110 CTest suites" src="https://img.shields.io/badge/tests-110%20suites-2f7bf5?style=flat-square"></a>
-  <a href="docs/automation.md"><img alt="Automation: 184 methods" src="https://img.shields.io/badge/automation-184%20methods-2f7bf5?style=flat-square"></a>
+  <a href="docs/automation.md"><img alt="Automation: 185 methods" src="https://img.shields.io/badge/automation-185%20methods-2f7bf5?style=flat-square"></a>
   <!-- compat-badges:end -->
 </p>
 
@@ -234,7 +234,7 @@ how export works is in [docs/psd-export.md](docs/psd-export.md) and [docs/psd-ro
 ## Built for scripts and agents
 
 Everything an agent or a script does goes through the same editor session you see, lands in the undo history, and
-shows on screen. 184 automation methods cover documents, layers, pixels, selections, painting and export.
+shows on screen. 185 automation methods cover documents, layers, pixels, selections, painting and export.
 
 Let Claude Code, or any MCP client, drive the editor:
 
@@ -360,7 +360,7 @@ Interactive Pty Ltd. A few features deliberately work differently from Photoshop
   <a href="docs/compatibility.md#日本語"><img alt="PSD の往復: 117 個中 117 個" src="https://img.shields.io/badge/PSD%20%E5%BE%80%E5%BE%A9-117%2F117-2ea44f?style=flat-square"></a>
   <a href="docs/compatibility.md#日本語"><img alt="Photoshop の描画と一致: 72 個中 61 個" src="https://img.shields.io/badge/Photoshop%20%E3%81%A8%E4%B8%80%E8%87%B4-61%2F72-97ca00?style=flat-square"></a>
   <a href="docs/compatibility.md#日本語"><img alt="テスト: CTest 110 個" src="https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-CTest%20110%20%E5%80%8B-2f7bf5?style=flat-square"></a>
-  <a href="docs/automation.md"><img alt="自動操作: メソッド 184 個" src="https://img.shields.io/badge/%E8%87%AA%E5%8B%95%E6%93%8D%E4%BD%9C-%E3%83%A1%E3%82%BD%E3%83%83%E3%83%89%20184%20%E5%80%8B-2f7bf5?style=flat-square"></a>
+  <a href="docs/automation.md"><img alt="自動操作: メソッド 185 個" src="https://img.shields.io/badge/%E8%87%AA%E5%8B%95%E6%93%8D%E4%BD%9C-%E3%83%A1%E3%82%BD%E3%83%83%E3%83%89%20185%20%E5%80%8B-2f7bf5?style=flat-square"></a>
   <!-- compat-badges-ja:end -->
 </p>
 
@@ -569,7 +569,7 @@ NekoPhoto は実際の Photoshop ファイルで検証しており、その数�
 ### スクリプトと AI エージェントから使う
 
 エージェントやスクリプトの操作は、画面に見えているのと同じ編集セッションを通り、取り消し履歴に残り、画面にも表示されます。
-184 個の自動操作メソッドで、ドキュメント・レイヤー・ピクセル・選択範囲・描画・書き出しを扱えます。
+185 個の自動操作メソッドで、ドキュメント・レイヤー・ピクセル・選択範囲・描画・書き出しを扱えます。
 
 Claude Code などの MCP クライアントから操作するには:
 

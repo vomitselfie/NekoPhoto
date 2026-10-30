@@ -5,6 +5,7 @@
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "nekophoto/image.h"
+#include "nekophoto/workcounters.h"
 #include <QTextCharFormat>
 #include <QInputMethodEvent>
 #include <QApplication>
@@ -16,6 +17,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <vector>
 
 namespace app {
@@ -29,6 +32,50 @@ double percentile(std::vector<double> v, double p) {
     std::sort(v.begin(), v.end());
     return v[std::min(v.size() - 1, size_t(p * double(v.size() - 1) + 0.5))];
 }
+
+/// The part of a benchmark tools/perf_suite.py counts: with NEKOPHOTO_PERF_CONTROL set to "<control fifo>,<ack
+/// fifo>" (`perf stat --delay=-1 --control fifo:...`), start() and stop() switch perf's counting on and off and wait
+/// for its acknowledgement, so the count covers the measured work and not the start-up. stop() prints the work
+/// counters of the part as a "work:" line either way.
+class Measured {
+public:
+    Measured() {
+        const char* control = std::getenv("NEKOPHOTO_PERF_CONTROL");
+        if (!control) return;
+        const std::string paths(control);
+        const size_t comma = paths.find(',');
+        if (comma == std::string::npos) return;
+        control_ = std::fopen(paths.substr(0, comma).c_str(), "w");
+        ack_ = std::fopen(paths.substr(comma + 1).c_str(), "r");
+    }
+    ~Measured() {
+        if (control_) std::fclose(control_);
+        if (ack_) std::fclose(ack_);
+    }
+    Measured(const Measured&) = delete;
+    Measured& operator=(const Measured&) = delete;
+    void start() {
+        tell("enable");
+        before_ = nekophoto::work::snapshot();
+    }
+    void stop(const char* what) {
+        const nekophoto::work::Snapshot work = nekophoto::work::snapshot() - before_;
+        tell("disable");
+        std::printf("work: %s: %s\n", what, work.describe().c_str());
+    }
+
+private:
+    void tell(const char* command) {
+        if (!control_ || !ack_) return;
+        std::fprintf(control_, "%s\n", command);
+        std::fflush(control_);
+        char reply[16];
+        if (!std::fgets(reply, sizeof reply, ack_)) std::fprintf(stderr, "perf did not acknowledge %s\n", command);
+    }
+    std::FILE* control_ = nullptr;
+    std::FILE* ack_ = nullptr;
+    nekophoto::work::Snapshot before_;
+};
 
 } // namespace
 
@@ -95,6 +142,13 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
                 o.paintOnOpaque ? "the opaque layer" : "a blank layer", canvas->width(), canvas->height(), session->viewport.zoom, o.moves);
     std::printf("%-8s %10s %10s | %10s %10s %10s | %10s\n", "stroke", "press ms", "(handler)", "move p50", "move p95", "move max", "release ms");
     std::vector<double> pressTotals, moveTotals, releaseTotals;
+    // Let the view settle first: a zoom redraws at full quality once it has rested (120 ms), and that redraw would
+    // otherwise land among the strokes on some runs and not on others.
+    QElapsedTimer settle;
+    settle.start();
+    while (settle.elapsed() < 300) { pump(); QThread::msleep(5); }
+    Measured measured;
+    measured.start();
     for (int s = 0; s < o.strokes; s++) {
         // A zigzag across the middle, offset per stroke so strokes do not land on the same pixels.
         auto at = [&](int i) {
@@ -122,6 +176,7 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
         releaseTotals.push_back(release.total);
         moveTotals.insert(moveTotals.end(), moves.begin(), moves.end());
     }
+    measured.stop("strokes");
     double moveSum = 0;
     for (double m : moveTotals) moveSum += m;
     std::printf("summary: press median %.2f ms, move median %.2f ms / p95 %.2f ms, release median %.2f ms\n",
@@ -397,6 +452,7 @@ int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
     report("full view render (fit)", full);
     // A slider drag: the adjustment layer's settings change on each tick inside one edit, as the Properties
     // panel does, and the canvas repaints before the next.
+    bool dragCounted = false;
     auto drag = [&](nekophoto::AdjustmentKind kind, const char* label, auto&& tick) {
         // A kind the mode lacks (Exposure in CMYK) is refused with a message; skip it rather than wait on that.
         if (!nekophoto::unavailableReason(std::string("adjustment.") + nekophoto::adjustmentKindName(kind), session->sampleType(), session->colorMode()).empty()) {
@@ -409,6 +465,11 @@ int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
         auto settings = session->adjustmentSettings(*id);
         if (!settings) { std::printf("%s: not available here\n", label); return; }
         std::vector<double> ticks;
+        // The counted part is the first drag's ticks (Levels): each tick's setting and the repaint it causes.
+        Measured measured;
+        const bool counted = !dragCounted;
+        dragCounted = true;
+        if (counted) measured.start();
         session->beginAdjustmentEdit();
         for (int i = 0; i < 30; i++) {
             tick(*settings, i);
@@ -420,6 +481,7 @@ int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
             ticks.push_back(double(t.nsecsElapsed()) / 1e6);
         }
         session->endAdjustmentEdit();
+        if (counted) measured.stop(label);
         report(label, ticks);
         session->undo();
         session->undo();

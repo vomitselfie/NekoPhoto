@@ -185,7 +185,12 @@ def presets(rpc, work, layer_id):
     # A pattern overlay can now use the imported pattern.
     patterned = rpc.call("layers.setStyle", id=layer_id, style={"patternOverlays": [{"pattern": "rpc-smoke-pattern"}]})
     assert patterned["patternOverlays"][0]["pattern"] == "rpc-smoke-pattern", patterned
+    # The work counters (tools/perf_suite.py reads them around each operation): a render is counted.
+    counted = rpc.call("debug.counters")
     rpc.call("render", maxSize=64)
+    after = rpc.call("debug.counters")
+    assert after["render.calls"] > counted["render.calls"] and after["render.pixels"] > counted["render.pixels"], (counted, after)
+    assert set(after) >= {"layer.draws", "mip.misses", "brush.dabs", "smartFilter.passes"}, after
     rpc.call("layers.select", id=layer_id)
     rpc.call("selection.none")
     rpc.call("gradient.draw", x0=0, y0=0, x1=200, y1=0, preset="rpc-smoke RGB")
