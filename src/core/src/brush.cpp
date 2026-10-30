@@ -265,7 +265,8 @@ void BrushStroke::walk(Point point) {
     // Hard tips merge by max, so dabs only need to be close enough that the scallop between two circles stays
     // under a tenth of a pixel (depth ~ s^2 / 8r); soft tips build up by screen and keep the dense spacing.
     const double radius = settings_.diameter / 2;
-    double spacing = settings_.hardness >= 1 ? std::clamp(std::sqrt(0.8 * radius), 0.25, settings_.diameter * 0.05) : std::max(0.25, settings_.diameter * 0.025);
+    // (min of max rather than clamp: under 5 px the upper bound falls below 0.25, which clamp may not be given.)
+    double spacing = settings_.hardness >= 1 ? std::min(std::max(std::sqrt(0.8 * radius), 0.25), settings_.diameter * 0.05) : std::max(0.25, settings_.diameter * 0.025);
     if (previous_) {
         double dx = point.x - previous_->x, dy = point.y - previous_->y;
         double length = std::hypot(dx, dy);

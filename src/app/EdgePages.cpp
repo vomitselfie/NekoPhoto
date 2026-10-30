@@ -3,6 +3,7 @@
 #include "Motion.h"
 #include <QApplication>
 #include <QEasingCurve>
+#include <QLayout>
 #include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
