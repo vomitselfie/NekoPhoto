@@ -20,7 +20,7 @@
 #include "KeyboardShortcuts.h"
 #include "ToolOptionsBar.h"
 #include "WelcomeDialog.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "HistoryPanel.h"
 #include "HidePanels.h"
 #include "ColorRing.h"
@@ -268,9 +268,9 @@ MainWindow::MainWindow() {
         if (session_->featuresGated() && (feature.empty() || !session_->supportsFeature(feature))) return session_->unavailableTip(feature);
         return {};
     });
-    fullScreen_ = new FullScreenMode(this);   // after the docks, whose panels it moves into its edges
+    windowEdges_ = new WindowEdges(this);   // after the docks, whose panels it moves into its edges
     hidePanels_ = new HidePanels(this);
-    connect(fullScreen_, &FullScreenMode::normalLayoutRestored, hidePanels_, &HidePanels::afterFullScreen);
+    connect(windowEdges_, &WindowEdges::normalLayoutRestored, hidePanels_, &HidePanels::afterFullScreen);
     toolRing_ = new ToolRing(this);   // its commands go in with the View menu's
     colorRing_ = new ColorRing(this);
     layerPicker_ = new LayerPicker(this);
@@ -325,7 +325,7 @@ MainWindow::MainWindow() {
     // window closes; restoring it could hide the bar of the tab this launch shows. The current tab owns the bar.
     for (size_t i = 0; i < tabs_.size(); i++) tabs_[i].options->setVisible(int(i) == current_);
     // Edit > Preferences > Edges: the edges that autohide take their parts from the layout just restored.
-    fullScreen_->applyPreferences();
+    windowEdges_->applyPreferences();
 }
 
 MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
@@ -400,7 +400,7 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     { QSignalBlocker b(tabBar_); tabBar_->addTab(tab.defaultName); }
     connect(tab.canvas, &CanvasWidget::cursorMoved, this, [this](QPointF p) {
         positionLabel_->setText(QStringLiteral("%1, %2").arg(int(std::floor(p.x()))).arg(int(std::floor(p.y()))));
-        fullScreen_->pointerMoved(p);   // the bottom edge's Info
+        windowEdges_->pointerMoved(p);   // the bottom edge's Info
     });
     connect(tab.session, &EditorSession::projectPathChanged, this, &MainWindow::refreshTabTitles);
     connect(tab.session, &EditorSession::titleChanged, this, &MainWindow::refreshTabTitles);
@@ -484,7 +484,7 @@ void MainWindow::switchTo(int index) {
     if (histogram_) histogram_->setSession(session_);
     if (history_) history_->setSession(session_);
     tab.options->setVisible(!hidePanels_ || !hidePanels_->hidesOptions());   // Tab hid the options bar
-    if (fullScreen_) fullScreen_->currentTabChanged();   // in full screen, the options bar goes in the top edge
+    if (windowEdges_) windowEdges_->currentTabChanged();   // in full screen, the options bar goes in the top edge
     // The import bar shows over its own document only.
     if (importBanner_) importBanner_->setVisible(bannerSession_ && bannerSession_ == session_ && !importBanner_->notes().isEmpty());
     { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
@@ -825,31 +825,31 @@ void MainWindow::closeEvent(QCloseEvent* e) {
     QSettings settings;
     // In full screen, the layout from before it: the next launch opens the standard window as it was. The autohiding
     // edges give their parts back to the layout first, so it is the window's own.
-    const bool full = fullScreen_ && fullScreen_->active();
-    fullScreen_->suspend();
-    settings.setValue("window/geometry", full ? fullScreen_->normalGeometry() : saveGeometry());
-    settings.setValue("window/state", full ? fullScreen_->normalState() : hidePanels_->normalState());
-    fullScreen_->resume();
+    const bool full = windowEdges_ && windowEdges_->active();
+    windowEdges_->suspend();
+    settings.setValue("window/geometry", full ? windowEdges_->normalGeometry() : saveGeometry());
+    settings.setValue("window/state", full ? windowEdges_->normalState() : hidePanels_->normalState());
+    windowEdges_->resume();
     if (autosave_) autosave_->finish();   // a clean quit leaves nothing to recover
     e->accept();
 }
 
 void MainWindow::setScreenMode(bool fullScreen) {
-    if (fullScreen_->active() == fullScreen) return;
+    if (windowEdges_->active() == fullScreen) return;
     // Panels hidden with Tab come back for full screen's edges, and are hidden again after it (afterFullScreen).
     if (fullScreen) hidePanels_->beforeFullScreen();
-    fullScreen_->setActive(fullScreen);
+    windowEdges_->setActive(fullScreen);
     refreshActions();
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* e) {
-    if (e->key() == Qt::Key_Escape && e->modifiers() == Qt::NoModifier && fullScreen_ && fullScreen_->active()) {
-        if (!fullScreen_->closeFlyouts()) setScreenMode(false);
+    if (e->key() == Qt::Key_Escape && e->modifiers() == Qt::NoModifier && windowEdges_ && windowEdges_->active()) {
+        if (!windowEdges_->closeFlyouts()) setScreenMode(false);
         e->accept();
         return;
     }
     // The standard window's autohiding edges: Esc slides back the ones out.
-    if (e->key() == Qt::Key_Escape && e->modifiers() == Qt::NoModifier && fullScreen_ && fullScreen_->closeFlyouts()) {
+    if (e->key() == Qt::Key_Escape && e->modifiers() == Qt::NoModifier && windowEdges_ && windowEdges_->closeFlyouts()) {
         e->accept();
         return;
     }
@@ -900,28 +900,28 @@ void MainWindow::showPanel(const QString& name) {
         // Full Screen Mode, or the standard window with an edge autohiding (for this run), for screenshots: no
         // pointer to follow, the slides immediate. fullscreen:<edge>[:<page>] and edges:<edge>[:<page>] slide that
         // edge out on that page (its id, or its number from 1).
-        fullScreen_->setPolling(false);
-        fullScreen_->setTimings(0, 500);
+        windowEdges_->setPolling(false);
+        windowEdges_->setTimings(0, 500);
         const bool full = name.startsWith("fullscreen");
         const QString part = name.section(':', 1, 1), page = name.section(':', 2, 2);
         const int edge = int(QStringList{"left", "top", "right", "bottom"}.indexOf(part));
         // The bottom edge's Timeline is there when the document has frames.
-        if (edge == FullScreenMode::Bottom && (page.isEmpty() || page == "timeline" || page == "1") && session_->hasDocument() && session_->document()->animation.empty())
+        if (edge == WindowEdges::Bottom && (page.isEmpty() || page == "timeline" || page == "1") && session_->hasDocument() && session_->document()->animation.empty())
             session_->timelineFramesFromLayers();
         if (full) setScreenMode(true);
-        else if (edge >= 0) fullScreen_->setAutohide(FullScreenMode::Edge(edge), true);
+        else if (edge >= 0) windowEdges_->setAutohide(WindowEdges::Edge(edge), true);
         if (edge >= 0) {
-            const auto e = FullScreenMode::Edge(edge);
+            const auto e = WindowEdges::Edge(edge);
             if (!page.isEmpty()) {
                 bool number = false;
                 const int n = page.toInt(&number);
-                fullScreen_->showPage(e, number ? fullScreen_->pages(e).value(n - 1) : page, false);
+                windowEdges_->showPage(e, number ? windowEdges_->pages(e).value(n - 1) : page, false);
             }
-            fullScreen_->showEdge(e);
+            windowEdges_->showEdge(e);
             // Held mid-flip (NEKOPHOTO_EDGE_FLIP_FREEZE): one more page with the edge out.
-            if (qEnvironmentVariableIsSet("NEKOPHOTO_EDGE_FLIP_FREEZE")) fullScreen_->flip(e, 1);
-        } else if (part == "panels") fullScreen_->togglePinned(true);
-        else if (part == "menus") fullScreen_->showMenus();
+            if (qEnvironmentVariableIsSet("NEKOPHOTO_EDGE_FLIP_FREEZE")) windowEdges_->flip(e, 1);
+        } else if (part == "panels") windowEdges_->togglePinned(true);
+        else if (part == "menus") windowEdges_->showMenus();
     } else if (name == "batch") {
         if (ActionLibrary::instance().actions().empty()) {
             RecordedAction sample{tr("Web Thumbnail"), {{"image.resize", QJsonObject{{"width", 400}}, true}, {"document.export", QJsonObject{{"path", "/tmp/thumb.png"}, {"overwrite", true}}, false}}};

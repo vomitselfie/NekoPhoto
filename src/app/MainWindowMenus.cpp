@@ -6,7 +6,7 @@
 #include "ColorManagement.h"
 #include "ColorSwatches.h"
 #include "ActionLibrary.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include <QActionGroup>
 #include <QColorDialog>
 #include <QMenuBar>
@@ -196,11 +196,11 @@ void MainWindow::updateColorSwatches() {
     if (session_->paintsMask()) {
         auto grey = [](const QColor& c) { const double g = EditorSession::maskGrey(c); return QColor::fromRgbF(float(g), float(g), float(g)); };
         swatches_->setColors(grey(session_->foregroundColor), grey(session_->backgroundColor));
-        if (fullScreen_) fullScreen_->coloursChanged();
+        if (windowEdges_) windowEdges_->coloursChanged();
         return;
     }
     swatches_->setColors(color::displayColor(session_->foregroundColor, profile), color::displayColor(session_->backgroundColor, profile));
-    if (fullScreen_) fullScreen_->coloursChanged();   // the left edge's Colour page, the recent colours
+    if (windowEdges_) windowEdges_->coloursChanged();   // the left edge's Colour page, the recent colours
 }
 
 void MainWindow::chooseColor(bool background) {

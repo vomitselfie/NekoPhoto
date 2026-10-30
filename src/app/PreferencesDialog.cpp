@@ -127,7 +127,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     ringGrid->setColumnStretch(3, 1);
     layout->addWidget(ringBox);
 
-    // The window's edges (FullScreen.h): each one shown, or autohiding until the pointer reaches it; and Reduce motion
+    // The window's edges (WindowEdges.h): each one shown, or autohiding until the pointer reaches it; and Reduce motion
     // (for the rings' and the picker's motion too, Motion.h).
     auto* edgesBox = new QGroupBox(tr("Edges"));
     edgesBox->setObjectName("edgesPreferences");

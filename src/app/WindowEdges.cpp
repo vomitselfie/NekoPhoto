@@ -1,5 +1,5 @@
-// The window's edges, in full screen and autohiding in the standard window: see FullScreen.h.
-#include "FullScreen.h"
+// The window's edges, in full screen and autohiding in the standard window: see WindowEdges.h.
+#include "WindowEdges.h"
 #include "EditorSession.h"
 #include "BrushImporter.h"
 #include "BrushLibrary.h"
@@ -46,12 +46,12 @@ namespace app {
 
 namespace {
 
-Qt::Edge qtEdge(FullScreenMode::Edge edge) {
+Qt::Edge qtEdge(WindowEdges::Edge edge) {
     switch (edge) {
-    case FullScreenMode::Left: return Qt::LeftEdge;
-    case FullScreenMode::Top: return Qt::TopEdge;
-    case FullScreenMode::Right: return Qt::RightEdge;
-    case FullScreenMode::Bottom: return Qt::BottomEdge;
+    case WindowEdges::Left: return Qt::LeftEdge;
+    case WindowEdges::Top: return Qt::TopEdge;
+    case WindowEdges::Right: return Qt::RightEdge;
+    case WindowEdges::Bottom: return Qt::BottomEdge;
     }
     return Qt::RightEdge;
 }
@@ -68,9 +68,9 @@ QKeySequence normalized(int key, Qt::KeyboardModifiers mods) {
 
 QString modeText(ColorMode mode) {
     switch (mode) {
-    case ColorMode::RGB: return FullScreenMode::tr("RGB Color");
-    case ColorMode::CMYK: return FullScreenMode::tr("CMYK Color");
-    case ColorMode::Lab: return FullScreenMode::tr("Lab Color");
+    case ColorMode::RGB: return WindowEdges::tr("RGB Color");
+    case ColorMode::CMYK: return WindowEdges::tr("CMYK Color");
+    case ColorMode::Lab: return WindowEdges::tr("Lab Color");
     }
     return {};
 }
@@ -156,9 +156,9 @@ void Flyout::paintEvent(QPaintEvent*) {
     p.drawPath(shape);
 }
 
-// ---- FullScreenMode --------------------------------------------------------------------------------------------
+// ---- WindowEdges --------------------------------------------------------------------------------------------
 
-FullScreenMode::FullScreenMode(MainWindow* window) : QObject(window), window_(window) {
+WindowEdges::WindowEdges(MainWindow* window) : QObject(window), window_(window) {
     for (int i = 0; i < edgeCount; i++) {
         EdgeState& s = edges_[size_t(i)];
         const Edge edge = Edge(i);
@@ -244,16 +244,16 @@ FullScreenMode::FullScreenMode(MainWindow* window) : QObject(window), window_(wi
             dock->hide();
             revealPanel(dock);
         });
-    connect(window, &MainWindow::automationEvent, this, &FullScreenMode::followWindow);
-    connect(edges::notifier(), &edges::Notifier::changed, this, &FullScreenMode::applyPreferences);
+    connect(window, &MainWindow::automationEvent, this, &WindowEdges::followWindow);
+    connect(edges::notifier(), &edges::Notifier::changed, this, &WindowEdges::applyPreferences);
     window->installEventFilter(this);
     window->canvasStack_->installEventFilter(this);
     qApp->installEventFilter(this);
 }
 
-FullScreenMode::~FullScreenMode() { qApp->removeEventFilter(this); }
+WindowEdges::~WindowEdges() { qApp->removeEventFilter(this); }
 
-void FullScreenMode::buildPages(Edge edge) {
+void WindowEdges::buildPages(Edge edge) {
     EdgeState& s = edges_[size_t(edge)];
     auto add = [&](const char* id, const QString& label, QStringList docks, bool fill, Qt::Orientation split = Qt::Vertical, QStringList guests = {}) {
         Page p;
@@ -302,7 +302,7 @@ void FullScreenMode::buildPages(Edge edge) {
     }
 }
 
-void FullScreenMode::fillOwnPages() {
+void WindowEdges::fillOwnPages() {
     if (brushes_) return;
     MainWindow* w = window_;
     // Left: the brush presets (choosing one picks the Brush), and the colours.
@@ -351,13 +351,13 @@ void FullScreenMode::fillOwnPages() {
     for (EdgeState& s : edges_) s.deck->setCurrent(s.current);
 }
 
-int FullScreenMode::pageIndex(Edge edge, const QString& id) const {
+int WindowEdges::pageIndex(Edge edge, const QString& id) const {
     const auto& pages = edges_[size_t(edge)].pages;
     for (size_t i = 0; i < pages.size(); i++) if (pages[i].id == id) return int(i);
     return -1;
 }
 
-bool FullScreenMode::pageAvailable(Edge edge, int index) const {
+bool WindowEdges::pageAvailable(Edge edge, int index) const {
     const EdgeState& s = edges_[size_t(edge)];
     if (!s.claimed || index < 0 || index >= int(s.pages.size())) return false;
     const Page& p = s.pages[size_t(index)];
@@ -375,54 +375,54 @@ bool FullScreenMode::pageAvailable(Edge edge, int index) const {
     return false;
 }
 
-QStringList FullScreenMode::pages(Edge edge) const {
+QStringList WindowEdges::pages(Edge edge) const {
     QStringList out;
     const EdgeState& s = edges_[size_t(edge)];
     for (int i = 0; i < int(s.pages.size()); i++) if (pageAvailable(edge, i)) out << s.pages[size_t(i)].id;
     return out;
 }
 
-QStringList FullScreenMode::allPages(Edge edge) const {
+QStringList WindowEdges::allPages(Edge edge) const {
     QStringList out;
     for (const Page& p : edges_[size_t(edge)].pages) out << p.id;
     return out;
 }
 
-QString FullScreenMode::pageLabel(Edge edge, const QString& id) const {
+QString WindowEdges::pageLabel(Edge edge, const QString& id) const {
     const int i = pageIndex(edge, id);
     return i < 0 ? QString() : edges_[size_t(edge)].pages[size_t(i)].label;
 }
 
-QString FullScreenMode::page(Edge edge) const {
+QString WindowEdges::page(Edge edge) const {
     const EdgeState& s = edges_[size_t(edge)];
     return s.current >= 0 && s.current < int(s.pages.size()) ? s.pages[size_t(s.current)].id : QString();
 }
 
-bool FullScreenMode::hasContent(Edge edge) const {
+bool WindowEdges::hasContent(Edge edge) const {
     const EdgeState& s = edges_[size_t(edge)];
     if (!s.claimed) return false;
     for (int i = 0; i < int(s.pages.size()); i++) if (pageAvailable(edge, i)) return true;
     return false;
 }
 
-bool FullScreenMode::anyClaimed() const {
+bool WindowEdges::anyClaimed() const {
     for (const EdgeState& s : edges_) if (s.claimed) return true;
     return false;
 }
 
-bool FullScreenMode::claimsWidget(const QWidget* widget) const {
+bool WindowEdges::claimsWidget(const QWidget* widget) const {
     if (!widget) return false;
     if (widget == rail_ || std::find(optionBars_.begin(), optionBars_.end(), QPointer<QToolBar>(const_cast<QToolBar*>(qobject_cast<const QToolBar*>(widget)))) != optionBars_.end()) return true;
     for (const Moved& m : moved_) if (m.dock == widget) return true;
     return false;
 }
 
-int FullScreenMode::edgeHolding(QDockWidget* dock) const {
+int WindowEdges::edgeHolding(QDockWidget* dock) const {
     for (const Moved& m : moved_) if (m.dock == dock) return m.edge;
     return -1;
 }
 
-QString FullScreenMode::pageHolding(QDockWidget* dock) const {
+QString WindowEdges::pageHolding(QDockWidget* dock) const {
     const int edge = edgeHolding(dock);
     if (edge < 0) return {};
     for (const Page& p : edges_[size_t(edge)].pages)
@@ -430,7 +430,7 @@ QString FullScreenMode::pageHolding(QDockWidget* dock) const {
     return {};
 }
 
-QRect FullScreenMode::area() const {
+QRect WindowEdges::area() const {
     if (active_) return window_->rect();
     const QWidget* canvas = window_->canvasStack_;
     return QRect(canvas->mapTo(window_, QPoint(0, 0)), canvas->size());
@@ -438,7 +438,7 @@ QRect FullScreenMode::area() const {
 
 // ---- Claiming an edge's parts ----------------------------------------------------------------------------------
 
-void FullScreenMode::claim(Edge edge) {
+void WindowEdges::claim(Edge edge) {
     EdgeState& s = edges_[size_t(edge)];
     if (s.claimed) return;
     MainWindow* w = window_;
@@ -516,7 +516,7 @@ void FullScreenMode::claim(Edge edge) {
     relayout();
 }
 
-void FullScreenMode::unclaim(Edge edge) {
+void WindowEdges::unclaim(Edge edge) {
     EdgeState& s = edges_[size_t(edge)];
     if (!s.claimed) return;
     MainWindow* w = window_;
@@ -563,7 +563,7 @@ void FullScreenMode::unclaim(Edge edge) {
     if (!anyClaimed()) tick_->stop();
 }
 
-void FullScreenMode::engageNormal() {
+void WindowEdges::engageNormal() {
     if (active_ || suspended_ > 0) return;
     for (int i = 0; i < edgeCount; i++) {
         if (autohide_[size_t(i)]) claim(Edge(i));
@@ -572,16 +572,16 @@ void FullScreenMode::engageNormal() {
     relayout();
 }
 
-void FullScreenMode::suspend() {
+void WindowEdges::suspend() {
     if (suspended_++ == 0 && !active_)
         for (int i = 0; i < edgeCount; i++) unclaim(Edge(i));
 }
 
-void FullScreenMode::resume() {
+void WindowEdges::resume() {
     if (suspended_ > 0 && --suspended_ == 0) engageNormal();
 }
 
-void FullScreenMode::applyPreferences() {
+void WindowEdges::applyPreferences() {
     reduceMotion_ = edges::reduceMotion();
     std::array<bool, edgeCount> wanted{};
     for (int i = 0; i < edgeCount; i++) wanted[size_t(i)] = edges::autohide(i);
@@ -592,7 +592,7 @@ void FullScreenMode::applyPreferences() {
     resume();
 }
 
-void FullScreenMode::setAutohide(Edge edge, bool on) {
+void WindowEdges::setAutohide(Edge edge, bool on) {
     suspend();
     autohide_[size_t(edge)] = on;
     resume();
@@ -600,7 +600,7 @@ void FullScreenMode::setAutohide(Edge edge, bool on) {
 
 // ---- Full screen -----------------------------------------------------------------------------------------------
 
-void FullScreenMode::enter() {
+void WindowEdges::enter() {
     if (active_) return;
     MainWindow* w = window_;
     // The autohiding edges give their parts back first: what is kept is the window's own layout.
@@ -630,7 +630,7 @@ void FullScreenMode::enter() {
     emit activeChanged(true);
 }
 
-void FullScreenMode::leave() {
+void WindowEdges::leave() {
     if (!active_) return;
     MainWindow* w = window_;
     active_ = false;
@@ -664,7 +664,7 @@ void FullScreenMode::leave() {
 
 // ---- The options bar, the window's keys ------------------------------------------------------------------------
 
-void FullScreenMode::placeOptionsBar() {
+void WindowEdges::placeOptionsBar() {
     MainWindow* w = window_;
     if (!edges_[Top].claimed || w->current_ < 0 || w->current_ >= int(w->tabs_.size())) return;
     QToolBar* bar = w->tabs_[size_t(w->current_)].options;
@@ -689,17 +689,17 @@ void FullScreenMode::placeOptionsBar() {
     relayout();
 }
 
-void FullScreenMode::currentTabChanged() {
+void WindowEdges::currentTabChanged() {
     if (edges_[Top].claimed) placeOptionsBar();
     refreshPagesLater();
 }
 
-void FullScreenMode::takeBackShortcuts() {
+void WindowEdges::takeBackShortcuts() {
     for (QAction* a : addedShortcuts_) window_->removeAction(a);
     addedShortcuts_.clear();
 }
 
-void FullScreenMode::lendShortcuts() {
+void WindowEdges::lendShortcuts() {
     takeBackShortcuts();
     if (!anyClaimed()) return;
     MainWindow* w = window_;
@@ -726,7 +726,7 @@ void FullScreenMode::lendShortcuts() {
 
 // ---- Pages -----------------------------------------------------------------------------------------------------
 
-void FullScreenMode::refreshStrip(Edge edge) {
+void WindowEdges::refreshStrip(Edge edge) {
     EdgeState& s = edges_[size_t(edge)];
     if (!s.claimed) return;
     if (!pageAvailable(edge, s.current)) {
@@ -745,7 +745,7 @@ void FullScreenMode::refreshStrip(Edge edge) {
     s.strip->setVisible(!labels.isEmpty());
 }
 
-void FullScreenMode::showPageIndex(Edge edge, int index, bool forwards, bool remember) {
+void WindowEdges::showPageIndex(Edge edge, int index, bool forwards, bool remember) {
     EdgeState& s = edges_[size_t(edge)];
     if (!pageAvailable(edge, index)) return;
     if (remember) edges::setLastPage(edge, s.pages[size_t(index)].id);
@@ -763,7 +763,7 @@ void FullScreenMode::showPageIndex(Edge edge, int index, bool forwards, bool rem
     emit pageChanged(edge, s.pages[size_t(index)].id);
 }
 
-bool FullScreenMode::flip(Edge edge, int step) {
+bool WindowEdges::flip(Edge edge, int step) {
     const EdgeState& s = edges_[size_t(edge)];
     std::vector<int> shown;
     for (int i = 0; i < int(s.pages.size()); i++) if (pageAvailable(edge, i)) shown.push_back(i);
@@ -775,7 +775,7 @@ bool FullScreenMode::flip(Edge edge, int step) {
     return true;
 }
 
-bool FullScreenMode::showPage(Edge edge, const QString& id, bool remember) {
+bool WindowEdges::showPage(Edge edge, const QString& id, bool remember) {
     const int index = pageIndex(edge, id);
     if (!pageAvailable(edge, index)) return false;
     const int from = edges_[size_t(edge)].current;
@@ -783,7 +783,7 @@ bool FullScreenMode::showPage(Edge edge, const QString& id, bool remember) {
     return true;
 }
 
-int FullScreenMode::flipTarget() const {
+int WindowEdges::flipTarget() const {
     int best = -1;
     quint64 latest = 0;
     for (int i = 0; i < edgeCount; i++) {
@@ -795,11 +795,11 @@ int FullScreenMode::flipTarget() const {
     return best;
 }
 
-void FullScreenMode::refreshPagesLater() {
+void WindowEdges::refreshPagesLater() {
     if (!refreshTimer_->isActive()) refreshTimer_->start();
 }
 
-void FullScreenMode::refreshPage(Edge edge) {
+void WindowEdges::refreshPage(Edge edge) {
     const EdgeState& s = edges_[size_t(edge)];
     if (!s.claimed || !brushes_) return;
     MainWindow* w = window_;
@@ -851,7 +851,7 @@ void FullScreenMode::refreshPage(Edge edge) {
     }
 }
 
-void FullScreenMode::followWindow(const QString& kind) {
+void WindowEdges::followWindow(const QString& kind) {
     EditorSession* session = window_->session_;
     if (!session) return;
     if (kind == QLatin1String("document") || kind == QLatin1String("layers")) staleThumbnails_.insert(session);
@@ -881,7 +881,7 @@ void FullScreenMode::followWindow(const QString& kind) {
     refreshPagesLater();
 }
 
-void FullScreenMode::coloursChanged() {
+void WindowEdges::coloursChanged() {
     const QColor fg = window_->session_ ? window_->session_->foregroundColor : QColor();
     if (fg.isValid() && fg != lastForeground_) {
         if (lastForeground_.isValid()) edges::noteRecentColour(fg);
@@ -890,13 +890,13 @@ void FullScreenMode::coloursChanged() {
     if (edges_[Left].claimed && page(Left) == QLatin1String("colour") && edges_[Left].progress > 0) refreshPage(Left);
 }
 
-void FullScreenMode::pointerMoved(QPointF documentPoint) {
+void WindowEdges::pointerMoved(QPointF documentPoint) {
     if (info_ && edges_[Bottom].claimed && edges_[Bottom].progress > 0 && page(Bottom) == QLatin1String("info")) info_->setPointer(documentPoint);
 }
 
 // ---- Geometry and the slides -----------------------------------------------------------------------------------
 
-int FullScreenMode::pageLength(Edge edge) const {
+int WindowEdges::pageLength(Edge edge) const {
     // How tall the top and bottom rows are, their pages' own height (the bottom's Timeline as it was in the window).
     const EdgeState& s = edges_[size_t(edge)];
     const QRect a = area();
@@ -909,7 +909,7 @@ int FullScreenMode::pageLength(Edge edge) const {
     return edge == Bottom ? std::min(height, std::max(120, a.height() / 2)) : height;
 }
 
-QRect FullScreenMode::shownGeometry(Edge edge) const {
+QRect WindowEdges::shownGeometry(Edge edge) const {
     const EdgeState& s = edges_[size_t(edge)];
     const QRect a = area();
     const QMargins m = s.flyout->body()->contentsMargins();
@@ -941,7 +941,7 @@ QRect FullScreenMode::shownGeometry(Edge edge) const {
     return {};
 }
 
-void FullScreenMode::relayout() {
+void WindowEdges::relayout() {
     if (!anyClaimed()) return;
     const QRect a = area();
     for (int i = 0; i < edgeCount; i++) {
@@ -968,7 +968,7 @@ void FullScreenMode::relayout() {
     if (menuStrip_ && menuStrip_->isVisible()) menuStrip_->setGeometry(0, 0, window_->width(), menuStrip_->sizeHint().height());
 }
 
-void FullScreenMode::slide(Edge edge, bool out, int delayMs) {
+void WindowEdges::slide(Edge edge, bool out, int delayMs) {
     EdgeState& s = edges_[size_t(edge)];
     if (out && !hasContent(edge)) return;
     if (!out) s.peeked = false;
@@ -1008,12 +1008,12 @@ void FullScreenMode::slide(Edge edge, bool out, int delayMs) {
     motion::start(s.slide);
 }
 
-void FullScreenMode::moveFocusOut(Edge edge) {
+void WindowEdges::moveFocusOut(Edge edge) {
     QWidget* focus = QApplication::focusWidget();
     if (focus && edges_[size_t(edge)].flyout->isAncestorOf(focus) && window_->canvas_) window_->canvas_->setFocus();
 }
 
-bool FullScreenMode::pinnedAll(bool withTools) const {
+bool WindowEdges::pinnedAll(bool withTools) const {
     bool any = false;
     for (int i = 0; i < edgeCount; i++) {
         const bool want = (withTools || i != Left) && hasContent(Edge(i));
@@ -1023,11 +1023,11 @@ bool FullScreenMode::pinnedAll(bool withTools) const {
     return any;
 }
 
-void FullScreenMode::togglePinned(bool withTools) {
+void WindowEdges::togglePinned(bool withTools) {
     if (active_) pin(!pinnedAll(withTools), withTools);
 }
 
-void FullScreenMode::pin(bool on, bool withTools) {
+void WindowEdges::pin(bool on, bool withTools) {
     if (!active_) return;
     for (int i = 0; i < edgeCount; i++) {
         EdgeState& s = edges_[size_t(i)];
@@ -1038,7 +1038,7 @@ void FullScreenMode::pin(bool on, bool withTools) {
     }
 }
 
-void FullScreenMode::peek(bool on, bool withTools) {
+void WindowEdges::peek(bool on, bool withTools) {
     peeking_ = on;
     // Out one after another, left, top, right, bottom (a little apart); back all together.
     int stagger = 0;
@@ -1059,7 +1059,7 @@ void FullScreenMode::peek(bool on, bool withTools) {
     evaluate();
 }
 
-void FullScreenMode::revealPanel(QDockWidget* dock) {
+void WindowEdges::revealPanel(QDockWidget* dock) {
     const int at = edgeHolding(dock);
     if (at < 0) return;
     if (dock == window_->timelineDock_) timelineWanted_ = true;
@@ -1072,13 +1072,13 @@ void FullScreenMode::revealPanel(QDockWidget* dock) {
     slide(Edge(at), true);
 }
 
-void FullScreenMode::showEdge(Edge edge) {
+void WindowEdges::showEdge(Edge edge) {
     if (!edges_[size_t(edge)].claimed) return;
     edges_[size_t(edge)].held = true;
     slide(edge, true);
 }
 
-bool FullScreenMode::closeFlyouts() {
+bool WindowEdges::closeFlyouts() {
     bool any = false;
     for (int i = 0; i < edgeCount; i++) {
         EdgeState& s = edges_[size_t(i)];
@@ -1090,7 +1090,7 @@ bool FullScreenMode::closeFlyouts() {
     return any;
 }
 
-void FullScreenMode::showMenus() {
+void WindowEdges::showMenus() {
     MainWindow* w = window_;
     QAction* first = nullptr;
     for (QAction* a : w->menuBar()->actions()) if (a->menu() && a->isVisible() && a->isEnabled()) { first = a; break; }
@@ -1106,7 +1106,7 @@ void FullScreenMode::showMenus() {
         menuStrip_->setObjectName(QStringLiteral("menuStrip"));
         menuStrip_->addActions(w->menuBar()->actions());
         for (QAction* a : w->menuBar()->actions())
-            if (QMenu* menu = a->menu()) connect(menu, &QMenu::aboutToHide, this, &FullScreenMode::hideMenuStripLater);
+            if (QMenu* menu = a->menu()) connect(menu, &QMenu::aboutToHide, this, &WindowEdges::hideMenuStripLater);
     }
     menuStrip_->setGeometry(0, 0, w->width(), menuStrip_->sizeHint().height());
     menuStrip_->show();
@@ -1114,7 +1114,7 @@ void FullScreenMode::showMenus() {
     menuStrip_->setActiveAction(first);
 }
 
-void FullScreenMode::hideMenuStripLater() {
+void WindowEdges::hideMenuStripLater() {
     // Moving from one menu to the next closes one and opens the other: look once that has settled.
     QTimer::singleShot(0, this, [this] {
         if (menuStrip_ && !QApplication::activePopupWidget()) menuStrip_->hide();
@@ -1123,7 +1123,7 @@ void FullScreenMode::hideMenuStripLater() {
 
 // ---- The pointer -----------------------------------------------------------------------------------------------
 
-int FullScreenMode::edgeOf(const QWidget* widget) const {
+int WindowEdges::edgeOf(const QWidget* widget) const {
     for (int i = 0; i < edgeCount; i++) {
         const Flyout* f = edges_[size_t(i)].flyout;
         if (widget == f || f->isAncestorOf(widget)) return i;
@@ -1131,7 +1131,7 @@ int FullScreenMode::edgeOf(const QWidget* widget) const {
     return -1;
 }
 
-bool FullScreenMode::atScreenEdge(Edge edge) const {
+bool WindowEdges::atScreenEdge(Edge edge) const {
     if (active_ || window_->isFullScreen()) return true;
     const QScreen* screen = window_->screen();
     if (!screen) return false;
@@ -1146,7 +1146,7 @@ bool FullScreenMode::atScreenEdge(Edge edge) const {
     return false;
 }
 
-bool FullScreenMode::inZone(Edge edge, QPoint p) const {
+bool WindowEdges::inZone(Edge edge, QPoint p) const {
     const QRect a = area();
     // Past the area's side only where that side is the screen's (the pointer stops there, or runs on to the next
     // monitor), and the corners belong to the side columns.
@@ -1163,7 +1163,7 @@ bool FullScreenMode::inZone(Edge edge, QPoint p) const {
     return false;
 }
 
-void FullScreenMode::pointerAt(QPoint p) {
+void WindowEdges::pointerAt(QPoint p) {
     if (!anyClaimed()) return;
     lastPointer_ = p;
     pointerKnown_ = true;
@@ -1187,7 +1187,7 @@ void FullScreenMode::pointerAt(QPoint p) {
     evaluate();
 }
 
-bool FullScreenMode::keepsOut(Edge edge) const {
+bool WindowEdges::keepsOut(Edge edge) const {
     const EdgeState& s = edges_[size_t(edge)];
     if (s.held || s.peeked) return true;
     if (pointerKnown_ && (s.inZone || s.flyout->geometry().adjusted(-2, -2, 2, 2).contains(lastPointer_))) return true;
@@ -1200,7 +1200,7 @@ bool FullScreenMode::keepsOut(Edge edge) const {
     return false;
 }
 
-void FullScreenMode::evaluate() {
+void WindowEdges::evaluate() {
     for (int i = 0; i < edgeCount; i++) {
         EdgeState& s = edges_[size_t(i)];
         if (!s.claimed || !s.target || s.pinned || keepsOut(Edge(i))) { s.closeTimer->stop(); continue; }
@@ -1210,7 +1210,7 @@ void FullScreenMode::evaluate() {
 
 // ---- Tab and Shift+Tab -----------------------------------------------------------------------------------------
 
-QList<QKeySequence> FullScreenMode::commandKeys(const char* id) const {
+QList<QKeySequence> WindowEdges::commandKeys(const char* id) const {
     QList<QKeySequence> out;
     const Command* c = window_->commands_ ? window_->commandRegistry().find(QString::fromLatin1(id)) : nullptr;
     if (!c || !c->action) return out;
@@ -1219,7 +1219,7 @@ QList<QKeySequence> FullScreenMode::commandKeys(const char* id) const {
     return out;
 }
 
-bool FullScreenMode::keyFree() const {
+bool WindowEdges::keyFree() const {
     // Not while a field has the keys, typing goes on on the canvas, or a menu or a dialog is open.
     QWidget* focus = QApplication::focusWidget();
     if (takesTypedText(focus)) return false;
@@ -1229,7 +1229,7 @@ bool FullScreenMode::keyFree() const {
     return true;
 }
 
-bool FullScreenMode::edgeKey(QObject*, QKeyEvent* ke) {
+bool WindowEdges::edgeKey(QObject*, QKeyEvent* ke) {
     const QEvent::Type type = ke->type();
     const QKeySequence key = normalized(ke->key(), ke->modifiers());
     const int code = int(key[0].key());
@@ -1276,7 +1276,7 @@ bool FullScreenMode::edgeKey(QObject*, QKeyEvent* ke) {
 
 // ---- Events ----------------------------------------------------------------------------------------------------
 
-bool FullScreenMode::eventFilter(QObject* watched, QEvent* event) {
+bool WindowEdges::eventFilter(QObject* watched, QEvent* event) {
     const QEvent::Type type = event->type();
     if (watched == window_) {
         if (type == QEvent::Resize) {
@@ -1356,7 +1356,7 @@ bool FullScreenMode::eventFilter(QObject* watched, QEvent* event) {
         // The drag is over: the press that began it will not be released here.
         pressEdge_ = -1;
         buttons_ = Qt::NoButton;
-        QTimer::singleShot(0, this, &FullScreenMode::evaluate);
+        QTimer::singleShot(0, this, &WindowEdges::evaluate);
         break;
     case QEvent::ShortcutOverride: {
         auto* ke = static_cast<QKeyEvent*>(event);
@@ -1377,7 +1377,7 @@ bool FullScreenMode::eventFilter(QObject* watched, QEvent* event) {
         if (ke->key() == Qt::Key_Alt && !ke->isAutoRepeat() && altArmed_ && ours) {
             // Alt pressed and let go alone: the menus, as F10.
             altArmed_ = false;
-            QTimer::singleShot(0, this, &FullScreenMode::showMenus);
+            QTimer::singleShot(0, this, &WindowEdges::showMenus);
         }
         break;
     }
@@ -1385,7 +1385,7 @@ bool FullScreenMode::eventFilter(QObject* watched, QEvent* event) {
         altArmed_ = false;
         break;
     case QEvent::FocusIn:
-        if (ours) QTimer::singleShot(0, this, &FullScreenMode::evaluate);
+        if (ours) QTimer::singleShot(0, this, &WindowEdges::evaluate);
         break;
     default:
         break;

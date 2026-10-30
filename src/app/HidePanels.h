@@ -1,7 +1,7 @@
 // Tab and Shift+Tab in the Standard Screen Mode, as Photoshop's: Tab hides every panel, the tool rail and the options
 // bar (the menus, the document tabs and the status bar stay); Shift+Tab hides only the panels docked on the right.
 // Either key again gives back the dock layout as it was (saveState()), so a panel that was closed stays closed. Full
-// Screen Mode keeps its own Tab (FullScreen.h): the layout comes back while it is on, and is hidden again after it.
+// Screen Mode keeps its own Tab (WindowEdges.h): the layout comes back while it is on, and is hidden again after it.
 // Tab and Shift+Tab stay with a text field wherever it is, in either mode.
 #pragma once
 #include <QByteArray>

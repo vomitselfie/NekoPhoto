@@ -80,14 +80,14 @@ private:
     QColor fill_, border_;
 };
 
-class FullScreenMode : public QObject {
+class WindowEdges : public QObject {
     Q_OBJECT
 public:
     enum Edge { Left, Top, Right, Bottom };
     static constexpr int edgeCount = 4;
 
-    explicit FullScreenMode(MainWindow* window);
-    ~FullScreenMode() override;
+    explicit WindowEdges(MainWindow* window);
+    ~WindowEdges() override;
 
     // ---- Full screen
     bool active() const { return active_; }

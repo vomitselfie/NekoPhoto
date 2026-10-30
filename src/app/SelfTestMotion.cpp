@@ -13,7 +13,7 @@
 #include "ColorRing.h"
 #include "EdgePages.h"
 #include "EditorSession.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "LayerPicker.h"
 #include "MainWindow.h"
 #include "Motion.h"
@@ -53,7 +53,7 @@ int interfaceMotion(MainWindow& w) {
     ToolRing* ring = w.toolRing();
     ColorRing* colours = w.colorRing();
     LayerPicker* picker = w.layerPicker();
-    FullScreenMode* fs = w.fullScreenMode();
+    WindowEdges* fs = w.windowEdges();
     if (!canvas || !ring || !colours || !picker || !fs || !s.document()) { std::fprintf(stderr, "motion: no canvas, rings or document\n"); return 1; }
     canvas->setFocus();
     QApplication::processEvents();
@@ -304,33 +304,33 @@ int interfaceMotion(MainWindow& w) {
     // ---- The edges: a slide with its shadow, a page turn, hold Tab -------------------------------------------------
     fs->setPolling(false);
     fs->setTimings(-1, 60000, 0);   // the slides as they are; nothing slides back on its own while the clips run
-    for (auto e : {FullScreenMode::Left, FullScreenMode::Top, FullScreenMode::Right, FullScreenMode::Bottom}) edges::setAutohide(e, true);
+    for (auto e : {WindowEdges::Left, WindowEdges::Top, WindowEdges::Right, WindowEdges::Bottom}) edges::setAutohide(e, true);
     QApplication::processEvents();
     run(100);
     {
         const QRect whole = w.rect();
         Clip slideClip{QStringLiteral("edge-slide"), whole};
         shoot(&slideClip);
-        fs->showEdge(FullScreenMode::Right);
-        Flyout* right = fs->flyout(FullScreenMode::Right);
-        expect(fs->isOut(FullScreenMode::Right) && right->isVisible() && right->reveal() < 1, "the right edge did not start sliding out");
+        fs->showEdge(WindowEdges::Right);
+        Flyout* right = fs->flyout(WindowEdges::Right);
+        expect(fs->isOut(WindowEdges::Right) && right->isVisible() && right->reveal() < 1, "the right edge did not start sliding out");
         run(66, &slideClip);
         expect(right->reveal() > 0 && right->reveal() < 1, "the right edge is not part of the way out at 66 ms");
         run(200, &slideClip);
-        expect(right->reveal() == 1 && right->geometry() == fs->shownGeometry(FullScreenMode::Right), "the right edge did not get all the way out");
+        expect(right->reveal() == 1 && right->geometry() == fs->shownGeometry(WindowEdges::Right), "the right edge did not get all the way out");
         run(300, &slideClip);
 
         Clip flipClip{QStringLiteral("page-flip"), whole};
         shoot(&flipClip);
         run(100, &flipClip);
-        fs->flip(FullScreenMode::Right, 1);
-        expect(fs->deck(FullScreenMode::Right)->flipping() && fs->strip(FullScreenMode::Right)->sliding(), "the page turn or the strip's pill did not animate");
+        fs->flip(WindowEdges::Right, 1);
+        expect(fs->deck(WindowEdges::Right)->flipping() && fs->strip(WindowEdges::Right)->sliding(), "the page turn or the strip's pill did not animate");
         run(66, &flipClip);
-        expect(fs->deck(FullScreenMode::Right)->flipping(), "the page turn ended too soon");
+        expect(fs->deck(WindowEdges::Right)->flipping(), "the page turn ended too soon");
         run(250, &flipClip);
-        expect(!fs->deck(FullScreenMode::Right)->flipping() && !fs->strip(FullScreenMode::Right)->sliding(), "the page turn did not end");
+        expect(!fs->deck(WindowEdges::Right)->flipping() && !fs->strip(WindowEdges::Right)->sliding(), "the page turn did not end");
         run(300, &flipClip);
-        fs->flip(FullScreenMode::Right, 1);
+        fs->flip(WindowEdges::Right, 1);
         run(500, &flipClip);
         fs->closeFlyouts();
         run(300, &flipClip);
@@ -341,12 +341,12 @@ int interfaceMotion(MainWindow& w) {
         run(100, &peekClip);
         fs->peek(true, true);
         run(33, &peekClip);
-        Flyout* left = fs->flyout(FullScreenMode::Left);
-        Flyout* bottom = fs->flyout(FullScreenMode::Bottom);
-        expect(left->reveal() > 0 && bottom->reveal() == 0 && fs->isOut(FullScreenMode::Bottom), "hold Tab did not bring the edges out one after another");
+        Flyout* left = fs->flyout(WindowEdges::Left);
+        Flyout* bottom = fs->flyout(WindowEdges::Bottom);
+        expect(left->reveal() > 0 && bottom->reveal() == 0 && fs->isOut(WindowEdges::Bottom), "hold Tab did not bring the edges out one after another");
         run(300, &peekClip);
         bool allOut = true;
-        for (auto e : {FullScreenMode::Left, FullScreenMode::Top, FullScreenMode::Right, FullScreenMode::Bottom})
+        for (auto e : {WindowEdges::Left, WindowEdges::Top, WindowEdges::Right, WindowEdges::Bottom})
             if (fs->hasContent(e) && fs->flyout(e)->reveal() < 1) allOut = false;
         expect(allOut, "hold Tab did not bring every edge out");
         run(400, &peekClip);
@@ -368,17 +368,17 @@ int interfaceMotion(MainWindow& w) {
     QApplication::processEvents();
     fs->applyPreferences();
     {
-        fs->showEdge(FullScreenMode::Right);
-        expect(fs->flyout(FullScreenMode::Right)->reveal() == 1, "with Reduce motion the edge slid out");
-        fs->flip(FullScreenMode::Right, 1);
+        fs->showEdge(WindowEdges::Right);
+        expect(fs->flyout(WindowEdges::Right)->reveal() == 1, "with Reduce motion the edge slid out");
+        fs->flip(WindowEdges::Right, 1);
         run(50);
-        expect(!fs->strip(FullScreenMode::Right)->sliding(), "with Reduce motion the strip's pill slid");
+        expect(!fs->strip(WindowEdges::Right)->sliding(), "with Reduce motion the strip's pill slid");
         fs->closeFlyouts();
         fs->peek(true, true);
-        expect(fs->flyout(FullScreenMode::Bottom)->reveal() == 1 && fs->flyout(FullScreenMode::Left)->reveal() == 1, "with Reduce motion hold Tab staggered the edges");
+        expect(fs->flyout(WindowEdges::Bottom)->reveal() == 1 && fs->flyout(WindowEdges::Left)->reveal() == 1, "with Reduce motion hold Tab staggered the edges");
         fs->peek(false, true);
         run(100);
-        for (auto e : {FullScreenMode::Left, FullScreenMode::Top, FullScreenMode::Right, FullScreenMode::Bottom}) edges::setAutohide(e, false);
+        for (auto e : {WindowEdges::Left, WindowEdges::Top, WindowEdges::Right, WindowEdges::Bottom}) edges::setAutohide(e, false);
         QApplication::processEvents();
 
         s.selectTool(Tool::Brush);

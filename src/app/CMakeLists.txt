@@ -216,8 +216,8 @@ qt_add_executable(nekophoto
     Scrub.cpp
     ImportBanner.h
     ImportBanner.cpp
-    FullScreen.h
-    FullScreen.cpp
+    WindowEdges.h
+    WindowEdges.cpp
     Motion.h
     Motion.cpp
     RingOverlay.h

@@ -6,7 +6,7 @@
 #include "ColorDialogs.h"
 #include "ColorManagement.h"
 #include "ViewOptions.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "HidePanels.h"
 #include "ColorRing.h"
 #include "LayerPicker.h"
@@ -93,7 +93,7 @@ void MainWindow::buildViewMenu(MenuContext& m) {
         runCommand("guides.add", {{"orientation", guide->vertical() ? "vertical" : "horizontal"}, {"position", guide->position}}, tr("New Guide"));
     }, "guides.add"));
     view->addSeparator();
-    // Photoshop's screen modes: Standard, and Full Screen (FullScreen.h), where nothing but the canvas is on screen and
+    // Photoshop's screen modes: Standard, and Full Screen (WindowEdges.h), where nothing but the canvas is on screen and
     // each screen edge slides its part of the interface out when the pointer reaches it. F steps through them, Esc
     // leaves full screen; there Tab pins every edge out (or hides them again), Shift+Tab all but the tools; F10 or Alt
     // opens the menus.
@@ -104,23 +104,23 @@ void MainWindow::buildViewMenu(MenuContext& m) {
     QAction* fullMode = m.add(screenMode, Spec("view.screenMode.fullScreen", tr("&Full Screen Mode")).request("view.screenMode", [] { return QJsonObject{{"mode", "full"}}; }));
     for (QAction* a : {standardMode, fullMode}) { a->setCheckable(true); screenModes->addAction(a); }
     standardMode->setChecked(true);
-    connect(fullScreen_, &FullScreenMode::activeChanged, this, [standardMode, fullMode](bool on) { fullMode->setChecked(on); standardMode->setChecked(!on); });
+    connect(windowEdges_, &WindowEdges::activeChanged, this, [standardMode, fullMode](bool on) { fullMode->setChecked(on); standardMode->setChecked(!on); });
     m.add(nullptr, Spec("view.screenMode.cycle", tr("Cycle Screen Modes"), {QKeySequence("F")})
-                     .request("view.screenMode", [this] { return QJsonObject{{"mode", fullScreen_->active() ? "standard" : "full"}}; }));
+                     .request("view.screenMode", [this] { return QJsonObject{{"mode", windowEdges_->active() ? "standard" : "full"}}; }));
     screenMode->addSeparator();
     // In the standard mode Tab hides the panels, the tools and the options bar, Shift+Tab the panels on the right
     // (HidePanels.h); again gives them back.
     m.add(screenMode, Spec("view.screenMode.panels", tr("Show or Hide &Panels"), {QKeySequence(Qt::Key_Tab)})
                         .request("view.screenMode", [this] {
-                            if (!fullScreen_->active()) return QJsonObject{{"panels", hidePanels_->hidden() != HidePanels::None ? "all" : "hidden"}};
-                            return QJsonObject{{"panels", fullScreen_->pinnedAll(true) ? "hidden" : "all"}};
+                            if (!windowEdges_->active()) return QJsonObject{{"panels", hidePanels_->hidden() != HidePanels::None ? "all" : "hidden"}};
+                            return QJsonObject{{"panels", windowEdges_->pinnedAll(true) ? "hidden" : "all"}};
                         }));
     m.add(screenMode, Spec("view.screenMode.panelsExceptTools", tr("Show or Hide Panels &Except Tools"), {QKeySequence(Qt::SHIFT | Qt::Key_Tab)})
                         .request("view.screenMode", [this] {
-                            if (!fullScreen_->active()) return QJsonObject{{"panels", hidePanels_->hidden() != HidePanels::None ? "all" : "hiddenRight"}};
-                            return QJsonObject{{"panels", fullScreen_->pinnedAll(false) ? "hidden" : "exceptTools"}};
+                            if (!windowEdges_->active()) return QJsonObject{{"panels", hidePanels_->hidden() != HidePanels::None ? "all" : "hiddenRight"}};
+                            return QJsonObject{{"panels", windowEdges_->pinnedAll(false) ? "hidden" : "exceptTools"}};
                         }));
-    // The edges' pages (FullScreen.h, EdgePages.h): while an edge is out, Tab and Shift+Tab flip it. Their keys work
+    // The edges' pages (WindowEdges.h, EdgePages.h): while an edge is out, Tab and Shift+Tab flip it. Their keys work
     // only then (keyContext), so Tab keeps Show or Hide Panels otherwise; Edit > Keyboard Shortcuts can change them.
     for (int step : {1, -1}) {
         Command c;
@@ -128,12 +128,12 @@ void MainWindow::buildViewMenu(MenuContext& m) {
         c.label = step > 0 ? tr("Next Edge Page") : tr("Previous Edge Page");
         c.shortcuts = {step > 0 ? QKeySequence(Qt::Key_Tab) : QKeySequence(Qt::SHIFT | Qt::Key_Tab)};
         c.keyContext = tr("while an edge is out");
-        c.run = [this, step] { if (const int edge = fullScreen_->flipTarget(); edge >= 0) fullScreen_->flip(FullScreenMode::Edge(edge), step); };
-        c.unavailable = [this] { return fullScreen_->flipTarget() >= 0 ? QString() : tr("No edge is out"); };
+        c.run = [this, step] { if (const int edge = windowEdges_->flipTarget(); edge >= 0) windowEdges_->flip(WindowEdges::Edge(edge), step); };
+        c.unavailable = [this] { return windowEdges_->flipTarget() >= 0 ? QString() : tr("No edge is out"); };
         m.reg.add(nullptr, std::move(c));
     }
     // F10 opens the menus (in full screen over the canvas, the menu bar showing while one is open).
-    m.add(nullptr, Spec("view.showMenus", tr("Show Menus"), {QKeySequence(Qt::Key_F10)}).runs([this] { fullScreen_->showMenus(); }));
+    m.add(nullptr, Spec("view.showMenus", tr("Show Menus"), {QKeySequence(Qt::Key_F10)}).runs([this] { windowEdges_->showMenus(); }));
     // View > Tool Ring (Alt+D) and the tool option steps its rings run (ToolRing.h).
     toolRing_->registerCommands(m.reg, view);
     // View > Colour Ring (Alt+C): the foreground colour on the same compass (ColorRing.h).

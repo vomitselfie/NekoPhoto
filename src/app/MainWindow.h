@@ -46,7 +46,7 @@ class AdjustmentsPanel;
 class AutomationServer;
 class ToolOptionsBar;
 class CommandPalette;
-class FullScreenMode;
+class WindowEdges;
 class HidePanels;
 struct PaletteEntry;
 
@@ -65,7 +65,7 @@ protected:
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
-    friend class FullScreenMode;
+    friend class WindowEdges;
     friend class HidePanels;
     friend class RingController;
     friend class ToolRing;
@@ -173,9 +173,9 @@ public:
     /// `viewPoint` on the canvas.
     QMenu* buildCanvasMenu(QPointF viewPoint, QWidget* parent);
     void showCanvasMenu(QPointF viewPoint);
-    /// View > Screen Mode: Full Screen (F) or Standard (FullScreen.h).
+    /// View > Screen Mode: Full Screen (F) or Standard (WindowEdges.h).
     void setScreenMode(bool fullScreen);
-    FullScreenMode* fullScreenMode() const { return fullScreen_; }
+    WindowEdges* windowEdges() const { return windowEdges_; }
     /// Tab and Shift+Tab in the Standard Screen Mode (HidePanels.h).
     HidePanels* hidePanels() const { return hidePanels_; }
     /// View > Tool Ring (Alt+D, ToolRing.h).
@@ -396,7 +396,7 @@ private:
     }
     QAction* eraserAction_;
     QToolBar* toolRail_ = nullptr;
-    FullScreenMode* fullScreen_ = nullptr;
+    WindowEdges* windowEdges_ = nullptr;
     HidePanels* hidePanels_ = nullptr;
     class ToolRing* toolRing_ = nullptr;
     class ColorRing* colorRing_ = nullptr;

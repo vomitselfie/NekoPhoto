@@ -1,6 +1,6 @@
 #include "nekophoto/raw.h"
 #include "Automation.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "HidePanels.h"
 #include "ColorManagement.h"
 #include "Language.h"
@@ -628,8 +628,8 @@ void AutomationServer::registerAppHandlers() {
         return QJsonObject{{"exposure", now.exposure}, {"gamma", now.gamma}, {"method", QString::fromLatin1(toneMethodKey(now.method))}};
     });
     add("view.screenMode", [w](const QJsonObject& p) {
-        // View > Screen Mode (FullScreen.h): the window, not the document; not an undo step.
-        FullScreenMode* fs = w->fullScreenMode();
+        // View > Screen Mode (WindowEdges.h): the window, not the document; not an undo step.
+        WindowEdges* fs = w->windowEdges();
         if (has(p, "mode")) {
             const QString mode = str(p, "mode");
             if (mode != QLatin1String("standard") && mode != QLatin1String("full")) fail("mode must be standard or full", invalidParams);
@@ -651,12 +651,12 @@ void AutomationServer::registerAppHandlers() {
         }
         QJsonArray out;
         const char* names[] = {"left", "top", "right", "bottom"};
-        for (int i = 0; i < FullScreenMode::edgeCount; i++) if (fs->isOut(FullScreenMode::Edge(i))) out.append(QString::fromLatin1(names[i]));
+        for (int i = 0; i < WindowEdges::edgeCount; i++) if (fs->isOut(WindowEdges::Edge(i))) out.append(QString::fromLatin1(names[i]));
         const char* hiddenNames[] = {"none", "all", "right"};
         // Each edge: whether it autohides in the standard window (Edit > Preferences > Edges), its pages and the one on it.
         QJsonObject edges;
-        for (int i = 0; i < FullScreenMode::edgeCount; i++) {
-            const auto edge = FullScreenMode::Edge(i);
+        for (int i = 0; i < WindowEdges::edgeCount; i++) {
+            const auto edge = WindowEdges::Edge(i);
             edges[QString::fromLatin1(names[i])] = QJsonObject{{"autohide", fs->autohides(edge)}, {"page", fs->page(edge)}, {"pages", QJsonArray::fromStringList(fs->allPages(edge))}};
         }
         return QJsonObject{{"mode", fs->active() ? "full" : "standard"}, {"out", out}, {"hidden", QString::fromLatin1(hiddenNames[hide->hidden()])}, {"edges", edges}};

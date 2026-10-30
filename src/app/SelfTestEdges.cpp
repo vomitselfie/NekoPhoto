@@ -1,4 +1,4 @@
-// edges: Edit ▸ Preferences ▸ Edges and the edges' pages (FullScreen.h, EdgePages.h) through synthesised keys, wheel
+// edges: Edit ▸ Preferences ▸ Edges and the edges' pages (WindowEdges.h, EdgePages.h) through synthesised keys, wheel
 // turns and pointer moves. An edge set to autohide leaves the window to the canvas (all four: the canvas fills it under
 // the menus and the document tabs); reaching an edge slides its flyout out over the canvas, and away it slides back; Tab
 // and Shift+Tab flip the edge that is out, and so does the wheel over its page strip, the new page in place at once
@@ -11,7 +11,7 @@
 #include "CommandRegistry.h"
 #include "EdgePages.h"
 #include "EditorSession.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "HidePanels.h"
 #include "MainWindow.h"
 #include "PreferencesDialog.h"
@@ -67,7 +67,7 @@ bool until(const std::function<bool()>& done, int timeoutMs = 8000) {
 } // namespace
 
 int edgePages(MainWindow& w) {
-    using E = FullScreenMode;
+    using E = WindowEdges;
     // Held open for the whole test: the settings stay in memory even where the file cannot be written.
     QSettings held;
     held.remove(QStringLiteral("edges"));
@@ -77,7 +77,7 @@ int edgePages(MainWindow& w) {
     w.show();
     w.activateWindow();
     settle(100);
-    FullScreenMode* fs = w.fullScreenMode();
+    WindowEdges* fs = w.windowEdges();
     HidePanels* hide = w.hidePanels();
     CanvasWidget* canvas = w.canvasAt(w.currentTabIndex());
     if (!fs || !hide || !canvas) { std::fprintf(stderr, "edges: no controller or canvas\n"); return 1; }
