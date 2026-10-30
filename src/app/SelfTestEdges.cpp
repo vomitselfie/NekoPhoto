@@ -7,6 +7,9 @@
 // the page an edge was on is remembered, the left edge opens on the brushes with the Brush, the right on Properties
 // after an adjustment layer is added; full screen has the same pages. The slides are immediate, the waits generous.
 #include "SelfTest.h"
+#include "AdjustmentEditor.h"
+#include "AdjustmentsPanel.h"
+#include "HistogramPanel.h"
 #include "CanvasWidget.h"
 #include "CommandRegistry.h"
 #include "EdgePages.h"
@@ -315,6 +318,28 @@ int edgePages(MainWindow& w) {
     s.addAdjustmentLayer(AdjustmentKind::Levels);
     settle(200);
     expect(fs->page(E::Right) == QLatin1String("properties"), "adding an adjustment layer did not put the right edge on Properties");
+    // The Properties page gives the adjustment's editor the room: the Histogram, a guest there while the bottom edge
+    // stays in the window, keeps to its own size at most, and a Curves graph is not squeezed (at 1300 x 820 it was
+    // left about 90 px under a histogram that took the rest).
+    s.addAdjustmentLayer(AdjustmentKind::Curves);
+    fs->showEdge(E::Right);
+    settle(200);
+    {
+        QWidget* page = fs->deck(E::Right)->page(fs->deck(E::Right)->current());
+        auto* editor = page->findChild<AdjustmentEditor*>();
+        auto* histogram = page->findChild<HistogramPanel*>();
+        const bool there = editor && histogram && editor->isVisible() && histogram->isVisible();
+        expect(there && fs->page(E::Right) == QLatin1String("properties"), "the Curves layer and the Histogram are not on the Properties page");
+        if (there) {
+            const int pageHeight = fs->deck(E::Right)->height();
+            auto* panel = page->findChild<AdjustmentsPanel*>();
+            const int room = panel ? panel->height() : 0;
+            if (room < pageHeight * 2 / 3 || histogram->height() > pageHeight / 4)
+                std::fprintf(stderr, "edges: on a %d px Properties page the adjustment has %d px and the Histogram %d px\n", pageHeight, room, histogram->height());
+            expect(room >= pageHeight * 2 / 3, "the adjustment's editor does not have two thirds of the Properties page");
+            expect(histogram->height() <= pageHeight / 4, "the Histogram takes more than a quarter of the Properties page");
+        }
+    }
     canvas->setFocus();
 
     // ---- Full screen: the same pages and keys.

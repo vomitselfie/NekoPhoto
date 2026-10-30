@@ -99,6 +99,20 @@ void WindowEdges::claim(Edge edge) {
         info.split->setStretchFactor(0, 0);
         info.split->setStretchFactor(1, 1);
     }
+    if (guests) {
+        // Properties: the adjustment's editor has the room, as in Photoshop's Properties panel. The Histogram under it
+        // starts small (about its own height, a quarter of the page at most), keeps its height as the edge grows, and
+        // can be dragged smaller, to nothing.
+        Page& properties = s.pages[size_t(pageIndex(Right, QStringLiteral("properties")))];
+        if (properties.split && properties.split->count() == 2) {
+            QWidget* histogram = properties.split->widget(1);
+            properties.split->setStretchFactor(0, 1);
+            properties.split->setStretchFactor(1, 0);
+            properties.split->setCollapsible(1, true);
+            const int hint = std::max(1, histogram->sizeHint().height());
+            properties.split->setSizes({std::max(3 * hint, 600), hint});   // proportions: the page's height is not known yet
+        }
+    }
     // It opens on the page it was last on, when it has that page now; the left on the brushes while the Brush is the
     // tool, else on the tools (followWindow).
     int index = pageIndex(edge, edges::lastPage(edge));
