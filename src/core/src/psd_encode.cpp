@@ -368,6 +368,8 @@ void writeRecord(Out& o, const Record& r, bool large) {
     o.bytes(extra.b);
 }
 
+namespace {
+
 /// The merged image of a CMYK or Lab document: the native render matted against white paper (no ink; L 100, a and b
 /// neutral), the colour planes, its transparency, then the alpha and spot channels, at the document's depth.
 void writeMergedMode(Out& f, const Document& document, const PsdExportOptions& options) {
@@ -416,6 +418,142 @@ void writeMergedMode(Out& f, const Document& document, const PsdExportOptions& o
         f.u16(0);
         for (auto& p : raw) f.bytes(p);
     }
+}
+
+
+/// A 32-bit document's merged image: in float, raw (big-endian), colour matted against white where it is transparent
+/// as at 8 and 16 bits; the alpha and spot channels as float coverage.
+void writeMergedFloat(Out& f, const Document& document) {
+    const size_t extra = document.channels.size();
+    auto flat = renderFlattenedF(document);
+    const int w = document.width, h = document.height;
+    const size_t n = size_t(w) * size_t(h);
+    std::vector<std::vector<uint8_t>> raw(4 + extra, std::vector<uint8_t>(n * 4));
+    auto put = [](std::vector<uint8_t>& plane, size_t i, float v) {
+        uint32_t bits;
+        std::memcpy(&bits, &v, 4);
+        for (int b = 0; b < 4; b++) plane[i * 4 + size_t(b)] = uint8_t(bits >> (24 - 8 * b));
+    };
+    parallelRows(0, h, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const float* s = flat->row(y);
+            for (int x = 0; x < w; x++, s += 4) {
+                const size_t i = size_t(y) * size_t(w) + size_t(x);
+                const float a = cleanCoverage(s[3]);
+                for (int c = 0; c < 3; c++) put(raw[size_t(c)], i, cleanColour(s[c]) + (1 - a));
+                put(raw[3], i, a);
+            }
+        }
+    }, 64);
+    for (size_t k = 0; k < extra; k++) {
+        const GrayFPtr gray = grayAtDepth(document.channels[k].image, SampleType::F32).f32();
+        if (gray && gray->width() == w && gray->height() == h)
+            for (size_t i = 0; i < n; i++) put(raw[4 + k], i, cleanCoverage(gray->data()[i]));
+    }
+    f.u16(0);
+    for (auto& p : raw) f.bytes(p);
+}
+
+/// A 16-bit RGB document's merged image: 0..65535 big-endian, then the alpha and spot channels.
+void writeMerged16(Out& f, const Document& document, const PsdExportOptions& options) {
+    const bool large = options.large;
+    const size_t extra = document.channels.size();
+    auto flat = renderFlattened16(document);
+    const int w = document.width, h = document.height;
+    std::vector<std::vector<uint8_t>> rows(size_t(h) * (4 + extra));
+    std::vector<std::vector<uint8_t>> raw(4);
+    for (auto& p : raw) p.resize(size_t(w) * h * 2);
+    for (const Channel& channel : document.channels) raw.push_back(psdChannelPlane(channel, true, w, h));
+    parallelRows(0, h, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const uint16_t* s = flat->row(y);
+            for (int x = 0; x < w; x++, s += 4) {
+                const size_t i = (size_t(y) * w + x) * 2;
+                for (int c = 0; c < 4; c++) {
+                    const uint16_t v = to65535(c == 3 ? s[3] : std::min<uint32_t>(one16, uint32_t(s[c]) + one16 - s[3]));
+                    raw[size_t(c)][i] = uint8_t(v >> 8); raw[size_t(c)][i + 1] = uint8_t(v);
+                }
+            }
+        }
+    }, 64);
+    if (options.compress) {
+        parallelRows(0, h, [&](int ya, int yb) {
+            for (size_t c = 0; c < raw.size(); c++) for (int y = ya; y < yb; y++) {
+                const uint8_t* row = raw[size_t(c)].data() + size_t(y) * w * 2;
+                packBits(row, w * 2, rows[size_t(c) * h + size_t(y)]);
+                makeRowEven(rows[size_t(c) * h + size_t(y)], row, w * 2);
+            }
+        }, 64);
+        f.u16(1);
+        for (auto& r : rows) { if (large) f.u32(uint32_t(r.size())); else f.u16(unsigned(r.size())); }
+        for (auto& r : rows) f.bytes(r);
+    } else {
+        f.u16(0);
+        for (auto& p : raw) f.bytes(p);
+    }
+}
+
+/// An 8-bit RGB document's merged image, then the alpha and spot channels.
+void writeMerged8(Out& f, const Document& document, const PsdExportOptions& options) {
+    const bool large = options.large;
+    const size_t extra = document.channels.size();
+    auto flat = renderFlattened(document);
+    std::array<std::vector<uint8_t>, 4> planes;
+    for (auto& p : planes) p.resize(size_t(document.width) * document.height);
+    parallelRows(0, document.height, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const uint8_t* s = flat->row(y);
+            for (int x = 0; x < document.width; x++, s += 4) {
+                const size_t i = size_t(y) * document.width + x;
+                planes[3][i] = s[3];
+                for (int c = 0; c < 3; c++) planes[size_t(c)][i] = uint8_t(std::min(255, int(s[c]) + 255 - int(s[3])));
+            }
+        }
+    }, 64);
+    const int w = document.width, h = document.height;
+    std::vector<std::vector<uint8_t>> rows;
+    rows.reserve(size_t(h) * 4);
+    const int order[4] = {0, 1, 2, 3};
+    bool rle = options.compress;
+    std::vector<std::vector<uint8_t>> channelPlanes;
+    for (const Channel& channel : document.channels) channelPlanes.push_back(psdChannelPlane(channel, false, w, h));
+    if (rle) {
+        rows.resize(size_t(h) * (4 + extra));
+        parallelRows(0, h, [&](int ya, int yb) {
+            for (int c : order) for (int y = ya; y < yb; y++) {
+                const uint8_t* raw = planes[size_t(c)].data() + size_t(y) * w;
+                packBits(raw, w, rows[size_t(c) * h + size_t(y)]);
+                makeRowEven(rows[size_t(c) * h + size_t(y)], raw, w);
+            }
+            for (size_t k = 0; k < extra; k++) for (int y = ya; y < yb; y++) {
+                const uint8_t* raw = channelPlanes[k].data() + size_t(y) * w;
+                std::vector<uint8_t>& row = rows[(4 + k) * size_t(h) + size_t(y)];
+                packBits(raw, w, row);
+                makeRowEven(row, raw, w);
+            }
+        }, 64);
+    }
+    if (rle) {
+        f.u16(1);
+        for (auto& r : rows) { if (large) f.u32(uint32_t(r.size())); else f.u16(unsigned(r.size())); }
+        for (auto& r : rows) f.bytes(r);
+    } else {
+        f.u16(0);
+        for (int c : order) f.bytes(planes[size_t(c)]);
+        for (const auto& p : channelPlanes) f.bytes(p);
+    }
+}
+
+} // namespace
+
+void writeMergedImage(Out& f, const Document& document, const PsdExportOptions& options) {
+    // The merged image from our own renderer, the look the layers should have. Its colour is matted
+    // against white where it is transparent, as Photoshop stores it: premultiplied plus the white behind.
+    // The alpha and spot channels follow, one plane each at the document's depth.
+    if (document.sampleType == SampleType::F32) writeMergedFloat(f, document);
+    else if (document.colorMode != ColorMode::RGB) writeMergedMode(f, document, options);
+    else if (document.sampleType == SampleType::U16) writeMerged16(f, document, options);
+    else writeMerged8(f, document, options);
 }
 
 } // namespace nekophoto::psd_write

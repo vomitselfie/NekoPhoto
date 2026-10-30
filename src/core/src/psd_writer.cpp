@@ -884,6 +884,151 @@ private:
 
 } // namespace
 
+namespace {
+
+/// The image resources: the resolution, the PSD's own resources while they still describe the document, the colour
+/// profile `fileProfile`, the alpha and spot channels' names, and the guides and slices when they were not carried.
+std::vector<uint8_t> imageResources(const Document& document, const ColorProfile& fileProfile) {
+    // The resolution (ResolutionInfo, 0x03ED): pixels per inch as 16.16 fixed point, both axes.
+    Out res;
+    const uint32_t ppi = uint32_t(std::lround(std::clamp(document.resolution, 1.0, 30000.0) * 65536));
+    res.str("8BIM"); res.u16(0x03ED); res.u8(0); res.u8(0); res.u32(16);
+    res.u32(ppi); res.u16(1); res.u16(1); res.u32(ppi); res.u16(1); res.u16(1);
+    // The PSD's own resources, when the document came from one.
+    bool slicesWritten = false, guidesWritten = false, profileWritten = false;
+    std::optional<std::pair<uint32_t, uint32_t>> grid;   // the file's grid words, kept when the guides change
+    auto writeProfile = [&](const std::string& name) {
+        res.str("8BIM"); res.u16(1039);
+        res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
+        if ((name.size() + 1) & 1) res.u8(0);
+        res.u32(uint32_t(fileProfile.icc.size())); res.bytes(fileProfile.icc);
+        if (fileProfile.icc.size() & 1) res.u8(0);
+        profileWritten = true;
+    };
+    if (document.psdCarry) {
+        const PsdDocumentCarry& c = *document.psdCarry;
+        const bool sameCanvas = c.width == document.width && c.height == document.height;
+        for (const auto& resource : c.resources) {
+            // Guides, slices and paths (stored relative to the canvas size) belong to the canvas they were made on.
+            const bool canvasBound = resource.id == 1032 || resource.id == 1050 || resource.id == 1025 || (resource.id >= 2000 && resource.id <= 2999);
+            if (!sameCanvas && canvasBound) continue;
+            // The colour profile (1039) is the document's: the file's own bytes while they are still it, the
+            // document's in their place after Assign or Convert, none for an untagged document. The untagged flag
+            // (1041) goes with a profile written.
+            if (resource.id == 1039) {
+                if (fileProfile.empty()) continue;
+                if (resource.data != fileProfile.icc) { writeProfile(resource.name.substr(0, 255)); continue; }
+                profileWritten = true;
+            }
+            if (resource.id == 1041 && !fileProfile.empty() && !resource.data.empty() && resource.data[0] != 0) continue;
+            if (resource.id == 1032) {
+                // The file's guides (and grid) while they are still the document's; else written anew below.
+                std::vector<Guide> held;
+                // Bytes that are not a guides resource go back untouched while the document has no guides of its own.
+                const bool parsed = parseGuidesResource(resource.data, held, &grid);
+                if (parsed ? held != document.guides : !document.guides.empty()) continue;
+                guidesWritten = true;
+            }
+            if (resource.id == 1050) {
+                // The file's slices while they are still the document's; else written anew below.
+                std::vector<Slice> held;
+                if (!parseSlicesResource(resource.data, held) || held != document.slices) continue;
+                slicesWritten = true;
+            }
+            res.str("8BIM"); res.u16(resource.id);
+            const std::string name = resource.name.substr(0, 255);
+            res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
+            if ((name.size() + 1) & 1) res.u8(0);
+            res.u32(uint32_t(resource.data.size())); res.bytes(resource.data);
+            if (resource.data.size() & 1) res.u8(0);
+        }
+    }
+    if (!profileWritten && !fileProfile.empty()) writeProfile("");
+    // The alpha and spot channels' names, display and identifiers (psd_channels.h).
+    for (const auto& [id, data] : psdChannelResourceBlocks(document)) {
+        res.str("8BIM"); res.u16(id); res.u8(0); res.u8(0);
+        res.u32(uint32_t(data.size())); res.bytes(data);
+        if (data.size() & 1) res.u8(0);
+    }
+    if (!guidesWritten && !document.guides.empty()) {
+        const std::vector<uint8_t> data = guidesResource(document.guides, grid);
+        res.str("8BIM"); res.u16(1032); res.u8(0); res.u8(0);
+        res.u32(uint32_t(data.size())); res.bytes(data);
+        if (data.size() & 1) res.u8(0);
+    }
+    if (!slicesWritten && !document.slices.empty()) {
+        const std::vector<uint8_t> data = slicesResource(document.slices, document.width, document.height);
+        res.str("8BIM"); res.u16(1050); res.u8(0); res.u8(0);
+        res.u32(uint32_t(data.size())); res.bytes(data);
+        if (data.size() & 1) res.u8(0);
+    }
+    return std::move(res.b);
+}
+
+/// The layer and mask information: the records and their channels (in an 'Lr16' or 'Lr32' block at 16 and 32 bits),
+/// then the global blocks carried from the PSD the document came from (`filterRecords` replacing Smart Filter cache
+/// records) and the smart object sources. None, with `error`, when a PSD cannot hold it.
+std::optional<std::vector<uint8_t>> layerAndMaskSection(const Document& document, const std::vector<Record>& records,
+                                                        const std::vector<std::pair<std::string, std::vector<uint8_t>>>& filterRecords, bool large,
+                                                        std::string* error) {
+    const bool deep = document.sampleType == SampleType::U16, floating = document.sampleType == SampleType::F32;
+    Out info;
+    // Negative: the merged image's first alpha channel is its transparency.
+    info.i16(-int(records.size()));
+    for (const Record& r : records) writeRecord(info, r, large);
+    for (const Record& r : records) for (auto& [id, data] : r.channels) info.bytes(data);
+    if (info.b.size() & 1) info.u8(0);
+    Out section;
+    if (deep || floating) {
+        // A 16-bit file keeps its layers in the 'Lr16' block after an empty layer information, as Photoshop writes it;
+        // a 32-bit one in 'Lr32'.
+        section.length(0, large);
+        section.u32(0);   // global layer mask info
+        section.str("8BIM"); section.str(floating ? "Lr32" : "Lr16");
+        section.length(info.b.size(), large);
+        section.bytes(info.b);
+        for (size_t n = info.b.size(); n % 4; n++) section.u8(0);
+    } else {
+        section.length(info.b.size(), large);
+        section.bytes(info.b);
+        section.u32(0);   // global layer mask info
+    }
+    // Global blocks from the PSD the document came from (linked smart object data, patterns, text
+    // engine data), each padded to four bytes outside its declared length, as Photoshop reads them.
+    // Smart object sources: while every embedded one is as it was read, the file's own 'lnk2' goes back as it
+    // was; otherwise 'lnk2' is rebuilt, unchanged elements byte for byte and new or edited ones written anew.
+    bool rebuildLinks = false;
+    for (auto& [id, source] : document.smartObjects)
+        rebuildLinks |= source->kind == SmartObjectSource::Kind::Embedded && !source->psdElement;
+    std::vector<uint8_t> links;
+    if (rebuildLinks)
+        for (auto& [id, source] : document.smartObjects) {
+            if (!source->psdBlock.empty() && source->psdBlock != "lnk2") continue;   // stays in its own block
+            if (source->psdElement) links.insert(links.end(), source->psdElement->begin(), source->psdElement->end());
+            else if (source->kind == SmartObjectSource::Kind::Embedded) { auto e = psdEmbeddedElement(*source); links.insert(links.end(), e.begin(), e.end()); }
+        }
+    if (document.psdCarry) for (const PsdBlock& stored : document.psdCarry->globals) {
+        if (rebuildLinks && stored.key == "lnk2") continue;
+        // Smart Filter caches are 8-bit pixels: a 16-bit file leaves them for Photoshop to rebuild, as the reader does.
+        if ((deep || floating) && (stored.key == "FEid" || stored.key == "FXid")) continue;
+        PsdBlock block = stored;
+        if (!filterRecords.empty() && (block.key == "FEid" || block.key == "FXid"))
+            if (auto replaced = replaceSmartFilterRecords(block.data, filterRecords)) block.data = std::move(*replaced);
+        section.str("8BIM"); section.str(block.key.c_str());
+        section.length(block.data.size(), large && longKey(block.key)); section.bytes(block.data);
+        for (size_t n = block.data.size(); n % 4; n++) section.u8(0);
+    }
+    if (!links.empty()) {
+        section.str("8BIM"); section.str("lnk2");
+        section.length(links.size(), large); section.bytes(links);
+        for (size_t n = links.size(); n % 4; n++) section.u8(0);
+    }
+    if (!large && section.b.size() > 0xFFFFFFFFull) { if (error) *error = "The layers are too large for a PSD file; export it as PSB."; return std::nullopt; }
+    return std::move(section.b);
+}
+
+} // namespace
+
 PsdExportSummary planPsdExport(const Document& document, const PsdExportOptions& options) {
     PsdExportSummary summary;
     Writer(document, options, false, summary).records();
@@ -914,264 +1059,13 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
     // The colour mode: RGB 3, CMYK 4, Lab 9 (32 bits is RGB only).
     f.u16(floating ? 32 : deep ? 16 : 8); f.u16(document.colorMode == ColorMode::CMYK ? 4 : document.colorMode == ColorMode::Lab ? 9 : 3);
     f.u32(0);   // colour mode data
-    {
-        // The resolution (ResolutionInfo, 0x03ED): pixels per inch as 16.16 fixed point, both axes.
-        Out res;
-        const uint32_t ppi = uint32_t(std::lround(std::clamp(document.resolution, 1.0, 30000.0) * 65536));
-        res.str("8BIM"); res.u16(0x03ED); res.u8(0); res.u8(0); res.u32(16);
-        res.u32(ppi); res.u16(1); res.u16(1); res.u32(ppi); res.u16(1); res.u16(1);
-        // The PSD's own resources, when the document came from one.
-        bool slicesWritten = false, guidesWritten = false, profileWritten = false;
-        std::optional<std::pair<uint32_t, uint32_t>> grid;   // the file's grid words, kept when the guides change
-        auto writeProfile = [&](const std::string& name) {
-            res.str("8BIM"); res.u16(1039);
-            res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
-            if ((name.size() + 1) & 1) res.u8(0);
-            res.u32(uint32_t(fileProfile.icc.size())); res.bytes(fileProfile.icc);
-            if (fileProfile.icc.size() & 1) res.u8(0);
-            profileWritten = true;
-        };
-        if (document.psdCarry) {
-            const PsdDocumentCarry& c = *document.psdCarry;
-            const bool sameCanvas = c.width == document.width && c.height == document.height;
-            for (const auto& resource : c.resources) {
-                // Guides, slices and paths (stored relative to the canvas size) belong to the canvas they were made on.
-                const bool canvasBound = resource.id == 1032 || resource.id == 1050 || resource.id == 1025 || (resource.id >= 2000 && resource.id <= 2999);
-                if (!sameCanvas && canvasBound) continue;
-                // The colour profile (1039) is the document's: the file's own bytes while they are still it, the
-                // document's in their place after Assign or Convert, none for an untagged document. The untagged flag
-                // (1041) goes with a profile written.
-                if (resource.id == 1039) {
-                    if (fileProfile.empty()) continue;
-                    if (resource.data != fileProfile.icc) { writeProfile(resource.name.substr(0, 255)); continue; }
-                    profileWritten = true;
-                }
-                if (resource.id == 1041 && !fileProfile.empty() && !resource.data.empty() && resource.data[0] != 0) continue;
-                if (resource.id == 1032) {
-                    // The file's guides (and grid) while they are still the document's; else written anew below.
-                    std::vector<Guide> held;
-                    // Bytes that are not a guides resource go back untouched while the document has no guides of its own.
-                    const bool parsed = parseGuidesResource(resource.data, held, &grid);
-                    if (parsed ? held != document.guides : !document.guides.empty()) continue;
-                    guidesWritten = true;
-                }
-                if (resource.id == 1050) {
-                    // The file's slices while they are still the document's; else written anew below.
-                    std::vector<Slice> held;
-                    if (!parseSlicesResource(resource.data, held) || held != document.slices) continue;
-                    slicesWritten = true;
-                }
-                res.str("8BIM"); res.u16(resource.id);
-                const std::string name = resource.name.substr(0, 255);
-                res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
-                if ((name.size() + 1) & 1) res.u8(0);
-                res.u32(uint32_t(resource.data.size())); res.bytes(resource.data);
-                if (resource.data.size() & 1) res.u8(0);
-            }
-        }
-        if (!profileWritten && !fileProfile.empty()) writeProfile("");
-        // The alpha and spot channels' names, display and identifiers (psd_channels.h).
-        for (const auto& [id, data] : psdChannelResourceBlocks(document)) {
-            res.str("8BIM"); res.u16(id); res.u8(0); res.u8(0);
-            res.u32(uint32_t(data.size())); res.bytes(data);
-            if (data.size() & 1) res.u8(0);
-        }
-        if (!guidesWritten && !document.guides.empty()) {
-            const std::vector<uint8_t> data = guidesResource(document.guides, grid);
-            res.str("8BIM"); res.u16(1032); res.u8(0); res.u8(0);
-            res.u32(uint32_t(data.size())); res.bytes(data);
-            if (data.size() & 1) res.u8(0);
-        }
-        if (!slicesWritten && !document.slices.empty()) {
-            const std::vector<uint8_t> data = slicesResource(document.slices, document.width, document.height);
-            res.str("8BIM"); res.u16(1050); res.u8(0); res.u8(0);
-            res.u32(uint32_t(data.size())); res.bytes(data);
-            if (data.size() & 1) res.u8(0);
-        }
-        f.u32(uint32_t(res.b.size())); f.bytes(res.b);
-    }
-    {
-        Out info;
-        // Negative: the merged image's first alpha channel is its transparency.
-        info.i16(-int(records.size()));
-        for (const Record& r : records) writeRecord(info, r, large);
-        for (const Record& r : records) for (auto& [id, data] : r.channels) info.bytes(data);
-        if (info.b.size() & 1) info.u8(0);
-        Out section;
-        if (deep || floating) {
-            // A 16-bit file keeps its layers in the 'Lr16' block after an empty layer information, as Photoshop writes it;
-            // a 32-bit one in 'Lr32'.
-            section.length(0, large);
-            section.u32(0);   // global layer mask info
-            section.str("8BIM"); section.str(floating ? "Lr32" : "Lr16");
-            section.length(info.b.size(), large);
-            section.bytes(info.b);
-            for (size_t n = info.b.size(); n % 4; n++) section.u8(0);
-        } else {
-            section.length(info.b.size(), large);
-            section.bytes(info.b);
-            section.u32(0);   // global layer mask info
-        }
-        // Global blocks from the PSD the document came from (linked smart object data, patterns, text
-        // engine data), each padded to four bytes outside its declared length, as Photoshop reads them.
-        // Smart object sources: while every embedded one is as it was read, the file's own 'lnk2' goes back as it
-        // was; otherwise 'lnk2' is rebuilt, unchanged elements byte for byte and new or edited ones written anew.
-        bool rebuildLinks = false;
-        for (auto& [id, source] : document.smartObjects)
-            rebuildLinks |= source->kind == SmartObjectSource::Kind::Embedded && !source->psdElement;
-        std::vector<uint8_t> links;
-        if (rebuildLinks)
-            for (auto& [id, source] : document.smartObjects) {
-                if (!source->psdBlock.empty() && source->psdBlock != "lnk2") continue;   // stays in its own block
-                if (source->psdElement) links.insert(links.end(), source->psdElement->begin(), source->psdElement->end());
-                else if (source->kind == SmartObjectSource::Kind::Embedded) { auto e = psdEmbeddedElement(*source); links.insert(links.end(), e.begin(), e.end()); }
-            }
-        if (document.psdCarry) for (const PsdBlock& stored : document.psdCarry->globals) {
-            if (rebuildLinks && stored.key == "lnk2") continue;
-            // Smart Filter caches are 8-bit pixels: a 16-bit file leaves them for Photoshop to rebuild, as the reader does.
-            if ((deep || floating) && (stored.key == "FEid" || stored.key == "FXid")) continue;
-            PsdBlock block = stored;
-            if (!writer.filterRecords_.empty() && (block.key == "FEid" || block.key == "FXid"))
-                if (auto replaced = replaceSmartFilterRecords(block.data, writer.filterRecords_)) block.data = std::move(*replaced);
-            section.str("8BIM"); section.str(block.key.c_str());
-            section.length(block.data.size(), large && longKey(block.key)); section.bytes(block.data);
-            for (size_t n = block.data.size(); n % 4; n++) section.u8(0);
-        }
-        if (!links.empty()) {
-            section.str("8BIM"); section.str("lnk2");
-            section.length(links.size(), large); section.bytes(links);
-            for (size_t n = links.size(); n % 4; n++) section.u8(0);
-        }
-        if (!large && section.b.size() > 0xFFFFFFFFull) { if (error) *error = "The layers are too large for a PSD file; export it as PSB."; return {}; }
-        f.length(section.b.size(), large);
-        f.bytes(section.b);
-    }
-    {
-        // The merged image from our own renderer, the look the layers should have. Its colour is matted
-        // against white where it is transparent, as Photoshop stores it: premultiplied plus the white behind.
-        // The alpha and spot channels follow, one plane each at the document's depth.
-        const size_t extra = document.channels.size();
-        if (floating) {
-            // In float, raw (big-endian), colour matted against white where it is transparent as at 8 and 16 bits;
-            // the alpha and spot channels as float coverage.
-            auto flat = renderFlattenedF(document);
-            const int w = document.width, h = document.height;
-            const size_t n = size_t(w) * size_t(h);
-            std::vector<std::vector<uint8_t>> raw(4 + extra, std::vector<uint8_t>(n * 4));
-            auto put = [](std::vector<uint8_t>& plane, size_t i, float v) {
-                uint32_t bits;
-                std::memcpy(&bits, &v, 4);
-                for (int b = 0; b < 4; b++) plane[i * 4 + size_t(b)] = uint8_t(bits >> (24 - 8 * b));
-            };
-            parallelRows(0, h, [&](int ya, int yb) {
-                for (int y = ya; y < yb; y++) {
-                    const float* s = flat->row(y);
-                    for (int x = 0; x < w; x++, s += 4) {
-                        const size_t i = size_t(y) * size_t(w) + size_t(x);
-                        const float a = cleanCoverage(s[3]);
-                        for (int c = 0; c < 3; c++) put(raw[size_t(c)], i, cleanColour(s[c]) + (1 - a));
-                        put(raw[3], i, a);
-                    }
-                }
-            }, 64);
-            for (size_t k = 0; k < extra; k++) {
-                const GrayFPtr gray = grayAtDepth(document.channels[k].image, SampleType::F32).f32();
-                if (gray && gray->width() == w && gray->height() == h)
-                    for (size_t i = 0; i < n; i++) put(raw[4 + k], i, cleanCoverage(gray->data()[i]));
-            }
-            f.u16(0);
-            for (auto& p : raw) f.bytes(p);
-            if (summaryOut) *summaryOut = summary;
-            return std::move(f.b);
-        }
-        if (document.colorMode != ColorMode::RGB) {
-            writeMergedMode(f, document, options);
-            if (summaryOut) *summaryOut = summary;
-            return std::move(f.b);
-        }
-        if (deep) {
-            auto flat = renderFlattened16(document);
-            const int w = document.width, h = document.height;
-            std::vector<std::vector<uint8_t>> rows(size_t(h) * (4 + extra));
-            std::vector<std::vector<uint8_t>> raw(4);
-            for (auto& p : raw) p.resize(size_t(w) * h * 2);
-            for (const Channel& channel : document.channels) raw.push_back(psdChannelPlane(channel, true, w, h));
-            parallelRows(0, h, [&](int ya, int yb) {
-                for (int y = ya; y < yb; y++) {
-                    const uint16_t* s = flat->row(y);
-                    for (int x = 0; x < w; x++, s += 4) {
-                        const size_t i = (size_t(y) * w + x) * 2;
-                        for (int c = 0; c < 4; c++) {
-                            const uint16_t v = to65535(c == 3 ? s[3] : std::min<uint32_t>(one16, uint32_t(s[c]) + one16 - s[3]));
-                            raw[size_t(c)][i] = uint8_t(v >> 8); raw[size_t(c)][i + 1] = uint8_t(v);
-                        }
-                    }
-                }
-            }, 64);
-            if (options.compress) {
-                parallelRows(0, h, [&](int ya, int yb) {
-                    for (size_t c = 0; c < raw.size(); c++) for (int y = ya; y < yb; y++) {
-                        const uint8_t* row = raw[size_t(c)].data() + size_t(y) * w * 2;
-                        packBits(row, w * 2, rows[size_t(c) * h + size_t(y)]);
-                        makeRowEven(rows[size_t(c) * h + size_t(y)], row, w * 2);
-                    }
-                }, 64);
-                f.u16(1);
-                for (auto& r : rows) { if (large) f.u32(uint32_t(r.size())); else f.u16(unsigned(r.size())); }
-                for (auto& r : rows) f.bytes(r);
-            } else {
-                f.u16(0);
-                for (auto& p : raw) f.bytes(p);
-            }
-            if (summaryOut) *summaryOut = summary;
-            return std::move(f.b);
-        }
-        auto flat = renderFlattened(document);
-        std::array<std::vector<uint8_t>, 4> planes;
-        for (auto& p : planes) p.resize(size_t(document.width) * document.height);
-        parallelRows(0, document.height, [&](int ya, int yb) {
-            for (int y = ya; y < yb; y++) {
-                const uint8_t* s = flat->row(y);
-                for (int x = 0; x < document.width; x++, s += 4) {
-                    const size_t i = size_t(y) * document.width + x;
-                    planes[3][i] = s[3];
-                    for (int c = 0; c < 3; c++) planes[size_t(c)][i] = uint8_t(std::min(255, int(s[c]) + 255 - int(s[3])));
-                }
-            }
-        }, 64);
-        const int w = document.width, h = document.height;
-        std::vector<std::vector<uint8_t>> rows;
-        rows.reserve(size_t(h) * 4);
-        const int order[4] = {0, 1, 2, 3};
-        bool rle = options.compress;
-        std::vector<std::vector<uint8_t>> channelPlanes;
-        for (const Channel& channel : document.channels) channelPlanes.push_back(psdChannelPlane(channel, false, w, h));
-        if (rle) {
-            rows.resize(size_t(h) * (4 + extra));
-            parallelRows(0, h, [&](int ya, int yb) {
-                for (int c : order) for (int y = ya; y < yb; y++) {
-                    const uint8_t* raw = planes[size_t(c)].data() + size_t(y) * w;
-                    packBits(raw, w, rows[size_t(c) * h + size_t(y)]);
-                    makeRowEven(rows[size_t(c) * h + size_t(y)], raw, w);
-                }
-                for (size_t k = 0; k < extra; k++) for (int y = ya; y < yb; y++) {
-                    const uint8_t* raw = channelPlanes[k].data() + size_t(y) * w;
-                    std::vector<uint8_t>& row = rows[(4 + k) * size_t(h) + size_t(y)];
-                    packBits(raw, w, row);
-                    makeRowEven(row, raw, w);
-                }
-            }, 64);
-        }
-        if (rle) {
-            f.u16(1);
-            for (auto& r : rows) { if (large) f.u32(uint32_t(r.size())); else f.u16(unsigned(r.size())); }
-            for (auto& r : rows) f.bytes(r);
-        } else {
-            f.u16(0);
-            for (int c : order) f.bytes(planes[size_t(c)]);
-            for (const auto& p : channelPlanes) f.bytes(p);
-        }
-    }
+    const std::vector<uint8_t> resources = imageResources(document, fileProfile);
+    f.u32(uint32_t(resources.size())); f.bytes(resources);
+    const std::optional<std::vector<uint8_t>> section = layerAndMaskSection(document, records, writer.filterRecords_, large, error);
+    if (!section) return {};
+    f.length(section->size(), large);
+    f.bytes(*section);
+    writeMergedImage(f, document, options);
     if (summaryOut) *summaryOut = summary;
     return std::move(f.b);
 }

@@ -91,7 +91,8 @@ std::string asciiName(const std::string& s);
 /// One layer record, its channels' data written separately after all the records.
 void writeRecord(Out& o, const Record& r, bool large);
 
-/// The merged image of a CMYK or Lab document, at the document's depth.
-void writeMergedMode(Out& f, const Document& document, const PsdExportOptions& options);
+/// The merged image section: the document rendered at its depth and layout, matted against white where it is
+/// transparent as Photoshop stores it, then the alpha and spot channels.
+void writeMergedImage(Out& f, const Document& document, const PsdExportOptions& options);
 
 } // namespace nekophoto::psd_write
