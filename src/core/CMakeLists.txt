@@ -206,6 +206,7 @@ add_library(nekophoto_core STATIC
     src/vectormask.cpp
     src/psd_text.cpp
     src/psd_writer.cpp
+    src/psd_encode.cpp
     src/subject.cpp
     src/sut.cpp
     src/scribble.cpp

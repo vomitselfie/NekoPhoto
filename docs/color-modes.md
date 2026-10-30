@@ -328,7 +328,7 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   and `render_exec_modes16.cpp`; the RGB executors are untouched. The blend kernels are `blend_c8.cpp` and
   `blend_modes16.cpp` over `blend_modes.inc`; `blendModeFor` holds the calibration hook for CMYK's non-separable modes.
   `renderNative` renders at the document's layout.
-- PSD: `assembleMode8/16` in `psd_parse.cpp`, `setPixelsMode` and `writeMergedMode` in `psd_writer.cpp`; the plane carry is
+- PSD: `assembleMode8/16` in `psd_parse.cpp`, `setPixelsMode` in `psd_writer.cpp` and `writeMergedMode` in `psd_encode.cpp`; the plane carry is
   `PsdLayerCarry::planes`.
 - Painting: `CmykStrokeOps<S>` (`stroke_raster.h`, `brush_modes.cpp`) paints five samples; Lab uses the RGB rasters of its
   depth; `BrushStroke(layer, mask, settings, document, options)` converts the colour through the profile

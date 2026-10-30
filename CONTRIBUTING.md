@@ -273,7 +273,7 @@ ids (`layers.set` with `id`, `layers.move`), as an agent's requests do.
 | You want to ... | Look at |
 |---|---|
 | Fix how a PSD opens | `src/core/src/psd.cpp` (reader), `psd_parse.cpp` (channels, records), `psd_settings.cpp` (adjustments, carry), `psd_text.cpp` (type), `psd_carry.cpp`; tests in `tests/psd_tests.cpp` |
-| Fix how a PSD is written | `src/core/src/psd_writer.cpp`; `tests/psd_writer_tests.cpp`, `tests/psd_roundtrip.cpp`; [docs/psd-export.md](docs/psd-export.md) |
+| Fix how a PSD is written | `src/core/src/psd_writer.cpp` (layers to records, the file), `psd_encode.cpp` (channels, records' bytes); `tests/psd_writer_tests.cpp`, `tests/psd_roundtrip.cpp`; [docs/psd-export.md](docs/psd-export.md) |
 | Layer styles | `src/core/src/layerstyle*.cpp`, `src/app/LayerStyleDialog.cpp`; [docs/layer-styles.md](docs/layer-styles.md) |
 | Vector masks and shapes | `src/core/src/vectormask.cpp`, `vectorlayer.cpp`, `shape.cpp`; [docs/vector-tools.md](docs/vector-tools.md) |
 | Smart objects and Smart Filters | `src/core/src/smartobject*.cpp`, `smartfilter*.cpp`, `src/app/EditorSessionSmartObjects.cpp` |
