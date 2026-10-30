@@ -5,8 +5,9 @@ files of the unified Affinity (3.x). Each opens in its own tab, like a PSD or a 
 lists what could not be carried over. `document.open` does the same over the automation socket and answers
 with `layers` and the `notes`. File > Place Embedded also accepts them, as the flattened document.
 
-The reader is a port of Patchy's (MIT, `src/third_party/patchy_psd/README.md`): `src/core/src/affinity.cpp`
-and `affinity_tree.{h,cpp}`, from Patchy's `src/formats/af_document_io.cpp` and `af_tree.{hpp,cpp}`. Patchy
+The reader is a port of Patchy's (MIT, `src/third_party/patchy_psd/README.md`): `src/core/src/affinity.cpp` (the
+build into layers), `affinity_container.cpp`, `affinity_pixels.cpp`, `affinity_shapes.cpp` and
+`affinity_tree.{h,cpp}`, from Patchy's `src/formats/af_document_io.cpp` and `af_tree.{hpp,cpp}`. Patchy
 worked the format out from documents authored in a licensed Affinity and the MIT-licensed afread project's
 notes; the container walk, tile planes, blend table and placement rules are its findings, kept as it pinned
 them. Most documents from Affinity 2 on compress their streams with zstd, so the build needs libzstd

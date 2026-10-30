@@ -125,6 +125,9 @@ add_library(nekophoto_core STATIC
     src/ico.cpp
     src/tga.cpp
     src/affinity.cpp
+    src/affinity_container.cpp
+    src/affinity_pixels.cpp
+    src/affinity_shapes.cpp
     src/affinity_tree.cpp
     src/adjustments.cpp
     src/adjustments_modes.cpp
