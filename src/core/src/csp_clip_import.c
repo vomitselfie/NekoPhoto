@@ -198,17 +198,6 @@ static int cc_get_file_size(FILE *f, uint64_t *out)
     return fseeko(f, 0, SEEK_SET) == 0;
 }
 
-static int cc_ident_ok(const char *s)
-{
-    const unsigned char *p = (const unsigned char *)s;
-    if (!p || !*p) return 0;
-    while (*p) {
-        if (!(isalnum(*p) || *p == '_')) return 0;
-        ++p;
-    }
-    return 1;
-}
-
 static int cc_stmt_col(sqlite3_stmt *st, const char *name)
 {
     int i, n;
@@ -1454,98 +1443,6 @@ int csp_clip_decode_layer_mask_gray8(const csp_clip_document *document, size_t l
     return rc;
 }
 
-int csp_clip_read_preview(const csp_clip_document *document,
-                          uint8_t **out_data, size_t *out_size,
-                          int *out_width, int *out_height,
-                          char *error, size_t error_capacity)
-{
-    sqlite3_stmt *st = NULL;
-    const void *p;
-    int n, rc, ci, cw, ch;
-    uint8_t *copy;
-    cc_clear_error(error, error_capacity);
-    if (!document || !out_data || !out_size) return CSP_CLIP_ERR_ARGUMENT;
-    *out_data = NULL; *out_size = 0;
-    if (out_width) *out_width = 0;
-    if (out_height) *out_height = 0;
-    rc = sqlite3_prepare_v2(document->db, "SELECT * FROM CanvasPreview LIMIT 1", -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        cc_set_error(error, error_capacity, "cannot query CanvasPreview: %s", sqlite3_errmsg(document->db));
-        return CSP_CLIP_ERR_SQLITE;
-    }
-    rc = sqlite3_step(st);
-    if (rc != SQLITE_ROW) { sqlite3_finalize(st); return CSP_CLIP_ERR_NOT_FOUND; }
-    ci = cc_stmt_col(st, "ImageData");
-    cw = cc_stmt_col(st, "ImageWidth");
-    ch = cc_stmt_col(st, "ImageHeight");
-    if (ci < 0 || sqlite3_column_type(st, ci) == SQLITE_NULL) { sqlite3_finalize(st); return CSP_CLIP_ERR_NOT_FOUND; }
-    p = sqlite3_column_blob(st, ci); n = sqlite3_column_bytes(st, ci);
-    if (!p || n <= 0) { sqlite3_finalize(st); return CSP_CLIP_ERR_NOT_FOUND; }
-    copy = (uint8_t *)malloc((size_t)n);
-    if (!copy) { sqlite3_finalize(st); return CSP_CLIP_ERR_MEMORY; }
-    memcpy(copy, p, (size_t)n);
-    if (out_width) *out_width = cc_col_int(st, cw, 0);
-    if (out_height) *out_height = cc_col_int(st, ch, 0);
-    *out_data = copy; *out_size = (size_t)n;
-    sqlite3_finalize(st);
-    return CSP_CLIP_OK;
-}
-
-int csp_clip_read_blob_by_main_id(const csp_clip_document *document,
-                                  const char *table, const char *column, int64_t main_id,
-                                  uint8_t **out_data, size_t *out_size,
-                                  char *error, size_t error_capacity)
-{
-    char sql[512];
-    sqlite3_stmt *st = NULL;
-    const void *p;
-    int n, rc;
-    uint8_t *copy;
-    cc_clear_error(error, error_capacity);
-    if (!document || !table || !column || !out_data || !out_size ||
-        !cc_ident_ok(table) || !cc_ident_ok(column)) {
-        cc_set_error(error, error_capacity, "invalid table/column/blob arguments");
-        return CSP_CLIP_ERR_ARGUMENT;
-    }
-    *out_data = NULL; *out_size = 0;
-    if (snprintf(sql, sizeof(sql), "SELECT \"%s\" FROM \"%s\" WHERE MainId=?1 LIMIT 1", column, table) >= (int)sizeof(sql)) {
-        return CSP_CLIP_ERR_ARGUMENT;
-    }
-    rc = sqlite3_prepare_v2(document->db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        cc_set_error(error, error_capacity, "blob query failed: %s", sqlite3_errmsg(document->db));
-        return CSP_CLIP_ERR_SQLITE;
-    }
-    sqlite3_bind_int64(st, 1, main_id);
-    rc = sqlite3_step(st);
-    if (rc != SQLITE_ROW) { sqlite3_finalize(st); return CSP_CLIP_ERR_NOT_FOUND; }
-    if (sqlite3_column_type(st, 0) == SQLITE_NULL) { sqlite3_finalize(st); return CSP_CLIP_ERR_NOT_FOUND; }
-    p = sqlite3_column_blob(st, 0); n = sqlite3_column_bytes(st, 0);
-    if (n < 0 || (!p && n != 0)) { sqlite3_finalize(st); return CSP_CLIP_ERR_FORMAT; }
-    copy = (uint8_t *)malloc((size_t)n ? (size_t)n : 1);
-    if (!copy) { sqlite3_finalize(st); return CSP_CLIP_ERR_MEMORY; }
-    if (n) memcpy(copy, p, (size_t)n);
-    *out_data = copy; *out_size = (size_t)n;
-    sqlite3_finalize(st);
-    return CSP_CLIP_OK;
-}
-
-const char *csp_clip_layer_kind_name(csp_clip_layer_kind kind)
-{
-    switch (kind) {
-        case CSP_CLIP_LAYER_RASTER: return "raster";
-        case CSP_CLIP_LAYER_GROUP: return "group";
-        case CSP_CLIP_LAYER_VECTOR: return "vector";
-        case CSP_CLIP_LAYER_TEXT: return "text";
-        case CSP_CLIP_LAYER_FILL: return "fill/gradient";
-        case CSP_CLIP_LAYER_CORRECTION: return "correction";
-        case CSP_CLIP_LAYER_PAPER: return "paper";
-        case CSP_CLIP_LAYER_ROOT: return "root";
-        case CSP_CLIP_LAYER_OTHER: return "other";
-        default: return "unknown";
-    }
-}
-
 const char *csp_clip_blend_mode_name(int v)
 {
     switch (v) {
@@ -1579,23 +1476,6 @@ const char *csp_clip_blend_mode_name(int v)
         case 30: return "pass through";
         case 36: return "divide";
         default: return "unknown";
-    }
-}
-
-const char *csp_clip_result_string(int result)
-{
-    switch (result) {
-        case CSP_CLIP_OK: return "ok";
-        case CSP_CLIP_ERR_ARGUMENT: return "invalid argument";
-        case CSP_CLIP_ERR_IO: return "I/O error";
-        case CSP_CLIP_ERR_FORMAT: return "invalid or unsupported CLIP structure";
-        case CSP_CLIP_ERR_MEMORY: return "out of memory";
-        case CSP_CLIP_ERR_SQLITE: return "embedded SQLite error";
-        case CSP_CLIP_ERR_NOT_FOUND: return "requested data not found";
-        case CSP_CLIP_ERR_UNSUPPORTED: return "feature not supported";
-        case CSP_CLIP_ERR_DECODE: return "pixel decode failed";
-        case CSP_CLIP_ERR_LIMIT: return "configured resource limit exceeded";
-        default: return "unknown error";
     }
 }
 

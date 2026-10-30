@@ -91,16 +91,8 @@ int csp_clip_decode_layer_mask_gray8(const csp_clip_document *document, size_t l
                                      uint8_t **out_gray, int *out_width, int *out_height,
                                      size_t *out_stride, int *out_x, int *out_y,
                                      char *error, size_t error_capacity);
-/* The canvas preview image as stored (PNG data), and its size. */
-int csp_clip_read_preview(const csp_clip_document *document, uint8_t **out_data, size_t *out_size,
-                          int *out_width, int *out_height, char *error, size_t error_capacity);
-int csp_clip_read_blob_by_main_id(const csp_clip_document *document, const char *table, const char *column,
-                                  int64_t main_id, uint8_t **out_data, size_t *out_size,
-                                  char *error, size_t error_capacity);
 
-const char *csp_clip_layer_kind_name(csp_clip_layer_kind kind);
 const char *csp_clip_blend_mode_name(int value);
-const char *csp_clip_result_string(int result);
 void csp_clip_free(void *memory);
 
 #ifdef __cplusplus
