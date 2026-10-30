@@ -61,7 +61,7 @@ const MethodDoc methodDocs[] = {
      "proofPreserveNumbers:bool Preserve Numbers: the document's values sent to the device unconverted (when the device is of the document's colour model); "
      "proofSimulatePaper:bool Simulate Paper Color (and black ink); proofSimulateBlackInk:bool Simulate Black Ink; "
      "proofColors:bool View > Proof Colors; gamutWarning:bool View > Gamut Warning; gamutColor:color The warning's colour"},
-    {"view.zoom", "Zoom the view (not the document).", "zoom:number Zoom factor, 1 = 100%; fit:bool=false Fit the document in the window"},
+    {"view.zoom", "Zoom the view (not the document).", "zoom:number Zoom factor, 1 = 100%; fit:bool=false Fit the document in the window; x:number Document x to centre the view on; y:number Document y to centre the view on"},
     {"view.exposure", "A 32-bit document's view (View > 32-bit Preview Options, the status bar's exposure): how the canvas shows its linear values, not the pixels; not an undo step. Returns the view; with no parameters, only reads it.",
      "exposure:number Stops, -20..20; gamma:number 0.1..9.99; method:(exposure-gamma|highlight-compression) Exposure and Gamma, or Highlight Compression"},
     {"view.screenMode", "View > Screen Mode: standard, or full (nothing on screen but the canvas; at a screen edge the pointer slides out the tools, the options bar, the panels or the Timeline). The window, not the document; not an undo step. Returns the mode, the edges out, what Tab or Shift+Tab hid in the standard mode (hidden: none, all or right) and each edge's autohide (Edit > Preferences > Edges), pages and page; with no parameters, only reads it.",

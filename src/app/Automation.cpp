@@ -607,7 +607,16 @@ void AutomationServer::registerAppHandlers() {
     });
     add("view.zoom", [session, document](const QJsonObject& p) {
         document();
-        if (flag(p, "fit", false)) session()->fitView(); else session()->zoomTo(num(p, "zoom"));
+        if (flag(p, "fit", false)) session()->fitView();
+        else if (has(p, "zoom")) session()->zoomTo(num(p, "zoom"));
+        // A document point to centre the view on (where the work is happening).
+        if (has(p, "x") || has(p, "y")) {
+            const Document& d = document();
+            const QSizeF size(d.width, d.height);
+            const QPointF wanted(has(p, "x") ? num(p, "x") : d.width / 2.0, has(p, "y") ? num(p, "y") : d.height / 2.0);
+            session()->viewport.translate(session()->viewport.center() - session()->viewport.viewPoint(wanted, size));
+            emit session()->viewportChanged();
+        }
         return QJsonObject{{"zoom", session()->viewport.zoom}};
     });
     add("view.exposure", [session, document](const QJsonObject& p) {

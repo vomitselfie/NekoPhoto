@@ -426,6 +426,21 @@ def remaining_methods(rpc):
     rpc.call("layers.flip", vertical=True)
     rpc.call("layers.move", id=copy["id"], atBottom=True)
     rpc.call("layers.reorder", id=copy["id"], offset=1)
+    # A move of several steps slides the layer past the ones between, which keep their order (it used to swap the
+    # layer with the target, sending the target to the layer's old place).
+    def siblings(parent):
+        return [l for l in rpc.call("layers.list") if l.get("parent") == parent]
+    parents = {l.get("parent") for l in rpc.call("layers.list")}
+    parent = next((p for p in parents if len(siblings(p)) >= 4 and not any(l["kind"] == "group" for l in siblings(p)[-4:])), "none")
+    assert parent != "none", "no four plain sibling layers to reorder"
+    top = [l["id"] for l in siblings(parent)]
+    moving = top[-1]
+    rpc.call("layers.reorder", id=moving, offset=3)
+    after = [l["id"] for l in siblings(parent)]
+    want = top[:-4] + [moving] + top[-4:-1]
+    assert after == want, (after, want)
+    rpc.call("history.undo")
+    assert [l["id"] for l in siblings(parent)] == top
     rpc.call("layers.render", id=placed["id"], maxSize=32)
     rpc.call("layers.setTransform", id=placed["id"], x=10, y=5, rotation=15)
     styled = rpc.call("layers.setStyle", id=placed["id"], style={"dropShadows": [{"distance": 6, "size": 4}], "strokes": [{"size": 2, "color": "#ff0000"}]})
@@ -625,6 +640,8 @@ def remaining_methods(rpc):
     for name in ("quickselect", "text", "brush"):
         rpc.call("tool.select", name=name)
     rpc.call("colors.set", foreground="#102030", background="#ffffff")
+    rpc.call("view.zoom", zoom=1)
+    assert rpc.call("view.zoom", zoom=2, x=10, y=10)["zoom"] == 2
     rpc.call("view.zoom", zoom=1)
     rpc.call("screenshot", maxSize=64)
     # View > Screen Mode: full screen with every edge kept out, then back; the window, not an undo step.

@@ -1405,9 +1405,10 @@ def color_settings(working_space: Optional[str] = None, policy: Optional[str] = 
 
 
 @edit("Zoom the view")
-def view_zoom(zoom: Optional[float] = None, fit: bool = False) -> str:
-    """Zoom the person's view (1 = 100%) or fit the document in the window; the document is not changed."""
-    return text(call("view.zoom", zoom=zoom, fit=fit))
+def view_zoom(zoom: Optional[float] = None, fit: bool = False, x: Optional[float] = None, y: Optional[float] = None) -> str:
+    """Zoom the person's view (1 = 100%) or fit the document in the window, optionally centred on the document point
+    x, y; the document is not changed."""
+    return text(call("view.zoom", zoom=zoom, fit=fit, x=x, y=y))
 
 
 @edit("Set the 32-bit view")
