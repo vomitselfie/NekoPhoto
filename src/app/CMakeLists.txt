@@ -95,6 +95,7 @@ qt_add_executable(nekophoto
     SelfTestColorRing.cpp
     SelfTestLayerPicker.cpp
     SelfTestMotion.cpp
+    SelfTestOptions.cpp
     SelfTestDump.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp

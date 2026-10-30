@@ -10915,6 +10915,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>キャンセル</translation>
     </message>
     <message>
+        <source>An adjustment layer has no pixels to transform</source>
+        <translation>調整レイヤーには変形するピクセルがありません</translation>
+    </message>
+    <message>
         <source>Controls</source>
         <translation>コントロール</translation>
     </message>

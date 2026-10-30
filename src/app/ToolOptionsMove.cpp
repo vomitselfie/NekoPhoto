@@ -53,8 +53,10 @@ QWidget* ToolOptionsBar::buildMoveOptions() {
     angleField_ = numberField(-100000, 100000, 1, "°", tr("Rotation, clockwise"));
     add("X", xField_); add("Y", yField_); add("W", wField_); add("H", hField_); add("", wPercent_); add("", hPercent_); add(tr("Angle"), angleField_);
     fields->addSpacing(6);
-    for (auto* f : {xField_, yField_, wField_, hField_, wPercent_, hPercent_, angleField_})
+    for (auto* f : {xField_, yField_, wField_, hField_, wPercent_, hPercent_, angleField_}) {
         connect(f, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &ToolOptionsBar::applyTransformField);
+        f->setProperty("tip", f->toolTip());
+    }
     auto* apply = new QPushButton(tr("Apply"));
     apply->setToolTip(tr("Apply the pending transform (Enter)"));
     connect(apply, &QPushButton::clicked, this, [this] { session_->commitTransformCommand(); });
@@ -74,6 +76,17 @@ void ToolOptionsBar::syncTransformFields() {
     bool enabled = active && session_->canTransform();
     transformFields_->setEnabled(enabled);
     for (auto* b : transformFields_->findChildren<QPushButton*>()) b->setVisible(session_->transformEdit().has_value());
+    // An adjustment layer has no pixels to place (Photoshop shows no size for one): its fields stay empty and say so,
+    // rather than showing the canvas-sized box it nominally has or the numbers of the layer chosen before it.
+    const bool nothingToPlace = active && active->adjustment && !enabled;
+    const QString why = tr("An adjustment layer has no pixels to transform");
+    for (auto* f : {xField_, yField_, wField_, hField_, wPercent_, hPercent_, angleField_}) f->setToolTip(nothingToPlace ? why : f->property("tip").toString());
+    if (nothingToPlace) {
+        syncingFields_ = true;
+        for (auto* f : {xField_, yField_, wField_, hField_, wPercent_, hPercent_, angleField_}) f->clear();
+        syncingFields_ = false;
+        return;
+    }
     // A layer that cannot be transformed right now (hidden, say) still shows where and how big it is.
     if (!active || active->isGroup) return;
     syncingFields_ = true;

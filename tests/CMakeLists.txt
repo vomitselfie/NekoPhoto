@@ -516,6 +516,11 @@ if(TARGET nekophoto)
     add_test(NAME edge_flip_selftest COMMAND nekophoto --lang en --self-test edge-flip)
     set_tests_properties(edge_flip_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/edge-flip-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/edge-flip-home/data")
+    # The Move tool's transform fields on an adjustment layer: empty, greyed and saying why; back on a pixel
+    # layer they show it again.
+    add_test(NAME move_options_selftest COMMAND nekophoto --lang en --self-test move-options)
+    set_tests_properties(move_options_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/move-options-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/move-options-home/data")
     add_test(NAME hide_panels_selftest COMMAND nekophoto --lang en --self-test hide-panels)
     set_tests_properties(hide_panels_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/data")
