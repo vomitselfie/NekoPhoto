@@ -100,6 +100,11 @@ jobs:
           sudo apt-get install -y time linux-tools-common "linux-tools-$(uname -r)" >/dev/null 2>&1 || echo "perf is not available for kernel $(uname -r)"
           sudo sysctl -w kernel.perf_event_paranoid=1 >/dev/null 2>&1 || true
           python3 tools/perf_suite.py --quick --compare tools/perf_baseline.json || echo "the performance suite did not finish (informational only)"
+      - name: Code shape (informational)
+        # The biggest files, longest functions and most-included headers (tools/code_shape.py); never fails the build.
+        if: ${{ !cancelled() && matrix.compiler == 'gcc' }}
+        continue-on-error: true
+        run: python3 tools/code_shape.py --top 15 || echo "the code shape report did not finish (informational only)"
       - name: Compiler cache statistics
         if: ${{ !cancelled() }}
         run: ccache --show-stats

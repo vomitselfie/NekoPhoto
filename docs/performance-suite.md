@@ -107,3 +107,22 @@ of three runs. Instructions in billions; peak RSS of the operation (the process'
 | startup-headless | 1.72 | 1.72 | 91 MB | 92 MB | - |
 | startup-window | 1.72 | 1.72 | 91 MB | 91 MB | - |
 | undo-redo | 5.24 | 5.14 | 1844 MB | 233 MB | render.calls 4 layer.draws 132 adjustment.passes 12 |
+
+## tools/code_shape.py: file sizes, function lengths, header fan-in
+
+```bash
+python3 tools/code_shape.py [--top 25] [--json shape.json] [--markdown shape.md]
+```
+
+Over our own sources under `src/` and `tests/` (not `src/third_party`):
+
+- **files** by lines, and lines of code (neither blank nor only a comment);
+- **functions** by length: every function body at namespace or class scope, found by matching braces once comments,
+  literals and preprocessor lines are blanked out, from the line its signature starts on to its closing brace (lambdas
+  inside count towards their function). A heuristic, not a parser: good enough to rank, not to count exactly;
+- **headers** by fan-in: per header of ours, the translation units that include it directly (their own `#include`
+  lines, resolved against each unit's include paths from `build/compile_commands.json`) and transitively (the
+  dependencies the compiler recorded, `ninja -t deps`). The transitive count is how many units a change to it rebuilds.
+  It needs a built build folder and skips this part, saying so, without one.
+
+CI's GCC job prints the top 15 of each list.
