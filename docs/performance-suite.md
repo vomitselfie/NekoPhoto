@@ -126,3 +126,38 @@ Over our own sources under `src/` and `tests/` (not `src/third_party`):
   It needs a built build folder and skips this part, saying so, without one.
 
 CI's GCC job prints the top 15 of each list.
+
+## tools/dead_code.py: candidates for dead code, with the evidence
+
+```bash
+../.tools/heavy.sh python3 tools/dead_code.py --prepare          # once: two builds and a coverage test run (heavy)
+python3 tools/dead_code.py --json dead.json --markdown dead.md   # the report from what they hold
+```
+
+`--prepare` configures and builds `build-gc` and `build-cov` (git-ignored, -j4) and runs the whole ctest, then
+`tools/rpc_smoke.py`, in `build-cov`. Set `PATCHY_FIXTURES`, `PHOTOSHOP_CORPUS` and `PSD_TOOLS_CORPUS` first for the
+corpus oracles to run (and count) too. Five kinds of evidence, each with how far it can be trusted:
+
+1. **Unreferenced functions**: `build-gc` is built at -O0 (nothing inlined away) with `-ffunction-sections` and linked
+   with `--gc-sections` by GNU ld; the report links every executable again with `--print-gc-sections`, `--trace` and a
+   link map. A function of ours (a strong definition,
+   not an inline or template copy) that every executable dropped, or whose object none loaded, is *unreferenced*; one
+   the app dropped and a test kept is *test-only*. Virtual functions are reached through vtables and slots through
+   moc's tables, so they count as referenced while their class is; inline header functions are only emitted where used
+   and never show. Unused copies of library templates (Qt's and the standard library's helpers a file instantiated) are
+   left out: only names in `app::`, `nekophoto::` or plain C names are listed.
+2. **Never executed**: `build-cov` is built with `--coverage`; gcov's counts after ctest and rpc_smoke give each file's
+   line coverage and the functions no test ran. Never run by a test is not never run by a person; a function both
+   unreferenced and never executed is the strongest candidate. At -O0, GCC 15 and later turn on the standard library's
+   assertions (`_GLIBCXX_ASSERTIONS`): a test that trips one fails here though it passes in a release build, and the
+   report counts what ran up to it. That is a finding of its own (a `std::clamp` with its bounds reversed, say); the
+   timing tests (hostile_input_tests, seamcarve_tests, the work-counter and motion self-tests) also fail at -O0's speed.
+3. **QSettings keys** written and never read, or read and never written (only defaulted), from literal keys, constants
+   in the same file, groups and literal prefixes of keys built at run time; the accesses it cannot resolve are listed.
+   Self-tests are left out. A key whose name appears as a string elsewhere is marked low confidence.
+4. **Resources** in the .qrc files and `qt_add_resources` lists that no source, stylesheet or code-built path mentions.
+5. **Translations** no longer in the code (lupdate over the sources into a copy of each .ts; `check_translations.py`
+   fails on these too).
+
+Nothing in the report is removed by the tool; deleting a candidate is a change of its own, with the evidence in its
+commit message.

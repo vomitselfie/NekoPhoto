@@ -54,6 +54,22 @@ python3 tools/rpc_smoke.py /tmp/np.sock
 `--call <method> --params '{...}' --rpc-socket <path>` sends one automation request from the shell;
 `--headless --batch script.jsonl` runs a file of them. On Linux the socket path must stay under 107 bytes.
 
+### Measuring
+
+Speed is measured by counting, never by the clock (machines and CI runners are shared). Before and after a change
+meant to make something faster or leaner:
+
+```bash
+python3 tools/perf_suite.py --compare tools/perf_baseline.json         # full size, 3 runs; --quick for CI's size
+```
+
+It runs a fixed set of scenarios (start-up, opening a big PSD, brush strokes, a slider drag, a filter, Content-Aware
+Fill, saving, undo) and reports each one's user-space instructions (`perf stat`), work counters and peak memory, with
+the change against the committed baseline. [docs/performance-suite.md](docs/performance-suite.md) has the details,
+the baseline and how to refresh it, and the two reports that go with it: `tools/code_shape.py` (file sizes, function
+lengths, header fan-in) and `tools/dead_code.py` (unreferenced and never-executed functions, unused settings keys,
+resources and translations). CI prints all three for reading; none of them fails a build.
+
 ## Architecture
 
 ```
