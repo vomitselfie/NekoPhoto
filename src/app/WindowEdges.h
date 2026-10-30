@@ -8,6 +8,9 @@
 // out, a tap of Tab is View ▸ Screen Mode's Show or Hide Panels as before, and holding Tab brings every hidden edge
 // out until it is let go. In full screen the menu bar shows only while a menu is open (F10 or Alt), and leaving it
 // restores the window and its dock layout exactly. In the standard window the menus and the document tabs stay.
+// WindowEdges is the engine both screen modes share: the flyouts, their slides, the hot zones and the keys
+// (WindowEdges.cpp) and the pages (WindowEdgePages.cpp); the screen modes, which claim edges into it and give them back,
+// are in ScreenModes.cpp; the card is Flyout.h.
 #pragma once
 #include <QByteArray>
 #include <QColor>
@@ -42,43 +45,7 @@ class ColourPage;
 class DocumentsPage;
 class InfoPanel;
 class EditorSession;
-
-/// One edge's slide-out panel: a card flush with the edge, its inner corners rounded and a soft shadow on its inner
-/// sides (Goth Kitty's stylesheet sets a deep one, rounder; the other themes have a faint one), the shadow growing as
-/// the flyout comes out.
-class Flyout : public QWidget {
-    Q_OBJECT
-    Q_PROPERTY(int cornerRadius READ cornerRadius WRITE setCornerRadius)
-    Q_PROPERTY(int shadow READ shadow WRITE setShadow)
-    Q_PROPERTY(QColor fill READ fill WRITE setFill)
-    Q_PROPERTY(QColor border READ border WRITE setBorder)
-public:
-    Flyout(Qt::Edge edge, QWidget* parent);
-    Qt::Edge edge() const { return edge_; }
-    QBoxLayout* body() const { return body_; }
-    int cornerRadius() const { return radius_; }
-    void setCornerRadius(int r) { radius_ = std::max(0, r); updateMargins(); update(); }
-    int shadow() const { return shadow_; }
-    void setShadow(int s);
-    QColor fill() const { return fill_; }
-    void setFill(const QColor& c) { fill_ = c; update(); }
-    QColor border() const { return border_; }
-    void setBorder(const QColor& c) { border_ = c; update(); }
-    /// The card without its shadow, in the flyout's own coordinates.
-    QRect cardRect() const;
-    /// How far it is out (0..1): the shadow deepens with it.
-    void setReveal(double reveal);
-    double reveal() const { return reveal_; }
-protected:
-    void paintEvent(QPaintEvent*) override;
-private:
-    void updateMargins();
-    Qt::Edge edge_;
-    QBoxLayout* body_;
-    int radius_ = 0, shadow_ = 0;
-    double reveal_ = 1;
-    QColor fill_, border_;
-};
+class Flyout;
 
 class WindowEdges : public QObject {
     Q_OBJECT

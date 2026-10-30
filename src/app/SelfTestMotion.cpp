@@ -14,6 +14,7 @@
 #include "EdgePages.h"
 #include "EditorSession.h"
 #include "WindowEdges.h"
+#include "Flyout.h"
 #include "LayerPicker.h"
 #include "MainWindow.h"
 #include "Motion.h"

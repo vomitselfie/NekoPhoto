@@ -12,6 +12,7 @@
 #include "EdgePages.h"
 #include "EditorSession.h"
 #include "WindowEdges.h"
+#include "Flyout.h"
 #include "HidePanels.h"
 #include "MainWindow.h"
 #include "PreferencesDialog.h"

@@ -10,6 +10,7 @@
 #include "EdgePages.h"
 #include "EditorSession.h"
 #include "WindowEdges.h"
+#include "Flyout.h"
 #include "LayersPanel.h"
 #include "MainWindow.h"
 #include "Theme.h"

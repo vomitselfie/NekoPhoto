@@ -218,6 +218,10 @@ qt_add_executable(nekophoto
     ImportBanner.cpp
     WindowEdges.h
     WindowEdges.cpp
+    WindowEdgePages.cpp
+    ScreenModes.cpp
+    Flyout.h
+    Flyout.cpp
     Motion.h
     Motion.cpp
     RingOverlay.h
