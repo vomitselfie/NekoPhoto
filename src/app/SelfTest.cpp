@@ -133,6 +133,7 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("full-screen")) return fullScreen(window);
     if (name == QLatin1String("hide-panels")) return hidePanels(window);
     if (name == QLatin1String("edges")) return edgePages(window);
+    if (name == QLatin1String("edge-flip")) return edgeFlip(window);
     if (name == QLatin1String("motion")) return interfaceMotion(window);
     if (name == QLatin1String("forbidden-cursor")) return forbiddenCursor(window);
     if (name == QLatin1String("tool-ring")) return toolRing(window);
@@ -140,7 +141,7 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("layer-picker")) return layerPicker(window);
     if (name == QLatin1String("menu-dump")) return menuDump(window);
     if (name == QLatin1String("options-dump")) return optionsDump(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen, hide-panels, edges, forbidden-cursor, tool-ring, color-ring, layer-picker, menu-dump, options-dump)\n", qPrintable(name));
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys, export-as, preferences, work-counters, shortcuts, full-screen, hide-panels, edges, edge-flip, forbidden-cursor, tool-ring, color-ring, layer-picker, menu-dump, options-dump)\n", qPrintable(name));
     return 2;
 }
 

@@ -20,7 +20,7 @@ Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_ch
 | Render hashes | **713 scenes**: 158 at 8-bit RGB, 157 at 16-bit RGB, 124 at 32-bit RGB, 73 at 8-bit CMYK, 73 at 16-bit CMYK, 64 at 8-bit Lab, 64 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
-| Test suites | **110 CTest tests** registered (790 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
+| Test suites | **111 CTest tests** registered (790 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
 | Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
 | Automation | **185 methods**, 184 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
 | Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
@@ -223,7 +223,7 @@ NekoPhoto 1.8.10 でツールを実行して集計したものです。
 - **Photoshop の表示との比較**: Patchy のファイル 72 個(うち 48 個はファイルに添えられた Photoshop 自身の統合結果、残りはファイル内の統合画像と比較)のうち **61 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(各ファイルの状態は `tests/psd_oracle.txt`)。
 - **Photoshop の表示との比較(photocraft-corpus)**: 258 個のうち **208 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 12/15 cmyk16, 12/15 cmyk8, 18/20 f32, 10/12 lab16, 10/12 lab8, 27/29 rgb16, 119/155 rgb8。各ファイルの状態は `tests/psd_oracle_photocraft.txt`)。
 - **Photoshop の表示との比較(psd-tools)**: 285 個のうち **232 個**が同じ基準を満たします(各ファイル自身のモードとビット深度で比較: 2/2 cmyk16, 12/13 cmyk8, 8/17 f32, 0/1 lab16, 4/4 lab8, 8/8 rgb16, 198/240 rgb8。各ファイルの状態は `tests/psd_oracle_psdtools.txt`)。
-- **描画のハッシュ**: 713 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 110 個(790 `TEST_CASE`)。
+- **描画のハッシュ**: 713 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 111 個(790 `TEST_CASE`)。
 - **自動操作**: メソッド 185 個、うち 184 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
 <!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、

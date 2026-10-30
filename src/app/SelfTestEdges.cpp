@@ -10,6 +10,7 @@
 #include "AdjustmentEditor.h"
 #include "AdjustmentsPanel.h"
 #include "HistogramPanel.h"
+#include "HistogramView.h"
 #include "CanvasWidget.h"
 #include "CommandRegistry.h"
 #include "EdgePages.h"
@@ -35,6 +36,7 @@
 #include <QThread>
 #include <QToolBar>
 #include <QWheelEvent>
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 
@@ -396,6 +398,47 @@ int edgePages(MainWindow& w) {
     expect(layersDock->isVisible() && adjustDock->isVisible() && rail->isVisible() && w.statusBar()->isVisible() && optionsInWindow() && !timelineDock->isVisible(), "the panels did not come back to the window");
     QSettings().remove(QStringLiteral("edges"));
     std::printf("edges: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
+/// edge-flip: a page turn shows the page leaving as it was drawn. A screenshot of the motion (--dialog
+/// edges:right:properties held mid-flip, NEKOPHOTO_EDGE_FLIP_FREEZE) turns, in a window just opened, from a Properties
+/// page just put on screen whose Histogram is still counting off the main thread: the turn waits for it, so the card
+/// leaving shows the counted graph rather than an empty grey one.
+int edgeFlip(MainWindow& w) {
+    using E = WindowEdges;
+    QSettings held;
+    held.remove(QStringLiteral("edges"));
+    buildDemoDocument(*w.session());
+    w.resize(1300, 820);
+    w.show();
+    QApplication::processEvents();
+    int failures = 0;
+    auto expect = [&](bool ok, const char* what) { if (!ok) { std::fprintf(stderr, "edge-flip: %s\n", what); failures++; } };
+    WindowEdges* fs = w.windowEdges();
+    qputenv("NEKOPHOTO_EDGE_FLIP_FREEZE", "0");
+    PageDeck::setFlipTiming(1000, 0);   // held at its start: the card leaving lies over the deck exactly as its picture
+    w.showPanel(QStringLiteral("edges:right:properties"));
+    PageDeck* deck = fs->deck(E::Right);
+    const int index = int(fs->allPages(E::Right).indexOf(QStringLiteral("properties")));
+    auto* graph = index >= 0 ? deck->page(index)->findChild<HistogramView*>() : nullptr;
+    expect(deck->flipping() && fs->page(E::Right) == QLatin1String("channels") && graph, "the held page turn from Properties did not start");
+    if (graph) {
+        const QImage frame = deck->grab().toImage();
+        const QRect area = QRect(graph->mapTo(deck, QPoint(0, 0)), graph->size()).intersected(frame.rect());
+        // The counted graph has bars in the channels' colours; a graph with nothing counted yet is grey.
+        int vivid = 0;
+        for (int y = area.top(); y <= area.bottom(); y++)
+            for (int x = area.left(); x <= area.right(); x++) {
+                const QColor c = frame.pixelColor(x, y);
+                if (std::max({c.red(), c.green(), c.blue()}) - std::min({c.red(), c.green(), c.blue()}) > 120) vivid++;
+            }
+        expect(vivid > 50, "the Properties page leaving shows an empty Histogram");
+    }
+    deck->finishFlip();
+    qunsetenv("NEKOPHOTO_EDGE_FLIP_FREEZE");
+    held.remove(QStringLiteral("edges"));
+    std::printf("edge-flip: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }
 

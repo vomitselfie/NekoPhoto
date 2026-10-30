@@ -463,6 +463,9 @@ void PageDeck::flip(int index, bool forwards, const std::function<void()>& relay
     finishFlip();
     QWidget* from = current_ >= 0 ? pages_[size_t(current_)] : nullptr;
     const bool shown = isVisible() && from && from->isVisible() && !rect().isEmpty();
+    // The page leaving as it is drawn now: a layout still waiting (a panel just moved onto it) is done first, so its
+    // picture is not an empty card.
+    if (shown) if (QLayout* l = from->layout()) l->activate();
     QPixmap before = shown ? from->grab() : QPixmap();
     setCurrent(index);
     if (relayout) relayout();

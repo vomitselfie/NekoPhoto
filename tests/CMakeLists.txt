@@ -511,6 +511,11 @@ if(TARGET nekophoto)
     # Tab and Shift+Tab in the Standard Screen Mode: the panels, tools and options bar hidden and given back byte for
     # byte, a closed panel staying closed; Shift+Tab the right panels only; fields and typing keep Tab; full screen
     # and F7 while they are hidden.
+    # A page turn of an edge shows the page leaving as it was drawn: held mid-flip in a window just opened, the
+    # Properties page's Histogram has been counted (not an empty grey graph).
+    add_test(NAME edge_flip_selftest COMMAND nekophoto --lang en --self-test edge-flip)
+    set_tests_properties(edge_flip_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/edge-flip-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/edge-flip-home/data")
     add_test(NAME hide_panels_selftest COMMAND nekophoto --lang en --self-test hide-panels)
     set_tests_properties(hide_panels_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/hide-panels-home/data")

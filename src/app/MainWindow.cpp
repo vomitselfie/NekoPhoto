@@ -21,6 +21,7 @@
 #include "ToolOptionsBar.h"
 #include "WelcomeDialog.h"
 #include "WindowEdges.h"
+#include "EdgePages.h"
 #include "HistoryPanel.h"
 #include "HidePanels.h"
 #include "ColorRing.h"
@@ -28,6 +29,7 @@
 #include "ToolRing.h"
 #include <QKeyEvent>
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDockWidget>
@@ -918,8 +920,21 @@ void MainWindow::showPanel(const QString& name) {
                 windowEdges_->showPage(e, number ? windowEdges_->pages(e).value(n - 1) : page, false);
             }
             windowEdges_->showEdge(e);
-            // Held mid-flip (NEKOPHOTO_EDGE_FLIP_FREEZE): one more page with the edge out.
-            if (qEnvironmentVariableIsSet("NEKOPHOTO_EDGE_FLIP_FREEZE")) windowEdges_->flip(e, 1);
+            // Held mid-flip (NEKOPHOTO_EDGE_FLIP_FREEZE): one more page with the edge out. The page leaving is first
+            // given the time to draw (the Histogram counts off the main thread), so the flip shows its last frame
+            // rather than a card it never drew on.
+            if (qEnvironmentVariableIsSet("NEKOPHOTO_EDGE_FLIP_FREEZE")) {
+                QWidget* leaving = windowEdges_->deck(e)->page(windowEdges_->deck(e)->current());
+                QElapsedTimer waited;
+                waited.start();
+                auto drawn = [leaving] {
+                    for (HistogramPanel* h : leaving->findChildren<HistogramPanel*>()) if (h->isVisible() && !h->settled()) return false;
+                    return true;
+                };
+                do QApplication::processEvents(QEventLoop::AllEvents, 20);
+                while ((waited.elapsed() < 50 || !drawn()) && waited.elapsed() < 3000);
+                windowEdges_->flip(e, 1);
+            }
         } else if (part == "panels") windowEdges_->togglePinned(true);
         else if (part == "menus") windowEdges_->showMenus();
     } else if (name == "batch") {
