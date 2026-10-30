@@ -221,7 +221,7 @@ bool photoshopType(const Layer& layer) {
     if (!layer.psdCarry || !layer.asset) return false;
     const auto& blocks = layer.psdCarry->blocks;
     if (std::none_of(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "TySh"; })) return false;
-    return layer.psdCarry->contentHash == psdContentHash(layer.asset->image);
+    return layer.psdCarry->contentHash == cachedPsdContentHash(layer.asset->image);
 }
 
 namespace {

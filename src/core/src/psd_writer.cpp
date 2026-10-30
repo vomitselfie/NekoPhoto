@@ -229,7 +229,7 @@ private:
         const LayerTransform& t = l.transform;
         const bool placementKept = c.placement.origin == t.origin && c.placement.size == t.size && c.placement.rotation == t.rotation
             && c.placement.flipX == t.flipX && c.placement.flipY == t.flipY;
-        const uint64_t contentNow = psdContentHash(l.asset ? l.asset->image : AnyImage());
+        const uint64_t contentNow = cachedPsdContentHash(l.asset ? l.asset->image : AnyImage());
         const bool contentKept = sameContent && placementKept && c.contentHash == contentNow;
         // A 16-bit layer as read: its channels go back as they were stored, since 0..65535 does not survive the trip
         // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew. PSD to PSD only
