@@ -263,6 +263,10 @@ ColorTransformPtr displayTransform(const Document& document) {
     return transformBetween(document.profile, monitor, {RenderingIntent::RelativeColorimetric, true}, input, PixelFormat::RGBA8);
 }
 
+ColorProfile storedColorProfile(const Document* document) {
+    return document && document->colorMode == ColorMode::RGB ? document->profile : ColorProfile();
+}
+
 QColor displayColor(const QColor& color, const ColorProfile& document) {
     const ColorProfile monitor = monitorProfile();
     if (monitor.empty() || equivalentProfiles(document, monitor)) return color;

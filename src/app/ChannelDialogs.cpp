@@ -1,4 +1,5 @@
 #include "ChannelDialogs.h"
+#include "EditorSession.h"
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QColorDialog>

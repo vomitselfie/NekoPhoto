@@ -1,4 +1,6 @@
 // Automation methods: document. Registered from AutomationServer::registerHandlers (Automation.cpp).
+#include "nekophoto/trim.h"
+#include "DocumentSource.h"
 #include "nekophoto/vectorlayer.h"
 #include "TextLayer.h"
 #include "Automation.h"

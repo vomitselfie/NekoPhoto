@@ -34,6 +34,8 @@ public:
     void setSession(EditorSession* session);
     bool expanded() const { return expanded_; }
     void setExpanded(bool expanded);
+    /// Whether what it shows is counted and drawn: nothing waiting, nothing being counted, no newer change to count.
+    bool settled() const { return !busy_ && !pending_ && !stale_ && !throttle_.isActive(); }
 
     /// What a request counts, taken on the UI thread; computeHistogram runs on any thread.
     struct Request {

@@ -1,6 +1,7 @@
 // Ruler guides on the canvas: drawn over the document, picked up and moved with the Move tool, pulled out of the
 // rulers, and dropped outside the canvas (onto a ruler) to delete them, as in Photoshop. Every add, move and
 // removal is one undo step (EditorSession::addGuide and friends).
+#include "EditorSession.h"
 #include "ActionLibrary.h"
 #include "CanvasWidget.h"
 #include "ViewOptions.h"

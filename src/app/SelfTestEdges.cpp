@@ -1,4 +1,4 @@
-// edges: Edit ▸ Preferences ▸ Edges and the edges' pages (FullScreen.h, EdgePages.h) through synthesised keys, wheel
+// edges: Edit ▸ Preferences ▸ Edges and the edges' pages (WindowEdges.h, EdgePages.h) through synthesised keys, wheel
 // turns and pointer moves. An edge set to autohide leaves the window to the canvas (all four: the canvas fills it under
 // the menus and the document tabs); reaching an edge slides its flyout out over the canvas, and away it slides back; Tab
 // and Shift+Tab flip the edge that is out, and so does the wheel over its page strip, the new page in place at once
@@ -7,11 +7,16 @@
 // the page an edge was on is remembered, the left edge opens on the brushes with the Brush, the right on Properties
 // after an adjustment layer is added; full screen has the same pages. The slides are immediate, the waits generous.
 #include "SelfTest.h"
+#include "AdjustmentEditor.h"
+#include "AdjustmentsPanel.h"
+#include "HistogramPanel.h"
+#include "HistogramView.h"
 #include "CanvasWidget.h"
 #include "CommandRegistry.h"
 #include "EdgePages.h"
 #include "EditorSession.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
+#include "Flyout.h"
 #include "HidePanels.h"
 #include "MainWindow.h"
 #include "PreferencesDialog.h"
@@ -31,6 +36,7 @@
 #include <QThread>
 #include <QToolBar>
 #include <QWheelEvent>
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 
@@ -67,7 +73,7 @@ bool until(const std::function<bool()>& done, int timeoutMs = 8000) {
 } // namespace
 
 int edgePages(MainWindow& w) {
-    using E = FullScreenMode;
+    using E = WindowEdges;
     // Held open for the whole test: the settings stay in memory even where the file cannot be written.
     QSettings held;
     held.remove(QStringLiteral("edges"));
@@ -77,7 +83,7 @@ int edgePages(MainWindow& w) {
     w.show();
     w.activateWindow();
     settle(100);
-    FullScreenMode* fs = w.fullScreenMode();
+    WindowEdges* fs = w.windowEdges();
     HidePanels* hide = w.hidePanels();
     CanvasWidget* canvas = w.canvasAt(w.currentTabIndex());
     if (!fs || !hide || !canvas) { std::fprintf(stderr, "edges: no controller or canvas\n"); return 1; }
@@ -314,6 +320,28 @@ int edgePages(MainWindow& w) {
     s.addAdjustmentLayer(AdjustmentKind::Levels);
     settle(200);
     expect(fs->page(E::Right) == QLatin1String("properties"), "adding an adjustment layer did not put the right edge on Properties");
+    // The Properties page gives the adjustment's editor the room: the Histogram, a guest there while the bottom edge
+    // stays in the window, keeps to its own size at most, and a Curves graph is not squeezed (at 1300 x 820 it was
+    // left about 90 px under a histogram that took the rest).
+    s.addAdjustmentLayer(AdjustmentKind::Curves);
+    fs->showEdge(E::Right);
+    settle(200);
+    {
+        QWidget* page = fs->deck(E::Right)->page(fs->deck(E::Right)->current());
+        auto* editor = page->findChild<AdjustmentEditor*>();
+        auto* histogram = page->findChild<HistogramPanel*>();
+        const bool there = editor && histogram && editor->isVisible() && histogram->isVisible();
+        expect(there && fs->page(E::Right) == QLatin1String("properties"), "the Curves layer and the Histogram are not on the Properties page");
+        if (there) {
+            const int pageHeight = fs->deck(E::Right)->height();
+            auto* panel = page->findChild<AdjustmentsPanel*>();
+            const int room = panel ? panel->height() : 0;
+            if (room < pageHeight * 2 / 3 || histogram->height() > pageHeight / 4)
+                std::fprintf(stderr, "edges: on a %d px Properties page the adjustment has %d px and the Histogram %d px\n", pageHeight, room, histogram->height());
+            expect(room >= pageHeight * 2 / 3, "the adjustment's editor does not have two thirds of the Properties page");
+            expect(histogram->height() <= pageHeight / 4, "the Histogram takes more than a quarter of the Properties page");
+        }
+    }
     canvas->setFocus();
 
     // ---- Full screen: the same pages and keys.
@@ -370,6 +398,47 @@ int edgePages(MainWindow& w) {
     expect(layersDock->isVisible() && adjustDock->isVisible() && rail->isVisible() && w.statusBar()->isVisible() && optionsInWindow() && !timelineDock->isVisible(), "the panels did not come back to the window");
     QSettings().remove(QStringLiteral("edges"));
     std::printf("edges: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
+/// edge-flip: a page turn shows the page leaving as it was drawn. A screenshot of the motion (--dialog
+/// edges:right:properties held mid-flip, NEKOPHOTO_EDGE_FLIP_FREEZE) turns, in a window just opened, from a Properties
+/// page just put on screen whose Histogram is still counting off the main thread: the turn waits for it, so the card
+/// leaving shows the counted graph rather than an empty grey one.
+int edgeFlip(MainWindow& w) {
+    using E = WindowEdges;
+    QSettings held;
+    held.remove(QStringLiteral("edges"));
+    buildDemoDocument(*w.session());
+    w.resize(1300, 820);
+    w.show();
+    QApplication::processEvents();
+    int failures = 0;
+    auto expect = [&](bool ok, const char* what) { if (!ok) { std::fprintf(stderr, "edge-flip: %s\n", what); failures++; } };
+    WindowEdges* fs = w.windowEdges();
+    qputenv("NEKOPHOTO_EDGE_FLIP_FREEZE", "0");
+    PageDeck::setFlipTiming(1000, 0);   // held at its start: the card leaving lies over the deck exactly as its picture
+    w.showPanel(QStringLiteral("edges:right:properties"));
+    PageDeck* deck = fs->deck(E::Right);
+    const int index = int(fs->allPages(E::Right).indexOf(QStringLiteral("properties")));
+    auto* graph = index >= 0 ? deck->page(index)->findChild<HistogramView*>() : nullptr;
+    expect(deck->flipping() && fs->page(E::Right) == QLatin1String("channels") && graph, "the held page turn from Properties did not start");
+    if (graph) {
+        const QImage frame = deck->grab().toImage();
+        const QRect area = QRect(graph->mapTo(deck, QPoint(0, 0)), graph->size()).intersected(frame.rect());
+        // The counted graph has bars in the channels' colours; a graph with nothing counted yet is grey.
+        int vivid = 0;
+        for (int y = area.top(); y <= area.bottom(); y++)
+            for (int x = area.left(); x <= area.right(); x++) {
+                const QColor c = frame.pixelColor(x, y);
+                if (std::max({c.red(), c.green(), c.blue()}) - std::min({c.red(), c.green(), c.blue()}) > 120) vivid++;
+            }
+        expect(vivid > 50, "the Properties page leaving shows an empty Histogram");
+    }
+    deck->finishFlip();
+    qunsetenv("NEKOPHOTO_EDGE_FLIP_FREEZE");
+    held.remove(QStringLiteral("edges"));
+    std::printf("edge-flip: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }
 

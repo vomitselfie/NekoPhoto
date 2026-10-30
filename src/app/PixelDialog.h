@@ -1,7 +1,8 @@
 // The frame shared by the modeless dialogs that preview on the canvas and then change one layer's pixels:
 // Image > Adjustments, the Filter menu, G'MIC and Remove Background.
 #pragma once
-#include "EditorSession.h"
+#include "nekophoto/colormgmt.h"   // TransferCurve
+#include "nekophoto/document.h"
 #include <QDialog>
 #include <QJsonObject>
 #include <QPointer>
@@ -10,6 +11,8 @@ class QCheckBox;
 class QVBoxLayout;
 
 namespace app {
+
+class EditorSession;
 
 /// Pins itself to the layer that was active when it opened: the source pixels, the selection on their grid,
 /// every preview and the result go to that layer whatever becomes active meanwhile. Closes itself when its
@@ -60,7 +63,7 @@ protected:
     virtual bool apply() = 0;
     void done(int result) override;
 
-    EditorSession* session() const { return session_; }
+    EditorSession* session() const;
     const std::shared_ptr<const nekophoto::Image>& source() const { return source_; }
     const std::shared_ptr<const nekophoto::Image>& previewSource() const { return previewSource_; }
     const std::shared_ptr<const nekophoto::Image16>& source16() const { return source16_; }

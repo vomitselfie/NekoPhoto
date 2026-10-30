@@ -4,6 +4,7 @@
 // (or Enter on the keypad, or a click outside) commits, Esc cancels: one undo step for the whole session
 // (EditorSessionTextEdit.cpp). The caret and selection live here; the pixels are the text layer's raster, redrawn
 // on every change.
+#include "EditorSession.h"
 #include "CanvasWidget.h"
 #include "QtGeometry.h"
 #include "TextLayer.h"

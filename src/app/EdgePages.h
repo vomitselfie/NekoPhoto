@@ -1,4 +1,4 @@
-// The edges' pages (FullScreen.h): each screen edge holds a small stack of pages (the left the tools, the brushes and
+// The edges' pages (WindowEdges.h): each screen edge holds a small stack of pages (the left the tools, the brushes and
 // the colours; the top the options bar and the open documents; the right the panels in four pages; the bottom the
 // Timeline and the Info and Histogram), flipped with Tab and Shift+Tab while the edge is out, or with the wheel over
 // its page strip. Here: the preferences (each edge Always shown or Autohide in the standard window, Reduce motion,
@@ -24,7 +24,7 @@ namespace motion { class Tween; }
 
 namespace edges {
 
-/// The edges, as FullScreenMode numbers them.
+/// The edges, as WindowEdges numbers them.
 enum EdgeId { Left, Top, Right, Bottom };
 constexpr int count = 4;
 /// "left", "top", "right", "bottom": the settings' and the automation's names.

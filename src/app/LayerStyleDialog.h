@@ -2,7 +2,7 @@
 // switch; the page on the right edits the effect's first instance (further ones are kept as they are). Every change
 // shows on the layer at once; Cancel puts the layer back.
 #pragma once
-#include "EditorSession.h"
+#include "nekophoto/uuid.h"
 #include "nekophoto/layerstyle.h"
 #include <QDialog>
 #include <QPointer>
@@ -14,6 +14,8 @@ class QListWidget;
 class QStackedWidget;
 
 namespace app {
+
+class EditorSession;
 
 class LayerStyleDialog : public QDialog {
     Q_OBJECT

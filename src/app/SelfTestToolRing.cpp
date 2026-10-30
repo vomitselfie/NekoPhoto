@@ -8,7 +8,7 @@
 #include "CanvasWidget.h"
 #include "CommandRegistry.h"
 #include "EditorSession.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "MainWindow.h"
 #include "ToolRing.h"
 #include <QAction>
@@ -122,7 +122,7 @@ int toolRing(MainWindow& w) {
     // F and S: Photoshop's [ and ] steps (40 to 48 and back), not Cycle Screen Modes or the Clone Stamp.
     expect(!tap(Qt::Key_F, "f"), "F went to a shortcut while the ring was open");
     expect(s.brushSettings.diameter == 48, "F did not step the brush size up to 48");
-    expect(!w.fullScreenMode()->active(), "F changed the screen mode while the ring was open");
+    expect(!w.windowEdges()->active(), "F changed the screen mode while the ring was open");
     expect(!tap(Qt::Key_S, "s"), "S went to a shortcut while the ring was open");
     expect(s.brushSettings.diameter == 40 && s.tool() == Tool::Brush, "S did not step the brush size back to 40, or switched tools");
     // A held key repeats a value.
@@ -248,8 +248,8 @@ int toolRing(MainWindow& w) {
 
     // Full screen: the ring over the canvas (no edge flyout holds it), and Alt then D leaves no menu bar behind.
     s.selectTool(Tool::Brush);
-    w.fullScreenMode()->setPolling(false);
-    w.fullScreenMode()->setTimings(0, 0);
+    w.windowEdges()->setPolling(false);
+    w.windowEdges()->setTimings(0, 0);
     w.setScreenMode(true);
     QApplication::processEvents();
     wait(100);
@@ -259,11 +259,11 @@ int toolRing(MainWindow& w) {
     wait(100);
     expect(ring->isOpen() && overlay->isVisible() && overlay->parentWidget() == &w, "Alt+D did not show the ring over the canvas in full screen");
     placedWell(QPointF(canvas->width() / 2.0, canvas->height() / 2.0), "in full screen");
-    expect(!(w.fullScreenMode()->menuStrip() && w.fullScreenMode()->menuStrip()->isVisible()) && !QApplication::activePopupWidget(), "Alt+D in full screen opened the menus");
+    expect(!(w.windowEdges()->menuStrip() && w.windowEdges()->menuStrip()->isVisible()) && !QApplication::activePopupWidget(), "Alt+D in full screen opened the menus");
     tap(Qt::Key_F, "f");
-    expect(w.fullScreenMode()->active(), "F with the ring open left full screen");
+    expect(w.windowEdges()->active(), "F with the ring open left full screen");
     tap(Qt::Key_Escape, nullptr);
-    expect(!ring->isOpen() && w.fullScreenMode()->active(), "Esc did not close the ring alone in full screen");
+    expect(!ring->isOpen() && w.windowEdges()->active(), "Esc did not close the ring alone in full screen");
     w.setScreenMode(false);
     QApplication::processEvents();
 

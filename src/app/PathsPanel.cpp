@@ -1,4 +1,5 @@
 #include "PathsPanel.h"
+#include "EditorSession.h"
 #include "Icons.h"
 #include <QHBoxLayout>
 #include <QInputDialog>

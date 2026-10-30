@@ -54,10 +54,15 @@ int workCounters(MainWindow& window);    // SelfTestWork.cpp
 int fullScreen(MainWindow& window);      // SelfTestFullScreen.cpp
 int hidePanels(MainWindow& window);      // SelfTestHidePanels.cpp
 int edgePages(MainWindow& window);       // SelfTestEdges.cpp
+int edgeFlip(MainWindow& window);        // SelfTestEdges.cpp
 int forbiddenCursor(MainWindow& window); // SelfTestForbidden.cpp
 int toolRing(MainWindow& window);        // SelfTestToolRing.cpp
 int colorRing(MainWindow& window);       // SelfTestColorRing.cpp
 int layerPicker(MainWindow& window);     // SelfTestLayerPicker.cpp
+int moveOptions(MainWindow& window);     // SelfTestOptions.cpp
+int swatches(MainWindow& window);        // SelfTestSwatches.cpp
+int menuDump(MainWindow& window);        // SelfTestDump.cpp
+int optionsDump(MainWindow& window);     // SelfTestDump.cpp
 int interfaceMotion(MainWindow& window); // SelfTestMotion.cpp
 
 } // namespace app

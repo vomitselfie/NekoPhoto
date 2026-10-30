@@ -1,5 +1,6 @@
 // The canvas-side parts of the context menu (MainWindowCanvasMenu.cpp builds the rest): the Pen and Direct
 // Selection tools' anchor and path commands, and the text being typed.
+#include "EditorSession.h"
 #include "CanvasWidget.h"
 #include "QtGeometry.h"
 #include "nekophoto/vectorlayer.h"

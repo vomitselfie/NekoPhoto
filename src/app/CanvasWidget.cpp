@@ -1,4 +1,5 @@
 #include "CanvasWidget.h"
+#include "EditorSession.h"
 #include "Style.h"
 #include "ColorManagement.h"
 #include <QRegion>
@@ -44,6 +45,8 @@ QCursor magnifierCursor(bool out, double dpr) {
 }
 
 } // namespace
+
+Tool CanvasWidget::canvasTool() const { return heldTool_.value_or(session_->tool()); }
 
 CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(parent), session_(session) {
     setMouseTracking(true);

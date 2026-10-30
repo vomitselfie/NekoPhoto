@@ -8,7 +8,7 @@
 #include "SelfTestSupport.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "LayerPicker.h"
 #include "MainWindow.h"
 #include "nekophoto/document.h"
@@ -223,8 +223,8 @@ int layerPicker(MainWindow& w) {
     tap(Qt::Key_F, "f");
     expect(picker->isOpen() && picker->overlay()->isVisible() && s.activeLayerId() == b, "the picker did not work with the Layers panel hidden");
     tap(Qt::Key_Escape, nullptr);
-    w.fullScreenMode()->setPolling(false);
-    w.fullScreenMode()->setTimings(0, 0);
+    w.windowEdges()->setPolling(false);
+    w.windowEdges()->setTimings(0, 0);
     w.setScreenMode(true);
     QApplication::processEvents();
     wait(100);
@@ -233,11 +233,11 @@ int layerPicker(MainWindow& w) {
     altA();
     wait(50);
     expect(picker->isOpen() && picker->overlay()->isVisible() && picker->overlay()->parentWidget() == &w && picker->layers() == want, "Alt+A did not show the picker in full screen");
-    expect(!(w.fullScreenMode()->menuStrip() && w.fullScreenMode()->menuStrip()->isVisible()) && !QApplication::activePopupWidget(), "Alt+A in full screen opened the menus");
+    expect(!(w.windowEdges()->menuStrip() && w.windowEdges()->menuStrip()->isVisible()) && !QApplication::activePopupWidget(), "Alt+A in full screen opened the menus");
     tap(Qt::Key_R, "r");
     expect(s.activeLayerId() == b, "R in full screen did not step up");
     tap(Qt::Key_Escape, nullptr);
-    expect(!picker->isOpen() && w.fullScreenMode()->active() && s.activeLayerId() == a, "Esc in full screen did not close the picker alone and put A back");
+    expect(!picker->isOpen() && w.windowEdges()->active() && s.activeLayerId() == a, "Esc in full screen did not close the picker alone and put A back");
     w.setScreenMode(false);
     QApplication::processEvents();
 

@@ -1,11 +1,13 @@
 // The Adjustments dock: edits the active adjustment layer's settings live.
 #pragma once
 #include "AdjustmentEditor.h"
-#include "EditorSession.h"
+#include "nekophoto/uuid.h"
 #include <QLabel>
 #include <QWidget>
 
 namespace app {
+
+class EditorSession;
 
 class AdjustmentsPanel : public QWidget {
     Q_OBJECT

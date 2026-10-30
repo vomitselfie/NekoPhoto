@@ -3,7 +3,8 @@
 // with its own session, canvas and panels; the menus act on the current one.
 #pragma once
 #include "CommandRegistry.h"
-#include "EditorSession.h"
+#include "EditorTool.h"
+#include "nekophoto/cameraraw.h"
 #include "nekophoto/psd.h"
 #include <QJsonObject>
 #include <QJsonValue>
@@ -26,6 +27,11 @@ class QStackedWidget;
 
 namespace app {
 
+class EditorSession;
+struct DocumentSource;
+struct LoadedProject;
+namespace color { struct OpenDecision; }
+
 /// A file that opens in its own tab with its layers: .psd, .psb, .clip, .ico, .cur, .ase, .aseprite, or a GIF of
 /// more than one frame.
 bool isLayeredPath(const QString& path);
@@ -40,7 +46,7 @@ class AdjustmentsPanel;
 class AutomationServer;
 class ToolOptionsBar;
 class CommandPalette;
-class FullScreenMode;
+class WindowEdges;
 class HidePanels;
 struct PaletteEntry;
 
@@ -59,7 +65,7 @@ protected:
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
-    friend class FullScreenMode;
+    friend class WindowEdges;
     friend class HidePanels;
     friend class RingController;
     friend class ToolRing;
@@ -167,9 +173,9 @@ public:
     /// `viewPoint` on the canvas.
     QMenu* buildCanvasMenu(QPointF viewPoint, QWidget* parent);
     void showCanvasMenu(QPointF viewPoint);
-    /// View > Screen Mode: Full Screen (F) or Standard (FullScreen.h).
+    /// View > Screen Mode: Full Screen (F) or Standard (WindowEdges.h).
     void setScreenMode(bool fullScreen);
-    FullScreenMode* fullScreenMode() const { return fullScreen_; }
+    WindowEdges* windowEdges() const { return windowEdges_; }
     /// Tab and Shift+Tab in the Standard Screen Mode (HidePanels.h).
     HidePanels* hidePanels() const { return hidePanels_; }
     /// View > Tool Ring (Alt+D, ToolRing.h).
@@ -198,7 +204,7 @@ private:
     /// records (and records the ones made now: the profile decision, a PDF's page). A layered file's import notes
     /// land in `notes`. Empty with `error` (empty when a choice was cancelled).
     std::optional<nekophoto::PsdImport> readLayeredSource(DocumentSource& source, QString* error);
-    std::optional<EditorSession::LoadedProject> readSource(DocumentSource& source, QString* error);
+    std::optional<LoadedProject> readSource(DocumentSource& source, QString* error);
     /// The profile decision for a file as it opens: the one `source` recorded while the file embeds the same profile,
     /// else asked (or by Color Settings' policy) and recorded.
     color::OpenDecision openDecision(DocumentSource& source, const std::optional<nekophoto::ColorProfile>& embedded);
@@ -221,6 +227,18 @@ private:
     void connectSession();
     void refreshTabTitles();
     void buildMenus();
+    /// One builder per menu of the menu bar (Menu<Name>.cpp), sharing a MenuContext (MainWindowMenus.h).
+    struct MenuContext;
+    void buildFileMenu(MenuContext& m);
+    void buildEditMenu(MenuContext& m);
+    void buildImageMenu(MenuContext& m);
+    void buildLayerMenu(MenuContext& m);
+    void buildTypeMenu(MenuContext& m);
+    void buildSelectMenu(MenuContext& m);
+    void buildFilterMenu(MenuContext& m);
+    void buildViewMenu(MenuContext& m);
+    void buildWindowMenu(MenuContext& m);
+    void buildHelpMenu(MenuContext& m);
     void buildToolRail();
     void newDocument();
     void openProject();
@@ -378,7 +396,7 @@ private:
     }
     QAction* eraserAction_;
     QToolBar* toolRail_ = nullptr;
-    FullScreenMode* fullScreen_ = nullptr;
+    WindowEdges* windowEdges_ = nullptr;
     HidePanels* hidePanels_ = nullptr;
     class ToolRing* toolRing_ = nullptr;
     class ColorRing* colorRing_ = nullptr;

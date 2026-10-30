@@ -2,6 +2,7 @@
 // Commands the menu bar already has are the menu bar's own QActions (so shortcuts, enabled state, the command path
 // and Actions recording are the same); a clearer label for one ("Disable Layer Mask") triggers that action. What
 // does not apply is left out rather than greyed.
+#include "EditorSession.h"
 #include "BrushPicker.h"
 #include "CanvasWidget.h"
 #include "MainWindow.h"

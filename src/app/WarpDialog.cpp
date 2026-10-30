@@ -1,4 +1,5 @@
 #include "WarpDialog.h"
+#include "EditorSession.h"
 #include <QComboBox>
 #include <QJsonObject>
 #include <QDialogButtonBox>

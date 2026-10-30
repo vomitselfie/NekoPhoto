@@ -2,6 +2,7 @@
 // buttons converted after them, each through the menu bar (answering its dialog), through the requests the
 // recording holds, and through the session calls the interface made before, compared as documents and history
 // names, with each recorded once as the method it names.
+#include "nekophoto/trim.h"
 #include "SelfTestSupport.h"
 #include "ActionLibrary.h"
 #include "AdjustmentEditor.h"

@@ -45,6 +45,10 @@ qt_add_executable(nekophoto
     icons.qrc
     Viewport.h
     EditorSession.h
+    EditorTool.h
+    EditorToolSettings.h
+    EditorTransform.h
+    EditorProject.h
     EditorSession.cpp
     EditorSessionAdjustments.cpp
     EditorSessionLayers.cpp
@@ -91,6 +95,9 @@ qt_add_executable(nekophoto
     SelfTestColorRing.cpp
     SelfTestLayerPicker.cpp
     SelfTestMotion.cpp
+    SelfTestOptions.cpp
+    SelfTestSwatches.cpp
+    SelfTestDump.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     DocumentSource.h
@@ -198,12 +205,25 @@ qt_add_executable(nekophoto
     KeyboardShortcuts.cpp
     ToolOptionsBar.h
     ToolOptionsBar.cpp
+    ToolOptionsParts.h
+    ToolOptionsMove.cpp
+    ToolOptionsBrush.cpp
+    ToolOptionsRetouch.cpp
+    ToolOptionsSelection.cpp
+    ToolOptionsFill.cpp
+    ToolOptionsShape.cpp
+    ToolOptionsType.cpp
+    ToolOptionsCrop.cpp
     Scrub.h
     Scrub.cpp
     ImportBanner.h
     ImportBanner.cpp
-    FullScreen.h
-    FullScreen.cpp
+    WindowEdges.h
+    WindowEdges.cpp
+    WindowEdgePages.cpp
+    ScreenModes.cpp
+    Flyout.h
+    Flyout.cpp
     Motion.h
     Motion.cpp
     RingOverlay.h
@@ -233,7 +253,15 @@ qt_add_executable(nekophoto
     MainWindow.h
     MainWindow.cpp
     MainWindowFiles.cpp
+    MainWindowMenus.h
     MainWindowMenus.cpp
+    MenuFile.cpp
+    MenuEdit.cpp
+    MenuImage.cpp
+    MenuLayer.cpp
+    MenuSelect.cpp
+    MenuFilter.cpp
+    MenuView.cpp
     MainWindowSearch.cpp
     CommandPalette.cpp
     CommandRegistry.cpp

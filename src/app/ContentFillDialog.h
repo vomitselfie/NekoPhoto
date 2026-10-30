@@ -2,7 +2,7 @@
 // searches around the selection and Wide Area a larger window around it. Output to the current or a new layer.
 // Photoshop's hand-painted sampling area is deliberately not offered (docs/legal-boundaries.md).
 #pragma once
-#include "EditorSession.h"
+#include "EditorToolSettings.h"
 #include <QDialog>
 #include <QImage>
 #include <QPointer>
@@ -12,6 +12,7 @@ class QComboBox;
 
 namespace app {
 
+class EditorSession;
 class SamplingCanvas;
 
 class ContentFillDialog : public QDialog {

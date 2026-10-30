@@ -1,5 +1,6 @@
 // The rings' shared controller (RingController.h): opening and closing, the keys while open, the pointer, placement.
 #include "RingController.h"
+#include "EditorSession.h"
 #include "CanvasWidget.h"
 #include "MainWindow.h"
 #include "RingOverlay.h"

@@ -1,6 +1,5 @@
 // Edit ▸ Warp: Photoshop's preset warps (Arc, Flag, Bulge, ...) with bend and distortion, for the active layer.
 #pragma once
-#include "EditorSession.h"
 #include <QDialog>
 #include <QPointer>
 
@@ -8,6 +7,8 @@ class QComboBox;
 class QSpinBox;
 
 namespace app {
+
+class EditorSession;
 
 class WarpDialog : public QDialog {
     Q_OBJECT

@@ -1,7 +1,7 @@
 // Tab and Shift+Tab in the Standard Screen Mode: see HidePanels.h.
 #include "HidePanels.h"
 #include "CanvasWidget.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "MainWindow.h"
 #include "ToolOptionsBar.h"
 #include <QAction>
@@ -21,7 +21,7 @@ HidePanels::HidePanels(MainWindow* window) : QObject(window), window_(window) {
     // F7 and the Window menu's panels while they are hidden: the layout comes back, with that panel showing.
     for (QDockWidget* dock : window->findChildren<QDockWidget*>(Qt::FindDirectChildrenOnly))
         connect(dock->toggleViewAction(), &QAction::triggered, this, [this, dock = QPointer<QDockWidget>(dock)](bool checked) {
-            if (!dock || !checked || hidden_ == None || (window_->fullScreen_ && (window_->fullScreen_->active() || window_->fullScreen_->edgeHolding(dock) >= 0))) return;
+            if (!dock || !checked || hidden_ == None || (window_->windowEdges_ && (window_->windowEdges_->active() || window_->windowEdges_->edgeHolding(dock) >= 0))) return;
             set(None);
             dock->show();
             dock->raise();
@@ -36,7 +36,7 @@ HidePanels::~HidePanels() { qApp->removeEventFilter(this); }
 void HidePanels::set(Hidden h) {
     if (h == hidden_) return;
     // The edges that autohide give their parts back meanwhile: the layout kept and restored is the window's own.
-    FullScreenMode* edges = window_->fullScreen_;
+    WindowEdges* edges = window_->windowEdges_;
     if (edges) edges->suspend();
     if (hidden_ != None) restore();
     hidden_ = h;
@@ -48,24 +48,24 @@ void HidePanels::set(Hidden h) {
 }
 
 bool HidePanels::hidesOptions() const {
-    return hidden_ == All && !(window_->fullScreen_ && window_->fullScreen_->active());
+    return hidden_ == All && !(window_->windowEdges_ && window_->windowEdges_->active());
 }
 
 QByteArray HidePanels::normalState() const { return hidden_ != None ? saved_ : window_->saveState(); }
 
 void HidePanels::beforeFullScreen() {
     if (hidden_ == None) return;
-    window_->fullScreen_->suspend();
+    window_->windowEdges_->suspend();
     restore();
-    window_->fullScreen_->resume();
+    window_->windowEdges_->resume();
 }
 
 void HidePanels::afterFullScreen() {
     if (hidden_ == None) return;
-    window_->fullScreen_->suspend();
+    window_->windowEdges_->suspend();
     saved_ = window_->saveState();
     hideNow();
-    window_->fullScreen_->resume();
+    window_->windowEdges_->resume();
 }
 
 void HidePanels::restore() {

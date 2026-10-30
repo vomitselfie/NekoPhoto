@@ -1,6 +1,7 @@
 // Filter > Camera Raw Filter: the Camera Raw panels (CameraRawPanels.h, a port of upstream Compositor's panels, MIT,
 // see LICENSES/MIT-Compositor.txt) over the pinned layer, previewed on the canvas; the grade is nekophoto/cameraraw.h.
 #include "CameraRawDialog.h"
+#include "EditorSession.h"
 #include "CameraRawPanels.h"
 #include <QCheckBox>
 #include <QJsonDocument>

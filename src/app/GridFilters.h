@@ -1,12 +1,13 @@
 // What the Filter menu's grid filters (nekophoto/filters.h, applyGridFilter) share between their dialog and
 // pixels.filter: their settings as automation's keys, and the context a run needs from the session.
 #pragma once
-#include "EditorSession.h"
 #include "nekophoto/filters.h"
 #include <QJsonObject>
 #include <QStringList>
 
 namespace app {
+
+class EditorSession;
 
 /// `params`' keys for `kind` read over `settings` (keys not given keep their values). False, with `error`, for a value
 /// that is not one of a choice's names.

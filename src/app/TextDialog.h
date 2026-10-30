@@ -4,7 +4,7 @@
 // alignment and line spacing. Changes are applied to the layer as they happen; OK keeps the edit as one undo
 // step, Cancel puts the layer back.
 #pragma once
-#include "EditorSession.h"
+#include "nekophoto/document.h"
 #include "FontPicker.h"
 #include <QDialog>
 #include <QPointer>
@@ -17,6 +17,8 @@ class QComboBox;
 class QPushButton;
 
 namespace app {
+
+class EditorSession;
 
 class TextDialog : public QDialog {
     Q_OBJECT

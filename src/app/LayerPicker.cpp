@@ -1,5 +1,6 @@
 // The Layer Picker (LayerPicker.h): the overlay's column of layers and the controller that steps through them.
 #include "LayerPicker.h"
+#include "EditorSession.h"
 #include "CanvasWidget.h"
 #include "CommandRegistry.h"
 #include "ImageConvert.h"

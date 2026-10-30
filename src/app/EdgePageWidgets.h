@@ -2,7 +2,7 @@
 // and background squares, a hue and saturation picker, swatches and the recent colours), the top edge's Documents page
 // (the open documents as small pictures, the zoom, and the current one's size, mode and depth) and the bottom edge's
 // Info (the pointer's position, the document's size, mode and depth). The window gives them their values and acts on
-// what they ask (FullScreen.cpp): they keep nothing themselves.
+// what they ask (WindowEdges.cpp): they keep nothing themselves.
 #pragma once
 #include <QColor>
 #include <QImage>

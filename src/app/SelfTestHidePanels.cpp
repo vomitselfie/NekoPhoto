@@ -7,7 +7,7 @@
 #include "SelfTest.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
 #include "HidePanels.h"
 #include "MainWindow.h"
 #include "ToolOptionsBar.h"
@@ -50,14 +50,14 @@ void pumpEvents(int ms) {
 int hidePanels(MainWindow& w) {
     EditorSession& s = *w.session();
     QSettings().remove(QStringLiteral("edges"));   // no edge autohiding, each on its first page
-    w.fullScreenMode()->applyPreferences();
+    w.windowEdges()->applyPreferences();
     buildDemoDocument(s);
     w.resize(1400, 900);
     w.show();
     w.activateWindow();
     pumpEvents(100);
     HidePanels* hide = w.hidePanels();
-    FullScreenMode* fs = w.fullScreenMode();
+    WindowEdges* fs = w.windowEdges();
     CanvasWidget* canvas = w.canvasAt(w.currentTabIndex());
     if (!hide || !fs || !canvas) { std::fprintf(stderr, "hide panels: no controller or canvas\n"); return 1; }
     fs->setPolling(false);
@@ -161,7 +161,7 @@ int hidePanels(MainWindow& w) {
     expect(hide->hidden() == HidePanels::All, "Tab did not hide the panels before full screen");
     expect(press(canvas, Qt::Key_F, Qt::NoModifier, QStringLiteral("f")) && fs->active(), "F did not enter full screen");
     pumpEvents(100);
-    expect(fs->edgeHolding(layersDock) == FullScreenMode::Right && fs->hasContent(FullScreenMode::Left) && fs->hasContent(FullScreenMode::Top),
+    expect(fs->edgeHolding(layersDock) == WindowEdges::Right && fs->hasContent(WindowEdges::Left) && fs->hasContent(WindowEdges::Top),
            "full screen's edges did not get the panels, the tools and the options bar");
     // The edges' pages hold their panels whether or not they were closed in the window.
     expect(fs->pageHolding(histogramDock) == QLatin1String("info") && fs->pageHolding(actionsDock) == QLatin1String("history"), "a closed panel is not on its edge's page in full screen");
@@ -171,7 +171,7 @@ int hidePanels(MainWindow& w) {
         QKeyEvent up(QEvent::KeyRelease, Qt::Key_Tab, Qt::NoModifier);
         QApplication::sendEvent(canvas, &up);
     }
-    expect(fs->isPinned(FullScreenMode::Left), "Tab in full screen did not pin the edges");
+    expect(fs->isPinned(WindowEdges::Left), "Tab in full screen did not pin the edges");
     press(canvas, Qt::Key_Tab, Qt::NoModifier);
     pumpEvents(50);
     expect(hide->hidden() == HidePanels::All, "Tab in full screen changed what the standard mode hides");

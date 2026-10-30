@@ -1,4 +1,5 @@
 #include "GmicDialog.h"
+#include "EditorSession.h"
 #include "ActionLibrary.h"
 #include "GmicStore.h"
 #include "Style.h"

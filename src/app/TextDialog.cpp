@@ -1,4 +1,5 @@
 #include "TextDialog.h"
+#include "EditorSession.h"
 #include "RichText.h"
 #include "TextLayer.h"
 #include <QColorDialog>

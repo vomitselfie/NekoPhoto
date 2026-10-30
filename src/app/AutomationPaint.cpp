@@ -1,4 +1,5 @@
 // Automation methods: paint. Registered from AutomationServer::registerHandlers (Automation.cpp).
+#include "nekophoto/mypaint.h"
 #include "Automation.h"
 #include "AutomationHandlers.h"
 #include "BrushImporter.h"

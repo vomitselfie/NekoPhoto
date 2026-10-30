@@ -1,4 +1,4 @@
-// full-screen: View ▸ Screen Mode ▸ Full Screen (FullScreen.h) through synthesised keys and pointer moves. F enters it
+// full-screen: View ▸ Screen Mode ▸ Full Screen (WindowEdges.h) through synthesised keys and pointer moves. F enters it
 // with nothing on screen but the canvas; each edge's hot zone slides its flyout out and the flyout slides back once
 // the pointer has left it (after the injected delay); a button held on the canvas keeps the zones off; the Layers
 // panel works from the right flyout; F10 and Alt open the menus over the canvas; a tap of Tab and of Shift+Tab pins the
@@ -9,7 +9,8 @@
 #include "CanvasWidget.h"
 #include "EdgePages.h"
 #include "EditorSession.h"
-#include "FullScreen.h"
+#include "WindowEdges.h"
+#include "Flyout.h"
 #include "LayersPanel.h"
 #include "MainWindow.h"
 #include "Theme.h"
@@ -67,7 +68,7 @@ bool waitFor(const std::function<bool()>& done, int timeoutMs = 8000) {
 int fullScreen(MainWindow& w) {
     EditorSession& s = *w.session();
     QSettings().remove(QStringLiteral("edges"));   // every edge on its first page, none autohiding
-    w.fullScreenMode()->applyPreferences();
+    w.windowEdges()->applyPreferences();
     PageDeck::setFlipTiming(0);
     buildDemoDocument(s);
     w.resize(1400, 900);
@@ -75,7 +76,7 @@ int fullScreen(MainWindow& w) {
     w.activateWindow();
     pump(100);
     s.fitView();
-    FullScreenMode* fs = w.fullScreenMode();
+    WindowEdges* fs = w.windowEdges();
     CanvasWidget* canvas = w.canvasAt(w.currentTabIndex());
     if (!fs || !canvas) { std::fprintf(stderr, "full screen: no controller or canvas\n"); return 1; }
     fs->setPolling(false);    // the pointer is what the test sends, not wherever the platform's cursor is
@@ -109,9 +110,9 @@ int fullScreen(MainWindow& w) {
         QApplication::sendEvent(target, &e);
     };
     auto move = [&](QPoint at) { pointer(QEvent::MouseMove, at); };
-    auto out = [fs](FullScreenMode::Edge e) { return fs->isOut(e) && fs->flyout(e)->isVisible(); };
-    auto away = [fs](FullScreenMode::Edge e) { return !fs->isOut(e) && !fs->flyout(e)->isVisible(); };
-    auto noneOut = [&] { return away(FullScreenMode::Left) && away(FullScreenMode::Top) && away(FullScreenMode::Right) && away(FullScreenMode::Bottom); };
+    auto out = [fs](WindowEdges::Edge e) { return fs->isOut(e) && fs->flyout(e)->isVisible(); };
+    auto away = [fs](WindowEdges::Edge e) { return !fs->isOut(e) && !fs->flyout(e)->isVisible(); };
+    auto noneOut = [&] { return away(WindowEdges::Left) && away(WindowEdges::Top) && away(WindowEdges::Right) && away(WindowEdges::Bottom); };
     auto* layersDock = w.findChild<QDockWidget*>(QStringLiteral("layersDock"));
     auto* channelsDock = w.findChild<QDockWidget*>(QStringLiteral("channelsDock"));
     auto* timelineDock = w.findChild<QDockWidget*>(QStringLiteral("timelineDock"));
@@ -137,27 +138,27 @@ int fullScreen(MainWindow& w) {
         if (bar->isVisible()) { std::fprintf(stderr, "full screen: the document tabs are on screen\n"); failures++; }
     expect(canvas->isVisible() && canvas->width() > w.width() / 2 && canvas->height() > w.height() / 2, "the canvas does not fill the screen");
     if (themeSetting() == QLatin1String("gothkitty"))
-        expect(fs->flyout(FullScreenMode::Right)->cornerRadius() > 0 && fs->flyout(FullScreenMode::Right)->shadow() > 0, "Goth Kitty's flyouts have no rounded corners or shadow");
+        expect(fs->flyout(WindowEdges::Right)->cornerRadius() > 0 && fs->flyout(WindowEdges::Right)->shadow() > 0, "Goth Kitty's flyouts have no rounded corners or shadow");
 
     // Each edge: into its hot zone the flyout slides out, over the canvas (the canvas keeps its size); the pointer in
     // it keeps it out; away, it slides back.
     // `middle` lies between where the side columns slide to, below the top bar: on the canvas whatever is out.
     const int W = w.width(), H = w.height();
-    const QPoint middle((fs->shownGeometry(FullScreenMode::Left).right() + fs->shownGeometry(FullScreenMode::Right).left()) / 2, H / 2);
-    expect(middle.x() > fs->shownGeometry(FullScreenMode::Left).right() && middle.x() < fs->shownGeometry(FullScreenMode::Right).left(), "the side columns cover the whole screen");
+    const QPoint middle((fs->shownGeometry(WindowEdges::Left).right() + fs->shownGeometry(WindowEdges::Right).left()) / 2, H / 2);
+    expect(middle.x() > fs->shownGeometry(WindowEdges::Left).right() && middle.x() < fs->shownGeometry(WindowEdges::Right).left(), "the side columns cover the whole screen");
     const QSize canvasSize = canvas->size();
-    struct EdgeCase { FullScreenMode::Edge edge; QPoint at; const char* name; };
-    for (const EdgeCase& c : {EdgeCase{FullScreenMode::Left, QPoint(0, H / 2), "left"}, EdgeCase{FullScreenMode::Top, QPoint(W / 2, 0), "top"},
-                              EdgeCase{FullScreenMode::Right, QPoint(W - 1, H / 2), "right"}}) {
+    struct EdgeCase { WindowEdges::Edge edge; QPoint at; const char* name; };
+    for (const EdgeCase& c : {EdgeCase{WindowEdges::Left, QPoint(0, H / 2), "left"}, EdgeCase{WindowEdges::Top, QPoint(W / 2, 0), "top"},
+                              EdgeCase{WindowEdges::Right, QPoint(W - 1, H / 2), "right"}}) {
         move(middle);
         pump(20);
         move(c.at);
         if (!waitFor([&] { return out(c.edge); })) { std::fprintf(stderr, "full screen: the %s edge did not slide out\n", c.name); failures++; continue; }
-        for (auto other : {FullScreenMode::Left, FullScreenMode::Top, FullScreenMode::Right, FullScreenMode::Bottom})
+        for (auto other : {WindowEdges::Left, WindowEdges::Top, WindowEdges::Right, WindowEdges::Bottom})
             if (other != c.edge && !away(other)) { std::fprintf(stderr, "full screen: the %s edge brought another out\n", c.name); failures++; }
         const QRect g = fs->flyout(c.edge)->geometry();
-        expect(w.rect().contains(g.center()) && (c.edge != FullScreenMode::Left || g.left() == 0) && (c.edge != FullScreenMode::Top || g.top() == 0)
-               && (c.edge != FullScreenMode::Right || g.right() == W - 1), "a flyout is not flush with its edge");
+        expect(w.rect().contains(g.center()) && (c.edge != WindowEdges::Left || g.left() == 0) && (c.edge != WindowEdges::Top || g.top() == 0)
+               && (c.edge != WindowEdges::Right || g.right() == W - 1), "a flyout is not flush with its edge");
         expect(canvas->size() == canvasSize, "a flyout resized the canvas instead of lying over it");
         move(g.center());
         pump(150);
@@ -166,27 +167,27 @@ int fullScreen(MainWindow& w) {
         if (!waitFor([&] { return away(c.edge); })) { std::fprintf(stderr, "full screen: the %s edge did not slide back\n", c.name); failures++; }
     }
     // The left, right and top flyouts hold the tool rail, the panels and the options bar.
-    expect(fs->flyout(FullScreenMode::Left)->findChild<QToolBar*>(QStringLiteral("toolRail")), "the left flyout has no tool rail");
-    expect(fs->flyout(FullScreenMode::Top)->findChild<QToolBar*>(), "the top flyout has no options bar");
-    expect(fs->edgeHolding(layersDock) == FullScreenMode::Right && fs->edgeHolding(channelsDock) == FullScreenMode::Right, "Layers and Channels are not in the right flyout");
+    expect(fs->flyout(WindowEdges::Left)->findChild<QToolBar*>(QStringLiteral("toolRail")), "the left flyout has no tool rail");
+    expect(fs->flyout(WindowEdges::Top)->findChild<QToolBar*>(), "the top flyout has no options bar");
+    expect(fs->edgeHolding(layersDock) == WindowEdges::Right && fs->edgeHolding(channelsDock) == WindowEdges::Right, "Layers and Channels are not in the right flyout");
     expect(fs->pageHolding(layersDock) == QLatin1String("layers") && fs->pageHolding(channelsDock) == QLatin1String("channels"), "Layers and Channels are not on the right edge's Layers and Channels pages");
-    expect(fs->page(FullScreenMode::Right) == QLatin1String("layers"), "the right edge did not open on its first page");
+    expect(fs->page(WindowEdges::Right) == QLatin1String("layers"), "the right edge did not open on its first page");
     // The delay before a flyout slides back is the injected one: with a long one it is still out right after leaving.
     fs->setTimings(0, 60000);
     move(QPoint(0, H / 2));
-    waitFor([&] { return out(FullScreenMode::Left); });
+    waitFor([&] { return out(WindowEdges::Left); });
     move(middle);
     pump(150);
-    expect(out(FullScreenMode::Left), "the left flyout slid back before its delay");
+    expect(out(WindowEdges::Left), "the left flyout slid back before its delay");
     fs->setTimings(0, 0);
     move(QPoint(middle.x() + 1, middle.y()));
-    expect(waitFor([&] { return away(FullScreenMode::Left); }), "the left flyout did not slide back after its delay");
+    expect(waitFor([&] { return away(WindowEdges::Left); }), "the left flyout did not slide back after its delay");
     // The bottom edge, without frames or the Timeline asked for, holds the Info and the Histogram.
     move(QPoint(W / 2, H - 1));
-    expect(waitFor([&] { return out(FullScreenMode::Bottom); }), "the bottom edge did not slide out");
-    expect(fs->page(FullScreenMode::Bottom) == QLatin1String("info") && !fs->pages(FullScreenMode::Bottom).contains(QStringLiteral("timeline")), "the bottom edge is not on its Info page, without the Timeline's");
+    expect(waitFor([&] { return out(WindowEdges::Bottom); }), "the bottom edge did not slide out");
+    expect(fs->page(WindowEdges::Bottom) == QLatin1String("info") && !fs->pages(WindowEdges::Bottom).contains(QStringLiteral("timeline")), "the bottom edge is not on its Info page, without the Timeline's");
     move(middle);
-    expect(waitFor([&] { return away(FullScreenMode::Bottom); }), "the bottom edge did not slide back");
+    expect(waitFor([&] { return away(WindowEdges::Bottom); }), "the bottom edge did not slide back");
 
     // A button held on the canvas (a stroke running to the edge) keeps every hot zone off, until it is let go and the
     // pointer comes back to the edge.
@@ -196,15 +197,15 @@ int fullScreen(MainWindow& w) {
     expect(noneOut(), "an edge slid out while a button was held on the canvas");
     pointer(QEvent::MouseButtonRelease, QPoint(W - 1, H / 3), Qt::NoButton, canvas);
     pump(100);
-    expect(away(FullScreenMode::Right), "letting go at the edge slid it out");
+    expect(away(WindowEdges::Right), "letting go at the edge slid it out");
     move(middle);
     move(QPoint(W - 1, H / 3));
-    expect(waitFor([&] { return out(FullScreenMode::Right); }), "after the stroke the right edge did not slide out");
+    expect(waitFor([&] { return out(WindowEdges::Right); }), "after the stroke the right edge did not slide out");
 
     // The Layers panel works in the right flyout: an eye clicked there hides the layer, as one undo step.
     {
         LayersPanel* layers = w.layersPanelAt(w.currentTabIndex());
-        expect(layers && fs->flyout(FullScreenMode::Right)->isAncestorOf(layers) && layers->isVisible(), "the Layers panel is not on screen in the right flyout");
+        expect(layers && fs->flyout(WindowEdges::Right)->isAncestorOf(layers) && layers->isVisible(), "the Layers panel is not on screen in the right flyout");
         const Layer* paint = nullptr;
         for (const Layer& l : s.document()->layers) if (l.name == "Paint") paint = &l;
         QToolButton* eye = nullptr;
@@ -222,10 +223,10 @@ int fullScreen(MainWindow& w) {
             pump(50);
             const Layer* after = s.document()->find(id);
             expect(after && !after->visible && s.undoNames().size() == steps + 1, "the eye in the right flyout did not hide the layer as one step");
-            expect(out(FullScreenMode::Right), "the right flyout slid back under the pointer");
+            expect(out(WindowEdges::Right), "the right flyout slid back under the pointer");
         }
         move(middle);
-        expect(waitFor([&] { return away(FullScreenMode::Right); }), "the right flyout did not slide back after the eye");
+        expect(waitFor([&] { return away(WindowEdges::Right); }), "the right flyout did not slide back after the eye");
     }
 
     // Menu commands keep their keys without the menu bar: Ctrl+0 (Fit on Screen) answers.
@@ -264,19 +265,19 @@ int fullScreen(MainWindow& w) {
     tap(canvas, Qt::Key_Tab, Qt::NoModifier);
     move(middle);
     pump(150);
-    expect(out(FullScreenMode::Left) && out(FullScreenMode::Top) && out(FullScreenMode::Right) && out(FullScreenMode::Bottom), "Tab did not pin the edges out");
-    expect(fs->isPinned(FullScreenMode::Left) && fs->isPinned(FullScreenMode::Right), "Tab did not pin the edges");
+    expect(out(WindowEdges::Left) && out(WindowEdges::Top) && out(WindowEdges::Right) && out(WindowEdges::Bottom), "Tab did not pin the edges out");
+    expect(fs->isPinned(WindowEdges::Left) && fs->isPinned(WindowEdges::Right), "Tab did not pin the edges");
     // Tab and F in a field stay with the field.
     {
         QWidget* field = nullptr;
-        for (QWidget* c : fs->flyout(FullScreenMode::Right)->findChildren<QWidget*>())
+        for (QWidget* c : fs->flyout(WindowEdges::Right)->findChildren<QWidget*>())
             if ((qobject_cast<QLineEdit*>(c) || qobject_cast<QAbstractSpinBox*>(c)) && c->isVisible() && c->isEnabled()) { field = c; break; }
         if (!field) { std::fprintf(stderr, "full screen: no field in the right flyout\n"); failures++; }
         else {
             field->setFocus();
             pump(20);
             expect(!press(QApplication::focusWidget(), Qt::Key_Tab, Qt::NoModifier), "a shortcut took Tab from a field");
-            expect(fs->active() && fs->isPinned(FullScreenMode::Left), "Tab in a field changed the edges");
+            expect(fs->active() && fs->isPinned(WindowEdges::Left), "Tab in a field changed the edges");
             if (QWidget* f = QApplication::focusWidget(); f && (f->inherits("QLineEdit") || f->inherits("QAbstractSpinBox")))
                 expect(!press(f, Qt::Key_F, Qt::NoModifier, QStringLiteral("f")) && fs->active(), "F in a field left full screen");
         }
@@ -288,7 +289,7 @@ int fullScreen(MainWindow& w) {
     expect(waitFor(noneOut), "Tab again did not hide the edges");
     tap(canvas, Qt::Key_Backtab, Qt::ShiftModifier);
     pump(100);
-    expect(away(FullScreenMode::Left) && out(FullScreenMode::Top) && out(FullScreenMode::Right), "Shift+Tab did not pin all but the tools");
+    expect(away(WindowEdges::Left) && out(WindowEdges::Top) && out(WindowEdges::Right), "Shift+Tab did not pin all but the tools");
     tap(canvas, Qt::Key_Backtab, Qt::ShiftModifier);
     expect(waitFor(noneOut), "Shift+Tab again did not hide the edges");
 
@@ -304,25 +305,25 @@ int fullScreen(MainWindow& w) {
     s.selectTool(Tool::Hand);
 
     // F7: the right edge, on the Layers page (from Channels); F7 again slides it back.
-    if (fs->showPage(FullScreenMode::Right, QStringLiteral("channels"))) {
+    if (fs->showPage(WindowEdges::Right, QStringLiteral("channels"))) {
         canvas->setFocus();
         expect(press(canvas, Qt::Key_F7, Qt::NoModifier), "no shortcut took F7");
         pump(100);
-        expect(out(FullScreenMode::Right), "F7 did not slide out the right edge");
-        expect(fs->page(FullScreenMode::Right) == QLatin1String("layers") && w.layersPanelAt(w.currentTabIndex())->isVisible(), "F7 did not bring Layers to the front");
+        expect(out(WindowEdges::Right), "F7 did not slide out the right edge");
+        expect(fs->page(WindowEdges::Right) == QLatin1String("layers") && w.layersPanelAt(w.currentTabIndex())->isVisible(), "F7 did not bring Layers to the front");
         expect(!layersDock->isVisible(), "F7 showed the Layers dock in the window");
         move(middle);
         pump(150);
-        expect(out(FullScreenMode::Right), "the edge F7 brought out slid back before the pointer visited it");
+        expect(out(WindowEdges::Right), "the edge F7 brought out slid back before the pointer visited it");
         press(canvas, Qt::Key_F7, Qt::NoModifier);
-        expect(waitFor([&] { return away(FullScreenMode::Right); }), "F7 again did not slide the right edge back");
+        expect(waitFor([&] { return away(WindowEdges::Right); }), "F7 again did not slide the right edge back");
     } else expect(false, "the right edge has no Channels page");
 
     // Window ▸ Timeline: the bottom edge, with the Timeline.
     if (const Command* timeline = w.commandRegistry().find(QStringLiteral("window.timeline")); timeline && timeline->action) {
         timeline->action->trigger();
         pump(100);
-        expect(out(FullScreenMode::Bottom) && fs->edgeHolding(timelineDock) == FullScreenMode::Bottom && fs->page(FullScreenMode::Bottom) == QLatin1String("timeline"), "Window > Timeline did not slide out the bottom edge on the Timeline");
+        expect(out(WindowEdges::Bottom) && fs->edgeHolding(timelineDock) == WindowEdges::Bottom && fs->page(WindowEdges::Bottom) == QLatin1String("timeline"), "Window > Timeline did not slide out the bottom edge on the Timeline");
         expect(!timelineDock->isVisible(), "Window > Timeline showed its dock in the window");
     } else expect(false, "no Window > Timeline command");
 
@@ -330,7 +331,7 @@ int fullScreen(MainWindow& w) {
     if (auto* actionsDock = w.findChild<QDockWidget*>(QStringLiteral("actionsDock")); actionsDock && actionsDock->isHidden()) {
         if (const Command* actions = w.commandRegistry().find(QStringLiteral("window.actions")); actions && actions->action) actions->action->trigger();
         pump(50);
-        expect(out(FullScreenMode::Right) && fs->edgeHolding(actionsDock) == FullScreenMode::Right && fs->page(FullScreenMode::Right) == QLatin1String("history"),
+        expect(out(WindowEdges::Right) && fs->edgeHolding(actionsDock) == WindowEdges::Right && fs->page(WindowEdges::Right) == QLatin1String("history"),
                "Window > Actions did not bring the Actions panel out on the right");
         expect(!actionsDock->isVisible(), "Window > Actions showed its dock in the window");
     } else expect(false, "no closed Actions dock");
@@ -342,12 +343,12 @@ int fullScreen(MainWindow& w) {
         const int added = w.newTab();
         pump(50);
         bool shown = false;
-        for (QToolBar* t : w.findChildren<QToolBar*>()) if (t->isVisible() && !fs->flyout(FullScreenMode::Top)->isAncestorOf(t) && !fs->flyout(FullScreenMode::Left)->isAncestorOf(t)) shown = true;
+        for (QToolBar* t : w.findChildren<QToolBar*>()) if (t->isVisible() && !fs->flyout(WindowEdges::Top)->isAncestorOf(t) && !fs->flyout(WindowEdges::Left)->isAncestorOf(t)) shown = true;
         expect(!shown, "a new tab's options bar showed in the window");
         move(middle);
         move(QPoint(middle.x(), 0));
-        expect(waitFor([&] { return out(FullScreenMode::Top); }), "the top edge did not slide out on the new tab");
-        const QList<QToolBar*> bars = fs->flyout(FullScreenMode::Top)->findChildren<QToolBar*>();
+        expect(waitFor([&] { return out(WindowEdges::Top); }), "the top edge did not slide out on the new tab");
+        const QList<QToolBar*> bars = fs->flyout(WindowEdges::Top)->findChildren<QToolBar*>();
         int visibleBars = 0;
         for (QToolBar* t : bars) if (t->isVisible()) visibleBars++;
         expect(visibleBars == 1, "the top flyout does not hold exactly the new tab's options bar");
@@ -362,7 +363,7 @@ int fullScreen(MainWindow& w) {
     // Esc: first the edges slide back (the right one, brought out by F7), then full screen ends.
     canvas->setFocus();
     press(canvas, Qt::Key_F7, Qt::NoModifier);
-    expect(waitFor([&] { return out(FullScreenMode::Right); }), "F7 did not bring the right edge out before Esc");
+    expect(waitFor([&] { return out(WindowEdges::Right); }), "F7 did not bring the right edge out before Esc");
     press(canvas, Qt::Key_Escape, Qt::NoModifier);
     pump(50);
     expect(fs->active() && noneOut(), "Esc did not slide the edges back first");

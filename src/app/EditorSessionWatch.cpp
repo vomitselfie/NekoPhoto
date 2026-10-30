@@ -5,6 +5,7 @@
 // until the next change; unsaved work is never replaced without asking. After upstream
 // Compositor's ProjectWatcher / ProjectDigest / ProjectController+ExternalChanges (MIT, LICENSES/MIT-Compositor.txt).
 #include "EditorSession.h"
+#include "DocumentSource.h"
 #include "nekophoto/zipfile.h"
 #include <QCryptographicHash>
 #include <QDir>
@@ -140,7 +141,7 @@ bool EditorSession::revertTo(LoadedProject loaded, QString* error) {
     endEdit();
     // The document is the file again: unmodified (Undo makes it modified once more).
     history_.markSaved();
-    if (source_.kind == DocumentSource::Kind::Project && source_.path == projectPath_) knownDigest_ = projectDigest(projectPath_);
+    if (source_->kind == DocumentSource::Kind::Project && source_->path == projectPath_) knownDigest_ = projectDigest(projectPath_);
     lastStepUndone_ = false;
     if (!sameCanvas) { viewport.fit({double(document_->width), double(document_->height)}); emit viewportChanged(); }
     notifyDocument();

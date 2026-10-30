@@ -5903,77 +5903,6 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
-    <name>app::FullScreenMode</name>
-    <message>
-        <source>RGB Color</source>
-        <translation>RGB カラー</translation>
-    </message>
-    <message>
-        <source>CMYK Color</source>
-        <translation>CMYK カラー</translation>
-    </message>
-    <message>
-        <source>Lab Color</source>
-        <translation>Lab カラー</translation>
-    </message>
-    <message>
-        <source>Tools</source>
-        <translation>ツール</translation>
-    </message>
-    <message>
-        <source>Brushes</source>
-        <translation>ブラシ</translation>
-    </message>
-    <message>
-        <source>Colour</source>
-        <translation>カラー</translation>
-    </message>
-    <message>
-        <source>Options</source>
-        <translation>オプション</translation>
-    </message>
-    <message>
-        <source>Documents</source>
-        <translation>ドキュメント</translation>
-    </message>
-    <message>
-        <source>Layers</source>
-        <translation>レイヤー</translation>
-    </message>
-    <message>
-        <source>Properties</source>
-        <translation>プロパティ</translation>
-    </message>
-    <message>
-        <source>Channels</source>
-        <translation>チャンネル</translation>
-    </message>
-    <message>
-        <source>History</source>
-        <translation>ヒストリー</translation>
-    </message>
-    <message>
-        <source>Timeline</source>
-        <translation>タイムライン</translation>
-    </message>
-    <message>
-        <source>Info</source>
-        <translation>情報</translation>
-    </message>
-    <message>
-        <source>%1 × %2 px · %3 · %4 bits</source>
-        <translation>%1 × %2 px · %3 · %4 bit</translation>
-    </message>
-    <message>
-        <source>%1 × %2 px</source>
-        <translation>%1 × %2 px</translation>
-    </message>
-    <message>
-        <source>%1, %2 bits/channel</source>
-        <translation>%1、%2 bit/チャンネル</translation>
-    </message>
-</context>
-<context>
     <name>app::GmicDialog</name>
     <message>
         <source>Testing (experimental)</source>
@@ -10986,6 +10915,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>キャンセル</translation>
     </message>
     <message>
+        <source>An adjustment layer has no pixels to transform</source>
+        <translation>調整レイヤーには変形するピクセルがありません</translation>
+    </message>
+    <message>
         <source>Controls</source>
         <translation>コントロール</translation>
     </message>
@@ -12198,6 +12131,77 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Next</source>
         <translation>次へ</translation>
+    </message>
+</context>
+<context>
+    <name>app::WindowEdges</name>
+    <message>
+        <source>RGB Color</source>
+        <translation>RGB カラー</translation>
+    </message>
+    <message>
+        <source>CMYK Color</source>
+        <translation>CMYK カラー</translation>
+    </message>
+    <message>
+        <source>Lab Color</source>
+        <translation>Lab カラー</translation>
+    </message>
+    <message>
+        <source>Tools</source>
+        <translation>ツール</translation>
+    </message>
+    <message>
+        <source>Brushes</source>
+        <translation>ブラシ</translation>
+    </message>
+    <message>
+        <source>Colour</source>
+        <translation>カラー</translation>
+    </message>
+    <message>
+        <source>Options</source>
+        <translation>オプション</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>ドキュメント</translation>
+    </message>
+    <message>
+        <source>Layers</source>
+        <translation>レイヤー</translation>
+    </message>
+    <message>
+        <source>Properties</source>
+        <translation>プロパティ</translation>
+    </message>
+    <message>
+        <source>Channels</source>
+        <translation>チャンネル</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation>ヒストリー</translation>
+    </message>
+    <message>
+        <source>Timeline</source>
+        <translation>タイムライン</translation>
+    </message>
+    <message>
+        <source>Info</source>
+        <translation>情報</translation>
+    </message>
+    <message>
+        <source>%1 × %2 px · %3 · %4 bits</source>
+        <translation>%1 × %2 px · %3 · %4 bit</translation>
+    </message>
+    <message>
+        <source>%1 × %2 px</source>
+        <translation>%1 × %2 px</translation>
+    </message>
+    <message>
+        <source>%1, %2 bits/channel</source>
+        <translation>%1、%2 bit/チャンネル</translation>
     </message>
 </context>
 </TS>

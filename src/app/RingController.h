@@ -6,7 +6,7 @@
 // starting, or the idle timeout (Edit > Preferences > Tool Ring's, shared by all of them). One ring is open at a time.
 // A close lets go of the keys at once; the overlay's fade (RingOverlay.h) is only paint.
 #pragma once
-#include "EditorSession.h"
+#include "EditorTool.h"
 #include <QObject>
 #include <QPoint>
 #include <QPointer>
@@ -22,6 +22,7 @@ class QWidget;
 
 namespace app {
 
+class EditorSession;
 class CanvasWidget;
 class MainWindow;
 class RingOverlay;

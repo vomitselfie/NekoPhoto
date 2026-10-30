@@ -81,8 +81,9 @@ A 32-bit document's canvas goes through its view first (exposure, gamma or Highl
 monitor profile it is encoded with the document's own curve instead.
 
 When no monitor profile is known, or it is the document's own, the canvas is not transformed at all, and 8-bit
-documents are drawn bit for bit as before. The foreground and background swatches are shown through the same
-transform; the values you pick and see in the colour dialogs are the document's.
+documents are drawn bit for bit as before. The foreground and background swatches (and the Colour Ring) are shown
+through the monitor profile too, from the space the colours are kept in: the document's profile in RGB, sRGB in CMYK
+and Lab; the values you pick and see in the colour dialogs are the document's.
 
 ## View ▸ Proof Setup, Proof Colors and Gamut Warning
 
@@ -328,7 +329,7 @@ CMYK として扱う)、Lab ドキュメントは Lab D50 です。CMYK・Lab �
 
 ### スポイト
 
-スポイトはドキュメントの値を取ります。スウォッチはモニタープロファイルを通して表示します。
+スポイトはドキュメントの値を取ります。スウォッチ(とカラーリング)はモニタープロファイルを通して表示します。色はRGB のドキュメントではそのプロファイルの値、CMYK と Lab のドキュメントでは sRGB の値として持つので、そこから変換します。
 
 ### 書き出し
 
