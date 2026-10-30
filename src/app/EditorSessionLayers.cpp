@@ -607,7 +607,11 @@ void EditorSession::moveActiveLayer(int offset) {
     }
     int a = document_->indexOf(active->id), b = document_->indexOf(target->id);
     beginEdit(QT_TRANSLATE_NOOP("History", "Reorder Layers"));
-    std::swap(document_->layers[size_t(a)], document_->layers[size_t(b)]);
+    // The layer moves to the target's place and the ones in between shift by one (a swap, for one step; for more,
+    // swapping would also send the target to the layer's old place).
+    auto first = document_->layers.begin();
+    if (a < b) std::rotate(first + a, first + a + 1, first + b + 1);
+    else std::rotate(first + b, first + a, first + a + 1);
     releaseDetachedClipping(document_->layers);
     endEdit();
     notifyDocument();
