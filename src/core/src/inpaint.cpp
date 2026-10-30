@@ -19,6 +19,9 @@
 #include <limits>
 #include <mutex>
 #include <vector>
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
 
 namespace nekophoto {
 
@@ -37,6 +40,7 @@ struct Work {
     std::vector<uint8_t> state;
     std::vector<uint8_t> holeAtStart;
     std::vector<uint8_t> sourceOk;   // the patch centred here is inside the region and wholly Known
+    std::vector<uint32_t> sourceSum; // sourceOk's summed-area table, (w + 1) x (h + 1), modulo 2^32
     std::vector<int32_t> confidence;
     std::vector<int32_t> from;       // for each filled pixel, the region index of the pixel it copies
     size_t at(int x, int y) const { return size_t(y) * size_t(w) + size_t(x); }
@@ -68,6 +72,15 @@ void markSources(Work& W) {
         for (int y = r; y < h - r; y++) {
             if (y > r) bad += horizontal[W.at(x, y + r)] - horizontal[W.at(x, y - r - 1)];
             W.sourceOk[W.at(x, y)] = bad == 0;
+        }
+    }
+    const size_t sw = size_t(w) + 1;
+    W.sourceSum.assign(sw * (size_t(h) + 1), 0);
+    for (int y = 0; y < h; y++) {
+        uint32_t run = 0;
+        for (int x = 0; x < w; x++) {
+            run += W.sourceOk[W.at(x, y)];
+            W.sourceSum[(size_t(y) + 1) * sw + size_t(x) + 1] = W.sourceSum[size_t(y) * sw + size_t(x) + 1] + run;
         }
     }
 }
@@ -119,46 +132,142 @@ int64_t priorityAt(const Work& W, int x, int y, int32_t* confidenceOut) {
 
 struct Candidate { int64_t distance = std::numeric_limits<int64_t>::max(); int64_t order = std::numeric_limits<int64_t>::max(); int x = -1, y = -1; };
 
-/// The scan behind bestSource, over `N` samples per pixel.
+/// The target patch as the scan compares it: per patch row, the target's samples and a mask of its seen pixels, both
+/// padded to whole 16-byte blocks, so a source row is compared with a few byte-wide absolute-difference sums. Pixels
+/// the target has not seen are masked out of the source and are zero in the target: they add nothing, as before.
+struct Template {
+    int blocks = 0, stride = 0;                // 16-byte blocks per patch row, bytes per patch row
+    std::vector<uint8_t> values, mask;
+    /// The patch rows with any seen pixel (their offsets from the patch's top-left sample, in the region, and in the
+    /// template), the fullest first: the sum is the same in any order, and the big rows pass a bound soonest.
+    struct Row { ptrdiff_t source; size_t at; };
+    std::vector<Row> rows;
+};
+
 template <int N>
-Candidate scanWindow(const Work& W, int tx, int ty, int radius, int penalty) {
-    const int r = W.r;
-    std::vector<int> deltas;             // region-index offsets of the target's seen pixels
-    std::vector<int> values;             // their samples
-    for (int j = -r; j <= r; j++)
+Template templateAt(const Work& W, int tx, int ty) {
+    const int r = W.r, side = 2 * r + 1;
+    Template T;
+    T.blocks = (side * N + 15) / 16;
+    T.stride = T.blocks * 16;
+    T.values.assign(size_t(side) * size_t(T.stride), 0);
+    T.mask.assign(size_t(side) * size_t(T.stride), 0);
+    std::vector<std::pair<int, int>> counted;  // (seen pixels, row)
+    for (int j = -r; j <= r; j++) {
+        int seen = 0;
         for (int i = -r; i <= r; i++) {
             if (!W.seen(tx + i, ty + j)) continue;
-            deltas.push_back(j * W.w + i);
-            const uint8_t* p = &W.pix[W.at(tx + i, ty + j) * N];
-            for (int c = 0; c < N; c++) values.push_back(p[c]);
+            const size_t at = size_t(j + r) * size_t(T.stride) + size_t(i + r) * N;
+            std::memcpy(&T.values[at], &W.pix[W.at(tx + i, ty + j) * N], N);
+            std::memset(&T.mask[at], 0xff, N);
+            seen++;
         }
-    const int y0 = std::max(r, ty - radius), y1 = std::min(W.h - r - 1, ty + radius);
-    const int x0 = std::max(r, tx - radius), x1 = std::min(W.w - r - 1, tx + radius);
+        if (seen) counted.push_back({seen, j + r});
+    }
+    std::stable_sort(counted.begin(), counted.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    for (const auto& [seen, row] : counted) T.rows.push_back({ptrdiff_t(row) * W.w * N, size_t(row) * size_t(T.stride)});
+    return T;
+}
+
+/// The L1 distance over the target's seen pixels between the template and the source patch whose top-left sample is
+/// `source`, in `B` blocks a row, added to `sum`; it stops, returning a sum past `bound`, once a patch row takes it past
+/// `bound`. A sum that passes the bound can only grow, so the candidate could not have won: stopping early changes no
+/// result.
+template <int B>
+int64_t patchDistance(const Template& T, const uint8_t* source, int64_t sum, int64_t bound) {
+    for (const Template::Row& row : T.rows) {
+        const uint8_t* s = source + row.source;
+        const uint8_t* t = &T.values[row.at];
+        const uint8_t* m = &T.mask[row.at];
+#if defined(__SSE2__)
+        __m128i acc = _mm_setzero_si128();
+        for (int b = 0; b < B; b++) {
+            const __m128i sv = _mm_and_si128(_mm_loadu_si128(reinterpret_cast<const __m128i*>(s + b * 16)), _mm_loadu_si128(reinterpret_cast<const __m128i*>(m + b * 16)));
+            acc = _mm_add_epi64(acc, _mm_sad_epu8(sv, _mm_loadu_si128(reinterpret_cast<const __m128i*>(t + b * 16))));
+        }
+        sum += _mm_cvtsi128_si64(acc) + _mm_cvtsi128_si64(_mm_unpackhi_epi64(acc, acc));
+#else
+        int part = 0;
+        for (int k = 0; k < B * 16; k++) part += std::abs(int(t[k]) - int(s[k] & m[k]));
+        sum += part;
+#endif
+        if (sum > bound) break;
+    }
+    return sum;
+}
+
+/// Whole patches whose centres lie in [x0, x1] x [y0, y1] (inclusive), from the region's summed-area table: exact in
+/// unsigned arithmetic, since a window's count fits in 32 bits.
+uint32_t sourcesIn(const Work& W, int x0, int y0, int x1, int y1) {
+    const size_t sw = size_t(W.w) + 1;
+    const auto at = [&](int x, int y) { return W.sourceSum[size_t(y) * sw + size_t(x)]; };
+    return at(x1 + 1, y1 + 1) - at(x0, y1 + 1) - at(x1 + 1, y0) + at(x0, y0);
+}
+
+/// The scan behind bestSource with `B` blocks a patch row. Every source centre in the window is a candidate; one is
+/// passed over only once its distance provably exceeds one already found in this same scan (the offset penalty alone,
+/// or a partial sum), and rows holding no whole patch are passed over whole, which leaves the winner what scoring every
+/// candidate in full would choose. The scan scores every eighth candidate of every eighth row first, at full
+/// resolution and against this target alone: the best of those bounds the winner's distance, so every band of the
+/// parallel scan starts passing over candidates at once. The bound is dropped when the scan ends, like everything else
+/// here, and the winner is still the exhaustive scan's: the smallest distance, then the earliest in scan order.
+template <int B>
+Candidate scanWith(const Work& W, const Template& T, int tx, int ty, int x0, int y0, int x1, int y1, int penalty) {
+    const size_t corner = size_t(W.r) * size_t(W.w) + size_t(W.r);   // a patch's centre to its top-left pixel
+    const size_t N = size_t(W.n);
+    // One candidate scored against `bound`: its distance, past `bound` when it cannot win.
+    auto score = [&](int x, int y, int64_t bound) {
+        const int64_t sum = int64_t(penalty) * (std::abs(x - tx) + std::abs(y - ty));
+        if (sum > bound) return sum;
+        return patchDistance<B>(T, &W.pix[(W.at(x, y) - corner) * N], sum, bound);
+    };
+    int64_t bound = std::numeric_limits<int64_t>::max();
+    constexpr int sparse = 8;
+    for (int y = y0; y <= y1; y += sparse)
+        for (int x = x0; x <= x1; x += sparse)
+            if (W.sourceOk[W.at(x, y)]) bound = std::min(bound, score(x, y, bound));
     Candidate best;
-    if (y1 < y0 || x1 < x0) return best;
     std::mutex lock;
-    const size_t n = deltas.size();
     parallelRows(y0, y1 + 1, [&](int ya, int yb) {
+        // Starting from the bound: a candidate at it or under it is still taken, so the one the sparse pass found is
+        // met again in its place in scan order.
         Candidate local;
-        for (int y = ya; y < yb; y++)
+        local.distance = bound;
+        for (int y = ya; y < yb; y++) {
+            if (int64_t(penalty) * std::abs(y - ty) > local.distance || !sourcesIn(W, x0, y, x1, y)) continue;
+            const uint8_t* ok = &W.sourceOk[W.at(0, y)];
             for (int x = x0; x <= x1; x++) {
-                const size_t q = W.at(x, y);
-                if (!W.sourceOk[q]) continue;
-                int64_t sum = int64_t(penalty) * (std::abs(x - tx) + std::abs(y - ty));
+                if (!ok[x]) continue;
+                const int64_t sum = score(x, y, local.distance);
                 if (sum > local.distance) continue;
-                const uint8_t* base = &W.pix[q * N];
-                for (size_t k = 0; k < n && sum <= local.distance; k++) {
-                    const uint8_t* s = base + ptrdiff_t(deltas[k]) * N;
-                    const int* t = &values[k * N];
-                    for (int c = 0; c < N; c++) sum += std::abs(t[c] - s[c]);
-                }
                 const int64_t order = int64_t(y) * W.w + x;
-                if (sum < local.distance || (sum == local.distance && order < local.order)) local = {sum, order, x, y};
+                if (sum < local.distance || order < local.order) local = {sum, order, x, y};
             }
+        }
+        if (local.x < 0) return;
         std::lock_guard<std::mutex> guard(lock);
         if (local.distance < best.distance || (local.distance == best.distance && local.order < best.order)) best = local;
     }, 4);
     return best;
+}
+
+/// The scan behind bestSource, over `N` samples per pixel. A window holding no whole patch finds nothing, as its scan
+/// would.
+template <int N>
+Candidate scanWindow(const Work& W, int tx, int ty, int radius, int penalty) {
+    const int r = W.r;
+    const int y0 = std::max(r, ty - radius), y1 = std::min(W.h - r - 1, ty + radius);
+    const int x0 = std::max(r, tx - radius), x1 = std::min(W.w - r - 1, tx + radius);
+    if (y1 < y0 || x1 < x0 || !sourcesIn(W, x0, y0, x1, y1)) return {};
+    const Template T = templateAt<N>(W, tx, ty);
+    switch (T.blocks) {
+    case 1: return scanWith<1>(W, T, tx, ty, x0, y0, x1, y1, penalty);
+    case 2: return scanWith<2>(W, T, tx, ty, x0, y0, x1, y1, penalty);
+    case 3: return scanWith<3>(W, T, tx, ty, x0, y0, x1, y1, penalty);
+    case 4: return scanWith<4>(W, T, tx, ty, x0, y0, x1, y1, penalty);
+    case 5: return scanWith<5>(W, T, tx, ty, x0, y0, x1, y1, penalty);
+    default: return scanWith<6>(W, T, tx, ty, x0, y0, x1, y1, penalty);   // 17 x 5 samples: 85 bytes
+    }
 }
 
 /// The best source patch for the target at (tx, ty): every source centre within `radius` is scored, independently
@@ -255,7 +364,8 @@ bool exemplarFill(const Eight& image, int channels, ColorMode mode, const GrayIm
     const int x1 = std::min(image.width(), b.x1 + reach), y1 = std::min(image.height(), b.y1 + reach);
     W.w = x1 - x0; W.h = y1 - y0; W.r = r; W.n = channels; W.mode = mode;
     const size_t n = size_t(W.w) * size_t(W.h), N = size_t(channels);
-    W.pix.resize(n * N); W.state.assign(n, Unknown); W.confidence.assign(n, 0); W.from.assign(n, -1);
+    // Sixteen spare bytes: the scan reads each source patch row in whole 16-byte blocks (masked), past its last pixel.
+    W.pix.resize(n * N + 16); W.state.assign(n, Unknown); W.confidence.assign(n, 0); W.from.assign(n, -1);
     for (int y = 0; y < W.h; y++) {
         std::memcpy(&W.pix[W.at(0, y) * N], image.pixel(x0, y0 + y), size_t(W.w) * N);
         for (int x = 0; x < W.w; x++) {
