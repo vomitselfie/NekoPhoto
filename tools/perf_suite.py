@@ -133,7 +133,7 @@ class Process:
             os.mkfifo(self.ctl)
             os.mkfifo(self.ack)
         if record:
-            command = ["perf", "record", "-q", "-F", "999", "-g", "--call-graph", "dwarf,16384", "-o", record]
+            command = ["perf", "record", "-q", "-F", "250", "--call-graph", "dwarf,8192", "-o", record]
         elif counting:
             command = ["perf", "stat", "-x,", "-e", "instructions:u", "-o", self.stat_out]
         if controlled:
@@ -740,7 +740,8 @@ def compare(result, baseline_path, threshold, rss_threshold):
             noise = max(threshold, now.get("spread_pct", 0), was.get("spread_pct", 0))
             row(name, "instructions:u", was.get("instructions"), now.get("instructions"), noise)
         for key in sorted(set(was.get("work", {})) | set(now.get("work", {}))):
-            noise = max(was.get("work_spread_pct", {}).get(key, 0.0), now.get("work_spread_pct", {}).get(key, 0.0))
+            # Twice the larger spread: a single run can land at either end of the range the baseline's runs saw.
+            noise = 2 * max(was.get("work_spread_pct", {}).get(key, 0.0), now.get("work_spread_pct", {}).get(key, 0.0))
             row(name, key, was.get("work", {}).get(key, 0), now.get("work", {}).get(key, 0), noise)
         row(name, "peak RSS kB", was.get("peak_rss_kb"), now.get("peak_rss_kb"), rss_threshold)
         row(name, "operation peak RSS kB", was.get("op_peak_rss_kb"), now.get("op_peak_rss_kb"), rss_threshold)
