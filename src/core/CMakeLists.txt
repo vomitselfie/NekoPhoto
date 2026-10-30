@@ -175,6 +175,8 @@ add_library(nekophoto_core STATIC
     src/contentmove.cpp
     src/seamcarve.cpp
     src/psd.cpp
+    src/psd_parse.cpp
+    src/psd_settings.cpp
     src/blendif.cpp
     src/layerstyle.cpp
     src/layerstyle_render.cpp
