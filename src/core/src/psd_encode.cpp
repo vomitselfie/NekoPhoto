@@ -510,6 +510,7 @@ void writeMerged8(Out& f, const Document& document, const PsdExportOptions& opti
             }
         }
     }, 64);
+    flat.reset();   // the planes hold it now
     const int w = document.width, h = document.height;
     std::vector<std::vector<uint8_t>> rows;
     rows.reserve(size_t(h) * 4);
@@ -534,9 +535,11 @@ void writeMerged8(Out& f, const Document& document, const PsdExportOptions& opti
         }, 64);
     }
     if (rle) {
+        for (auto& p : planes) std::vector<uint8_t>().swap(p);   // the rows hold them now
+        channelPlanes.clear();
         f.u16(1);
         for (auto& r : rows) { if (large) f.u32(uint32_t(r.size())); else f.u16(unsigned(r.size())); }
-        for (auto& r : rows) f.bytes(r);
+        for (auto& r : rows) { f.bytes(r); std::vector<uint8_t>().swap(r); }
     } else {
         f.u16(0);
         for (int c : order) f.bytes(planes[size_t(c)]);

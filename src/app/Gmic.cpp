@@ -11,6 +11,7 @@
 #include <gmic.h>
 #endif
 #include <QRegularExpression>
+#include <QSettings>
 #include <QSet>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -450,12 +451,22 @@ QString GmicRunner::version() {
         std::lock_guard<std::mutex> lock(mutex);
         if (exe == cachedFor) return cached;
     }
-    QProcess p;
-    p.start(exe, {"-version"});
-    p.waitForFinished(5000);
-    static const QRegularExpression re(R"(Version\s+(\d+\.\d+\.\d+))");
-    auto m = re.match(QString::fromUtf8(p.readAllStandardOutput()) + QString::fromUtf8(p.readAllStandardError()));
-    const QString found = m.hasMatch() ? m.captured(1) : QStringLiteral("0.0.0");
+    // And remembered across runs for that file as it is (its size and time): asking means starting G'MIC, which
+    // loads its whole command library first, and app.info, Preferences and the G'MIC dialog all ask.
+    const QFileInfo file(exe);
+    const QString stamp = QStringLiteral("%1|%2|%3").arg(file.absoluteFilePath()).arg(file.size()).arg(file.lastModified().toMSecsSinceEpoch());
+    QSettings settings;
+    QString found;
+    if (settings.value(QStringLiteral("gmic/versionOf")).toString() == stamp) found = settings.value(QStringLiteral("gmic/version")).toString();
+    if (found.isEmpty()) {
+        QProcess p;
+        p.start(exe, {"-version"});
+        p.waitForFinished(5000);
+        static const QRegularExpression re(R"(Version\s+(\d+\.\d+\.\d+))");
+        auto m = re.match(QString::fromUtf8(p.readAllStandardOutput()) + QString::fromUtf8(p.readAllStandardError()));
+        found = m.hasMatch() ? m.captured(1) : QStringLiteral("0.0.0");
+        if (m.hasMatch()) { settings.setValue(QStringLiteral("gmic/versionOf"), stamp); settings.setValue(QStringLiteral("gmic/version"), found); settings.sync(); }
+    }
     std::lock_guard<std::mutex> lock(mutex);
     cachedFor = exe;
     cached = found;

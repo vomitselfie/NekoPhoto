@@ -461,7 +461,7 @@ private:
         carry->fill = rec.fillOpacity;
         auto lyid = rec.blocks.find("lyid");
         if (lyid != rec.blocks.end() && lyid->second.second >= 4) { Reader id(lyid->second.first, 4); carry->layerId = id.u32(); }
-        carry->contentHash = psdContentHash(layer.asset ? layer.asset->image : AnyImage());
+        carry->contentHash = cachedPsdContentHash(layer.asset ? layer.asset->image : AnyImage());
         // A 16- or 32-bit layer's channels as stored, and a CMYK or Lab layer's at either depth: written back while
         // its pixels are these (psd_carry.h). A CMYK or Lab layer whose pixels were not read from its planes (a smart
         // object's contents drawn here) has none.

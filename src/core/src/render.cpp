@@ -15,6 +15,7 @@
 #include <vector>
 #include <cmath>
 #include <cstring>
+#include <mutex>
 #include <optional>
 
 namespace nekophoto {
@@ -71,6 +72,50 @@ Mapping mappingFor(const LayerTransform& transform, int pixelWidth, int pixelHei
 // ---- Mask coverage --------------------------------------------------------
 
 namespace {
+
+/// The last coverages sampled from shared masks, for a mask drawn again unchanged at the same place and scale (an
+/// adjustment layer's mask under a slider drag is sampled once, not on every tick). An entry holds while its mask
+/// lives and nothing has been written in place since (MipCache::refresh, which a stroke on a mask calls), so it is
+/// what sampling again would give. Only view-sized coverages are kept (a few, up to a 4K screen's each).
+class CoverageCache {
+public:
+    struct Key {
+        const GrayImage* mask = nullptr;
+        LayerTransform transform;
+        Rect region;
+        double scale = 0;
+        uint8_t outside = 0;
+        int width = 0, height = 0;
+        bool operator==(const Key&) const = default;
+    };
+    static CoverageCache& shared() { static CoverageCache cache; return cache; }
+    bool find(const Key& key, const GrayPtr& owner, GrayImage& out) {
+        std::lock_guard<std::mutex> guard(mutex_);
+        const uint64_t writes = MipCache::shared().writes();
+        for (auto it = entries_.begin(); it != entries_.end(); ++it) {
+            if (!(it->key == key)) continue;
+            if (it->writes != writes || it->owner.lock() != owner) { entries_.erase(it); return false; }
+            std::memcpy(out.data(), it->coverage->data(), out.byteCount());
+            // Most recently used last.
+            std::rotate(it, it + 1, entries_.end());
+            return true;
+        }
+        return false;
+    }
+    void store(const Key& key, const GrayPtr& owner, const GrayImage& coverage, uint64_t writes) {
+        std::lock_guard<std::mutex> guard(mutex_);
+        std::erase_if(entries_, [&](const Entry& e) { return e.key == key || e.owner.expired() || e.writes != writes; });
+        if (entries_.size() >= kEntries) entries_.erase(entries_.begin());
+        entries_.push_back({key, owner, std::make_shared<GrayImage>(coverage), writes});
+    }
+
+private:
+    static constexpr size_t kEntries = 4;
+    struct Entry { Key key; std::weak_ptr<const GrayImage> owner; std::shared_ptr<const GrayImage> coverage; uint64_t writes = 0; };
+    std::mutex mutex_;
+    std::vector<Entry> entries_;
+};
+
 void sampleMaskCoverageImpl(const GrayImage& mask, const GrayPtr& owner, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply) {
     int mw = mask.width(), mh = mask.height();
     if (!multiply) out.fill(outside);
@@ -79,6 +124,46 @@ void sampleMaskCoverageImpl(const GrayImage& mask, const GrayPtr& owner, const L
     double sx = std::hypot(m.outputToPixel.a, m.outputToPixel.b); // layer px per output px along x
     double sy = std::hypot(m.outputToPixel.c, m.outputToPixel.d);
     MipChoice mip = mipFor(transform.sampling, transform.size.width * scale, transform.size.height * scale, mw, mh);
+    // The mask on the output grid at whole pixels (1:1, no rotation or flip): every output pixel centre lands on a
+    // mask pixel centre, where the bilinear (or nearest) sample is that pixel and the edge weight is 1 inside and 0
+    // outside, so the rows copy over.
+    const Affine& o2p = m.outputToPixel;
+    if (mip.level == 0 && o2p.a == 1 && o2p.b == 0 && o2p.c == 0 && o2p.d == 1 && o2p.tx == std::floor(o2p.tx) && o2p.ty == std::floor(o2p.ty)
+        && std::fabs(o2p.tx) < 1e15 && std::fabs(o2p.ty) < 1e15) {
+        const long long offsetX = (long long)o2p.tx, offsetY = (long long)o2p.ty;   // output -> mask pixel
+        if (multiply && outside != 255) {
+            for (int y = 0; y < out.height(); y++) {
+                uint8_t* row = out.row(y);
+                for (int x = 0; x < out.width(); x++) {
+                    bool inside = x >= m.outputRect.minX() && x < m.outputRect.maxX() && y >= m.outputRect.minY() && y < m.outputRect.maxY();
+                    if (!inside) row[x] = uint8_t((row[x] * outside + 127) / 255);
+                }
+            }
+        }
+        const int xBegin = int(m.outputRect.minX()), xEnd = int(m.outputRect.maxX());
+        parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint8_t* row = out.row(y);
+            const long long py = y + offsetY;
+            const uint8_t* maskRow = py >= 0 && py < mh ? mask.row(int(py)) : nullptr;
+            for (int x = xBegin; x < xEnd; x++) {
+                const long long px = x + offsetX;
+                const uint8_t v = maskRow && px >= 0 && px < mw ? maskRow[px] : outside;
+                row[x] = multiply ? uint8_t((row[x] * v + 127) / 255) : v;
+            }
+        }
+        });
+        return;
+    }
+    // A shared mask's coverage, sampled before at this place and scale.
+    const bool cacheable = !multiply && owner && owner.get() == &mask && out.byteCount() <= (size_t(12) << 20);
+    CoverageCache::Key key;
+    uint64_t writes = 0;
+    if (cacheable) {
+        key = {&mask, transform, region, scale, outside, out.width(), out.height()};
+        writes = MipCache::shared().writes();
+        if (CoverageCache::shared().find(key, owner, out)) return;
+    }
     // Reductions are cached with the shared mask; a plain reference builds them on the spot.
     std::shared_ptr<const GrayImage> reduced;
     if (mip.level > 0) reduced = owner && owner.get() == &mask ? MipCache::shared().level(owner, mip.level) : reduceGray(mask, mip.level);
@@ -117,6 +202,7 @@ void sampleMaskCoverageImpl(const GrayImage& mask, const GrayPtr& owner, const L
         }
     }
     });
+    if (cacheable) CoverageCache::shared().store(key, owner, out, writes);
 }
 
 } // namespace
@@ -135,7 +221,7 @@ bool photoshopType(const Layer& layer) {
     if (!layer.psdCarry || !layer.asset) return false;
     const auto& blocks = layer.psdCarry->blocks;
     if (std::none_of(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "TySh"; })) return false;
-    return layer.psdCarry->contentHash == psdContentHash(layer.asset->image);
+    return layer.psdCarry->contentHash == cachedPsdContentHash(layer.asset->image);
 }
 
 namespace {

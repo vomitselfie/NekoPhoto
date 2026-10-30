@@ -4,6 +4,7 @@
 // Buffers are immutable once shared (ImagePtr / GrayPtr), so undo snapshots and
 // renders can hold them without copying.
 #pragma once
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -168,6 +169,9 @@ public:
     void refresh(const GrayImageT<SampleType::F32>* image, int x0, int y0, int x1, int y1);
     void refresh(const ImageT<SampleType::U8>* image, int x0, int y0, int x1, int y1);
     void clear();
+    /// Counts the buffers written in place (each refresh): what is kept from an image's pixels by its address (a
+    /// coverage, a fingerprint) holds only while this stays where it was.
+    uint64_t writes() const { return writes_.load(std::memory_order_acquire); }
     void setBudget(size_t bytes);
     size_t budget() const { return budget_; }
     size_t bytesUsed() const { return used_; }
@@ -207,6 +211,7 @@ private:
     std::vector<Entry<ImageT<SampleType::F32>>> entriesF_;
     std::vector<Entry<GrayImageT<SampleType::F32>>> grayEntriesF_;
     std::vector<Entry<ImageT<SampleType::U8>>> entriesC8_;
+    std::atomic<uint64_t> writes_{0};
 };
 
 } // namespace nekophoto

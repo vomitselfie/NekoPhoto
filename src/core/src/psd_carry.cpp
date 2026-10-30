@@ -1,6 +1,8 @@
 #include "nekophoto/psd_carry.h"
 #include "nekophoto/depth.h"
 #include <cstring>
+#include <map>
+#include <mutex>
 #include <set>
 
 namespace nekophoto {
@@ -70,6 +72,44 @@ uint64_t psdContentHash(const AnyImage& image) {
         return h ? h : 1;
     }
     return psdContentHash(image.u8().get());
+}
+
+namespace {
+/// cachedPsdContentHash's memory: each image by its address, held weakly, with the hash and the write count it was
+/// taken at.
+class HashCache {
+public:
+    static HashCache& shared() { static HashCache cache; return cache; }
+    template <typename T>
+    uint64_t hash(const std::shared_ptr<const T>& image) {
+        const uint64_t writes = MipCache::shared().writes();
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto it = entries_.find(image.get());
+            if (it != entries_.end() && it->second.writes == writes && it->second.owner.lock() == std::static_pointer_cast<const void>(image)) return it->second.hash;
+        }
+        const uint64_t h = psdContentHash(AnyImage(image));
+        std::lock_guard<std::mutex> lock(mutex_);
+        // Bounded without thrashing: the images that are gone go first, and all only past a generous limit.
+        if (entries_.size() >= 1024) std::erase_if(entries_, [](const auto& entry) { return entry.second.owner.expired(); });
+        if (entries_.size() >= 16384) entries_.clear();
+        entries_[image.get()] = {std::static_pointer_cast<const void>(image), h, writes};
+        return h;
+    }
+
+private:
+    struct Entry { std::weak_ptr<const void> owner; uint64_t hash = 0, writes = 0; };
+    std::mutex mutex_;
+    std::map<const void*, Entry> entries_;
+};
+} // namespace
+
+uint64_t cachedPsdContentHash(const AnyImage& image) {
+    if (image.u16()) return HashCache::shared().hash(image.u16());
+    if (image.f32()) return HashCache::shared().hash(image.f32());
+    if (image.c8()) return HashCache::shared().hash(image.c8());
+    if (image.u8()) return HashCache::shared().hash(image.u8());
+    return psdContentHash(image);
 }
 
 uint64_t psdMaskHash(const AnyGray& mask, bool enabled) {

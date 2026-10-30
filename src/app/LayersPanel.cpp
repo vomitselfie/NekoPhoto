@@ -9,6 +9,7 @@
 #include "nekophoto/blend.h"
 #include "nekophoto/vectorlayer.h"
 #include <QStandardItemModel>
+#include <cstring>
 #include <QApplication>
 #include <QDrag>
 #include <QDragEnterEvent>
@@ -662,32 +663,88 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
     return row;
 }
 
+LayersPanel::RowKey LayersPanel::rowKey(const Layer& layer, int depth, bool visible) const {
+    RowKey key;
+    key.fixed = !layer.smartObject && !hasLayerVectorMask(layer);
+    if (!key.fixed) return key;
+    key.thumbnail = layer.asset ? layer.asset->thumbnail : nullptr;
+    key.maskThumbnail = layer.mask ? layer.mask->asset.thumbnail : nullptr;
+    const bool active = session_->activeLayerId() == layer.id;
+    const bool selected = active || session_->selectedLayerIds().count(layer.id);
+    const QPalette& p = palette();
+    double opacity = layer.opacity;
+    char opacityBits[sizeof(double)];
+    std::memcpy(opacityBits, &opacity, sizeof(double));
+    QString text = QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9")
+        .arg(QString::fromStdString(layer.id), QString::fromStdString(layer.name)).arg(depth).arg(visible).arg(layer.visible)
+        .arg(layer.isGroup).arg(layer.passThrough).arg(int(layer.blendMode)).arg(QString::fromLatin1(QByteArray(opacityBits, sizeof(double)).toHex()));
+    text += QStringLiteral("|%1|%2|%3|%4|%5|%6")
+        .arg(layer.maskSourceId.has_value()).arg(layer.adjustment ? int(layer.adjustment->kind) : -1).arg(layer.isLiveText())
+        .arg(active && !session_->isMaskSelected()).arg(active && session_->isMaskSelected()).arg(selected);
+    if (layer.mask) text += QStringLiteral("|mask %1 %2").arg(layer.mask->enabled).arg(layer.mask->linked);
+    text += QStringLiteral("|%1|%2|%3|%4|%5").arg(devicePixelRatioF()).arg(p.color(QPalette::Text).rgba()).arg(p.color(QPalette::HighlightedText).rgba())
+        .arg(p.color(QPalette::Highlight).rgba()).arg(hintStyle());
+    key.text = text.toStdString();
+    return key;
+}
+
 void LayersPanel::rebuild() {
     rebuilding_ = true;
-    tree_->clear();
-    items_.clear();
     const auto& doc = session_->document();
+    // The rows in order, and the folder each sits in: when they are the rows already shown, only the rows whose
+    // picture changed are made again.
+    std::vector<HierarchyEntry> shown;
+    std::vector<std::pair<Uuid, Uuid>> structure;
     if (doc) {
-        std::map<Uuid, QTreeWidgetItem*> parents;
-        auto entries = hierarchyEntries(doc->layers, true, nullptr);
+        std::set<Uuid> listed;
         const auto proxy = session_->filterMaskLayer();
-        for (auto& e : entries) {
+        for (auto& e : hierarchyEntries(doc->layers, true, nullptr)) {
             if (proxy && e.layer->id == *proxy) continue;   // the filter mask being painted shows on its smart object
             if (session_->isChannelProxy(e.layer->id)) continue;   // an alpha channel being painted shows in the Channels panel
-            QTreeWidgetItem* item = new QTreeWidgetItem;
-            item->setData(0, Qt::UserRole, QString::fromStdString(e.layer->id));
-            item->setData(0, Qt::UserRole + 1, e.layer->isGroup);
-            item->setSizeHint(0, QSize(0, thumbHeight + 6));
-            Qt::ItemFlags flags = Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled;
-            if (e.layer->isGroup) flags |= Qt::ItemIsDropEnabled;
-            item->setFlags(flags);
-            if (e.layer->parentId && parents.count(*e.layer->parentId)) parents[*e.layer->parentId]->addChild(item);
-            else tree_->addTopLevelItem(item);
-            parents[e.layer->id] = item;
-            items_[e.layer->id] = item;
-            tree_->setItemWidget(item, 0, makeRow(*e.layer, e.depth, e.visible));
-            if (e.layer->smartObject) addSmartFilterRows(item, *e.layer);
+            const Uuid parent = e.layer->parentId && listed.count(*e.layer->parentId) ? *e.layer->parentId : Uuid();
+            structure.push_back({e.layer->id, parent});
+            listed.insert(e.layer->id);
+            shown.push_back(e);
         }
+    }
+    if (doc && !structure.empty() && structure == structure_ && items_.size() == structure.size()) {
+        for (auto& e : shown) {
+            QTreeWidgetItem* item = items_[e.layer->id];
+            RowKey key = rowKey(*e.layer, e.depth, e.visible);
+            // A smart object's Smart Filter rows draw from its stack: made again with its row (and gone if it no longer is one).
+            for (int i = item->childCount() - 1; i >= 0; i--) if (smartFilterRow(item->child(i))) delete item->takeChild(i);
+            auto known = rowKeys_.find(e.layer->id);
+            if (known == rowKeys_.end() || !(known->second == key)) tree_->setItemWidget(item, 0, makeRow(*e.layer, e.depth, e.visible));
+            if (e.layer->smartObject) addSmartFilterRows(item, *e.layer);
+            rowKeys_[e.layer->id] = std::move(key);
+        }
+        tree_->clearSelection();
+    } else {
+        tree_->clear();
+        items_.clear();
+        rowKeys_.clear();
+        structure_ = structure;
+        if (doc) {
+            std::map<Uuid, QTreeWidgetItem*> parents;
+            for (auto& e : shown) {
+                QTreeWidgetItem* item = new QTreeWidgetItem;
+                item->setData(0, Qt::UserRole, QString::fromStdString(e.layer->id));
+                item->setData(0, Qt::UserRole + 1, e.layer->isGroup);
+                item->setSizeHint(0, QSize(0, thumbHeight + 6));
+                Qt::ItemFlags flags = Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled;
+                if (e.layer->isGroup) flags |= Qt::ItemIsDropEnabled;
+                item->setFlags(flags);
+                if (e.layer->parentId && parents.count(*e.layer->parentId)) parents[*e.layer->parentId]->addChild(item);
+                else tree_->addTopLevelItem(item);
+                parents[e.layer->id] = item;
+                items_[e.layer->id] = item;
+                tree_->setItemWidget(item, 0, makeRow(*e.layer, e.depth, e.visible));
+                rowKeys_[e.layer->id] = rowKey(*e.layer, e.depth, e.visible);
+                if (e.layer->smartObject) addSmartFilterRows(item, *e.layer);
+            }
+        }
+    }
+    if (doc) {
         tree_->invisibleRootItem()->setFlags(tree_->invisibleRootItem()->flags() | Qt::ItemIsDropEnabled);
         for (auto& [id, item] : items_)
             if (item->childCount() > 0) item->setExpanded(item->data(0, Qt::UserRole + 1).toBool() ? !session_->collapsedGroupIds.count(id) : !collapsedSmartFilters_.count(id));

@@ -112,6 +112,9 @@ uint64_t psdMaskHash(const GrayImage* mask, bool enabled);
 /// The same for pixels of any depth (the 8-bit fingerprint for 8-bit pixels).
 uint64_t psdContentHash(const AnyImage& image);
 uint64_t psdMaskHash(const AnyGray& mask, bool enabled);
+/// psdContentHash, remembered for each image while it lives and nothing has been written in place
+/// (MipCache::writes): a layer's pixels are hashed once on opening, not again for every render, save or check.
+uint64_t cachedPsdContentHash(const AnyImage& image);
 
 /// For the project package: the carry as one file's bytes, and back (null when the bytes are not one).
 std::vector<uint8_t> serializePsdCarry(const PsdLayerCarry& carry);

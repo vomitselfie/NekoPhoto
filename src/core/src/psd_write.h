@@ -28,6 +28,12 @@ struct Out {
     void f32(float v) { uint32_t bits; std::memcpy(&bits, &v, 4); u32(bits); }
     void str(const char* s) { b.insert(b.end(), s, s + std::strlen(s)); }
     void bytes(const std::vector<uint8_t>& v) { b.insert(b.end(), v.begin(), v.end()); }
+    /// A length not known yet: zeros now, its offset back for `patch` once what it measures is written.
+    size_t mark(bool wide) { const size_t at = b.size(); length(0, wide); return at; }
+    void patch(size_t at, uint64_t v, bool wide) {
+        const int n = wide ? 8 : 4;
+        for (int k = 0; k < n; k++) b[at + size_t(k)] = uint8_t(v >> (8 * (n - 1 - k)));
+    }
 };
 
 /// A layer record, ready to encode.

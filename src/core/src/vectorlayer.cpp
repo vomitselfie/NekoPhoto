@@ -203,42 +203,8 @@ void pathCanvas(const Document& document, int& width, int& height) {
 }
 
 namespace {
-/// The content hash of an image, remembered while the image lives (layer images do not change once shared).
-uint64_t cachedContentHash(const std::shared_ptr<const Image>& image) {
-    static std::mutex mutex;
-    static std::map<const Image*, std::pair<std::weak_ptr<const Image>, uint64_t>> cache;
-    std::lock_guard lock(mutex);
-    auto it = cache.find(image.get());
-    if (it != cache.end() && it->second.first.lock() == image) return it->second.second;
-    // Bounded without thrashing: a document with more shape layers than the bound must not rehash every layer on
-    // every call, so drop the entries whose images are gone first, and clear only past a generous limit.
-    if (cache.size() >= 1024) std::erase_if(cache, [](const auto& entry) { return entry.second.first.expired(); });
-    if (cache.size() >= 16384) cache.clear();
-    const uint64_t hash = psdContentHash(image.get());
-    cache[image.get()] = {image, hash};
-    return hash;
-}
-
-/// The same for a 16-bit raster (psdContentHash at its depth).
-uint64_t cachedContentHash(const Image16Ptr& image) {
-    static std::mutex mutex;
-    static std::map<const Image16*, std::pair<std::weak_ptr<const Image16>, uint64_t>> cache;
-    std::lock_guard lock(mutex);
-    auto it = cache.find(image.get());
-    if (it != cache.end() && it->second.first.lock() == image) return it->second.second;
-    if (cache.size() >= 1024) std::erase_if(cache, [](const auto& entry) { return entry.second.first.expired(); });
-    if (cache.size() >= 16384) cache.clear();
-    const uint64_t hash = psdContentHash(AnyImage(image));
-    cache[image.get()] = {image, hash};
-    return hash;
-}
-
-/// psdContentHash of a layer's pixels, remembered for 8- and 16-bit RGB rasters.
-uint64_t layerContentHash(const AnyImage& image) {
-    if (image.u16()) return cachedContentHash(image.u16());
-    if (image.u8()) return cachedContentHash(image.u8());
-    return psdContentHash(image);
-}
+/// psdContentHash of a layer's pixels, remembered (psd_carry.h).
+uint64_t layerContentHash(const AnyImage& image) { return cachedPsdContentHash(image); }
 
 /// The fill block `key` ('SoCo', 'GdFl', 'PtFl'): the layer's own, else an older file's 'vscg' holding that kind (its
 /// four-character kind, then the same payload), which is the fill when the layer has no fill block of its own.

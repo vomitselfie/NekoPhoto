@@ -93,6 +93,18 @@ private:
     /// All) and, `whole`, the row menu's Add Reveal-All / Hide-All Mask: layers.mask.
     void addMask(bool revealing, bool whole = false);
     QWidget* makeRow(const nekophoto::Layer& layer, int depth, bool visible);
+    /// Everything makeRow draws from, so a rebuild keeps a row whose picture has not changed (an undo touches one row,
+    /// and making the others again repolishes every child widget). The thumbnails are held, so a new one at a freed
+    /// one's address cannot pass for it. A row with a vector mask or a smart object's Smart Filters is always made
+    /// again (their pictures come from more than the layer).
+    struct RowKey {
+        std::string text;
+        nekophoto::ImagePtr thumbnail;
+        nekophoto::GrayPtr maskThumbnail;
+        bool fixed = true;   // false: made again every time
+        bool operator==(const RowKey& o) const { return fixed && o.fixed && text == o.text && thumbnail == o.thumbnail && maskThumbnail == o.maskThumbnail; }
+    };
+    RowKey rowKey(const nekophoto::Layer& layer, int depth, bool visible) const;
     /// A smart object's Smart Filters as child rows of its item: the stack's row (its mask, its switch), then each
     /// entry, last applied first as in Photoshop. They are not layers: their data names the smart object.
     void addSmartFilterRows(QTreeWidgetItem* item, const nekophoto::Layer& layer);
@@ -112,6 +124,9 @@ private:
     QSpinBox* fillSpin_;
     LayerTree* tree_;
     std::map<nekophoto::Uuid, QTreeWidgetItem*> items_;
+    /// The rows as last built: each one's layer and the folder row it sits in, in order, and what each one shows.
+    std::vector<std::pair<nekophoto::Uuid, nekophoto::Uuid>> structure_;
+    std::map<nekophoto::Uuid, RowKey> rowKeys_;
     std::set<nekophoto::Uuid> collapsedSmartFilters_;   // smart objects whose Smart Filters are folded away
     bool rebuilding_ = false;
     bool pendingRebuild_ = false;

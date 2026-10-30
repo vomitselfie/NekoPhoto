@@ -17,6 +17,7 @@
 #include <cstring>
 #include <filesystem>
 #include <map>
+#include <new>
 #include <set>
 #include <zlib.h>
 #ifdef _WIN32
@@ -228,7 +229,7 @@ private:
         const LayerTransform& t = l.transform;
         const bool placementKept = c.placement.origin == t.origin && c.placement.size == t.size && c.placement.rotation == t.rotation
             && c.placement.flipX == t.flipX && c.placement.flipY == t.flipY;
-        const uint64_t contentNow = psdContentHash(l.asset ? l.asset->image : AnyImage());
+        const uint64_t contentNow = cachedPsdContentHash(l.asset ? l.asset->image : AnyImage());
         const bool contentKept = sameContent && placementKept && c.contentHash == contentNow;
         // A 16-bit layer as read: its channels go back as they were stored, since 0..65535 does not survive the trip
         // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew. PSD to PSD only
@@ -968,29 +969,36 @@ std::vector<uint8_t> imageResources(const Document& document, const ColorProfile
 /// The layer and mask information: the records and their channels (in an 'Lr16' or 'Lr32' block at 16 and 32 bits),
 /// then the global blocks carried from the PSD the document came from (`filterRecords` replacing Smart Filter cache
 /// records) and the smart object sources. None, with `error`, when a PSD cannot hold it.
-std::optional<std::vector<uint8_t>> layerAndMaskSection(const Document& document, const std::vector<Record>& records,
-                                                        const std::vector<std::pair<std::string, std::vector<uint8_t>>>& filterRecords, bool large,
-                                                        std::string* error) {
+/// The layer and mask section with its length, written at the end of `section` (the file so far: nothing is built
+/// apart and copied in). Each layer's channel data is released once it is in, so the layers are held once, not twice.
+bool writeLayerAndMaskSection(Out& section, const Document& document, std::vector<Record>& records,
+                              const std::vector<std::pair<std::string, std::vector<uint8_t>>>& filterRecords, bool large, std::string* error) {
     const bool deep = document.sampleType == SampleType::U16, floating = document.sampleType == SampleType::F32;
-    Out info;
-    // Negative: the merged image's first alpha channel is its transparency.
-    info.i16(-int(records.size()));
-    for (const Record& r : records) writeRecord(info, r, large);
-    for (const Record& r : records) for (auto& [id, data] : r.channels) info.bytes(data);
-    if (info.b.size() & 1) info.u8(0);
-    Out section;
+    const size_t sectionLength = section.mark(large);
+    const size_t start = section.b.size();
+    // The layer information: its records, then their channel data.
+    auto layerInfo = [&] {
+        const size_t lengthAt = section.mark(large);
+        const size_t from = section.b.size();
+        // Negative: the merged image's first alpha channel is its transparency.
+        section.i16(-int(records.size()));
+        for (const Record& r : records) writeRecord(section, r, large);
+        for (Record& r : records)
+            for (auto& [id, data] : r.channels) { section.bytes(data); std::vector<uint8_t>().swap(data); }
+        if ((section.b.size() - from) & 1) section.u8(0);
+        const size_t size = section.b.size() - from;
+        section.patch(lengthAt, size, large);
+        return size;
+    };
     if (deep || floating) {
         // A 16-bit file keeps its layers in the 'Lr16' block after an empty layer information, as Photoshop writes it;
         // a 32-bit one in 'Lr32'.
         section.length(0, large);
         section.u32(0);   // global layer mask info
         section.str("8BIM"); section.str(floating ? "Lr32" : "Lr16");
-        section.length(info.b.size(), large);
-        section.bytes(info.b);
-        for (size_t n = info.b.size(); n % 4; n++) section.u8(0);
+        for (size_t n = layerInfo(); n % 4; n++) section.u8(0);
     } else {
-        section.length(info.b.size(), large);
-        section.bytes(info.b);
+        layerInfo();
         section.u32(0);   // global layer mask info
     }
     // Global blocks from the PSD the document came from (linked smart object data, patterns, text
@@ -1023,8 +1031,10 @@ std::optional<std::vector<uint8_t>> layerAndMaskSection(const Document& document
         section.length(links.size(), large); section.bytes(links);
         for (size_t n = links.size(); n % 4; n++) section.u8(0);
     }
-    if (!large && section.b.size() > 0xFFFFFFFFull) { if (error) *error = "The layers are too large for a PSD file; export it as PSB."; return std::nullopt; }
-    return std::move(section.b);
+    const size_t size = section.b.size() - start;
+    if (!large && size > 0xFFFFFFFFull) { if (error) *error = "The layers are too large for a PSD file; export it as PSB."; return false; }
+    section.patch(sectionLength, size, large);
+    return true;
 }
 
 } // namespace
@@ -1061,10 +1071,25 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
     f.u32(0);   // colour mode data
     const std::vector<uint8_t> resources = imageResources(document, fileProfile);
     f.u32(uint32_t(resources.size())); f.bytes(resources);
-    const std::optional<std::vector<uint8_t>> section = layerAndMaskSection(document, records, writer.filterRecords_, large, error);
-    if (!section) return {};
-    f.length(section->size(), large);
-    f.bytes(*section);
+    // Room for the whole file at once, so it never moves while it grows (a move holds the old copy and the new): the
+    // layers as encoded with their records, the global blocks, and the merged image at its PackBits worst case. Room
+    // left unused is never touched, so it costs address space, not memory.
+    size_t room = f.b.size() + (size_t(1) << 20);
+    for (const Record& r : records) {
+        room += 4096 + r.adjustmentData.size() + r.blendingRanges.size() + r.rawMask.size();
+        for (const PsdBlock& block : r.carried) room += block.data.size() + 16;
+        for (auto& [id, data] : r.channels) room += data.size() + 16;
+    }
+    for (auto& [key, data] : writer.filterRecords_) room += data.size() + 16;
+    if (document.psdCarry) for (const PsdBlock& block : document.psdCarry->globals) room += block.data.size() + 16;
+    for (auto& [id, source] : document.smartObjects) room += (source->psdElement ? source->psdElement->size() : source->bytes ? source->bytes->size() : 0) + 4096;
+    const size_t sampleBytes = document.sampleType == SampleType::F32 ? 4 : document.sampleType == SampleType::U16 ? 2 : 1;
+    const size_t planes = size_t(colorModeColorChannels(document.colorMode)) + 1 + document.channels.size();
+    const size_t rowBytes = size_t(document.width) * sampleBytes;
+    room += planes * size_t(document.height) * (rowBytes + rowBytes / 128 + 8);
+    try { f.b.reserve(room); } catch (const std::bad_alloc&) {}   // without the room it grows as it goes
+    if (!writeLayerAndMaskSection(f, document, records, writer.filterRecords_, large, error)) return {};
+    records.clear();
     writeMergedImage(f, document, options);
     if (summaryOut) *summaryOut = summary;
     return std::move(f.b);

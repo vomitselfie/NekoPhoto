@@ -373,7 +373,7 @@ bool conform(Document& document, const TransferCurve& curve, const ToneMap* tone
         if (l.psdCarry && ((l.asset && !(l.asset->image == before)) || (l.mask && !(l.mask->asset.image == maskBefore)))) {
             // What the PSD's blocks are bound to follows the pixels to their new depth, while they are unchanged.
             auto carry = std::make_shared<PsdLayerCarry>(*l.psdCarry);
-            if (carry->contentHash == psdContentHash(before)) carry->contentHash = psdContentHash(l.asset ? l.asset->image : AnyImage());
+            if (carry->contentHash == cachedPsdContentHash(before)) carry->contentHash = cachedPsdContentHash(l.asset ? l.asset->image : AnyImage());
             if (l.mask && carry->maskHash == psdMaskHash(maskBefore, l.mask->enabled)) carry->maskHash = psdMaskHash(l.mask->asset.image, l.mask->enabled);
             l.psdCarry = carry;
         }
