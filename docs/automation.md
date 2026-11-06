@@ -380,7 +380,7 @@ View: `tool.select` (`name`: move, marquee, lasso, wand, quickselect, crop, brus
 smudge, dodge, bucket, gradient, pen, directselect, shape, text, eyedropper, hand, zoom, artboard or slice), `colors.set` (CSS colours; `#rrrrggggbbbb` gives 16 bits per
 channel, as `pixels.fill` takes it too), `color.sample` (the Eyedropper at `x`, `y`,
 `background` to set the background colour: answers `color` and the document's own `values`, linear R, G, B at 32 bits,
-C, M, Y, K ink percentages in CMYK, L, a, b in Lab, with `model`), `view.zoom` (`zoom`, `fit`, and `x`, `y` to centre the view on a document point), `view.exposure` (a 32-bit
+C, M, Y, K ink percentages in CMYK, L, a, b in Lab, with `model`), `view.zoom` (`zoom`, `fit`, and `x`, `y` to centre the view on a document point, kept on the document), `view.exposure` (a 32-bit
 document's view, not the pixels and not an undo step: `exposure` in stops, `gamma`, `method` exposure-gamma or
 highlight-compression; with no keys it reads it), `view.screenMode` (View > Screen Mode: `mode` standard or full, where only
 the canvas is on screen and the screen's edges slide out the tools, options bar, panels and Timeline; `panels` in full screen:

@@ -57,6 +57,7 @@ struct Viewport {
     /// Moves the view by `delta` points, rounded to whole device pixels so the canvas can scroll what it has
     /// rendered instead of rendering the view again.
     void translate(QPointF delta) {
+        if (!std::isfinite(delta.x()) || !std::isfinite(delta.y())) return;
         const double s = std::max(1.0, backingScale);
         pan += QPointF(std::round(delta.x() * s) / s, std::round(delta.y() * s) / s);
         followsFit = false;

@@ -613,7 +613,10 @@ void AutomationServer::registerAppHandlers() {
         if (has(p, "x") || has(p, "y")) {
             const Document& d = document();
             const QSizeF size(d.width, d.height);
-            const QPointF wanted(has(p, "x") ? num(p, "x") : d.width / 2.0, has(p, "y") ? num(p, "y") : d.height / 2.0);
+            // Kept on the document: a point far outside it would throw the view out of reach.
+            const double x = has(p, "x") ? num(p, "x") : d.width / 2.0, y = has(p, "y") ? num(p, "y") : d.height / 2.0;
+            const QPointF wanted(std::isfinite(x) ? std::clamp(x, 0.0, double(d.width)) : d.width / 2.0,
+                                 std::isfinite(y) ? std::clamp(y, 0.0, double(d.height)) : d.height / 2.0);
             session()->viewport.translate(session()->viewport.center() - session()->viewport.viewPoint(wanted, size));
             emit session()->viewportChanged();
         }
