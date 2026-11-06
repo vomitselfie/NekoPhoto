@@ -121,6 +121,8 @@ std::optional<NewDocumentOptions> askNewDocument(QWidget* parent, NewDocumentOpt
         refresh();
     });
     QObject::connect(swap, &QToolButton::clicked, &dialog, [&] { int w = width->value(); syncing = true; width->setValue(height->value()); height->setValue(w); syncing = false; custom(); });
+    // An image on the clipboard (a copied selection, say) sizes the new canvas, as Photoshop's File > New does.
+    if (!clip.isNull()) preset->setCurrentIndex(1);
     refresh();
 
     layout->addWidget(okCancel(&dialog, QObject::tr("Create")));
