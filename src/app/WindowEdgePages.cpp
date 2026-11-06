@@ -13,6 +13,7 @@
 #include <QBoxLayout>
 #include <QDockWidget>
 #include <QSplitter>
+#include <QToolBar>
 #include <cmath>
 
 using namespace nekophoto;
