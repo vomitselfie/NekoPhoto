@@ -442,13 +442,34 @@ void EditorSession::mergeWithPlan(const MergePlan& planned) {
     const MergePlan* plan = &planned;
     const auto& layers = document_->layers;
     std::set<Uuid> kept(plan->ids.begin(), plan->ids.end());
-    // Only the merged layers, cut loose from anything outside the merge, composited as the canvas shows them.
+    // Only the merged layers, cut loose from anything outside the merge, composited as the canvas shows them. A merged
+    // layer clipped to one that stays out keeps its clip: the base comes along hidden, so it clips without being drawn.
+    // When every merged layer is clipped to the same base, the result is clipped to it instead, as in Photoshop: drawn
+    // unclipped here, it shows exactly as the layers did.
+    std::optional<Uuid> clippedTo;
+    {
+        bool same = true;
+        for (auto& l : layers) {
+            if (!kept.count(l.id)) continue;
+            if (!l.maskSourceId || kept.count(*l.maskSourceId) || (clippedTo && *clippedTo != *l.maskSourceId)) { same = false; break; }
+            clippedTo = l.maskSourceId;
+        }
+        if (!same) clippedTo.reset();
+    }
+    std::set<Uuid> bases;
+    for (auto& l : layers)
+        if (!clippedTo && kept.count(l.id) && l.maskSourceId && !kept.count(*l.maskSourceId) && document_->find(*l.maskSourceId)) bases.insert(*l.maskSourceId);
+    std::set<Uuid> clipping = bases;
+    for (const Uuid& base : bases) for (const Uuid& id : descendantIds(layers, base)) clipping.insert(id);
     Document flat(document_->width, document_->height);
     for (auto& l : layers) {
-        if (!kept.count(l.id)) continue;
+        const bool merged = kept.count(l.id) > 0;
+        if (!merged && !clipping.count(l.id)) continue;
         Layer copy = l;
-        if (copy.parentId && !kept.count(*copy.parentId)) copy.parentId.reset();
-        if (copy.maskSourceId && !kept.count(*copy.maskSourceId)) copy.maskSourceId.reset();
+        const std::set<Uuid>& with = merged ? kept : clipping;
+        if (copy.parentId && !with.count(*copy.parentId)) copy.parentId.reset();
+        if (copy.maskSourceId && !kept.count(*copy.maskSourceId) && !(merged && bases.count(*copy.maskSourceId))) copy.maskSourceId.reset();
+        if (bases.count(l.id)) copy.visible = false;
         flat.layers.push_back(copy);
     }
     LayerTransform canvas(Point(0, 0), document_->size());
@@ -482,6 +503,7 @@ void EditorSession::mergeWithPlan(const MergePlan& planned) {
     merged.transform = placed;
     merged.name = plan->name;
     merged.parentId = plan->parent;
+    merged.maskSourceId = clippedTo;
     std::vector<Layer> next;
     for (auto& l : layers) if (!plan->removed.count(l.id)) next.push_back(l);
     // A hidden layer inside a merged folder moves to the nearest folder that stays.

@@ -543,6 +543,23 @@ def remaining_methods(rpc):
     after = layer_ids()
     assert before[-1] in after and len(after) < len(before), (before, after)
     rpc.call("history.undo")
+    # Two layers clipped to one base merge into a layer still clipped to it, as Photoshop's Merge Layers does.
+    steps = len(rpc.call("history.list")["undo"])
+    rpc.call("layers.add")
+    rpc.call("brush.stroke", points=[[10, 10], [40, 10]], size=8, color="#2040ff")
+    clipped = []
+    for colour in ("#ffffff", "#ff2020"):
+        clipped.append(rpc.call("layers.add")["id"])
+        rpc.call("brush.stroke", points=[[0, 10], [60, 12]], size=12, color=colour)
+        rpc.call("layers.set", clipping=True)
+    rpc.call("layers.select", ids=clipped)
+    earlier = set(layer_ids())
+    assert rpc.call("layers.merge")["merged"]
+    listed = rpc.call("layers.list")
+    merged = [l for l in (listed["layers"] if isinstance(listed, dict) else listed) if l["id"] not in earlier]
+    assert len(merged) == 1 and merged[0]["clipping"], merged
+    while len(rpc.call("history.list")["undo"]) > steps:
+        rpc.call("history.undo")
     assert layer_ids() == before
     rpc.call("history.undo")
     # Blend If (Blending Options): set by channel, one undo step, reported by layers.get, cleared by reset.

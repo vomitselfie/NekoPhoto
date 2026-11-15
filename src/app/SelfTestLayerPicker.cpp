@@ -80,10 +80,10 @@ int layerPicker(MainWindow& w) {
         return std::nullopt;
     };
 
-    // The test's layers, 40 px squares round a point of the demo's left side, each inserted on top. Under the point
-    // the demo shows its Background and the merged Paint layer (its stripes are a translucent white there).
+    // The test's layers, 40 px squares round a point of the demo's top left, each inserted on top. Under the point
+    // the demo shows its Background and the merged Paint layer (the start of its brush stroke).
     const std::optional<Uuid> background = named("Background"), paint = named("Paint");
-    const QPointF point(doc.width * 0.08, doc.height * 0.45);
+    const QPointF point(doc.width * 0.11, doc.height * 0.16);
     const std::vector<Uuid> demo = {paint.value_or(Uuid()), background.value_or(Uuid())};
     expect(s.layersAt(point + QPointF(0.5, 0.5)) == demo, "the demo's layers under the point are not Paint and the Background");
     auto square = [&](const char* name, QPointF centre, bool hole = false) {
