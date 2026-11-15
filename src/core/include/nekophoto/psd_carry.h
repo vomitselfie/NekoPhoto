@@ -43,11 +43,12 @@ struct PsdLayerCarry {
     bool closedFolder = false;
     /// The layer id Photoshop gave the layer ('lyid'), 0 for none.
     uint32_t layerId = 0;
-    /// What the bound blocks describe: the pixels (psdContentHash) and their placement.
+    /// What the bound blocks describe: the pixels (psdContentHash) and their placement. Read it with content() or
+    /// contentHolds(): a PSD's layer leaves it to be taken when first asked (pendingContent).
     uint64_t contentHash = 0;
     LayerTransform placement;
     /// The record's mask section and its mask channels (-2, -3) as stored, from an 8-bit PSD; with the
-    /// fingerprint of the mask NekoPhoto made from them (psdMaskHash).
+    /// fingerprint of the mask NekoPhoto made from them (psdMaskHash; read it with maskContent() or maskHolds()).
     std::vector<uint8_t> maskData;
     std::vector<std::pair<int, std::vector<uint8_t>>> maskChannels;
     uint64_t maskHash = 0;
@@ -73,6 +74,25 @@ struct PsdLayerCarry {
     /// and antialiased, the stroke over it. While the pixels are still these (`contentHash`) they are shown as they
     /// are, not cut by the path again (vectorlayer.h, shapeShowsDrawnPixels).
     bool drawnShape = false;
+
+    /// A fingerprint still to be taken: of the pixels a PSD's layer was opened with, held weakly. Most layers are
+    /// never asked before a save, and a layer whose pixels are still that buffer is answered without hashing it
+    /// (a document's pixels are never written in place: strokes and warps paint copies).
+    struct Pending;
+    std::shared_ptr<Pending> pendingContent, pendingPlanes, pendingMask;
+    /// contentHash (planesHash, maskHash), taken now when it was left for later; one set directly wins.
+    uint64_t content() const;
+    uint64_t planesContent() const;
+    uint64_t maskContent() const;
+    /// Whether `image` is still what contentHash (planesHash) describes, and `mask` in that state what maskHash does.
+    bool contentHolds(const AnyImage& image) const;
+    bool planesHold(const AnyImage& image) const;
+    bool maskHolds(const AnyGray& mask, bool enabled) const;
+    /// Binds the content (the mask) to `hash`, or to the fingerprint of `image` (`mask`), taken when first asked.
+    void setContent(uint64_t hash) { contentHash = hash; pendingContent.reset(); }
+    void setContentOf(const AnyImage& image);
+    void setMask(uint64_t hash) { maskHash = hash; pendingMask.reset(); }
+    void setMaskOf(const AnyGray& mask, bool enabled);
 
     enum class Binding { Always, Placement, Content };
     /// What `key` describes: nothing about the pixels (Always), where they are (a vector mask: Placement),

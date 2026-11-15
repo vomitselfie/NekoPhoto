@@ -1,6 +1,7 @@
 #include "nekophoto/psd_carry.h"
 #include "nekophoto/depth.h"
 #include <cstring>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <set>
@@ -112,6 +113,58 @@ uint64_t cachedPsdContentHash(const AnyImage& image) {
     return psdContentHash(image);
 }
 
+struct PsdLayerCarry::Pending {
+    /// Whether the buffer still lives at `identity`, and its fingerprint (a value no fingerprint takes but by chance
+    /// once it is gone: pixels that are gone cannot be what a layer now holds).
+    std::function<bool(const void*)> is;
+    std::function<uint64_t()> take;
+    std::once_flag once;
+    uint64_t hash = 0;
+    bool enabled = true;   // a mask's state when it was opened
+
+    template <class Any, class Hash>
+    static std::shared_ptr<Pending> of(const Any& buffer, Hash hash) {
+        if (!buffer) return nullptr;
+        auto p = std::make_shared<Pending>();
+        buffer.visit([&](const auto& typed) {
+            std::weak_ptr<typename std::remove_cvref_t<decltype(typed)>::element_type> weak = typed;
+            p->is = [weak](const void* identity) { auto held = weak.lock(); return held && held.get() == identity; };
+            p->take = [weak, hash] { auto held = weak.lock(); return held ? hash(Any(held)) : ~uint64_t(0); };
+        });
+        return p;
+    }
+    uint64_t value() {
+        std::call_once(once, [&] { hash = take(); });
+        return hash;
+    }
+};
+
+// A fingerprint set directly (non-zero: pending ones are only made for pixels) wins over the one still to be taken.
+uint64_t PsdLayerCarry::content() const { return pendingContent && !contentHash ? pendingContent->value() : contentHash; }
+uint64_t PsdLayerCarry::planesContent() const { return pendingPlanes && !planesHash ? pendingPlanes->value() : planesHash; }
+uint64_t PsdLayerCarry::maskContent() const { return pendingMask && !maskHash ? pendingMask->value() : maskHash; }
+bool PsdLayerCarry::contentHolds(const AnyImage& image) const {
+    if (pendingContent && !contentHash && image && pendingContent->is(image.identity())) return true;
+    return content() == cachedPsdContentHash(image);
+}
+bool PsdLayerCarry::planesHold(const AnyImage& image) const {
+    if (pendingPlanes && !planesHash && image && pendingPlanes->is(image.identity())) return true;
+    return planesContent() == cachedPsdContentHash(image);
+}
+bool PsdLayerCarry::maskHolds(const AnyGray& mask, bool enabled) const {
+    if (pendingMask && !maskHash && mask && pendingMask->enabled == enabled && pendingMask->is(mask.identity())) return true;
+    return maskContent() == (mask ? psdMaskHash(mask, enabled) : 0);
+}
+void PsdLayerCarry::setContentOf(const AnyImage& image) {
+    contentHash = 0;
+    pendingContent = Pending::of(image, [](const AnyImage& held) { return cachedPsdContentHash(held); });
+}
+void PsdLayerCarry::setMaskOf(const AnyGray& mask, bool enabled) {
+    maskHash = 0;
+    pendingMask = Pending::of(mask, [enabled](const AnyGray& held) { return psdMaskHash(held, enabled); });
+    if (pendingMask) pendingMask->enabled = enabled;
+}
+
 uint64_t psdMaskHash(const AnyGray& mask, bool enabled) {
     if (mask.u16()) { const uint64_t h = contentHash(mask.u16().get()); return h ? h ^ (enabled ? 0 : 0x5555) : 0; }
     if (mask.f32()) { const uint64_t h = contentHash(mask.f32().get()); return h ? h ^ (enabled ? 0 : 0x5555) : 0; }
@@ -179,14 +232,14 @@ std::vector<uint8_t> serializePsdCarry(const PsdLayerCarry& c) {
     w.bytes(c.blendingRanges);
     w.u8(c.opacity); w.u8(c.fill); w.u32(c.layerId);
     w.str(c.blendKey); w.u32(uint32_t(c.blendAs)); w.u8(c.flags); w.u8(c.closedFolder ? 1 : 0);
-    w.u64(c.contentHash);
+    w.u64(c.content());
     const LayerTransform& t = c.placement;
     w.f64(t.origin.x); w.f64(t.origin.y); w.f64(t.size.width); w.f64(t.size.height); w.f64(t.rotation);
     w.u8(uint8_t((t.flipX ? 1 : 0) | (t.flipY ? 2 : 0)));
     w.bytes(c.maskData);
     w.u32(uint32_t(c.maskChannels.size()));
     for (auto& [id, data] : c.maskChannels) { w.u32(uint32_t(id)); w.bytes(data); }
-    w.u64(c.maskHash);
+    w.u64(c.maskContent());
     writeBlocks(w, c.endBlocks);
     w.bytes(c.endRanges);
     if (!c.adjustmentJson.empty() || deep) w.str(c.adjustmentJson);   // optional: older carries end before it
@@ -194,7 +247,7 @@ std::vector<uint8_t> serializePsdCarry(const PsdLayerCarry& c) {
         w.u32(uint32_t(c.maskDepth));
         w.u32(uint32_t(c.planes.size()));
         for (auto& plane : c.planes) { w.u32(uint32_t(plane.id)); w.bytes(plane.data); }
-        w.u64(c.planesHash);
+        w.u64(c.planesContent());
     }
     if (c.drawnShape) w.u8(1);
     return std::move(w.b);

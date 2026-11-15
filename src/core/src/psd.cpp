@@ -461,7 +461,7 @@ private:
         carry->fill = rec.fillOpacity;
         auto lyid = rec.blocks.find("lyid");
         if (lyid != rec.blocks.end() && lyid->second.second >= 4) { Reader id(lyid->second.first, 4); carry->layerId = id.u32(); }
-        carry->contentHash = cachedPsdContentHash(layer.asset ? layer.asset->image : AnyImage());
+        carry->setContentOf(layer.asset ? layer.asset->image : AnyImage());
         // A 16- or 32-bit layer's channels as stored, and a CMYK or Lab layer's at either depth: written back while
         // its pixels are these (psd_carry.h). A CMYK or Lab layer whose pixels were not read from its planes (a smart
         // object's contents drawn here) has none.
@@ -478,6 +478,7 @@ private:
             && (eightBit ? drawnPlanes || filterMasked : smartRaster || (nativeMode ? planesRead : bool(layer.asset->image.u16()) || bool(layer.asset->image.f32())))) {
             carry->planes = std::move(rawPlanes);
             carry->planesHash = carry->contentHash;
+            carry->pendingPlanes = carry->pendingContent;
             if (smartRaster || filterMasked) carry->planesRect = std::array<int, 4>{rec.left, rec.top, rec.right, rec.bottom};
         }
         if (layer.adjustment) {
@@ -490,7 +491,7 @@ private:
             carry->maskData = rec.mask.section;
             carry->maskChannels = maskRaw;
             carry->maskDepth = depth;
-            carry->maskHash = layer.mask ? psdMaskHash(layer.mask->asset.image, layer.mask->enabled) : 0;
+            if (layer.mask) carry->setMaskOf(layer.mask->asset.image, layer.mask->enabled);
         }
         const bool plainBlend = rec.blend == "norm" || (rec.blend == "pass" && layer.isGroup);
         if (carry->blocks.empty() && carry->blendingRanges.empty() && carry->layerId == 0 && carry->maskData.empty()

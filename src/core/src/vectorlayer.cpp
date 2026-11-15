@@ -203,9 +203,6 @@ void pathCanvas(const Document& document, int& width, int& height) {
 }
 
 namespace {
-/// psdContentHash of a layer's pixels, remembered (psd_carry.h).
-uint64_t layerContentHash(const AnyImage& image) { return cachedPsdContentHash(image); }
-
 /// The fill block `key` ('SoCo', 'GdFl', 'PtFl'): the layer's own, else an older file's 'vscg' holding that kind (its
 /// four-character kind, then the same payload), which is the fill when the layer has no fill block of its own.
 std::optional<std::vector<uint8_t>> fillBlock(const Layer& layer, const char* key) {
@@ -220,7 +217,7 @@ bool hasShapeBlocks(const Layer& layer) {
     if (layer.isGroup || layer.adjustment || !layer.asset || !layer.asset->image || !(block(layer, "vsms") || block(layer, "vmsk"))
         || !(fillBlock(layer, "SoCo") || fillBlock(layer, "GdFl") || fillBlock(layer, "PtFl"))) return false;
     if (layer.asset->image.f32()) return false;   // not drawn as a shape at 32 bits
-    return layer.psdCarry->contentHash == layerContentHash(layer.asset->image);
+    return layer.psdCarry->contentHolds(layer.asset->image);
 }
 }
 
@@ -229,7 +226,7 @@ bool isVectorShapeLayer(const Layer& layer) { return hasShapeBlocks(layer); }
 void keepVectorShapeBlocks(Layer& layer) {
     if (!layer.psdCarry || !layer.asset) return;
     auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
-    carry->contentHash = psdContentHash(layer.asset->image);
+    carry->setContent(psdContentHash(layer.asset->image));
     layer.psdCarry = std::move(carry);
 }
 
@@ -241,7 +238,7 @@ bool softVectorMask(const std::vector<uint8_t>& maskSection) {
 bool shapeShowsDrawnPixels(const Layer& layer) {
     if (!layer.psdCarry || !layer.psdCarry->drawnShape || layer.isGroup || layer.adjustment || !layer.asset || !layer.asset->image) return false;
     if (!(block(layer, "vsms") || block(layer, "vmsk")) || softVectorMask(layer.psdCarry->maskData)) return false;
-    return layer.psdCarry->contentHash == layerContentHash(layer.asset->image);
+    return layer.psdCarry->contentHolds(layer.asset->image);
 }
 
 AnyImage shapeDrawing(const Document& document, const Layer& layer) {
@@ -294,7 +291,7 @@ bool moveDrawnShape(Layer& layer, const Document& document) {
     // The mask section as stored described the old place; the mask is written from the layer's own from now on.
     carry->maskData.clear();
     carry->maskChannels.clear();
-    carry->maskHash = 0;
+    carry->setMask(0);
     carry->placement = layer.transform;
     layer.psdCarry = std::move(carry);
     return true;
@@ -498,7 +495,7 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
     if (!live.empty()) blocks.push_back({"vogk", authorVectorOrigination(live)});
     // The blocks describe these pixels where they now are, so they are kept (and not moved) until they change.
     carry->placement = layer.transform;
-    carry->contentHash = psdContentHash(image);
+    carry->setContent(psdContentHash(image));
     carry->drawnShape = false;   // our pixels: the fill, which the path cuts
     layer.psdCarry = std::move(carry);
 }
@@ -971,7 +968,7 @@ void setLayerVectorMask(Layer& layer, const Document& document, const std::optio
     auto carry = layer.psdCarry ? std::make_shared<PsdLayerCarry>(*layer.psdCarry) : std::make_shared<PsdLayerCarry>();
     if (!layer.psdCarry) {
         carry->placement = layer.transform;
-        carry->contentHash = psdContentHash(layer.asset ? layer.asset->image : AnyImage());
+        carry->setContent(psdContentHash(layer.asset ? layer.asset->image : AnyImage()));
     }
     auto& blocks = carry->blocks;
     const bool had = std::any_of(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "vmsk" || b.key == "vsms"; });

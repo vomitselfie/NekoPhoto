@@ -229,8 +229,8 @@ private:
         const LayerTransform& t = l.transform;
         const bool placementKept = c.placement.origin == t.origin && c.placement.size == t.size && c.placement.rotation == t.rotation
             && c.placement.flipX == t.flipX && c.placement.flipY == t.flipY;
-        const uint64_t contentNow = cachedPsdContentHash(l.asset ? l.asset->image : AnyImage());
-        const bool contentKept = sameContent && placementKept && c.contentHash == contentNow;
+        const AnyImage pixelsNow = l.asset ? l.asset->image : AnyImage();
+        const bool contentKept = sameContent && placementKept && c.contentHolds(pixelsNow);
         // A 16-bit layer as read: its channels go back as they were stored, since 0..65535 does not survive the trip
         // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew. PSD to PSD only
         // (a PSB's RLE rows count in 32 bits).
@@ -249,7 +249,7 @@ private:
         // So does a shape's drawing as Photoshop stored it at 8 bits (vectorlayer.h, shapeShowsDrawnPixels).
         const bool drawn8 = c.drawnShape && !deep_ && !float_ && !native_ && l.asset && l.asset->image.u8();
         if ((deep_ || float_ || native_ || eightBitSmart || drawn8) && !options_.large && (sameContent || smartRaster) && placementKept && planesCover
-            && c.planesHash == contentNow && l.asset
+            && l.asset && c.planesHold(pixelsNow)
             && (eightBitSmart || drawn8 || (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8))))) {
             r.carriedPixels = true;
             if (smartRaster) { r.left = (*c.planesRect)[0]; r.top = (*c.planesRect)[1]; r.right = (*c.planesRect)[2]; r.bottom = (*c.planesRect)[3]; }
@@ -288,9 +288,8 @@ private:
         // Transparency lock (bit 0) always; "pixel data irrelevant" (bit 4) while what makes it so is kept.
         r.flags = uint8_t((c.flags & 0x01) | (contentKept ? c.flags & 0x10 : 0));
         if (r.section == 1 && c.closedFolder) r.section = 2;
-        const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image, l.mask->enabled) : 0;
         // The stored mask channels are PSD's (16-bit row counts) at the file's depth: as they are into a PSD of that depth only.
-        if (!options_.large && !c.maskData.empty() && c.maskDepth == (float_ ? 32 : deep_ ? 16 : 8) && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
+        if (!options_.large && !c.maskData.empty() && c.maskDepth == (float_ ? 32 : deep_ ? 16 : 8) && placementKept && (l.mask ? c.maskHolds(l.mask->asset.image, l.mask->enabled) : c.maskContent() == 0) && !dropped.count("vmsk") && !dropped.count("vsms")) {
             r.rawMask = c.maskData;
             r.channels.erase(std::remove_if(r.channels.begin(), r.channels.end(), [](auto& ch) { return ch.first == -2 || ch.first == -3; }), r.channels.end());
             if (encode_) for (auto& ch : c.maskChannels) r.channels.push_back(ch);

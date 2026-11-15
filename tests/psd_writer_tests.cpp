@@ -422,9 +422,9 @@ TEST_CASE(psd_carry_survives_a_project_save) {
     REQUIRE(loaded.has_value());
     REQUIRE(loaded->layers[0].psdCarry);
     CHECK(loaded->layers[0].psdCarry->blocks == doc.layers[0].psdCarry->blocks);
-    CHECK_EQ(loaded->layers[0].psdCarry->contentHash, doc.layers[0].psdCarry->contentHash);
+    CHECK_EQ(loaded->layers[0].psdCarry->content(), doc.layers[0].psdCarry->content());
     // The pixels came back through PNG, and still match what the text describes.
-    CHECK_EQ(psdContentHash(loaded->layers[0].asset->image.u8().get()), doc.layers[0].psdCarry->contentHash);
+    CHECK_EQ(psdContentHash(loaded->layers[0].asset->image.u8().get()), doc.layers[0].psdCarry->content());
     REQUIRE(loaded->psdCarry);
     CHECK_EQ(int(loaded->psdCarry->resources.size()), 2);
     CHECK(loaded->psdCarry->globals == dc->globals);
