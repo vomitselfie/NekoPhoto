@@ -6,6 +6,7 @@
 #pragma once
 #include "image.h"
 #include "imaget.h"
+#include <cstddef>
 
 namespace nekophoto {
 
@@ -19,6 +20,10 @@ void gaussianBlur(Gray16& image, double sigma);
 /// The same at 32 bits (premultiplied linear float, unrounded; blur_f32.cpp).
 void gaussianBlur(ImageF& image, double sigma);
 void gaussianBlur(GrayF& image, double sigma);
+/// The most of the row pass's floats a Gaussian keeps at once (default 64 MB): a larger image is blurred a slice of
+/// columns at a time, with the very same result. Settable for tests, which slice small images; 0 restores the default.
+size_t gaussianSliceBytes();
+void setGaussianSliceBytes(size_t bytes);
 
 /// Photoshop's Motion Blur: an even smear along `distance` pixels at `angleDegrees` (counterclockwise from
 /// horizontal, y down), in place.

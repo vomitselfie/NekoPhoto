@@ -16,6 +16,16 @@ namespace {
 
 constexpr int bandColumns = 64;   // columns per vertical-pass band: 64 x C values keep each row segment a few cache lines
 
+/// The row pass's floats for a whole image take 4 bytes a sample (768 MB at 8000 x 6000 RGBA), so a larger image is
+/// blurred a slice of columns at a time, gaussianSliceBytes of them at most: each slice's rows are run again over the
+/// slice alone, from what the whole row's pass would have held at its edge, which gives the very same floats.
+/// Columns per slice (whole bands), or `w` when the image's row pass fits at once.
+inline int sliceColumns(int w, int h, int C) {
+    const size_t perColumn = size_t(h) * size_t(C) * sizeof(float), most = gaussianSliceBytes();
+    if (size_t(w) * perColumn <= most) return w;
+    return std::max(1, int(most / perColumn / bandColumns)) * bandColumns;
+}
+
 // ---- pixel access templated on the buffer: channel count, sample type and full scale ----------------
 
 template <class T> struct Raster;
@@ -90,26 +100,76 @@ void firRows(const T& image, std::vector<float>& out, const std::vector<float>& 
 
 /// Vertical FIR over column bands: each output row of a band is a weighted sum of the band's input rows,
 /// so the inner loop runs over `bandColumns * C` contiguous floats.
+/// `in` holds the columns from `sx0` up to `sx1` (a slice: sliceColumns), and only those are written.
 template <class T, int C = Raster<T>::C>
-void firColumns(const std::vector<float>& in, T& image, const std::vector<float>& kernel, int radius) {
-    const int w = image.width(), h = image.height();
-    const int bands = (w + bandColumns - 1) / bandColumns;
+void firColumns(const std::vector<float>& in, T& image, const std::vector<float>& kernel, int radius, int sx0 = 0, int sx1 = -1) {
+    const int w = sx1 < 0 ? image.width() : sx1, h = image.height(), span = w - sx0;
+    const int bands = (span + bandColumns - 1) / bandColumns;
     parallelRows(0, bands, [&](int b0, int b1) {
         std::vector<float> acc(size_t(bandColumns) * C);
         for (int b = b0; b < b1; b++) {
-            const int x0 = b * bandColumns, n = std::min(bandColumns, w - x0) * C;
+            const int x0 = sx0 + b * bandColumns, n = std::min(bandColumns, w - x0) * C;
             for (int y = 0; y < h; y++) {
                 std::fill(acc.begin(), acc.begin() + n, 0.0f);
                 const int i0 = std::max(-radius, -y), i1 = std::min(radius, h - 1 - y);
                 for (int i = i0; i <= i1; i++) {
                     const float k = kernel[size_t(i + radius)];
-                    const float* p = &in[(size_t(y + i) * w + x0) * C];
+                    const float* p = &in[(size_t(y + i) * span + (x0 - sx0)) * C];
                     for (int j = 0; j < n; j++) acc[size_t(j)] += p[j] * k;
                 }
                 storeRow<T>(image.row(y) + size_t(x0) * C, acc.data(), n / C);
             }
         }
     }, 1);
+}
+
+/// firRows over the columns from `x0` up to `x1` only, the same sums: the samples left of `x0` come from `margin`
+/// (`radius` columns a row, as they were before the slice to the left was written), the rest from the image.
+template <class T, int C = Raster<T>::C>
+void firRowsSlice(const T& image, const std::vector<typename Raster<T>::Sample>& margin, std::vector<float>& out,
+                  const std::vector<float>& kernel, int radius, int x0, int x1) {
+    using S = typename Raster<T>::Sample;
+    const int w = image.width(), h = image.height(), n = x1 - x0;
+    const int xs0 = std::max(0, x0 - radius), xs1 = std::min(w, x1 + radius);
+    out.resize(size_t(n) * h * C);
+    parallelRows(0, h, [&](int y0, int y1) {
+        std::vector<S> line(size_t(xs1 - xs0) * C);
+        for (int y = y0; y < y1; y++) {
+            const int left = x0 - xs0;
+            if (left > 0) std::copy_n(&margin[(size_t(y) * radius + size_t(radius - left)) * C], size_t(left) * C, line.data());
+            std::copy_n(image.row(y) + size_t(x0) * C, size_t(xs1 - x0) * C, line.data() + size_t(left) * C);
+            float* dst = &out[size_t(y) * n * C];
+            for (int x = x0; x < x1; x++, dst += C) {
+                float acc[C] = {};
+                const int i0 = std::max(-radius, -x), i1 = std::min(radius, w - 1 - x);
+                for (int i = i0; i <= i1; i++) {
+                    const float k = kernel[size_t(i + radius)];
+                    const S* p = line.data() + size_t(x + i - xs0) * C;
+                    for (int c = 0; c < C; c++) acc[c] += p[c] * k;
+                }
+                for (int c = 0; c < C; c++) dst[c] = acc[c];
+            }
+        }
+    });
+}
+
+/// The separable FIR a slice of columns at a time (sliceColumns), for an image whose row pass would not fit whole.
+template <class T, int C = Raster<T>::C>
+void firSlices(T& image, const std::vector<float>& kernel, int radius, int columns) {
+    using S = typename Raster<T>::Sample;
+    const int w = image.width(), h = image.height();
+    std::vector<S> margin(size_t(h) * radius * C);
+    std::vector<float> rows;
+    for (int x0 = 0; x0 < w; x0 += columns) {
+        const int x1 = std::min(w, x0 + columns);
+        firRowsSlice<T>(image, margin, rows, kernel, radius, x0, x1);
+        // The next slice's rows reach this far back into this one, which is about to be written.
+        if (x1 < w)
+            parallelRows(0, h, [&](int y0, int y1) {
+                for (int y = y0; y < y1; y++) std::copy_n(image.row(y) + size_t(x1 - radius) * C, size_t(radius) * C, &margin[size_t(y) * radius * C]);
+            });
+        firColumns<T>(rows, image, kernel, radius, x0, x1);
+    }
 }
 
 // ---- large sigma: three integer box passes ---------------------------------------------------------
@@ -149,19 +209,13 @@ DericheFilter dericheFor(double sigma) {
     return f;
 }
 
-/// Both passes along one line of `n` samples with `lanes` interleaved channels (a row, or a band of columns
-/// when `stride` steps between rows); beyond the ends the signal is zero (transparent), as for the FIR.
-template <int C>
-void dericheLine(const float* in, float* out, int n, int lanes, size_t stride, const DericheFilter& f, double* scratch) {
-    if (n <= 0 || lanes <= 0) return;
-    // The feedback cancels large terms (the poles sit near 1 for a wide kernel), so the state and the sums
-    // are double; the samples stay float.
+/// The causal pass along `n` samples with `count` interleaved lanes, `stride` apart, from `state` (8 x count doubles:
+/// the last inputs x1..x4 and outputs y1..y4 of each lane), which it leaves where the line ends.
+template <bool Store>
+inline void dericheCausal(const float* in, float* out, int n, size_t count, size_t stride, const DericheFilter& f, double* state) {
     const double b0 = f.b[0], b1 = f.b[1], b2 = f.b[2], b3 = f.b[3];
     const double a1 = f.a[0], a2 = f.a[1], a3 = f.a[2], a4 = f.a[3];
-    const double c1 = f.anti[0], c2 = f.anti[1], c3 = f.anti[2], c4 = f.anti[3];
-    const size_t count = size_t(lanes);
-    double *x1 = scratch, *x2 = x1 + count, *x3 = x2 + count, *x4 = x3 + count, *y1 = x4 + count, *y2 = y1 + count, *y3 = y2 + count, *y4 = y3 + count;
-    std::fill(scratch, scratch + count * 8, 0.0);
+    double *x1 = state, *x2 = x1 + count, *x3 = x2 + count, *y1 = x3 + 2 * count, *y2 = y1 + count, *y3 = y2 + count, *y4 = y3 + count;
     for (int i = 0; i < n; i++) {
         const float* x = in + size_t(i) * stride;
         float* y = out + size_t(i) * stride;
@@ -169,49 +223,101 @@ void dericheLine(const float* in, float* out, int n, int lanes, size_t stride, c
             const double v = b0 * x[l] + b1 * x1[l] + b2 * x2[l] + b3 * x3[l] - a1 * y1[l] - a2 * y2[l] - a3 * y3[l] - a4 * y4[l];
             x3[l] = x2[l]; x2[l] = x1[l]; x1[l] = x[l];
             y4[l] = y3[l]; y3[l] = y2[l]; y2[l] = y1[l]; y1[l] = v;
-            y[l] = float(v);
+            if constexpr (Store) y[l] = float(v);
         }
     }
-    std::fill(scratch, scratch + count * 8, 0.0);
+}
+
+/// The anticausal pass, from the line's end back to its start, added to `out`; without Store it only moves `state`.
+template <bool Store>
+inline void dericheAnticausal(const float* in, float* out, int n, size_t count, size_t stride, const DericheFilter& f, double* state) {
+    const double a1 = f.a[0], a2 = f.a[1], a3 = f.a[2], a4 = f.a[3];
+    const double c1 = f.anti[0], c2 = f.anti[1], c3 = f.anti[2], c4 = f.anti[3];
+    double *x1 = state, *x2 = x1 + count, *x3 = x2 + count, *x4 = x3 + count, *y1 = x4 + count, *y2 = y1 + count, *y3 = y2 + count, *y4 = y3 + count;
     for (int i = n - 1; i >= 0; i--) {
         const float* x = in + size_t(i) * stride;
-        float* y = out + size_t(i) * stride;
         for (size_t l = 0; l < count; l++) {
             const double v = c1 * x1[l] + c2 * x2[l] + c3 * x3[l] + c4 * x4[l] - a1 * y1[l] - a2 * y2[l] - a3 * y3[l] - a4 * y4[l];
             x4[l] = x3[l]; x3[l] = x2[l]; x2[l] = x1[l]; x1[l] = x[l];
             y4[l] = y3[l]; y3[l] = y2[l]; y2[l] = y1[l]; y1[l] = v;
-            y[l] += float(v);
+            if constexpr (Store) out[size_t(i) * stride + l] += float(v);
         }
     }
+}
+
+/// Both passes along one line of `n` samples with `lanes` interleaved channels (a row, or a band of columns
+/// when `stride` steps between rows); beyond the ends the signal is zero (transparent), as for the FIR.
+/// The feedback cancels large terms (the poles sit near 1 for a wide kernel), so the state and the sums are double;
+/// the samples stay float.
+template <int C>
+void dericheLine(const float* in, float* out, int n, int lanes, size_t stride, const DericheFilter& f, double* scratch) {
+    if (n <= 0 || lanes <= 0) return;
+    const size_t count = size_t(lanes);
+    std::fill(scratch, scratch + count * 8, 0.0);
+    dericheCausal<true>(in, out, n, count, stride, f, scratch);
+    std::fill(scratch, scratch + count * 8, 0.0);
+    dericheAnticausal<true>(in, out, n, count, stride, f, scratch);
 }
 
 template <class T, int C = Raster<T>::C>
 void dericheGaussian(T& image, double sigma) {
     const int w = image.width(), h = image.height();
     const DericheFilter f = dericheFor(sigma);
-    // Rows: bytes in, floats out.
-    std::vector<float> rows(size_t(w) * h * C);
-    parallelRows(0, h, [&](int y0, int y1) {
-        std::vector<float> in(size_t(w) * C);
-        std::vector<double> scratch(8 * size_t(C));
-        for (int y = y0; y < y1; y++) {
-            const typename Raster<T>::Sample* p = image.row(y);
-            for (int i = 0; i < w * C; i++) in[size_t(i)] = p[i];
-            dericheLine<C>(in.data(), &rows[size_t(y) * w * C], w, C, C, f, scratch.data());
-        }
-    });
-    // Columns in bands, row-major: the recursion steps down the rows while the inner loop runs across the band.
-    const int bands = (w + bandColumns - 1) / bandColumns;
-    parallelRows(0, bands, [&](int b0, int b1) {
-        std::vector<float> band(size_t(bandColumns) * C * h), in(size_t(bandColumns) * C * h);
-        std::vector<double> scratch(8 * size_t(bandColumns) * C);
-        for (int b = b0; b < b1; b++) {
-            const int x0 = b * bandColumns, lanes = std::min(bandColumns, w - x0) * C;
-            for (int y = 0; y < h; y++) std::copy_n(&rows[(size_t(y) * w + size_t(x0)) * C], lanes, &in[size_t(y) * lanes]);
-            dericheLine<C>(in.data(), band.data(), h, lanes, size_t(lanes), f, scratch.data());
-            for (int y = 0; y < h; y++) storeRow<T>(image.row(y) + size_t(x0) * C, &band[size_t(y) * lanes], lanes / C);
-        }
-    }, 1);
+    const int columns = sliceColumns(w, h, C), slices = (w + columns - 1) / columns;
+    constexpr size_t state = 8 * size_t(C);
+    // A slice's rows start from the state the whole row's pass has at its edges: the causal one carried from the slice
+    // to the left (per row), the anticausal one taken first by a sweep from the right that keeps only that.
+    std::vector<double> causal, anticausal;
+    if (slices > 1) {
+        causal.assign(size_t(h) * state, 0.0);
+        anticausal.assign(size_t(h) * slices * state, 0.0);
+        parallelRows(0, h, [&](int y0, int y1) {
+            std::vector<float> in(size_t(w) * C);
+            std::vector<double> scratch(state);
+            for (int y = y0; y < y1; y++) {
+                const typename Raster<T>::Sample* p = image.row(y);
+                for (int i = 0; i < w * C; i++) in[size_t(i)] = p[i];
+                std::fill(scratch.begin(), scratch.end(), 0.0);
+                for (int s = slices - 1; s > 0; s--) {
+                    const int x0 = s * columns, x1 = std::min(w, x0 + columns);
+                    std::copy(scratch.begin(), scratch.end(), &anticausal[(size_t(y) * slices + size_t(s)) * state]);
+                    dericheAnticausal<false>(&in[size_t(x0) * C], nullptr, x1 - x0, C, C, f, scratch.data());
+                }
+                std::copy(scratch.begin(), scratch.end(), &anticausal[size_t(y) * slices * state]);
+            }
+        });
+    }
+    std::vector<float> rows;
+    for (int s = 0; s < slices; s++) {
+        const int sx0 = s * columns, sx1 = std::min(w, sx0 + columns), span = sx1 - sx0;
+        // Rows: samples in, floats out.
+        rows.resize(size_t(span) * h * C);
+        parallelRows(0, h, [&](int y0, int y1) {
+            std::vector<float> in(size_t(span) * C);
+            std::vector<double> scratch(state);
+            for (int y = y0; y < y1; y++) {
+                const typename Raster<T>::Sample* p = image.row(y) + size_t(sx0) * C;
+                for (int i = 0; i < span * C; i++) in[size_t(i)] = p[i];
+                float* out = &rows[size_t(y) * span * C];
+                if (slices == 1) { dericheLine<C>(in.data(), out, span, C, C, f, scratch.data()); continue; }
+                dericheCausal<true>(in.data(), out, span, C, C, f, &causal[size_t(y) * state]);
+                std::copy_n(&anticausal[(size_t(y) * slices + size_t(s)) * state], state, scratch.data());
+                dericheAnticausal<true>(in.data(), out, span, C, C, f, scratch.data());
+            }
+        });
+        // Columns in bands, row-major: the recursion steps down the rows while the inner loop runs across the band.
+        const int bands = (span + bandColumns - 1) / bandColumns;
+        parallelRows(0, bands, [&](int b0, int b1) {
+            std::vector<float> band(size_t(bandColumns) * C * h), in(size_t(bandColumns) * C * h);
+            std::vector<double> scratch(8 * size_t(bandColumns) * C);
+            for (int b = b0; b < b1; b++) {
+                const int x0 = sx0 + b * bandColumns, lanes = std::min(bandColumns, sx1 - x0) * C;
+                for (int y = 0; y < h; y++) std::copy_n(&rows[(size_t(y) * span + size_t(x0 - sx0)) * C], lanes, &in[size_t(y) * lanes]);
+                dericheLine<C>(in.data(), band.data(), h, lanes, size_t(lanes), f, scratch.data());
+                for (int y = 0; y < h; y++) storeRow<T>(image.row(y) + size_t(x0) * C, &band[size_t(y) * lanes], lanes / C);
+            }
+        }, 1);
+    }
 }
 
 template <class T>
@@ -220,6 +326,8 @@ void gaussianBlurImpl(T& image, double sigma) {
     if (sigma <= 6) {
         int radius;
         std::vector<float> kernel = gaussianKernel(sigma, radius);
+        const int columns = sliceColumns(image.width(), image.height(), Raster<T>::C);
+        if (columns < image.width()) { firSlices<T>(image, kernel, radius, columns); return; }
         std::vector<float> rows;
         firRows<T>(image, rows, kernel, radius);
         firColumns<T>(rows, image, kernel, radius);

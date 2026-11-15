@@ -206,6 +206,45 @@ TEST_CASE(gaussian_gray_matches_rgba_channel) {
     }
 }
 
+TEST_CASE(gaussian_slices_give_the_whole_image_result) {
+    // A large image is blurred a slice of columns at a time (gaussianSliceBytes); here a small one is cut into
+    // 64-column slices, and every sample must be what one pass over the whole image gives, at every depth, through
+    // both the FIR and the recursive filter.
+    const Image base = scene(400, 150);
+    const int w = base.width(), h = base.height();
+    Image16 base16(w, h);
+    ImageF baseF(w, h);
+    GrayImage baseGray(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const uint8_t* p = base.pixel(x, y);
+            for (int c = 0; c < 4; c++) { base16.pixel(x, y)[c] = uint16_t(p[c] * 32768 / 255); baseF.pixel(x, y)[c] = p[c] / 255.0f; }
+            baseGray.at(x, y) = p[3];
+        }
+    auto same = [](const auto& a, const auto& b, int channels) {
+        const size_t rowBytes = size_t(a.width()) * size_t(channels) * sizeof(a.row(0)[0]);
+        for (int y = 0; y < a.height(); y++) if (std::memcmp(a.row(y), b.row(y), rowBytes) != 0) return false;
+        return true;
+    };
+    for (double sigma : {2.0, 20.0}) {
+        Image whole = base, sliced = base;
+        Image16 whole16 = base16, sliced16 = base16;
+        ImageF wholeF = baseF, slicedF = baseF;
+        GrayImage wholeGray = baseGray, slicedGray = baseGray;
+        gaussianBlur(whole, sigma); gaussianBlur(whole16, sigma); gaussianBlur(wholeF, sigma); gaussianBlur(wholeGray, sigma);
+        setGaussianSliceBytes(size_t(h) * 4 * sizeof(float) * 64);   // 64 RGBA columns a slice
+        gaussianBlur(sliced, sigma); gaussianBlur(sliced16, sigma); gaussianBlur(slicedF, sigma);
+        setGaussianSliceBytes(size_t(h) * sizeof(float) * 64);
+        gaussianBlur(slicedGray, sigma);
+        setGaussianSliceBytes(0);
+        CHECK(w > 3 * 64);
+        CHECK(same(whole, sliced, 4));
+        CHECK(same(whole16, sliced16, 4));
+        CHECK(same(wholeF, slicedF, 4));
+        CHECK(same(wholeGray, slicedGray, 1));
+    }
+}
+
 TEST_CASE(motion_blur_matches_reference_closely) {
     // The shear path samples once per column instead of once per pixel along the line, so it is not
     // bit-identical; it must stay close, keep the premultiplied invariant, and leave flat areas flat.

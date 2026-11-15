@@ -164,7 +164,7 @@ void AutomationServer::registerPixelsHandlers() {
             return QJsonObject{{"applied", QString::fromUtf8(filterKindName(*kind))}};
         }
         auto source = s->adjustmentSource(margin, transform);
-        if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
+        if (!source) fail("the active layer has no pixels, or it is too large to grow for this filter");
         auto out = std::make_shared<Image>(*source);
         applyFilter(*kind, *out, settings, 1, uint32_t(integer(p, "seed", 1)));
         if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*out, *source, *coverage);
