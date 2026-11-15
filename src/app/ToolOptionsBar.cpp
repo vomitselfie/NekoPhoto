@@ -7,12 +7,45 @@
 #include <QPushButton>
 #include <QToolButton>
 #include <QResizeEvent>
+#include <algorithm>
 
 using namespace nekophoto;
 
 namespace app {
 
 using namespace tooloptions;
+
+namespace {
+/// Holds the shown page at its least width at least, so a window narrower than the page cuts the bar off at the
+/// right edge, as Photoshop's does, instead of squeezing its labels and fields into each other.
+class ClipBox : public QWidget {
+public:
+    // The stack is made here, a child from the start: reparenting it would hide it, and showing it again would
+    // polish every page at once, even in a headless run that never shows the window.
+    ClipBox() : stack_(new QStackedWidget(this)) {
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);   // all the bar has; it may shrink to nothing
+    }
+    QStackedWidget* stack() const { return stack_; }
+    QSize sizeHint() const override { return stack_->sizeHint(); }
+    QSize minimumSizeHint() const override { return {0, stack_->minimumSizeHint().height()}; }
+    void place() {
+        const QWidget* page = stack_->currentWidget();
+        const int least = page ? page->minimumSizeHint().width() : 0;
+        stack_->setGeometry(0, 0, std::max(width(), least), height());
+    }
+
+protected:
+    void resizeEvent(QResizeEvent* e) override { QWidget::resizeEvent(e); place(); }
+    // A page whose contents changed (a longer preset name, say) asks again here.
+    bool event(QEvent* e) override {
+        if (e->type() == QEvent::LayoutRequest) place();
+        return QWidget::event(e);
+    }
+
+private:
+    QStackedWidget* stack_;
+};
+} // namespace
 
 ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWidget* parent)
     : QToolBar(tr("Tool Options"), parent), session_(session), canvas_(canvas) {
@@ -21,8 +54,9 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     setObjectName(QStringLiteral("toolOptions%1").arg(++count));
     setMovable(false);
     setFloatable(false);
-    stack_ = new QStackedWidget;
-    stack_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    auto* box = new ClipBox;
+    clip_ = box;
+    stack_ = box->stack();
     stack_->addWidget(buildMoveOptions());       // 0
     stack_->addWidget(buildBrushOptions());      // 1
     stack_->addWidget(buildMarqueeOptions());    // 2
@@ -43,7 +77,8 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildPenOptions());        // 17
     boxOptionsPage_ = stack_->count();
     stack_->addWidget(buildBoxOptions());        // the Artboard and Slice tools
-    addWidget(stack_);
+    addWidget(box);
+    connect(stack_, &QStackedWidget::currentChanged, box, [box] { box->place(); });
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
     connect(session_, &EditorSession::layersChanged, this, &ToolOptionsBar::syncTransformFields);
@@ -109,6 +144,7 @@ void ToolOptionsBar::applyCompact() {
     transformFields_->setVisible(compact_ < 2);
     if (controlsCheck_) controlsCheck_->setText(compact_ ? tr("Controls") : tr("Transform Controls"));
     if (ratioCheck_) ratioCheck_->setText(compact_ ? tr("Ratio") : tr("Keep Ratio"));
+    if (clip_) static_cast<ClipBox*>(clip_)->place();
 }
 
 QWidget* ToolOptionsBar::buildZoomOptions() {

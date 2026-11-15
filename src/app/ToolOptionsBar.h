@@ -73,6 +73,7 @@ private:
     EditorSession* session_;
     CanvasWidget* canvas_;
     QStackedWidget* stack_;
+    QWidget* clip_ = nullptr;   // holds stack_ (ToolOptionsBar.cpp, ClipBox)
     QDoubleSpinBox *xField_, *yField_, *wField_, *hField_, *wPercent_, *hPercent_, *angleField_;
     bool syncingFields_ = false;
     QWidget* transformFields_;
