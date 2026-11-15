@@ -90,25 +90,29 @@ perf's nor the baseline's. The step is `continue-on-error` and never fails the b
 
 ### Baseline
 
-Taken 2026-10-30 on an AMD Ryzen AI 9 HX 370 (24 threads), GCC 16.2, Release, at 7a6cee4 with this suite; the median
+Taken 2026-11-15 on an AMD Ryzen AI 9 HX 370 (24 threads), GCC 16.2, Release, at e462d9a with the changes after it; the median
 of three runs. Instructions in billions; peak RSS of the operation (the process's for the start-up and benchmarks).
 The start-up counts are with G'MIC's version already remembered in the suite's settings (the first run in a fresh
 `build-perf/home` asks G'MIC once and costs about 0.6 G more).
 
 | Scenario | instructions:u, full | quick | peak RSS, full | quick | work counters (full) |
 |---|---:|---:|---:|---:|---|
-| adjust-drag | 5.26 | 3.92 | 591 MB | 145 MB | render.calls 31 layer.draws 10 adjustment.passes 31 |
-| brush-mypaint | 2.62 | 3.49 | 137 MB | 117 MB | render.calls 411 layer.draws 822 mip.builtPixels 2.3M |
-| brush-round | 2.51 | 3.14 | 258 MB | 123 MB | render.calls 406 layer.draws 812 mip.builtPixels 19.3M brush.dabs 11.6k |
-| content-aware-fill | 107.60 | 7.46 | 1852 MB | 239 MB | render.calls 3 layer.draws 99 adjustment.passes 9 mip.builtPixels 16.0M |
-| filter-gaussian | 33.25 | 5.96 | 2759 MB | 372 MB | render.calls 3 layer.draws 99 adjustment.passes 9 mip.builtPixels 17.4M |
-| open-psd | 32.92 | 6.45 | 1855 MB | 216 MB | render.calls 4 layer.draws 132 adjustment.passes 12 mip.builtPixels 106.4M |
+| adjust-drag | 5.26 | 2.98 | 592 MB | 136 MB | render.calls 31 layer.draws 10 adjustment.passes 31 |
+| brush-mypaint | 2.61 | 3.48 | 138 MB | 118 MB | render.calls 411 layer.draws 822 mip.builtPixels 2.3M |
+| brush-round | 1.97 | 3.13 | 254 MB | 123 MB | render.calls 406 layer.draws 812 mip.builtPixels 19.3M brush.dabs 11.6k |
+| content-aware-fill | 107.47 | 7.46 | 1845 MB | 240 MB | render.calls 3 layer.draws 99 adjustment.passes 9 mip.builtPixels 16.0M |
+| filter-gaussian | 36.95 | 5.95 | 2180 MB | 373 MB | render.calls 3 layer.draws 99 adjustment.passes 9 mip.builtPixels 17.4M |
+| open-psd | 31.82 | 6.38 | 1856 MB | 216 MB | render.calls 4 layer.draws 132 adjustment.passes 12 mip.builtPixels 106.4M |
 | open-real-psd | 12.47 | n/a | 454 MB | n/a | render.calls 7 layer.draws 97 adjustment.passes 8 mip.builtPixels 10.2M |
-| save-nekophoto | 219.05 | 17.33 | 1851 MB | 272 MB | render.calls 2 layer.draws 66 adjustment.passes 6 |
-| save-psd | 93.38 | 6.04 | 2128 MB | 275 MB | render.calls 1 layer.draws 33 adjustment.passes 3 |
-| startup-headless | 1.15 | 1.15 | 91 MB | 91 MB | - |
-| startup-window | 1.15 | 1.15 | 91 MB | 91 MB | - |
-| undo-redo | 4.77 | 4.67 | 1855 MB | 242 MB | render.calls 4 layer.draws 132 adjustment.passes 12 |
+| save-nekophoto | 220.12 | 17.40 | 1853 MB | 274 MB | render.calls 2 layer.draws 66 adjustment.passes 6 |
+| save-psd | 93.19 | 6.03 | 2132 MB | 275 MB | render.calls 1 layer.draws 33 adjustment.passes 3 |
+| startup-headless | 1.16 | 1.16 | 92 MB | 92 MB | - |
+| startup-window | 1.16 | 1.16 | 92 MB | 92 MB | - |
+| undo-redo | 4.77 | 4.66 | 1845 MB | 243 MB | render.calls 4 layer.draws 132 adjustment.passes 12 |
+
+filter-gaussian keeps the row pass's floats a 64 MB slice of columns at a time (blur.h, gaussianSliceBytes): the peak
+fell from 2759 MB to 2180 MB for 11 % more instructions, an extra sweep that finds the recursion's state at each slice's
+edge. brush-round and the quick adjust-drag moved with the machine (the 1.8.16 build measures the same).
 
 The first baseline (2026-10-29, 43a8029), for the record: adjust-drag 7.78 / 6.47, brush-mypaint 3.86 / 4.72,
 brush-round 3.75 / 4.38, content-aware-fill 542.06 / 20.88, filter-gaussian 33.34 / 6.06, open-psd 31.95 / 6.39,
